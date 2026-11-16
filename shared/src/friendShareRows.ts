@@ -34,6 +34,7 @@ import {
   type BulkShareItem,
   type FriendShareRow,
 } from "./sharing.js";
+import { plural, t } from "./i18n.js";
 
 /** Which direction the screen is showing. */
 export type FriendShareDirection = "theySee" | "youSee";
@@ -115,12 +116,12 @@ export function buildShareCards(
       key,
       row,
       title: shareRowTitle(row),
-      subtitle: `${capitalise(SHARE_KIND_LABEL[row.entityType])} · shared ${formatShareDay(row.sharedAt)}`,
+      subtitle: t`${capitalise(SHARE_KIND_LABEL[row.entityType])} · shared ${formatShareDay(row.sharedAt)}`,
       copyable: options.direction === "youSee" && isCopyableSharedRow(row),
       removable: options.direction === "youSee" && !viaPlace,
       ...(viaPlace
         ? {
-            blockedReason: `This came with a place ${options.friendName} shared with you. Remove that place to stop seeing it.`,
+            blockedReason: t`This came with a place ${options.friendName} shared with you. Remove that place to stop seeing it.`,
           }
         : {}),
     };
@@ -139,7 +140,7 @@ export function shareSelectionCountLabel(
   cards: FriendShareCard[],
   direction: FriendShareDirection,
 ): string {
-  const count = `${cards.length} selected`;
+  const count = t`${cards.length} selected`;
   if (direction === "theySee") return count;
   const copyable = cards.filter((card) => card.copyable).length;
   const removable = cards.filter((card) => card.removable).length;
@@ -147,8 +148,8 @@ export function shareSelectionCountLabel(
   // Only worth saying when it differs from the total — "5 selected · 5
   // removable" is noise, and noise is what stops the useful case being read.
   if (copyable > 0 && copyable < cards.length)
-    parts.push(`${copyable} copyable`);
-  if (removable < cards.length) parts.push(`${removable} removable`);
+    parts.push(t`${copyable} copyable`);
+  if (removable < cards.length) parts.push(t`${removable} removable`);
   return [count, ...parts].join(" · ");
 }
 
@@ -165,16 +166,31 @@ export function unshareAllConfirm(args: {
   /** Whether a place is in the selection — it carries more than itself. */
   includesPlace: boolean;
 }): { title: string; body: string } {
-  const things = args.count === 1 ? "1 item" : `${args.count} items`;
+  const { count, friendName } = args;
   return {
-    title: `Stop sharing ${things} with ${args.friendName}?`,
-    body:
-      `${args.friendName} loses access to ${things}` +
-      (args.includesPlace
-        ? ", and a place takes its notes, its photos and its route with it. "
-        : ". ") +
-      `You stay friends, and what ${args.friendName} shares with you is unaffected. ` +
-      `There is no undo — you would have to share each one again. Stopping sharing won't remove copies ${args.friendName} has already made.`,
+    title: plural(
+      count,
+      "Stop sharing # item with {0}?",
+      "Stop sharing # items with {0}?",
+      friendName,
+    ),
+    body: [
+      args.includesPlace
+        ? plural(
+            count,
+            "{0} loses access to # item, and a place takes its notes, its photos and its route with it.",
+            "{0} loses access to # items, and a place takes its notes, its photos and its route with it.",
+            friendName,
+          )
+        : plural(
+            count,
+            "{0} loses access to # item.",
+            "{0} loses access to # items.",
+            friendName,
+          ),
+      t`You stay friends, and what ${friendName} shares with you is unaffected.`,
+      t`There is no undo — you would have to share each one again. Stopping sharing won't remove copies ${friendName} has already made.`,
+    ].join(" "),
   };
 }
 
@@ -193,19 +209,35 @@ export function removeAllConfirm(args: {
   copyableCount: number;
 }): { title: string; body: string } {
   const one = args.count === 1;
-  const things = one ? "1 item" : `${args.count} items`;
   return {
-    title: `Remove ${things} shared with you?`,
-    body:
-      `${things} ${one ? "is" : "are"} removed from your account, on every device. ` +
-      `${args.friendName} keeps the ${one ? "original" : "originals"}.` +
+    title: plural(
+      args.count,
+      "Remove # item shared with you?",
+      "Remove # items shared with you?",
+    ),
+    body: [
+      plural(
+        args.count,
+        "# item is removed from your account, on every device.",
+        "# items are removed from your account, on every device.",
+      ),
+      one
+        ? t`${args.friendName} keeps the original.`
+        : t`${args.friendName} keeps the originals.`,
       // Naming the wrong kind in the one sentence that offers the safe
       // alternative is how a user decides the alternative isn't for them.
-      (args.copyableCount === 0
+      args.copyableCount === 0
         ? ""
         : one
-          ? " You could save a copy of it first."
-          : ` ${args.copyableCount === 1 ? "1 of them is something you" : `${args.copyableCount} of them are things you`} could save a copy of first.`),
+          ? t`You could save a copy of it first.`
+          : plural(
+              args.copyableCount,
+              "# of them is something you could save a copy of first.",
+              "# of them are things you could save a copy of first.",
+            ),
+    ]
+      .filter(Boolean)
+      .join(" "),
   };
 }
 
@@ -219,7 +251,7 @@ export function removeRowSubtitle(args: {
   kindLabel: string;
   friendName: string;
 }): string {
-  return `Takes it off your account. ${args.friendName} keeps the original ${args.kindLabel}.`;
+  return t`Takes it off your account. ${args.friendName} keeps the original ${args.kindLabel}.`;
 }
 
 /**
@@ -250,17 +282,24 @@ export function copyConfirm(args: {
   kindLabel?: string;
 }): { title: string; body: string } {
   const one = args.count === 1;
-  const withRoute = one && args.kindLabel === "place" ? ", with its route" : "";
-  const owner = args.friendName ?? "the owner";
-  const Owner = args.friendName ?? "The owner";
+  const withRoute = one && args.kindLabel === "place";
+  const owner = args.friendName ?? t`the owner`;
+  const Owner = args.friendName ?? t`The owner`;
   return {
-    title: one ? "Save a copy?" : `Save ${args.count} copies?`,
-    body:
-      (one && args.itemName
-        ? `“${args.itemName}” is copied into your own account${withRoute}. `
-        : `${args.count} items are copied into your own account. `) +
-      `The ${one ? "copy is" : "copies are"} yours to edit, and ${one ? "stays" : "stay"} if ${owner} stops sharing. ` +
-      `${Owner}'s ${one ? "original is" : "originals are"} untouched.`,
+    title: one ? t`Save a copy?` : t`Save ${args.count} copies?`,
+    body: [
+      one && args.itemName
+        ? withRoute
+          ? t`“${args.itemName}” is copied into your own account, with its route.`
+          : t`“${args.itemName}” is copied into your own account.`
+        : t`${args.count} items are copied into your own account.`,
+      one
+        ? t`The copy is yours to edit, and stays if ${owner} stops sharing.`
+        : t`The copies are yours to edit, and stay if ${owner} stops sharing.`,
+      one
+        ? t`${Owner}'s original is untouched.`
+        : t`${Owner}'s originals are untouched.`,
+    ].join(" "),
   };
 }
 
@@ -283,11 +322,10 @@ export function copyOutcomeMessage(outcome: {
     skipped,
     outcome.mediaOutOfSpace === true,
   );
-  const media = sentence ? ` ${sentence}` : "";
-  const saved = copied === 1 ? "Saved 1 copy" : `Saved ${copied} copies`;
+  const saved = plural(copied, "Saved # copy.", "Saved # copies.");
   if (failed.length === 0) {
     return {
-      text: `${saved}.${media}`,
+      text: [saved, sentence].filter(Boolean).join(" "),
       tone: skipped > 0 ? "error" : "done",
     };
   }
@@ -295,13 +333,15 @@ export function copyOutcomeMessage(outcome: {
     return {
       text:
         failed.length === 1
-          ? `Couldn't copy ${failed[0]}.`
-          : `Couldn't copy ${failed.length} items: ${failed.join(", ")}.`,
+          ? t`Couldn't copy ${failed[0]}.`
+          : t`Couldn't copy ${failed.length} items: ${failed.join(", ")}.`,
       tone: "error",
     };
   }
   return {
-    text: `${saved}. Couldn't copy ${failed.join(", ")}.${media}`,
+    text: [saved, t`Couldn't copy ${failed.join(", ")}.`, sentence]
+      .filter(Boolean)
+      .join(" "),
     tone: "error",
   };
 }
@@ -338,23 +378,25 @@ export function copyAndRemoveOutcomeMessage(outcome: {
 
   if (done.length > 0) {
     parts.push(
-      done.length === 1
-        ? "Saved 1 copy and removed the shared one."
-        : `Saved ${done.length} copies and removed the shared ones.`,
+      plural(
+        done.length,
+        "Saved # copy and removed the shared one.",
+        "Saved # copies and removed the shared ones.",
+      ),
     );
   }
   if (copiedNotRemoved.length > 0) {
     parts.push(
       copiedNotRemoved.length === 1
-        ? `Copied ${copiedNotRemoved[0]}, but it's still shared with you — use Remove to finish.`
-        : `Copied ${copiedNotRemoved.length} items, but they're still shared with you — use Remove to finish.`,
+        ? t`Copied ${copiedNotRemoved[0]}, but it's still shared with you — use Remove to finish.`
+        : t`Copied ${copiedNotRemoved.length} items, but they're still shared with you — use Remove to finish.`,
     );
   }
   if (failed.length > 0) {
     parts.push(
       failed.length === 1
-        ? `Couldn't copy ${failed[0]}, so it's still shared with you.`
-        : `Couldn't copy ${failed.join(", ")} — they're still shared with you.`,
+        ? t`Couldn't copy ${failed[0]}, so it's still shared with you.`
+        : t`Couldn't copy ${failed.join(", ")} — they're still shared with you.`,
     );
   }
   const media = mediaSkippedSentence(mediaSkipped, mediaOutOfSpace === true);
@@ -374,9 +416,12 @@ export function unshareOutcomeMessage(args: {
   revokedCount: number;
   friendName: string;
 }): string {
-  return args.revokedCount === 1
-    ? `1 item is no longer shared with ${args.friendName}.`
-    : `${args.revokedCount} items are no longer shared with ${args.friendName}.`;
+  return plural(
+    args.revokedCount,
+    "# item is no longer shared with {0}.",
+    "# items are no longer shared with {0}.",
+    args.friendName,
+  );
 }
 
 /** What a bulk remove-my-access did, in one sentence. */
@@ -385,19 +430,19 @@ export function removeOutcomeMessage(outcome: {
   failed: string[];
 }): { text: string; tone: "done" | "error" } {
   const { removed, failed } = outcome;
-  const gone = removed === 1 ? "Removed 1 item" : `Removed ${removed} items`;
-  if (failed.length === 0) return { text: `${gone}.`, tone: "done" };
+  const gone = plural(removed, "Removed # item.", "Removed # items.");
+  if (failed.length === 0) return { text: gone, tone: "done" };
   if (removed === 0) {
     return {
       text:
         failed.length === 1
-          ? `Couldn't remove ${failed[0]}.`
-          : `Couldn't remove ${failed.length} items: ${failed.join(", ")}.`,
+          ? t`Couldn't remove ${failed[0]}.`
+          : t`Couldn't remove ${failed.length} items: ${failed.join(", ")}.`,
       tone: "error",
     };
   }
   return {
-    text: `${gone}. Couldn't remove ${failed.join(", ")}.`,
+    text: `${gone} ${t`Couldn't remove ${failed.join(", ")}.`}`,
     tone: "error",
   };
 }
@@ -412,9 +457,15 @@ export function mediaSkippedSentence(
   outOfSpace: boolean,
 ): string | null {
   if (skipped === 0) return null;
-  const what =
-    skipped === 1 ? "1 photo or file" : `${skipped} photos and files`;
   return outOfSpace
-    ? `Your storage is full, so ${what} ${skipped === 1 ? "wasn't" : "weren't"} copied.`
-    : `${what[0].toUpperCase()}${what.slice(1)} couldn't be copied.`;
+    ? plural(
+        skipped,
+        "Your storage is full, so # photo or file wasn't copied.",
+        "Your storage is full, so # photos and files weren't copied.",
+      )
+    : plural(
+        skipped,
+        "# photo or file couldn't be copied.",
+        "# photos and files couldn't be copied.",
+      );
 }

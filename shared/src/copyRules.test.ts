@@ -229,9 +229,14 @@ describe("shared copy outside contracts/", () => {
   // identifier, key or URL, wherever it is written (a returned template, a
   // record, a `failure:` property). Left out: the message of a thrown `Error`
   // (never shown, §11), Title Case (names in data: canyons, schemes, land
-  // classes), and the two files that quote a provider's own product names and
-  // required credits, which we cannot reword.
-  const PROVIDER_TEXT = new Set(["geoPdfBaseLayers.ts", "demSources.ts"]);
+  // classes), and the files that quote a provider's own product names and
+  // required credits, which we cannot reword: the two that declare them and
+  // `i18nSource.ts`, which lists them (`DATA_LITERALS`) to leave them as written.
+  const PROVIDER_TEXT = new Set([
+    "geoPdfBaseLayers.ts",
+    "demSources.ts",
+    "i18nSource.ts",
+  ]);
   const sentences = (path: string): { line: number; text: string }[] => {
     const sf = ts.createSourceFile(
       path,

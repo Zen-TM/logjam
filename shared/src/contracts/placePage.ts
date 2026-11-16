@@ -188,7 +188,7 @@ export function placeStatusLabel(
 ): string {
   if (status === "shared") return incomingLabel(owner);
   if (status !== "done") return PLACE_STATUS_LABELS[status];
-  return `${PLACE_STATUS_LABELS.done} · ${plural(tripCount, "# trip", "# trips")}`;
+  return plural(tripCount, "Visited · # trip", "Visited · # trips");
 }
 
 export type PlaceSource = {

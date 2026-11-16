@@ -13,6 +13,8 @@
  * allowance lands in the low thousands rather than the low millions.
  */
 
+import { plural, t } from "./i18n.js";
+
 /**
  * Per-worker Fargate sizing. These MUST match the `cpu` / `memory` on the task
  * definitions in infra/terraform/envs/prod/ecs.tf — that is a hand-kept
@@ -21,9 +23,9 @@
  */
 export const WORKER_SPECS = {
   /** logjam-topo-worker — LiDAR topo generation. The expensive one. */
-  topo: { vcpus: 8, memoryGiB: 16, label: "Sharpen an area" },
+  topo: { vcpus: 8, memoryGiB: 16, label: t`Sharpen an area` },
   /** logjam-topo-export-worker — on-demand map rendering. */
-  topoExport: { vcpus: 4, memoryGiB: 8, label: "Make a map" },
+  topoExport: { vcpus: 4, memoryGiB: 8, label: t`Make a map` },
 } as const;
 
 export type WorkerKind = keyof typeof WORKER_SPECS;
@@ -119,24 +121,26 @@ export function quotaState(used: number, quota: number): QuotaState {
  */
 export function formatCredits(credits: number): string {
   const rounded = Math.max(0, Math.round(credits));
-  if (rounded < 90) return `${rounded} credit${rounded === 1 ? "" : "s"}`;
-  const hours = rounded / 60;
-  return `${hours >= 10 ? Math.round(hours) : hours.toFixed(1)} credit-hours`;
+  if (rounded < 90) return plural(rounded, "# credit", "# credits");
+  return t`${hoursOf(rounded)} credit-hours`;
 }
 
-/** The number alone, in the unit `quota` picks: credit-hours from ~90, else credits. */
-function inUnitOf(quota: number, credits: number): [string, string] {
-  const n = Math.max(0, Math.round(credits));
-  if (Math.max(0, Math.round(quota)) >= 90) {
-    const h = n / 60;
-    return [h >= 10 ? String(Math.round(h)) : h.toFixed(1), "credit-hours"];
-  }
-  return [String(n), `credit${n === 1 ? "" : "s"}`];
+/** Credits as hours: a whole number from ten, else one decimal. */
+function hoursOf(credits: number): string {
+  const h = Math.max(0, Math.round(credits)) / 60;
+  return h >= 10 ? String(Math.round(h)) : h.toFixed(1);
+}
+
+/** Whether `quota` is big enough that credits read as credit-hours. */
+function inHours(quota: number): boolean {
+  return Math.max(0, Math.round(quota)) >= 90;
 }
 
 /** `credits` as a quantity in the unit `quota` picks, e.g. "0.6 credit-hours". */
 export function formatCreditsLike(credits: number, quota: number): string {
-  return inUnitOf(quota, credits).join(" ");
+  return inHours(quota)
+    ? t`${hoursOf(credits)} credit-hours`
+    : plural(Math.max(0, Math.round(credits)), "# credit", "# credits");
 }
 
 /**
@@ -145,7 +149,12 @@ export function formatCreditsLike(credits: number, quota: number): string {
  * threshold and the allowance was over it.
  */
 export function formatCreditsOf(used: number, quota: number): string {
-  const [u] = inUnitOf(quota, used);
-  const [q, unit] = inUnitOf(quota, quota);
-  return `${u} of ${q} ${unit}`;
+  if (inHours(quota))
+    return t`${hoursOf(used)} of ${hoursOf(quota)} credit-hours`;
+  return plural(
+    Math.max(0, Math.round(quota)),
+    "{0} of # credit",
+    "{0} of # credits",
+    Math.max(0, Math.round(used)),
+  );
 }

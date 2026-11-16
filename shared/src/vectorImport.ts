@@ -8,6 +8,7 @@
 import { XMLParser, XMLValidator } from "fast-xml-parser";
 import { messageFromError } from "./apiErrors.js";
 import { MEDIA_SIZE_CAPS } from "./media.js";
+import { t } from "./i18n.js";
 
 export type ImportedPosition = number[]; // [lon, lat] or [lon, lat, ele]
 
@@ -69,15 +70,12 @@ export const IMPORT_ERRORS = {
  * code and the corpus goldens; these are the sentences a client shows.
  */
 export const IMPORT_SENTENCES: Record<keyof typeof IMPORT_ERRORS, string> = {
-  unparseable:
-    "We couldn't read that file. Check that it opens in another app.",
-  invalidCoordinates:
-    "That file has a point in an impossible place. Try exporting it again.",
-  noFeatures: "There's no line or point in that file to show on the map.",
-  tooManyPositions:
-    "That file has too many points. Try saving a shorter section.",
-  tooLarge: `That file is over ${MEDIA_SIZE_CAPS.track / 1024 / 1024} MB. Try saving a shorter section.`,
-  unsupportedExtension: "That file isn't a GPX, KML or GeoJSON file.",
+  unparseable: t`We couldn't read that file. Check that it opens in another app.`,
+  invalidCoordinates: t`That file has a point in an impossible place. Try exporting it again.`,
+  noFeatures: t`There's no line or point in that file to show on the map.`,
+  tooManyPositions: t`That file has too many points. Try saving a shorter section.`,
+  tooLarge: t`That file is over ${MEDIA_SIZE_CAPS.track / 1024 / 1024} MB. Try saving a shorter section.`,
+  unsupportedExtension: t`That file isn't a GPX, KML or GeoJSON file.`,
 };
 
 /**

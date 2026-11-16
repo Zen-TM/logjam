@@ -1,13 +1,15 @@
 // The one sentence both clients say when a capped list left rows out, so a
 // list that ends early is never mistaken for a complete one.
 
+import { t } from "./i18n.js";
+
 /** Null when nothing was cut: the caller renders no row at all then. */
 export function truncationHint(
   visibleCount: number,
   hiddenCount: number,
 ): string | null {
   if (hiddenCount <= 0) return null;
-  return `Showing ${visibleCount} of ${visibleCount + hiddenCount} — keep typing to narrow it down.`;
+  return t`Showing ${visibleCount} of ${visibleCount + hiddenCount} — keep typing to narrow it down.`;
 }
 
 /** `GET /friends/search` returns at most this many users. */
@@ -29,6 +31,6 @@ export function friendSearchHint(
   if (shown === 0) return null;
   if (total !== null) return truncationHint(shown, total - omitted - shown);
   return shown + omitted >= FRIEND_SEARCH_CAP
-    ? `Showing the first ${shown} — keep typing to narrow it down.`
+    ? t`Showing the first ${shown} — keep typing to narrow it down.`
     : null;
 }

@@ -78,6 +78,7 @@ for (const file of paths.flatMap((p) => sources(resolve(p)))) {
     words: flag("--words"),
     prose: flag("--prose"),
     importFrom: importFor(repoPath),
+    repoPath,
   });
   for (const skip of result.skipped)
     console.log(`${repoPath}:${skip.line}  left: ${skip.reason}\n    ${JSON.stringify(skip.text)}`);

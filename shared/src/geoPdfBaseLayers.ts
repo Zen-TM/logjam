@@ -145,7 +145,7 @@ export const BASEMAP_CATALOG: BasemapCatalogEntry[] = [
     // It is also the only OSM default either picker offers (the "osm" raster
     // entry below is offered by neither): same cartography, drawn rather than
     // fetched and downloadable, so the name says which rendering it is.
-    name: "OSM Vector",
+    name: t`OSM Vector`,
     kind: "vector",
     // ODbL: the licence of the OpenStreetMap data every region's cut is drawn from.
     licence: "odbl",
@@ -159,7 +159,7 @@ export const BASEMAP_CATALOG: BasemapCatalogEntry[] = [
   },
   {
     id: "osm",
-    name: "Default",
+    name: t`Default`,
     kind: "raster",
     urlTemplate: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
     maxNativeZoom: 19,
@@ -181,7 +181,7 @@ export const BASEMAP_CATALOG: BasemapCatalogEntry[] = [
   {
     id: "osm-topo",
     printsContours: true,
-    name: "OSM Topo",
+    name: t`OSM Topo`,
     kind: "raster",
     urlTemplate: "https://a.tile.opentopomap.org/{z}/{x}/{y}.png",
     maxNativeZoom: 17,
@@ -201,7 +201,7 @@ export const BASEMAP_CATALOG: BasemapCatalogEntry[] = [
   {
     id: "osm-cycle",
     printsContours: true,
-    name: "OSM Cycle Topo",
+    name: t`OSM Cycle Topo`,
     kind: "raster",
     urlTemplate:
       "https://a.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png",
@@ -219,7 +219,7 @@ export const BASEMAP_CATALOG: BasemapCatalogEntry[] = [
   {
     id: "six-topo",
     printsContours: true,
-    name: "SIX Maps Topo",
+    name: t`SIX Maps Topo`,
     chipName: t`Topo`,
     kind: "raster",
     urlTemplate:
@@ -259,7 +259,7 @@ export const BASEMAP_CATALOG: BasemapCatalogEntry[] = [
   {
     id: "six-base",
     printsContours: true,
-    name: "SIX Maps Base Map",
+    name: t`SIX Maps Base Map`,
     chipName: t`Base Map`,
     kind: "raster",
     urlTemplate:
@@ -286,7 +286,7 @@ export const BASEMAP_CATALOG: BasemapCatalogEntry[] = [
   {
     id: "six-imagery",
     photo: true,
-    name: "SIX Maps Imagery",
+    name: t`SIX Maps Imagery`,
     chipName: t`Imagery`,
     kind: "raster",
     urlTemplate:

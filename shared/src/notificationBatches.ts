@@ -31,6 +31,7 @@
 // PRIVACY: reads the same resolved payload the rows render. Usernames are
 // server-resolved and username-only; no id reaches a label.
 import type { TNotification } from "./apiTypes.js";
+import { t } from "./i18n.js";
 
 /**
  * Which verb's notifications these are — and the reason a batch is keyed on it
@@ -195,12 +196,12 @@ export function collapseBatches(
  * sharing feature exists to protect.
  */
 export function batchLabel(batch: NotificationBatch): string {
-  const who = batch.sender ?? "Someone";
+  const who = batch.sender ?? t`Someone`;
   const count = batch.items.length;
   if (batch.group === "files") {
-    return `${who} sent you ${count} files`;
+    return t`${who} sent you ${count} files`;
   }
-  return `${who} shared ${count} items with you`;
+  return t`${who} shared ${count} items with you`;
 }
 
 /**

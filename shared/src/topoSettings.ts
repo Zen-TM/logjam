@@ -26,6 +26,8 @@
 // `features` (geoPdfConfig.test.ts); api/src/constants/topoLayers.ts and
 // frontend/src/topoLayerTypes.ts are thin re-exports.
 
+import { t } from "./i18n.js";
+
 // `surveyPick` declares, per layer, which survey to prefer when an ELVIS ZIP
 // contains multiple overlapping surveys for the same ground footprint:
 //   "density" — the densest survey (terrain/bedrock geometry; fire-irrelevant).
@@ -38,24 +40,29 @@
 export const TOPO_LAYERS = [
   {
     name: "hillshade",
-    label: "Hillshade",
+    label: t`Hillshade`,
     format: "raster",
     surveyPick: "density",
   },
   {
     name: "vegetation",
-    label: "Vegetation",
+    label: t`Vegetation`,
     format: "raster",
     surveyPick: "recency",
   },
-  { name: "slope", label: "Slope", format: "raster", surveyPick: "density" },
+  { name: "slope", label: t`Slope`, format: "raster", surveyPick: "density" },
   {
     name: "contours",
-    label: "Contours",
+    label: t`Contours`,
     format: "vector",
     surveyPick: "density",
   },
-  { name: "features", label: "Features", format: "vector", surveyPick: "none" },
+  {
+    name: "features",
+    label: t`Features`,
+    format: "vector",
+    surveyPick: "none",
+  },
 ] as const;
 
 export type TopoLayerMeta = (typeof TOPO_LAYERS)[number];
@@ -238,43 +245,22 @@ export type OsmLineFeatureKey = (typeof OSM_LINE_FEATURE_KEYS)[number];
 
 // Labels used by the OSM features UI tab.
 export const OSM_FEATURE_LABELS: Record<OsmFeatureKey, string> = {
-  waterway: "Waterways",
-  track: "Tracks / paths",
-  road: "Roads",
-  building: "Buildings",
-  power: "Power lines",
-  campsite: "Campsites",
-  peak: "Peaks",
-  spring: "Springs",
-  gate: "Gates / barriers",
-  cave: "Cave entrances",
-  bridge: "Bridges",
-  ford: "Fords",
-  waterfall: "Waterfalls",
-  trailhead: "Trailheads",
-  viewpoint: "Viewpoints",
-  hut: "Huts / shelters",
-};
-
-// Plain-language description of the underlying OSM query, shown under each
-// feature's switch. Plain text: it is rendered as written, so no markdown.
-export const OSM_FEATURE_TAG_HINTS: Record<OsmFeatureKey, string> = {
-  waterway: "OSM waterway ways (rivers, streams, creeks, canals, drains)",
-  track: "OSM highway=track|path|footway|bridleway|steps",
-  road: "OSM highway=primary|secondary|tertiary|unclassified|residential|service",
-  building: "OSM building=*",
-  power: "OSM power=line|minor_line|cable",
-  campsite: "OSM tourism=camp_site|caravan_site|wilderness_hut|alpine_hut",
-  peak: "OSM natural=peak",
-  spring: "OSM natural=spring",
-  gate: "OSM barrier=gate|lift_gate|cycle_barrier",
-  cave: "OSM natural=cave_entrance",
-  bridge: "OSM bridge=yes ways",
-  ford: "OSM ford=* (water crossings)",
-  waterfall: "OSM waterway=waterfall",
-  trailhead: "OSM information=guidepost and highway=trailhead",
-  viewpoint: "OSM tourism=viewpoint",
-  hut: "OSM tourism=alpine_hut|wilderness_hut and amenity=shelter",
+  waterway: t`Waterways`,
+  track: t`Tracks / paths`,
+  road: t`Roads`,
+  building: t`Buildings`,
+  power: t`Power lines`,
+  campsite: t`Campsites`,
+  peak: t`Peaks`,
+  spring: t`Springs`,
+  gate: t`Gates / barriers`,
+  cave: t`Cave entrances`,
+  bridge: t`Bridges`,
+  ford: t`Fords`,
+  waterfall: t`Waterfalls`,
+  trailhead: t`Trailheads`,
+  viewpoint: t`Viewpoints`,
+  hut: t`Huts / shelters`,
 };
 
 // Formation list must match topo/build_svtm_formation.py SVTM_FORMATION_MU
@@ -590,22 +576,22 @@ function validateSlope(v: unknown, errors: string[]): void {
  * and to gate the template Save / topo Generate buttons.
  */
 export function slopeBandsError(bands: SlopeBand[]): string | null {
-  if (bands.length === 0) return "Add at least one slope band.";
+  if (bands.length === 0) return t`Add at least one slope band.`;
   if (bands.length > MAX_SLOPE_BANDS)
-    return `At most ${MAX_SLOPE_BANDS} bands allowed.`;
+    return t`At most ${MAX_SLOPE_BANDS} bands allowed.`;
   for (let i = 0; i < bands.length; i++) {
     const b = bands[i];
     if (!Number.isInteger(b.fromDeg) || !Number.isInteger(b.toDeg)) {
-      return `Band ${i + 1}: angles must be whole numbers.`;
+      return t`Band ${i + 1}: angles must be whole numbers.`;
     }
     if (b.fromDeg < 0 || b.toDeg > 90) {
-      return `Band ${i + 1}: angles must be between 0 and 90.`;
+      return t`Band ${i + 1}: angles must be between 0 and 90.`;
     }
     if (b.fromDeg >= b.toDeg) {
-      return `Band ${i + 1}: "from" must be less than "to".`;
+      return t`Band ${i + 1}: "from" must be less than "to".`;
     }
     if (i > 0 && bands[i - 1].toDeg !== b.fromDeg) {
-      return `Band ${i + 1}: must start where band ${i} ends.`;
+      return t`Band ${i + 1}: must start where band ${i} ends.`;
     }
   }
   return null;
@@ -652,21 +638,21 @@ export function hillshadeSettingsError(h: HillshadeSettings): string | null {
     h.azimuth < azimuth.min ||
     h.azimuth > azimuth.max
   ) {
-    return `Azimuth must be between ${azimuth.min} and ${azimuth.max}.`;
+    return t`Azimuth must be between ${azimuth.min} and ${azimuth.max}.`;
   }
   if (
     !Number.isFinite(h.altitude) ||
     h.altitude < altitude.min ||
     h.altitude > altitude.max
   ) {
-    return `Altitude must be between ${altitude.min} and ${altitude.max}.`;
+    return t`Altitude must be between ${altitude.min} and ${altitude.max}.`;
   }
   if (
     !Number.isFinite(h.zFactor) ||
     h.zFactor < zFactor.min ||
     h.zFactor > zFactor.max
   ) {
-    return `Vertical exaggeration must be between ${zFactor.min} and ${zFactor.max}.`;
+    return t`Vertical exaggeration must be between ${zFactor.min} and ${zFactor.max}.`;
   }
   return null;
 }

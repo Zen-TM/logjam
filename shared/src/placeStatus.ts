@@ -12,6 +12,7 @@
 import { formatCanyonGrade } from "./canyonGrade.js";
 import { numericFieldValue } from "./fieldValues.js";
 import { lengthToInput, lengthUnitLabel } from "./units.js";
+import { t } from "./i18n.js";
 
 export type PlaceStatus = "done" | "todo" | "shared";
 
@@ -19,9 +20,9 @@ export type PlaceStatus = "done" | "todo" | "shared";
  *  rather than "Done": the measure is one logged trip and nothing more, so a
  *  bailed descent counts — and it applies to campsites as well. */
 export const PLACE_STATUS_LABELS: Record<PlaceStatus, string> = {
-  done: "Visited",
-  todo: "Not visited",
-  shared: "Shared",
+  done: t`Visited`,
+  todo: t`Not visited`,
+  shared: t`Shared`,
 };
 
 /**
@@ -30,7 +31,7 @@ export const PLACE_STATUS_LABELS: Record<PlaceStatus, string> = {
  * "Shared", which a row on the owner's side also says of what they gave away.
  */
 export function incomingLabel(owner: string | null | undefined): string {
-  return owner ? `From ${owner}` : "Shared with you";
+  return owner ? t`From ${owner}` : t`Shared with you`;
 }
 
 /** Rail order: the question the list answers, then the friend's places. */
@@ -83,11 +84,11 @@ export function placeSummary(place: PlaceSummaryFields): string {
   const abseils = numericFieldValue(place.fieldValues, "num_abseils");
   const facts = [
     formatCanyonGrade(place.fieldValues),
-    hours != null ? `${trimNumber(hours)} h` : null,
+    hours != null ? t`${trimNumber(hours)} h` : null,
     longest != null
-      ? `${trimNumber(lengthToInput(longest))} ${lengthUnitLabel()} max`
+      ? t`${trimNumber(lengthToInput(longest))} ${lengthUnitLabel()} max`
       : null,
-    abseils != null ? `${abseils} abseils` : null,
+    abseils != null ? t`${abseils} abseils` : null,
   ]
     .filter((part): part is string => Boolean(part))
     .slice(0, SUMMARY_FACTS)

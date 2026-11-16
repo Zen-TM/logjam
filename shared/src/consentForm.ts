@@ -3,6 +3,7 @@
 // Each client draws the result itself (ADR 0020).
 import { ApiError, messageFromError } from "./apiErrors.js";
 import { isValidUsername, usernameRule } from "./username.js";
+import { t } from "./i18n.js";
 
 /** `retry`: whether sending again can help. A form problem never can. */
 export type ConsentFormProblem =
@@ -28,15 +29,15 @@ export function consentFormProblem(form: {
     return {
       field: "form",
       message: form.newAccount
-        ? "Agree to the Terms of Use and Privacy Policy to continue."
-        : "Tick the box to agree to the updated terms.",
+        ? t`Agree to the Terms of Use and Privacy Policy to continue.`
+        : t`Tick the box to agree to the updated terms.`,
       retry: false,
     };
   }
   if (form.newAccount && !form.ageConfirmed) {
     return {
       field: "form",
-      message: "Confirm you are 18 or older to continue.",
+      message: t`Confirm you are 18 or older to continue.`,
       retry: false,
     };
   }
@@ -55,7 +56,7 @@ export function consentSubmitFailure(
 ): ConsentFormProblem {
   const message = messageFromError(
     err,
-    "Couldn't record your consent. Try again.",
+    t`Couldn't record your consent. Try again.`,
   );
   if (
     newAccount &&

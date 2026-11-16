@@ -95,7 +95,7 @@ export function placeTypeNameError(
   types: readonly { id: string; name: string }[],
   editing?: { id: string; name: string } | null,
 ): string | null {
-  if (!name.trim()) return "A place type needs a name.";
+  if (!name.trim()) return t`A place type needs a name.`;
   if (editing && nameKey(editing.name) === nameKey(name)) return null;
   return placeTypeNameTaken(name, types, editing?.id)
     ? placeTypeNameTakenError(name)
@@ -304,25 +304,25 @@ export type PlaceTypeColor = (typeof PLACE_TYPE_COLORS)[number];
  * palette unnamed.
  */
 export const PLACE_TYPE_COLOR_NAMES: Record<PlaceTypeColor, string> = {
-  "#E4C5AA": "Banksia orange",
-  "#E3D0AB": "Ochre",
-  "#E2D9AC": "Wattle",
-  "#D5DCB2": "Lichen",
-  "#BED9B5": "Scrub green",
-  "#B5D9C4": "Fern",
-  "#B5D9D6": "Pool teal",
-  "#B7D0E1": "Water blue",
-  "#B9C2DF": "Dusk blue",
-  "#E1B7C5": "Heath pink",
-  "#E1BCB7": "Clay rose",
-  "#CDC8C1": "Stone",
+  "#E4C5AA": t`Banksia orange`,
+  "#E3D0AB": t`Ochre`,
+  "#E2D9AC": t`Wattle`,
+  "#D5DCB2": t`Lichen`,
+  "#BED9B5": t`Scrub green`,
+  "#B5D9C4": t`Fern`,
+  "#B5D9D6": t`Pool teal`,
+  "#B7D0E1": t`Water blue`,
+  "#B9C2DF": t`Dusk blue`,
+  "#E1B7C5": t`Heath pink`,
+  "#E1BCB7": t`Clay rose`,
+  "#CDC8C1": t`Stone`,
 };
 
 /** The spoken name of a type's colour. A colour outside the palette comes back
  *  AS ITS HEX rather than as "Custom", the same way `trackColorName` does:
  *  unhelpful is better than wrong. */
 export function placeTypeColorName(color: string | null | undefined): string {
-  if (!color) return "No colour";
+  if (!color) return t`No colour`;
   return PLACE_TYPE_COLOR_NAMES[color.toUpperCase() as PlaceTypeColor] ?? color;
 }
 
@@ -485,44 +485,44 @@ export const SYSTEM_FIELD_DEFS: SystemFieldDef[] = [
   {
     id: "a0000000-0000-4000-8000-000000000011",
     key: "aca_technical",
-    label: t`ACA technical`,
+    label: "ACA technical",
     type: "integer",
     min: 1,
     max: 4,
-    hint: t`Technical difficulty of the descent, on the American Canyoneering Association rating system.`,
+    hint: "Technical difficulty of the descent, on the American Canyoneering Association rating system.",
     placeTypes: ["canyon"],
     labels: ["1", "2", "3", "4"],
   },
   {
     id: "a0000000-0000-4000-8000-000000000012",
     key: "aca_water",
-    label: t`ACA water`,
+    label: "ACA water",
     type: "integer",
     min: 1,
     max: 7,
-    hint: t`Difficulty of the water, from little or no water (A) to the most powerful (C4), on the American Canyoneering Association rating system.`,
+    hint: "Difficulty of the water, from little or no water (A) to the most powerful (C4), on the American Canyoneering Association rating system.",
     placeTypes: ["canyon"],
     labels: ["A", "B", "C", "C1", "C2", "C3", "C4"],
   },
   {
     id: "a0000000-0000-4000-8000-000000000013",
     key: "aca_time",
-    label: t`ACA time`,
+    label: "ACA time",
     type: "integer",
     min: 1,
     max: 6,
-    hint: t`How long the canyon takes, in Roman numerals, on the American Canyoneering Association rating system.`,
+    hint: "How long the canyon takes, in Roman numerals, on the American Canyoneering Association rating system.",
     placeTypes: ["canyon"],
     labels: ["I", "II", "III", "IV", "V", "VI"],
   },
   {
     id: "a0000000-0000-4000-8000-000000000014",
     key: "aca_risk",
-    label: t`ACA risk`,
+    label: "ACA risk",
     type: "integer",
     min: 1,
     max: 5,
-    hint: t`How dangerous the canyon is beyond its technical difficulty, on the American Canyoneering Association rating system.`,
+    hint: "How dangerous the canyon is beyond its technical difficulty, on the American Canyoneering Association rating system.",
     placeTypes: ["canyon"],
     labels: ["PG", "PG13", "R", "X", "XX"],
   },

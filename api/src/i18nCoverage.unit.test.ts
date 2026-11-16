@@ -23,7 +23,7 @@ const SRC = dirname(fileURLToPath(import.meta.url));
 const CEILINGS: Record<string, number> = {
   lib: 3,
   middleware: 4,
-  routes: 9,
+  routes: 7,
   scripts: 3,
   services: 9,
 };

@@ -8,19 +8,20 @@
 import { boxCentre, parseGridReference } from "./grids.js";
 import { wrapBox } from "./placeGeo.js";
 import { REGIONS, type LonLatBox } from "./regions.js";
+import { t } from "./i18n.js";
 
-export const RECENT_SEARCHES_HEADING = "Recent searches";
+export const RECENT_SEARCHES_HEADING = t`Recent searches`;
 /** What the search box says while it works, finds nothing or fails: one set of
  *  words for Logjam Web's box and Logjam GPS's bar (mapSearch.test.ts). */
 export const SEARCH_STATUS = {
-  searching: "Searching locations…",
-  noPlaces: "No places match.",
-  noLocations: "No locations found.",
-  searchFailed: "Couldn't search locations.",
-  namesFailed: "Couldn't load place names.",
+  searching: t`Searching locations…`,
+  noPlaces: t`No places match.`,
+  noLocations: t`No locations found.`,
+  searchFailed: t`Couldn't search locations.`,
+  namesFailed: t`Couldn't load place names.`,
 } as const;
 
-export const COORDINATE_RESULT_KIND = "Coordinates";
+export const COORDINATE_RESULT_KIND = t`Coordinates`;
 
 export interface SearchPoint {
   lat: number;

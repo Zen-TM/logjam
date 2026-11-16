@@ -1,11 +1,15 @@
 import { readFileSync } from "node:fs";
-import { describe, it, expect } from "vitest";
+import { afterEach, describe, it, expect, vi } from "vitest";
 import {
   messageFromError,
   ApiError,
   SIGNUP_CAP_MESSAGE,
   SIGNUP_CAP_SENTENCE,
 } from "./apiErrors.js";
+
+afterEach(() => {
+  delete (globalThis as { LOGJAM_LANGUAGE?: string }).LOGJAM_LANGUAGE;
+});
 
 describe("messageFromError", () => {
   it("prefers a server-supplied message on an ApiError", () => {
@@ -86,7 +90,9 @@ describe("the sign-up cap", () => {
   it("maps the pre sign-up refusal, and only that, to the closed-for-the-month sentence", () => {
     expect(
       messageFromError(
-        cognito(`PreSignUp failed with error ${SIGNUP_CAP_SENTENCE}.`),
+        cognito(
+          "PreSignUp failed with error Logjam is not taking new accounts this month.",
+        ),
         "fallback",
       ),
     ).toBe(SIGNUP_CAP_MESSAGE);
@@ -96,6 +102,22 @@ describe("the sign-up cap", () => {
         "fallback",
       ),
     ).toBe("fallback");
+  });
+
+  // Mutation: write `SIGNUP_CAP_SENTENCE` as t`Logjam is not taking new accounts this month`.
+  it("still maps the refusal when the page started in another language", async () => {
+    vi.resetModules();
+    (globalThis as { LOGJAM_LANGUAGE?: string }).LOGJAM_LANGUAGE = "en-XA";
+    const fresh: typeof import("./apiErrors.js") = await import(
+      "./apiErrors.js"
+    );
+    expect(
+      fresh.mapAuthError(
+        cognito(
+          "PreSignUp failed with error Logjam is not taking new accounts this month.",
+        ),
+      ),
+    ).toBe(fresh.SIGNUP_CAP_MESSAGE);
   });
 
   // Mutation: reword the sentence in either place alone.
