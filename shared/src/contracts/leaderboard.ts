@@ -54,11 +54,10 @@ export const LEADERBOARD = {
 /** The switch in Settings: the only way in, and the way out. */
 export const LEADERBOARD_SETTING = {
   // Label and hint each fit one line on a phone, under the Friends heading
-  // that says whose board it is. The hint is what joining shows. They stay
-  // plain literals: each client's `switchCopy.test.ts` measures a switch's
-  // words by their literal types, which `t` widens to `string`.
-  label: "Canyon leaderboard",
-  hint: "Friends see only your count.",
+  // that says whose board it is. The hint is what joining shows. Each client's
+  // `switchCopy.test.ts` ("keeps to the limit") holds both to `SWITCH_COPY_MAX`.
+  label: t`Canyon leaderboard`,
+  hint: t`Friends see only your count.`,
   joined: t`You're on the leaderboard. Find it in Friends.`,
   // Friends' standing line for someone who has friends and has not joined:
   // the one place besides Settings that says the board exists.

@@ -47,25 +47,20 @@ export const PLACES_FILTER_SHEET = {
     onMap: t`On the map`,
 
     allStatuses: t`All`,
-    // Plain literals: a switch's words are measured through their literal types
-    // in each client's `switchCopy.test.ts`, and `t` widens them to `string`.
-    // No switch-copy test names these words, so a wrap passes there; it turns
-    // `i18nCoverage.test.ts` ("writes no new text outside the catalogue, and
-    // every ceiling is the count") red until the contracts ceiling is lowered.
-    includeMissing: "Include if not set",
-    includeMissingHint: "Also show ones with no value",
+    // Each client's `switchCopy.test.ts` ("keeps to the limit") holds a switch's
+    // label and hint to `SWITCH_COPY_MAX`.
+    includeMissing: t`Include if not set`,
+    includeMissingHint: t`Also show ones with no value`,
     drawArea: t`Draw on map`,
     /** Logjam Web only: the map is in view beside the sheet. */
     areaToView: t`This view`,
     clear: t`Clear`,
-    // Plain literal, as `includeMissing` above.
-    sharedByMe: "Shared by me",
+    sharedByMe: t`Shared by me`,
     added: t`Added`,
     updated: t`Updated`,
     dateFrom: t`From`,
     dateTo: t`To`,
-    // Plain literal, as `includeMissing` above.
-    showOnMap: "Only filtered places",
+    showOnMap: t`Only filtered places`,
     reset: t`Reset`,
     done: t`Done`,
   },
