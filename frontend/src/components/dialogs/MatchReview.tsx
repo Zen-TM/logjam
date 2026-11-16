@@ -5,6 +5,7 @@
 // live in the card rather than in a dialog raised from it. They are native
 // radios in a real `radiogroup` labelled by the incoming name so a screen
 // reader announces which place each option refers to.
+import { formatDistanceM } from "@logjam/shared";
 import { useId } from "react";
 import { Button, StatusPill } from "../../ui";
 import classes from "./MatchReview.module.css";
@@ -42,13 +43,6 @@ export type MatchReviewProps = {
 };
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
-
-function formatDistance(meters: number): string {
-  if (meters >= 1000) {
-    return `${(meters / 1000).toFixed(1)} km`;
-  }
-  return `${Math.round(meters)} m`;
-}
 
 /** True when an item's decision is still its initial guess (a link whose option is flagged isGuess). */
 function isGuessDecision(item: ReviewItem): boolean {
@@ -171,7 +165,7 @@ function MatchReview({
                     </span>
                     {option.distanceMeters !== undefined && (
                       <span className={classes.optionMeta}>
-                        {formatDistance(option.distanceMeters)}
+                        {formatDistanceM(option.distanceMeters)}
                       </span>
                     )}
                     {option.isGuess && <StatusPill label="best guess" />}

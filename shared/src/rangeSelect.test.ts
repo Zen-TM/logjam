@@ -48,4 +48,12 @@ describe("formatRange", () => {
     expect(formatRange([4, 4], [1, 7], "V")).toBe("V4");
     expect(formatRange([3, 5], [1, 7], "V")).toBe("V3–V5");
   });
+
+  // Mutation: print the number where `word` is given.
+  it("writes each end through `word`", () => {
+    const letters = (stop: number) => "ABCDEFG"[stop - 1]!;
+    expect(formatRange([1, 3], [1, 7], "", letters)).toBe("A–C");
+    expect(formatRange([2, 2], [1, 7], "", letters)).toBe("B");
+    expect(formatRange(null, [1, 7], "", letters)).toBe("Any");
+  });
 });

@@ -19,8 +19,10 @@ import {
   tripTitleHint,
   type SectionKeysOn,
   CANYONING_TRIP_TYPE,
-  coerceFieldValue,
+  coerceFieldInput,
+  fieldInputText,
   formatFieldValue,
+  withFieldUnit,
   enforceCanyoningTag,
   linksCanyon,
   formatTripPlaceNames,
@@ -45,6 +47,7 @@ import {
   type TripLogCustomFieldType,
   coordinateEntry,
   coordinateNumber,
+  displayUnits,
 } from "@logjam/shared";
 import { useToast } from "../feedback/ToastProvider";
 import type { TPlace, TTripLog } from "../../placeUtils";
@@ -373,8 +376,18 @@ function TripLogDialog({
   // session's values, and the Dialog's focus-on-open sees the offer.
   // customFieldDefs is deliberately not part of the key — field defs shouldn't
   // reset the form values just because a new field was added mid-session.
+  //
+  // The units `populateForm` wrote the form's text in: the length text and its
+  // conversion are always in one unit, so a change of units while the form is
+  // open, or closed for a pick on the map, writes the fields again (dropping
+  // what was typed) rather than saving feet as metres, and leaves the files, the
+  // uploads and the draft trip as the session has them (`unitsOnly`). Guard:
+  // `lengthFieldClients.test.ts` ("every form of a length field converts it"),
+  // and `TripLogDialog.render.test.tsx` ("a trip log being edited, when the
+  // units change under it").
   const openKey = open ? (tripLog?.id ?? "") : null;
   const [populatedFor, setPopulatedFor] = useState<string | null>(null);
+  const [seededUnits, setSeededUnits] = useState(displayUnits());
   if (openKey !== populatedFor) {
     setPopulatedFor(openKey);
     if (openKey !== null) {
@@ -382,13 +395,17 @@ function TripLogDialog({
       // too; see the media effect below.
       setMediaLoading(!!tripLog);
       if (picking) {
-        // Returning from a pick-on-map cycle — don't reset form state.
+        // Returning from a pick-on-map cycle — don't reset form state, unless
+        // the units changed meanwhile: the typed length is in the old ones.
         setPicking(false);
-        setFocusDateWhenOpened(false);
+        if (seededUnits === displayUnits()) setFocusDateWhenOpened(false);
+        else populateForm({ unitsOnly: true });
       } else {
         populateForm();
       }
     }
+  } else if (open && seededUnits !== displayUnits()) {
+    populateForm({ unitsOnly: true });
   }
 
   // The user arrived, changed or went (an expiry) while the form was open:
@@ -405,7 +422,8 @@ function TripLogDialog({
     );
   }
 
-  function populateForm() {
+  function populateForm({ unitsOnly = false } = {}) {
+    setSeededUnits(displayUnits());
     let initialDate: string;
     let initialNotes: string;
     let initialSelectedPlaceIds: string[];
@@ -429,7 +447,7 @@ function TripLogDialog({
       const vals: Record<string, string> = {};
       for (const def of customFieldDefs) {
         const raw = tripLog.customFields[def.key];
-        vals[def.key] = raw != null ? String(raw) : "";
+        vals[def.key] = fieldInputText(def.key, raw);
       }
       initialFieldValues = vals;
     } else {
@@ -507,6 +525,7 @@ function TripLogDialog({
     setShowAddField(false);
     setNewFieldLabel("");
     setNewFieldType("string");
+    if (unitsOnly) return;
     // Reset media/draft tracking each time the dialog opens.
     setMedia([]);
     setDraftTripId(null);
@@ -707,7 +726,8 @@ function TripLogDialog({
 
     const customFields: Record<string, unknown> = {};
     for (const def of visibleFieldDefs) {
-      customFields[def.key] = coerceFieldValue(
+      customFields[def.key] = coerceFieldInput(
+        def.key,
         getFieldValue(def.key),
         def.type,
       );
@@ -871,6 +891,18 @@ function TripLogDialog({
 
   function getFieldValue(key: string): string {
     return fieldValues[key] ?? "";
+  }
+
+  /** A leftover value as its row reads it: a length with its unit. */
+  function leftoverText(def: { key: string; type: TripLogCustomFieldType }) {
+    const value = coerceFieldInput(
+      def.key,
+      getFieldValue(def.key),
+      def.type,
+      tripLog?.customFields[def.key],
+    );
+    const text = formatFieldValue(value, def.type);
+    return typeof value === "number" ? withFieldUnit(def.key, text) : text;
   }
 
   function setFieldValue(key: string, value: string) {
@@ -1067,7 +1099,12 @@ function TripLogDialog({
       const customFields: Record<string, unknown> = {};
       for (const def of visibleFieldDefs) {
         const raw = getFieldValue(def.key);
-        customFields[def.key] = coerceFieldValue(raw, def.type);
+        customFields[def.key] = coerceFieldInput(
+          def.key,
+          raw,
+          def.type,
+          tripLog?.customFields[def.key],
+        );
       }
 
       if (tripLog) {
@@ -1409,10 +1446,7 @@ function TripLogDialog({
                 key={def.key}
                 leading={<IconTile icon="help" hue="var(--color-accent)" />}
                 title={def.label}
-                subtitle={formatFieldValue(
-                  coerceFieldValue(getFieldValue(def.key), def.type),
-                  def.type,
-                )}
+                subtitle={leftoverText(def)}
                 trailing={
                   <IconButton
                     icon="close"

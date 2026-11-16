@@ -9,6 +9,7 @@ import {
   TILE_SIZE,
   type TileToMapTransform,
   type VectorStyleSettings,
+  formatFixedMetres,
 } from "@logjam/shared";
 import { decodeVectorTileLayer } from "../vectorTile";
 import { MAP_FONT, type Ctx } from "./common";
@@ -154,7 +155,7 @@ export function buildContours(
         // Keep text upright
         if (angle > Math.PI / 2) angle -= Math.PI;
         if (angle < -Math.PI / 2) angle += Math.PI;
-        const text = `${elev}m`;
+        const text = formatFixedMetres(elev);
         labels.push({
           x: mx,
           y: my,

@@ -35,14 +35,17 @@ import {
   ROPEWIKI_OFFER,
   type PlaceSortKey,
   type PlaceStatus,
+  type CanyonGradeSystem,
   type Region,
   type RegionBbox,
   type ScopedCustomFieldDef,
   type SectionKeysOn,
   LIDAR_JOB_COPY,
+  sharpenUnavailable,
   type LoadState,
   formatNumericDay,
   localDay,
+  type SharpenOffer,
 } from "@logjam/shared";
 import type {
   TFilters,
@@ -100,7 +103,11 @@ import {
   sheetFilterCount,
   withBucket,
 } from "./placesModel";
-import { placeVerbEntries, type WebPlaceVerbId } from "./placeVerbMenu";
+import {
+  placeVerbEntries,
+  unavailableItem,
+  type WebPlaceVerbId,
+} from "./placeVerbMenu";
 import classes from "./PlacesPanel.module.css";
 
 const { copy } = PLACES_LIST;
@@ -164,11 +171,14 @@ function PlacesPanel({
   setActivePanel,
   onHoverPlace,
   onMakeMap,
+  sharpenFor,
   onSharePlaces,
   onExportPlaces,
   onPlaceVerb,
   onExpandSheet,
   canyonRegions,
+  gradeSystem,
+  uiPreferences,
 }: {
   places: TPlace[];
   /** False until the first fetch lands — an empty list before then is not "no
@@ -206,6 +216,8 @@ function PlacesPanel({
   onHoverPlace: (id: string | null) => void;
   /** A pin was pressed while this list is open: scroll to its row. */
   onMakeMap: (bounds: RegionBbox, kind: MapKind) => void;
+  /** What sharpening offers for a box, else for the ground the map shows. */
+  sharpenFor: (box: RegionBbox | null) => SharpenOffer;
   onSharePlaces: (ids: string[]) => void;
   onExportPlaces: (ids: string[]) => void;
   /** A row's verb that needs the place's page (a form, a confirm): the row
@@ -215,6 +227,10 @@ function PlacesPanel({
   onExpandSheet?: () => void;
   /** The user's regions that have a canyon list: one import entry each. */
   canyonRegions: readonly Region[];
+  /** The system the map in view grades in: "Easiest first" sorts by it. */
+  gradeSystem: CanyonGradeSystem;
+  /** The account's preferences: which grade attributes a new type's step lists. */
+  uiPreferences: unknown;
 }) {
   const toast = useToast();
   const isNarrow = useIsMobile();
@@ -290,8 +306,10 @@ function PlacesPanel({
 
   const visible = useMemo(
     () =>
-      matching(filters).sort((a, b) => comparePlaces(a.place, b.place, sort)),
-    [matching, filters, sort],
+      matching(filters).sort((a, b) =>
+        comparePlaces(a.place, b.place, sort, gradeSystem),
+      ),
+    [matching, filters, sort, gradeSystem],
   );
 
   const typeCounts = useMemo(() => {
@@ -385,12 +403,14 @@ function PlacesPanel({
   const makeMapEntries = (targets: TPlace[]): MenuEntry[] => {
     const bounds = placesBounds(targets);
     if (!bounds) return [];
+    const off = sharpenUnavailable(sharpenFor(bounds));
     return [
       {
         id: "topo",
         label: LIDAR_JOB_COPY.make,
         icon: "lidar",
         onSelect: () => onMakeMap(bounds, "topo"),
+        ...(off ? unavailableItem(LIDAR_JOB_COPY.make, off) : {}),
       },
       {
         id: "export",
@@ -443,7 +463,14 @@ function PlacesPanel({
       remove: handOff("remove"),
       delete: () => setPendingDelete([place.id]),
     };
-    return placeVerbEntries("row", owned, (id) => run[id]());
+    const off = sharpenUnavailable(sharpenFor(placesBounds([place])));
+    return placeVerbEntries(
+      "row",
+      owned,
+      (id) => run[id](),
+      false,
+      off ? { makeTopo: off } : {},
+    );
   };
 
   async function confirmDelete() {
@@ -837,6 +864,8 @@ function PlacesPanel({
       sort={sort}
       onChangeSort={setSort}
       placeCustomFieldDefs={placeCustomFieldDefs}
+      gradeSystem={gradeSystem}
+      listedPlaces={collection.map(({ place }) => place)}
       onDrawArea={onDrawFilterArea}
       onAreaToView={onFilterToMapView}
       onReset={() => onChangeFilters(clearSheetFilters(filters))}
@@ -934,6 +963,7 @@ function PlacesPanel({
           onTypesChange={onPlaceTypesChange}
           placeDefs={placeCustomFieldDefs}
           onPlaceDefsChange={onPlaceCustomFieldDefsChange}
+          uiPreferences={uiPreferences}
           onClose={() => setAddingType(false)}
         />
       )}

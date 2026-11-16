@@ -50,6 +50,11 @@ const ALLOWED: { file: string; text: string; reason: string }[] = [
     text: "Logjam couldn't prepare this map",
     reason: "the service clips the map, not this phone",
   },
+  {
+    file: "offline/regionJobStatus.ts",
+    text: "a region Logjam covers",
+    reason: "the service covers regions, not this phone",
+  },
 ];
 
 // Strings still to reword to the glossary; delete an entry with its string.

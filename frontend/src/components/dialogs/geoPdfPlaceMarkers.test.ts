@@ -86,4 +86,26 @@ describe("buildPlaceMarkers", () => {
       }),
     ).toEqual([]);
   });
+
+  // Mutation: put the plain `c.longitude >= extent.west && c.longitude <= extent.east`
+  // back in `inExtent`.
+  it("keeps places on both sides of 180 when the extent follows the map past it", () => {
+    // Made-up positions; the extent's east edge is above 180, as MapLibre
+    // reports a view panned past the line.
+    const near = { latitude: -17, longitude: 179.5, name: "Near" };
+    const across = { latitude: -17, longitude: -179.5, name: "Across" };
+    const far = { latitude: -17, longitude: 170, name: "Far" };
+    const markers = buildPlaceMarkers(
+      [near, across, far],
+      [],
+      {
+        north: -16,
+        south: -18,
+        west: 178,
+        east: 182,
+      },
+      { includeOwned: true, includeShared: false },
+    );
+    expect(markers.map((m) => m.name)).toEqual(["Near", "Across"]);
+  });
 });

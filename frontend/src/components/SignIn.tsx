@@ -24,14 +24,15 @@ import {
 import Footer from "./Footer";
 import SignInTerrain from "./SignInTerrain";
 import TermsTick from "./TermsTick";
+import { signInCredit } from "./signInTerrain";
 import useSignInArea from "./useSignInArea";
 import {
   FRIENDS,
   isValidPassword,
   isValidUsername,
-  NSW_REGION,
   PASSWORD_HINT,
   resendCodeWaiting,
+  signInIntro,
   SIGN_IN_COPY,
   TRIP_PLAN_JOIN,
   signUpFormProblem,
@@ -69,7 +70,7 @@ function Frame({ children }: { children: ReactNode }) {
               move when the name arrives. */}
           <p className={classes.credit}>
             <span className={classes.creditPlace}>{area?.terrain.name}</span>
-            {NSW_REGION.terrain.heights.credit}
+            {signInCredit()}
           </p>
         </div>
       </main>
@@ -78,7 +79,7 @@ function Frame({ children }: { children: ReactNode }) {
 }
 
 function Intro() {
-  return <p className={classes.intro}>{SIGN_IN_COPY.intro}</p>;
+  return <p className={classes.intro}>{signInIntro()}</p>;
 }
 
 function InviteNote() {

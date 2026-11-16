@@ -1040,6 +1040,21 @@ describe("classifyElvisEntries for a job that sharpens", () => {
     expect(() => classifyElvisEntries(entries)).toThrow(ElvisZipError);
   });
 
+  // Mutation: put "in ELVIS" back into TOO_MANY_FILES, or "all of NSW" into
+  // ONLY_5M: someone with a survey of another region, from another portal,
+  // is sent to ELVIS.
+  it("names no region and no portal", () => {
+    const source = readFileSync(
+      join(import.meta.dirname, "elvisZip.ts"),
+      "utf8",
+    );
+    const sentences = [...source.matchAll(/say`([^`]*)`/g)].map((m) => m[1]!);
+    expect(sentences.length).toBeGreaterThanOrEqual(8);
+    expect(
+      sentences.filter((s) => /ELVIS|NSW|New South Wales/.test(s)),
+    ).toEqual([]);
+  });
+
   // Mutation: reword one copy, and the form and the worker refuse the same
   // ZIP in two different sentences.
   it("refuses it in the worker's own words", async () => {

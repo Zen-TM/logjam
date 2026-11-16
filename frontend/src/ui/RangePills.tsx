@@ -21,12 +21,15 @@ export function RangePills({
   label,
   stops,
   value,
+  word = String,
   onChange,
 }: {
   label: string;
   /** Every value on the axis, in order (`filterPillStops`). */
   stops: readonly number[];
   value: NumberRange | null;
+  /** How a stop reads, on its pill and in the summary: a labelled field's word. */
+  word?: (stop: number) => string;
   onChange: (next: NumberRange | null) => void;
 }) {
   const bounds = [stops[0], stops[stops.length - 1]] as const;
@@ -73,7 +76,7 @@ export function RangePills({
   return (
     <FilterField
       label={label}
-      summary={formatRange(value, bounds)}
+      summary={formatRange(value, bounds, "", word)}
       active={active}
       onClear={() => onChange(null)}
     >
@@ -84,7 +87,7 @@ export function RangePills({
           return (
             <Chip
               key={stop}
-              label={String(stop)}
+              label={word(stop)}
               active={inRange}
               aria-pressed={inRange}
               onPointerDown={(event) => startDrag(event, stop)}

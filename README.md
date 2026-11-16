@@ -135,12 +135,20 @@ and takes the rest from the prod CDN. On a phone, also run
 To try the screens a second region adds, switch on the simulated regions: a
 made-up New Zealand and Utah, declared over the Makarora and Kauaeranga valleys
 and Zion, with no data behind them until archives for those boxes are in the dev
-bucket. Set `SIM_REGIONS=1` for
+bucket ([scripts/sim-regions/README.md](scripts/sim-regions/README.md) builds and
+uploads them). Set `SIM_REGIONS=1` for
 the API (in the shell that starts it; `.env.local` is regenerated), `VITE_SIM_REGIONS=1`
 in `frontend/.env`, and `EXPO_PUBLIC_SIM_REGIONS=1` in `mobile/.env`. A new
 account then sees the region step, and Settings lists the regions. Each
 runtime refuses the switch outside a dev stack: the API in a prod runtime,
 Logjam Web unless it uses fake auth, Logjam GPS unless its API is local.
+The dev stack's topo worker does not take the switch: the local ECS emulator
+(MiniStack) gives every task container a variable the worker reads as a prod
+runtime, so the worker refuses the switch there. A sharpen job over simulated
+ground started through the stack is refused with "Sharpening an area isn't
+available where this survey is." To sharpen a survey in a simulated region, run
+`topo/sharpen.py` by hand with `SIM_REGIONS=1`, as
+[`topo/README.md`](topo/README.md#sharpening-an-area) describes.
 
 ### Command reference
 

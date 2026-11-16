@@ -102,9 +102,9 @@ describe("terrainSourceFor", () => {
     expect(open).not.toHaveBeenCalled();
   });
 
-  // Mutation: read the view unwrapped (`regionInView` in place of
-  // `regionInWrappedView`) and a map panned once around the world draws NSW
-  // from the worldwide tiles.
+  // Mutation: read the box only as given in `regionTouchesBox` (set `first` and
+  // `last` to 0) and the centre unwrapped in `regionInView`, and a map panned
+  // once around the world draws NSW from the worldwide tiles.
   it("uses the NSW archive over NSW after a pan around the world", async () => {
     const map = fakeMap(KATOOMBA[0] + 360, KATOOMBA[1]);
     expect(
@@ -163,7 +163,7 @@ describe("terrainSourceFor", () => {
     });
 
     // Mutation: test the view's centre against the heights' coverage box in
-    // place of `regionInWrappedView`, and a view centred just east of the
+    // place of `regionInView`, and a view centred just east of the
     // Kauaeranga box, whose border still touches it, draws the worldwide tiles.
     it("reads a region whose border touches the view, as the Terrain group does", async () => {
       expect(await ask(fakeMap(175.685, -37.1))).toBe(
@@ -224,6 +224,19 @@ describe("terrainSourceFor", () => {
         bounds: [...SIM_NZ.terrain.heights!.coverage],
         minzoom: SIM_NZ.terrain.hillshade!.minzoom,
       });
+    });
+
+    // Mutation: take the areas' deepest zmax alone for the source's maxzoom
+    // (drop `shade.maxzoom`), and a region whose archive holds z17 beside an
+    // area that stops at z16 is never asked for its z17 tiles.
+    it("reaches the region's own top zoom where an area stops shallower", async () => {
+      const map = fakeMap(...MAKARORA);
+      await ask(map, [nzArea]);
+      expect(nzArea.zmax).toBe(16);
+      expect(map.addSource.mock.calls[0]![1]).toMatchObject({
+        maxzoom: SIM_NZ.terrain.hillshade!.maxzoom,
+      });
+      expect(SIM_NZ.terrain.hillshade!.maxzoom).toBe(17);
     });
 
     // Mutation: keep the NSW-only prefix test in `dropStaleTerrainSources`,

@@ -130,6 +130,14 @@ describe("the wipe stops the producers before it deletes", () => {
     expect(wipe).toContain("stopGeoPdfImportRun()");
   });
 
+  // Mutation: drop `stopPlaceRegistryForWipe()` from the wipe's list.
+  it("stops the place registry refresh too", () => {
+    expect(wipe).toContain("stopPlaceRegistryForWipe()");
+    expect(wipe.indexOf("stopPlaceRegistryForWipe()")).toBeLessThan(
+      wipe.indexOf("FileSystem.deleteAsync"),
+    );
+  });
+
   it("stops them before the first delete", () => {
     const stopAt = wipe.indexOf("cancelAllRegionDownloads()");
     const deleteAt = wipe.indexOf("FileSystem.deleteAsync");

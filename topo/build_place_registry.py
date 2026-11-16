@@ -3,17 +3,21 @@
 build_place_registry.py
 -----------------------
 Builds the place registry that Logjam's location search reads: every named
-OpenStreetMap feature in NSW, one row each, from Geofabrik's NSW extract.
-Why a registry, and why it is public: ADR 0034.
+OpenStreetMap feature in a region, one row each, from Geofabrik's extract of
+it. Why a registry, and why it is public: ADR 0034.
 
     python3 build_place_registry.py build new-south-wales-latest.osm.pbf out/
+    python3 build_place_registry.py build --bbox=W,S,E,N big-extract.osm.pbf out/
     python3 build_place_registry.py measure new-south-wales-latest.osm.pbf
 
 `build` writes `places-<version>-<hash>.json.gz` (the format is `PlaceRegistryFile`
-in shared/src/placeRegistry.ts) and `latest.json`, the pointer clients read.
-`publish` builds from a fresh download and uploads both to the topo bucket,
-pointer last; it is what the monthly ECS task runs. `measure` prints the size
-each class of feature adds, which is how the rules below were chosen.
+in shared/src/placeRegistry.ts) and `latest.json`, the pointer clients read;
+with `--bbox` it keeps only the features inside the box, so a small registry
+is cut from a large extract. `publish` builds from a fresh download of one
+region's extract (`--region`, New South Wales by default) and uploads both
+under the prefix that region declares as `placeSearch` in regions.json, pointer
+last; with no arguments it is what the monthly ECS task runs. `measure` prints
+the size each class of feature adds, which is how the rules below were chosen.
 
 Source and licence: OpenStreetMap, © OpenStreetMap contributors, under the
 ODbL 1.0. The public copy under master/places/v1/ is the offer of the derived
@@ -35,16 +39,22 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple
 
+from regions import region
+
 FORMAT = 1
-EXTRACT_URL = (
-    "https://download.geofabrik.de/australia-oceania/australia/"
-    "new-south-wales-latest.osm.pbf"
-)
+# Geofabrik's extract of each region that publishes a registry, by region id.
+# A region declares its registry's prefix as `placeSearch` in regions.json;
+# tests/test_place_registry.py `test_extracts_are_the_regions_that_declare_a_registry`
+# holds the two lists equal.
+EXTRACTS = {
+    "nsw": (
+        "https://download.geofabrik.de/australia-oceania/australia/"
+        "new-south-wales-latest.osm.pbf"
+    ),
+}
+DEFAULT_REGION = "nsw"
 ATTRIBUTION = "© OpenStreetMap contributors"
 LICENCE = "ODbL-1.0"
-# PLACE_REGISTRY_PREFIX in shared/src/placeRegistry.ts. Guard:
-# tests/test_place_registry.py.
-S3_PREFIX = f"master/places/v{FORMAT}/"
 
 # The tag that says what a feature is, in the order a feature with several is
 # read: `natural=peak` on a node that also has `tourism=viewpoint` is a peak.
@@ -391,8 +401,37 @@ def extract_version(pbf: str) -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
 
-def build(pbf: str, out_dir: str) -> Tuple[Path, Path]:
-    doc = registry(read_extract(pbf), extract_version(pbf))
+Bbox = Tuple[float, float, float, float]
+
+
+def parse_bbox(text: str) -> Bbox:
+    """`W,S,E,N` in degrees, west of east and south of north."""
+    try:
+        west, south, east, north = (float(v) for v in text.split(","))
+    except ValueError:
+        raise argparse.ArgumentTypeError("W,S,E,N: four numbers") from None
+    if west >= east or south >= north:
+        raise argparse.ArgumentTypeError("west of east and south of north")
+    return west, south, east, north
+
+
+def inside(raws: Iterable[Raw], bbox: Bbox) -> Iterable[Raw]:
+    """The objects whose point lies in the box, edges included."""
+    west, south, east, north = bbox
+    return (r for r in raws if west <= r.lon <= east and south <= r.lat <= north)
+
+
+def build(pbf: str, out_dir: str, bbox: Optional[Bbox] = None) -> Tuple[Path, Path]:
+    raws = read_extract(pbf)
+    if bbox is not None:
+        raws = inside(raws, bbox)
+    doc = registry(raws, extract_version(pbf))
+    # A box over the sea, or one with its longitude and latitude swapped,
+    # would otherwise publish an empty registry.
+    if not doc["names"]:
+        raise SystemExit(
+            "the registry holds no named feature: check the extract and box"
+        )
     return build_files(doc, Path(out_dir))
 
 
@@ -448,15 +487,16 @@ def measure(pbf: str) -> None:
 MIN_SIZE_RATIO = 0.8
 
 
-def upload(s3, bucket: str, data_path: Path, pointer_path: Path) -> None:
-    """The data file first, then the pointer, so no client reads a pointer to
-    a file that is not there yet. Guard: tests/test_place_registry.py.
+def upload(s3, bucket: str, prefix: str, data_path: Path, pointer_path: Path) -> None:
+    """The data file first, then the pointer, both under `prefix`, so no client
+    reads a pointer to a file that is not there yet. Guard:
+    tests/test_place_registry.py.
 
     The current pointer is listed before it is read: S3 answers a GetObject
     for a missing key with AccessDenied unless the caller may list the whole
     bucket, and the task role may list only master/places/."""
     size = data_path.stat().st_size
-    key = S3_PREFIX + "latest.json"
+    key = prefix + "latest.json"
     listed = s3.list_objects_v2(Bucket=bucket, Prefix=key, MaxKeys=1)
     current = None
     if listed.get("KeyCount", 0) > 0:
@@ -475,7 +515,7 @@ def upload(s3, bucket: str, data_path: Path, pointer_path: Path) -> None:
     s3.upload_file(
         str(data_path),
         bucket,
-        S3_PREFIX + published_name(data_path),
+        prefix + published_name(data_path),
         ExtraArgs={
             "ContentType": "application/json",
             "ContentEncoding": "gzip",
@@ -485,7 +525,7 @@ def upload(s3, bucket: str, data_path: Path, pointer_path: Path) -> None:
     s3.upload_file(
         str(pointer_path),
         bucket,
-        S3_PREFIX + "latest.json",
+        prefix + "latest.json",
         ExtraArgs={
             "ContentType": "application/json",
             "CacheControl": "public, max-age=300",
@@ -493,18 +533,24 @@ def upload(s3, bucket: str, data_path: Path, pointer_path: Path) -> None:
     )
 
 
-def publish(bucket: str) -> None:
-    """Download the extract, build, and upload."""
+def publish(bucket: str, region_id: str = DEFAULT_REGION) -> None:
+    """Download the region's extract, build, and upload under its prefix."""
     import boto3
 
     # A stalled download would otherwise hang the task with no failure to
     # alarm on.
     socket.setdefaulttimeout(300)
     with tempfile.TemporaryDirectory() as tmp:
-        pbf = os.path.join(tmp, "nsw.osm.pbf")
-        urllib.request.urlretrieve(EXTRACT_URL, pbf)
+        pbf = os.path.join(tmp, "extract.osm.pbf")
+        urllib.request.urlretrieve(EXTRACTS[region_id], pbf)
         data_path, pointer_path = build(pbf, os.path.join(tmp, "out"))
-        upload(boto3.client("s3"), bucket, data_path, pointer_path)
+        upload(
+            boto3.client("s3"),
+            bucket,
+            region(region_id)["placeSearch"],
+            data_path,
+            pointer_path,
+        )
         print(f"published {data_path.name} ({data_path.stat().st_size} bytes)")
 
 
@@ -514,20 +560,26 @@ def main(argv: List[str]) -> int:
     b = sub.add_parser("build", help="build the registry from a local extract")
     b.add_argument("pbf")
     b.add_argument("out_dir")
+    b.add_argument(
+        "--bbox",
+        type=parse_bbox,
+        help="W,S,E,N in degrees: keep only what lies inside; write --bbox=… when W is negative",
+    )
     m = sub.add_parser("measure", help="print the size each class adds")
     m.add_argument("pbf")
     p = sub.add_parser("publish", help="download, build and upload to S3")
     p.add_argument("--bucket", default=os.environ.get("S3_BUCKET_TOPO"))
+    p.add_argument("--region", choices=sorted(EXTRACTS), default=DEFAULT_REGION)
     args = parser.parse_args(argv)
     if args.command == "build":
-        data_path, _ = build(args.pbf, args.out_dir)
+        data_path, _ = build(args.pbf, args.out_dir, args.bbox)
         print(f"wrote {data_path} ({data_path.stat().st_size} bytes)")
     elif args.command == "measure":
         measure(args.pbf)
     else:
         if not args.bucket:
             parser.error("publish needs --bucket or S3_BUCKET_TOPO")
-        publish(args.bucket)
+        publish(args.bucket, args.region)
     return 0
 
 

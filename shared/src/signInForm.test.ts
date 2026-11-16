@@ -5,11 +5,14 @@ import {
   isValidPassword,
   resendCodeWaiting,
   SIGN_IN_COPY,
+  signInIntro,
   signUpFormProblem,
   usernameAvailable,
   verifyIntro,
 } from "./signInForm.js";
 import { passwordSignIn } from "./cognitoAccount.js";
+import { NSW_REGION } from "./regions.js";
+import { SIM_NZ } from "./simRegions.js";
 
 // Both clients' forms call these, so one test holds them (ADR 0020).
 // Mutations that turn it red: add "InvalidParameterException" to FORM_ANSWERS
@@ -179,5 +182,18 @@ describe("the words both sign-in forms draw", () => {
       "We sent a code to a@b.co. Check your spam folder too.",
     );
     expect(resendCodeWaiting(30)).toBe("Send a new code (30s)");
+  });
+});
+
+describe("signInIntro", () => {
+  // Mutation: name `regions[0]` whatever the length, and a build with a second
+  // region tells everyone Logjam is for canyoning in New South Wales.
+  it("names the region while there is one, and no region with several", () => {
+    expect(signInIntro([NSW_REGION])).toBe(
+      "Your private map and trips for canyoning in New South Wales.",
+    );
+    expect(signInIntro([NSW_REGION, SIM_NZ])).toBe(
+      "Your private map and trips for canyoning.",
+    );
   });
 });

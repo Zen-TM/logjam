@@ -584,7 +584,8 @@ model TopoExportJob {
   bundling            String
   // "composite" | "per-layer"
   vectorStyleSnapshot Json      @map("vector_style_snapshot")
-  // An export of an area: {west, south, east, north} in degrees, and no
+  // An export of an area: {west, south, east, north} in degrees and the
+  // `epsg` of the grid it is warped to (a row from before has none), and no
   // source job. Null for an export of a LiDAR job. Never logged, as it is a
   // place: the request logger keeps no body (src/lib/logger.unit.test.ts, "is
   // not in what the request logger keeps of the request"), and the worker

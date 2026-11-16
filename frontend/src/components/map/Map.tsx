@@ -18,8 +18,8 @@ setWorkerUrl(maplibreWorkerUrl);
 import { PMTiles, Protocol } from "pmtiles";
 import {
   MAP_INK,
-  mgaGrid,
-  MGA_GRID_STYLE,
+  mapGrid,
+  GRID_STYLE,
   MAP_LABEL_MIN_ZOOM,
   MAP_LABEL_SIZE,
   PIN_CASING_COLOR,
@@ -107,6 +107,7 @@ import {
   ROUTE_ARROW_MIN_ZOOM,
   ROUTE_ARROW_SDF_URI,
   SAVED_ROUTE_MIN_ZOOM,
+  displayUnits,
   type LonLatBox,
   type RouteDraft,
   type RoutePoint,
@@ -176,6 +177,7 @@ import {
 } from "./geoPdfFrame";
 import type { ReactNode } from "react";
 import { MOBILE_MAX_WIDTH_PX, useMediaQuery } from "../../useIsMobile";
+import { makeScaleControl } from "./scaleControl";
 import { collapseCreditsOnce } from "./collapseCredits";
 import type {
   TPlace,
@@ -208,6 +210,7 @@ import {
   BASEMAP_FAIL_AFTER,
   isServerFault,
   extentFromCentreAndSize,
+  gaugeFeedOf,
   rgbaCssFromHex,
   contourWidthStops,
   TERRARIUM,
@@ -757,10 +760,10 @@ function Map({
   onGeoPdfExtentCancelled?: () => void;
   /**
    * The visible bounds, on load and after every pan/zoom. Separate from
-   * `onMapViewChange` because its consumer keeps the answer in a ref: "filter
-   * to the current view" needs the bounds only at the moment the button is
-   * pressed, and routing them through state would re-render Logjam Web on every
-   * frame of a pan for a value nothing renders.
+   * `onMapViewChange` because the consumer uses them two ways: a ref for
+   * "filter to the current view", which needs them only when the button is
+   * pressed, and state for the Layers popover's grid row, which is named for
+   * them. The state update lands in the same batched render as the view's.
    */
   onMapBoundsChange?: (bounds: TBbox) => void;
   onMapViewChange?: (view: {
@@ -819,6 +822,12 @@ function Map({
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
+  const scaleControlRef = useRef<maplibregl.ScaleControl | null>(null);
+  // Read while rendering: the app sets the account's units before it renders
+  // the map, so a change of units reaches the scale bar's effect below.
+  // Guard: `scaleControl.test.ts` ("is made with the display units and told
+  // when they change").
+  const units = displayUnits();
   /**
    * The map and its locate control, once it is safe to attach handlers to —
    * null before load, so the box-draw hook can key its effect on the map
@@ -901,7 +910,9 @@ function Map({
   // The river gauge pressed, if any; the drops come from the public file.
   const [gaugeId, setGaugeId] = useState<string | null>(null);
   const [searchPin, setSearchPin] = useState<SearchPin | null>(null);
-  const { file: gaugeFile, failed: gaugesFailed } = useGauges(showGauges);
+  const { file: gaugeFile, failed: gaugesFailed } = useGauges(
+    showGauges ? gaugeFeedOf(region) : null,
+  );
   if (!showGauges && gaugeId) setGaugeId(null);
   const openGauge = gaugeFile?.gauges.find((g) => g.id === gaugeId);
   const closedGaugeRef = useRef<{ id: string; at: number } | null>(null);
@@ -1113,13 +1124,12 @@ function Map({
     );
     const credits = map.getContainer().querySelector(".maplibregl-ctrl-attrib");
     if (credits) collapseCreditsOnce(credits);
-    map.addControl(
-      new maplibregl.ScaleControl({
-        unit: "metric",
-        maxWidth: window.innerWidth <= MOBILE_MAX_WIDTH_PX ? 100 : 160,
-      }),
-      "bottom-left",
+    const scale = makeScaleControl(
+      displayUnits(),
+      window.innerWidth <= MOBILE_MAX_WIDTH_PX,
     );
+    scaleControlRef.current = scale;
+    map.addControl(scale, "bottom-left");
 
     // A completed topo job whose S3 outputs are gone otherwise 404s on every
     // tile request, silently renders nothing, and retries each load.
@@ -1660,8 +1670,8 @@ function Map({
           layout: { visibility: "none" },
           paint: {
             "line-color": MAP_INK.grid,
-            "line-width": MGA_GRID_STYLE.lineWidth,
-            "line-opacity": MGA_GRID_STYLE.lineOpacity,
+            "line-width": GRID_STYLE.lineWidth,
+            "line-opacity": GRID_STYLE.lineOpacity,
           },
         },
         GAUGE_BELOW,
@@ -1674,7 +1684,7 @@ function Map({
           layout: {
             visibility: "none",
             "symbol-placement": "line",
-            "symbol-spacing": MGA_GRID_STYLE.labelSpacing,
+            "symbol-spacing": GRID_STYLE.labelSpacing,
             "text-rotation-alignment": "viewport",
             "text-field": ["get", "text"],
             "text-font": ["Noto Sans Medium"],
@@ -1817,11 +1827,16 @@ function Map({
     return () => {
       map.remove();
       mapRef.current = null;
+      scaleControlRef.current = null;
       // Reset mapLoaded so the place update effect re-runs when the map
       // reinitialises (required in React Strict Mode, which mounts twice).
       setLoaded(null);
     };
   }, []);
+
+  useEffect(() => {
+    scaleControlRef.current?.setUnit(units);
+  }, [units]);
 
   useEffect(() => {
     if (!mapLoaded || !mapRef.current) return;
@@ -2268,7 +2283,7 @@ function Map({
     });
   }, [showGauges, gaugeFile, mapLoaded]);
 
-  // The MGA grid, rebuilt for the view each time the camera settles.
+  // The map grid, rebuilt for the view each time the camera settles.
   useEffect(() => {
     const map = mapRef.current;
     if (!mapLoaded || !map) return;
@@ -2277,7 +2292,7 @@ function Map({
       map.setLayoutProperty(id, "visibility", vis);
     if (!showMgaGrid) return;
     const draw = () => {
-      const grid = mgaGrid(boxOf(map.getBounds()), map.getZoom());
+      const grid = mapGrid(boxOf(map.getBounds()), map.getZoom());
       (map.getSource("mga-grid") as maplibregl.GeoJSONSource).setData(grid);
     };
     draw();
@@ -3789,6 +3804,7 @@ function Map({
           gauge={openGauge}
           attribution={gaugeFile.attribution}
           generatedAt={gaugeFile.generatedAt}
+          units={gaugeFile.units}
           onClose={closeGauge}
         />
       )}

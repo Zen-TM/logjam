@@ -6,6 +6,7 @@ stub is needed for this module; boto3/psycopg2/pmtiles are stubbed by
 _native_stub when absent on the host.
 """
 
+import json
 import os
 import subprocess
 import sys
@@ -56,6 +57,14 @@ class _FakeConn:
         return _FakeCursor(self._row)
 
 
+# Every region in regions.json, the simulated ones too, whatever the shell's
+# SIM_REGIONS says, and a made-up box inside two of them.
+with open(worker.regions.REGIONS_FILE, encoding="utf-8") as _f:
+    EVERY_REGION = json.load(_f)["regions"]
+IN_NSW = [150.7, -33.8, 150.72, -33.78]
+IN_SIM_UTAH = [-112.96, 37.27, -112.94, 37.29]
+
+
 class TestSafeErrorMessage(unittest.TestCase):
     # The owner reads this in both clients (shared/DESIGN.md §11): no tool's
     # name, no id. Which step failed is in CloudWatch.
@@ -85,7 +94,25 @@ class TestSafeErrorMessage(unittest.TestCase):
         self.assertEqual(safe_error_message(RuntimeError("exit code -9")), TOO_BIG)
 
     def test_os_error_points_at_input(self):
-        self.assertIn("LiDAR data", safe_error_message(OSError("bad zip")))
+        self.assertEqual(safe_error_message(OSError("bad zip")), worker.UNREADABLE)
+
+    # Mutation: reword one copy, or name a portal in one ("the one ELVIS sent
+    # you"): the seed's failed job and a real one then read differently, and
+    # a survey from another portal is sent to ELVIS.
+    def test_the_api_words_an_unreadable_zip_the_same(self):
+        import re
+
+        path = os.path.join(
+            os.path.dirname(__file__), "../../api/src/lib/failureCopy.ts"
+        )
+        with open(path, encoding="utf-8") as f:
+            declared = re.search(
+                r"function topoUnreadableMessage\(\): UserSentence \{\s*return say`(.*)`;",
+                f.read(),
+            )
+        self.assertIsNotNone(declared, "no topoUnreadableMessage in failureCopy.ts")
+        self.assertEqual(worker.UNREADABLE, declared.group(1))
+        self.assertNotRegex(worker.UNREADABLE, r"ELVIS|NSW")
 
 
 class TestWantsEmail(unittest.TestCase):
@@ -334,7 +361,8 @@ class TestProcessSharpen(unittest.TestCase):
     def finished(out):
         import json
 
-        (out / "sharpen.json").write_text(json.dumps({"v": 1, "zmax": 16}))
+        result = {"v": 1, "zmax": 16, "coverage": IN_NSW}
+        (out / "sharpen.json").write_text(json.dumps(result))
         for name in ("heights", "slope", "contours"):
             (out / f"{name}.pmtiles").write_bytes(b"x" * 10)
         return 0
@@ -485,6 +513,31 @@ class TestProcessSharpen(unittest.TestCase):
         self.assertEqual(metrics["wallSeconds"], 13.0)
         self.assertNotIn("vegetationWallSeconds", metrics)
 
+    # Mutation: `left_out = False` before the pass in `process_sharpen`, so
+    # the tick alone decides: the pass runs where it has no formations and no
+    # fire raster to read, and the result does not say the layer is missing.
+    def test_a_ticked_job_in_a_region_without_the_model_skips_the_pass(self):
+        import json
+        from unittest import mock
+
+        def finished(out):
+            self.finished(out)
+            result = {"v": 1, "zmax": 16, "coverage": IN_SIM_UTAH}
+            (out / "sharpen.json").write_text(json.dumps(result))
+            return 0
+
+        with mock.patch.object(worker.regions, "REGIONS", EVERY_REGION):
+            result, uploads, vegetation = self.run_job(
+                {"v": 1, "vegetation": True}, finished
+            )
+        output_keys, _, total, _, sharpen = result
+        vegetation.assert_not_called()
+        self.assertEqual(output_keys, [])
+        self.assertEqual(total, 30)
+        self.assertTrue(sharpen["vegetation"])
+        self.assertTrue(sharpen["vegetationLeftOut"])
+        self.assertEqual(len(uploads), 3)
+
     def test_another_failure_of_the_pass_still_fails_the_job(self):
         with self.assertRaises(RuntimeError):
             self.run_job(
@@ -548,6 +601,21 @@ class TestLeftOutNotice(unittest.TestCase):
         self.assertNotIn(
             "vegetationLeftOut", worker.completion_payload(job, None, False)
         )
+
+    # Mutation: `left_out_for_size` returning `vegetationLeftOut` alone, and
+    # the owner of an area in a region without the vegetation model is told
+    # the area was too large for it.
+    def test_only_a_layer_left_out_for_size_is_said_to_be(self):
+        from unittest import mock
+
+        with mock.patch.object(worker.regions, "REGIONS", EVERY_REGION):
+            for coverage, left_out, told in (
+                (IN_NSW, True, True),
+                (IN_NSW, False, False),
+                (IN_SIM_UTAH, True, False),
+            ):
+                sharpen = {"coverage": coverage, "vegetationLeftOut": left_out}
+                self.assertEqual(worker.left_out_for_size(sharpen), told)
 
     def test_the_email_says_it_too(self):
         from unittest import mock

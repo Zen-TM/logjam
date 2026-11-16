@@ -5,7 +5,7 @@ import type { TPlace } from "./apiTypes.js";
 import { formatCanyonGrade, isCanyonGradeKey } from "./canyonGrade.js";
 import { escapeXml } from "./escapeXml.js";
 import { userFieldValues } from "./fieldValues.js";
-import { SOURCES_FIELD_KEY } from "./placeTypes.js";
+import { fieldValueLabel, SOURCES_FIELD_KEY } from "./placeTypes.js";
 import {
   GEOJSON_MIME_TYPE,
   GPX_MIME_TYPE,
@@ -336,11 +336,17 @@ function placesToCsv(places: TPlace[], types: PlaceTypeName[]): string {
     });
     for (const key of attrKeys) {
       // Empty cell for places lacking the field; String() for present values
-      // (custom-field values re-ingest as strings via the `attr:<key>` role).
+      // (custom-field values re-ingest as strings via the `attr:<key>` role),
+      // except a built-in field that gives its values words, which leaves as
+      // its word ("C2") and is read back from it or from its number.
       // Custom-field values are free-form user text — formula-injection guard
       // applies here too.
       const value = fieldValues[key];
-      cells.push(value == null ? "" : neutralizeFormula(String(value)));
+      cells.push(
+        value == null
+          ? ""
+          : neutralizeFormula(fieldValueLabel(key, value) ?? String(value)),
+      );
     }
     return cells;
   });

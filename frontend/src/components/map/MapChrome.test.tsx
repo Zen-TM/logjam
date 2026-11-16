@@ -5,6 +5,7 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
+import type { ComponentProps } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type * as maplibregl from "maplibre-gl";
 import { ToastProvider } from "../feedback/ToastProvider";
@@ -26,7 +27,18 @@ const stubMap = {
 // The element MapLibre draws in: a press on it is a press on the map.
 const mapContainer = document.createElement("div");
 
-function chrome(selectingArea = false, map: maplibregl.Map | null = null) {
+function chrome(
+  selectingArea = false,
+  map: maplibregl.Map | null = null,
+  tools: ComponentProps<typeof MapChrome>["tools"] = [
+    {
+      id: "m",
+      label: "Measure",
+      icon: "add",
+      onSelect() {},
+    },
+  ],
+) {
   return render(
     <ToastProvider>
       <MapChrome
@@ -35,14 +47,7 @@ function chrome(selectingArea = false, map: maplibregl.Map | null = null) {
         is3D={false}
         onToggle3D={() => {}}
         search={null}
-        tools={[
-          {
-            id: "m",
-            label: "Measure",
-            icon: "add",
-            onSelect() {},
-          },
-        ]}
+        tools={tools}
         selectingArea={selectingArea}
       />
       <div data-testid="map" />
@@ -128,5 +133,60 @@ describe("3D and the compass during an area selection", () => {
       expect(
         (screen.getByRole("button", { name }) as HTMLButtonElement).disabled,
       ).toBe(true);
+  });
+});
+
+describe("a tool the map's region cannot run", () => {
+  // jsdom has no Popover API or ResizeObserver, which the tool's tooltip
+  // opens and places itself with.
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      observe() {}
+      disconnect() {}
+    },
+  );
+  Object.assign(HTMLElement.prototype, {
+    showPopover(this: HTMLElement) {
+      this.removeAttribute("popover");
+    },
+    hidePopover() {},
+    togglePopover() {},
+  });
+
+  // Mutation: in MapChrome.tsx change `) : tool.unavailable ? (` to
+  // `) : false ? (`, and the press runs the tool and closes the tray; delete
+  // the `{" "}` before `<span className={classes.trayState}>`, and the name
+  // reads "Sharpen an areaNot available here".
+  it("says why beside its label and does nothing when pressed", () => {
+    const onSelect = vi.fn();
+    chrome(false, null, [
+      {
+        id: "s",
+        label: "Sharpen an area",
+        icon: "lidar",
+        onSelect,
+        unavailable: { state: "Not available here", reason: "Made-up reason." },
+      },
+    ]);
+    fireEvent.click(screen.getByRole("button", { name: "Tools" }));
+    const tool = screen.getByRole("button", {
+      name: "Sharpen an area Not available here",
+    });
+    expect(tool.getAttribute("aria-disabled")).toBe("true");
+    expect(tool.textContent).toContain("Not available here");
+    fireEvent.click(tool);
+    expect(onSelect).not.toHaveBeenCalled();
+    expect(tray()).toBeTruthy();
+    expect(screen.getByRole("tooltip").textContent).toBe("Made-up reason.");
+  });
+
+  // Mutation: mark every tool unavailable, and a tool that can run is dead.
+  it("leaves the other tools running", () => {
+    const onSelect = vi.fn();
+    chrome(false, null, [{ id: "m", label: "Measure", icon: "add", onSelect }]);
+    fireEvent.click(screen.getByRole("button", { name: "Tools" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Measure/ }));
+    expect(onSelect).toHaveBeenCalledTimes(1);
   });
 });

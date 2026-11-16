@@ -25,6 +25,7 @@ import type {
 } from "../../placeUtils";
 import type {
   RegionBbox,
+  SharpenOffer,
   StandaloneFile,
   ScopedCustomFieldDef,
 } from "@logjam/shared";
@@ -32,6 +33,7 @@ import type { GeoJsonPolygonal } from "../dialogs/TopoDialog";
 import {
   accountRegion,
   canyonOffersFor,
+  gradeSystemOfView,
   TRIPS_LIST,
   type LoadState,
   type NotificationPlanTarget,
@@ -97,11 +99,13 @@ function SidebarPanel({
   onFiltersOpenChange,
   onHoverPlace,
   onMakeMap,
+  sharpenFor,
   onSharePlaces,
   onExportPlaces,
   // LiDAR
   onQuotaChanged,
   onWaysChanged,
+  mapCenter,
   currentUser,
   currentUserError,
   onRetryCurrentUser,
@@ -196,10 +200,14 @@ function SidebarPanel({
   onFiltersOpenChange: (open: boolean) => void;
   onHoverPlace: (id: string | null) => void;
   onMakeMap: (bounds: RegionBbox, kind: MapKind) => void;
+  /** What sharpening offers for a box, else for the ground the map shows. */
+  sharpenFor: (box: RegionBbox | null) => SharpenOffer;
   onSharePlaces: (ids: string[]) => void;
   onExportPlaces: (ids: string[]) => void;
   onQuotaChanged: () => void;
   onWaysChanged: () => void;
+  /** Where the map is looking, or null before it has moved. */
+  mapCenter: { lat: number; lng: number } | null;
   currentUser: TUser | null;
   /** Set when the signed-in user's own record failed to load — the one fetch
    *  the Account page has no fallback for. */
@@ -373,6 +381,10 @@ function SidebarPanel({
 
   const accountFailed =
     !currentUser && currentUserError !== null && waitsOnAccount(activePanel);
+  const placesGradeSystem = gradeSystemOfView(
+    mapCenter ? [mapCenter.lng, mapCenter.lat] : null,
+    currentUser?.uiPreferences,
+  );
 
   // Every hero in a panel draws the ×, and it does what the rail icon does.
   const panelContent = (
@@ -411,11 +423,14 @@ function SidebarPanel({
             setActivePanel={setActivePanel}
             onHoverPlace={onHoverPlace}
             onMakeMap={onMakeMap}
+            sharpenFor={sharpenFor}
             onSharePlaces={onSharePlaces}
             onExportPlaces={onExportPlaces}
             onPlaceVerb={(id) => setPlaceVerbRequest({ id })}
             onExpandSheet={expandSheetToFull}
             canyonRegions={canyonOffersFor(currentUser?.uiPreferences)}
+            gradeSystem={placesGradeSystem}
+            uiPreferences={currentUser?.uiPreferences}
           />
         )}
         {!accountFailed && activePanel === "friends" && (
@@ -531,6 +546,7 @@ function SidebarPanel({
               const bounds = placesBounds([target]);
               if (bounds) onMakeMap(bounds, kind);
             }}
+            sharpenFor={sharpenFor}
             onExportPlace={(id) => onExportPlaces([id])}
             verbRequest={placeVerbRequest}
             onVerbRequestConsumed={() => setPlaceVerbRequest(null)}

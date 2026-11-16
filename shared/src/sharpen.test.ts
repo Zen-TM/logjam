@@ -7,18 +7,24 @@ import {
   type DemTileReader,
 } from "./demSources.js";
 import { DEM_TILE_SIZE } from "./demTiles.js";
+import { MAP_TERRAIN } from "./contracts/mapTerrain.js";
 import { PLACE_VERBS } from "./contracts/placeVerbs.js";
 import { buildElevationProfile, climbFromProfile } from "./elevation.js";
 import {
   areasInBox,
   compareSharpenedAreas,
   demSourcesFor,
+  sharpenOffer,
+  sharpenOfferFor,
+  sharpenUnavailable,
+  SHARPEN_OFF_REASON,
   terrainTileArchive,
   type RoutedTerrain,
   type SharpenedArea,
   LIDAR_JOB_COPY,
 } from "./sharpen.js";
-import { NSW_REGION } from "./regions.js";
+import { NSW_REGION, WORLD } from "./regions.js";
+import { SIM_NZ, SIM_REGIONS, SIM_UTAH } from "./simRegions.js";
 
 // Made-up areas near Katoomba: a z15 range of two by two z14 tiles.
 const area = (over: Partial<SharpenedArea>): SharpenedArea => ({
@@ -87,8 +93,9 @@ describe("terrainTileArchive", () => {
     x: number,
     y: number,
     areas = [a],
+    statewideMax = 15,
   ) => {
-    const answer = terrainTileArchive(areas, layer, z, x, y);
+    const answer = terrainTileArchive(areas, layer, z, x, y, statewideMax);
     return typeof answer === "string" ? answer : answer.id;
   };
 
@@ -112,6 +119,65 @@ describe("terrainTileArchive", () => {
     expect(route("slope", 16, 30104 * 2, 19403 * 2)).toBe("absent");
     expect(route("slope", 16, 30100 * 2, 19400 * 2)).toBe("a");
     expect(route("slope", 16, 30100 * 2 - 1, 19400 * 2)).toBe("absent");
+  });
+
+  // Mutation: answer "absent" at z16 or z17 outside every area whatever
+  // `statewideMax` is (the old literal z15), and a region whose archive holds
+  // z17 has its two deepest zooms read as absent once an area is held.
+  it("reads statewide to the region's own deepest zoom outside an area", () => {
+    for (const layer of ["heights", "slope"] as const) {
+      expect(route(layer, 16, 60198, 38800, [a], 17)).toBe("statewide");
+      expect(route(layer, 17, 120396, 77600, [a], 17)).toBe("statewide");
+      expect(route(layer, 17, 120396, 77600, [], 17)).toBe("statewide");
+      expect(route(layer, 18, 240792, 155200, [a], 17)).toBe("absent");
+      // An archive that stops at z16 reads nothing at z17.
+      expect(route(layer, 16, 60198, 38800, [a], 16)).toBe("statewide");
+      expect(route(layer, 17, 120396, 77600, [a], 16)).toBe("absent");
+    }
+  });
+
+  // Mutations: drop the `Math.max(from, …)` floor (z15 outside an area is then
+  // absent when `statewideMax` is 0), or answer contours "absent" for a small
+  // `statewideMax`. Callers that ask only at these zooms (Logjam GPS's
+  // `terrainRoutes`, the GeoPDF contour grouping) pass a stand-in.
+  it("answers at the routed zoom, and for contours, whatever the archive's deepest zoom", () => {
+    const tiles = [
+      [30100, 19400],
+      [30103, 19403],
+      [30104, 19403],
+      [30099, 19400],
+    ];
+    const contourTiles = [
+      [15050, 9700, 14],
+      [15049, 9700, 14],
+      [60200, 38800, 16],
+      [60198, 38800, 16],
+      [120400, 77600, 17],
+    ];
+    for (const max of [0, 15, 17]) {
+      for (const layer of ["heights", "slope"] as const)
+        for (const [x, y] of tiles)
+          expect(route(layer, 15, x, y, [a], max)).toBe(
+            route(layer, 15, x, y, [a], 15),
+          );
+      for (const [x, y, z] of contourTiles)
+        expect(route("contours", z, x, y, [a], max)).toBe(
+          route("contours", z, x, y, [a], 15),
+        );
+    }
+    expect(route("heights", 15, 30104, 19403, [a], 0)).toBe("statewide");
+    expect(route("contours", 14, 15049, 9700, [a], 0)).toBe("statewide");
+  });
+
+  // Mutations: let `statewideMax` lift an area's zmax (it answers a z17 tile
+  // it has none of), or answer statewide past the area's zmax (the archive's
+  // z17 tile is drawn beside the area's own z16 one).
+  it("still gives an area's range to the area where the archive goes deeper", () => {
+    expect(route("heights", 16, 60200, 38800, [a], 17)).toBe("a");
+    expect(route("slope", 17, 120400, 77600, [a], 17)).toBe("absent");
+    expect(route("slope", 17, 120400, 77600, [area({ zmax: 17 })], 17)).toBe(
+      "a",
+    );
   });
 
   // Mutation: an area answering past its zmax, which it has no tile for.
@@ -245,5 +311,117 @@ describe("LIDAR_JOB_COPY", () => {
   it("names a new job in one place", () => {
     const verb = PLACE_VERBS.find((v) => v.id === "makeTopo")!;
     expect(verb.label).toBe(LIDAR_JOB_COPY.makeHere);
+  });
+});
+
+describe("sharpenOffer", () => {
+  const UPLOADING = [NSW_REGION, ...SIM_REGIONS].filter(
+    (r) => r.sharpen.mode === "upload",
+  );
+
+  // Mutation: delete a region's `portal` from regions.ts or simRegions.ts, or
+  // give it an address that is not https, and the dialog names a portal it
+  // cannot link to.
+  it("gives every upload region a portal", () => {
+    expect(UPLOADING.map((r) => r.id)).toEqual(["nsw", "simutah"]);
+    for (const region of UPLOADING) {
+      const offer = sharpenOffer(region);
+      if (offer.mode !== "upload") throw new Error(region.id);
+      expect(offer.portal.name, region.id).not.toBe("");
+      expect(offer.portal.url, region.id).toMatch(/^https:\/\/\S+$/);
+    }
+  });
+
+  // Mutation: in sharpen.ts change `(region ?? WORLD).sharpen` to
+  // `REGIONS[0]!.sharpen`, and Utah is sent to ELVIS.
+  it("offers the region's own portal and vegetation model", () => {
+    expect(sharpenOffer(NSW_REGION)).toEqual({
+      mode: "upload",
+      portal: {
+        name: "ELVIS",
+        url: "https://elevation.fsdf.org.au/",
+        steps: "elvis",
+      },
+      vegetation: true,
+    });
+    expect(sharpenOffer(SIM_UTAH)).toMatchObject({
+      mode: "upload",
+      portal: { name: "USGS", steps: "link" },
+      vegetation: false,
+    });
+  });
+
+  // Mutation: in sharpen.ts change `SHARPEN_OFF_REASON[entry.reason]` to
+  // `SHARPEN_OFF_REASON["no-lidar"]`, or make the two sentences the same.
+  it("says why a region that is off is off", () => {
+    expect(sharpenOffer(SIM_NZ)).toEqual({
+      mode: "off",
+      reason: SHARPEN_OFF_REASON["already-fine"],
+    });
+    expect(sharpenOffer(WORLD)).toEqual({
+      mode: "off",
+      reason: SHARPEN_OFF_REASON["no-lidar"],
+    });
+    expect(SHARPEN_OFF_REASON["already-fine"]).not.toBe(
+      SHARPEN_OFF_REASON["no-lidar"],
+    );
+  });
+
+  // Mutation: in sharpen.ts change `const entry: RegionSharpen = (region ?? WORLD).sharpen;`
+  // to `(region ?? REGIONS[0]!).sharpen`, and a map over no region offers
+  // ELVIS's errand.
+  it("is off with no LiDAR over ground no region declares", () => {
+    expect(sharpenOffer(null)).toEqual({
+      mode: "off",
+      reason: SHARPEN_OFF_REASON["no-lidar"],
+    });
+  });
+});
+
+describe("sharpenOfferFor", () => {
+  const all = [NSW_REGION, ...SIM_REGIONS];
+  const inUtah = { west: -112.97, south: 37.26, east: -112.93, north: 37.3 };
+  const atSea = { west: 0, south: 0, east: 0.1, north: 0.1 };
+
+  // Mutation: in sharpen.ts replace `if (!box) return sharpenOffer(view);` and
+  // the `return sharpenOffer(` call after it with `return sharpenOffer(view);`,
+  // and a Utah place's Sharpen offers ELVIS because the map is over New South Wales.
+  it("lets the box's region decide, whatever the map shows", () => {
+    expect(sharpenOfferFor(inUtah, NSW_REGION, all)).toEqual(
+      sharpenOffer(SIM_UTAH),
+    );
+  });
+
+  // Mutation: in sharpen.ts end the box branch with `?? view` after the
+  // `regionOfArea(...)` call, and a box in no region is offered the map's
+  // region's errand.
+  it("is off for a box in no region, with no fall back to the map's region", () => {
+    expect(sharpenOfferFor(atSea, NSW_REGION, all)).toEqual({
+      mode: "off",
+      reason: SHARPEN_OFF_REASON["no-lidar"],
+    });
+  });
+
+  // Mutation: in sharpen.ts change `if (!box) return sharpenOffer(view);` to
+  // `if (!box) return sharpenOffer(null);`, and the map's own entry points
+  // ignore the region in view.
+  it("reads the map's region for an action about no box", () => {
+    expect(sharpenOfferFor(null, SIM_NZ, all)).toEqual(sharpenOffer(SIM_NZ));
+    expect(sharpenOfferFor(null, NSW_REGION, all)).toEqual(
+      sharpenOffer(NSW_REGION),
+    );
+  });
+});
+
+describe("sharpenUnavailable", () => {
+  // Mutation: in sharpen.ts change `offer.mode === "off"` in
+  // `sharpenUnavailable` to `offer.mode !== "off"`, or write the state's words
+  // there instead of reading the Terrain layers' (`MAP_TERRAIN.copy.notHere`).
+  it("says Not available here, with the region's reason, only where it is off", () => {
+    expect(sharpenUnavailable(sharpenOffer(NSW_REGION))).toBeNull();
+    expect(sharpenUnavailable(sharpenOffer(SIM_NZ))).toEqual({
+      state: MAP_TERRAIN.copy.notHere,
+      reason: SHARPEN_OFF_REASON["already-fine"],
+    });
   });
 });

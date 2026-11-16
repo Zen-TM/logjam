@@ -113,10 +113,34 @@ describe("regionUpdateSpecs", () => {
       taskKind: "clip",
       basemapId: "protomaps",
     });
-    expect(specs?.[2]).toMatchObject({ demSourceId: "nsw-5m" });
-    expect(specs?.[3]).toMatchObject({ contours: true });
-    expect(specs?.[4]).toMatchObject({ fire: true });
-    expect(specs?.[5]).toMatchObject({ coverage: true });
+    expect(specs?.[1]).toMatchObject({ archiveId: undefined });
+    expect(specs?.[2]).toMatchObject({ archiveId: "nsw-5m" });
+    expect(specs?.[3]).toMatchObject({ archiveId: "nsw-contours" });
+    expect(specs?.[4]).toMatchObject({ archiveId: "nsw-fire" });
+    expect(specs?.[5]).toMatchObject({ archiveId: "nsw-coverage" });
+  });
+
+  // Mutation: build a spec for every file that is not a tile pyramid, and a
+  // clip of an archive no region declares now is cut as the vector map and
+  // filed under its key, beside the one it was saved with.
+  it("leaves a clip of an archive no region declares as it was saved", () => {
+    const gone = member({
+      id: "s",
+      kind: "contours-region",
+      logicalKey: "simnz-contours",
+      format: "pmtiles",
+    });
+    const specs = regionUpdateSpecs(
+      [...members, gone],
+      "Claustral",
+      false,
+      newId,
+    );
+    expect(specs).toHaveLength(6);
+    expect(
+      specs?.map((s) => (s as { basemapId: string }).basemapId),
+    ).not.toContain("simnz-contours");
+    expect(regionUpdateSpecs([gone], "Claustral", false, newId)).toBeNull();
   });
 
   it("has nothing to update when no file knows its area", () => {

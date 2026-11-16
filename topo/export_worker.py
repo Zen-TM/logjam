@@ -4,7 +4,7 @@ export_worker.py
 ECS Fargate export worker. Processes a single TopoExportJob then exits.
 
 Reads the export-job ID from EXPORT_JOB_ID. An export of an area renders the
-statewide terrain over its box (area_export.py). An export of a topo, which
+terrain of its box's region over it (area_export.py). An export of a topo, which
 only a row queued before Make a map can be, fetches the source TopoJob's
 outputs from S3 (COGs for raster layers, raw GeoJSONs for vectors, vector
 PMTiles where needed) and dispatches to the renderer for its
@@ -55,12 +55,14 @@ from area_export import (
     FETCH_THREADS,
     Area,
     AreaExportError,
-    AreaOutsideNsw,
+    AreaOutsideTerrain,
     area_from,
+    region_top_zoom,
     render_area,
     s3_area_archives,
     s3_archives,
 )
+import regions
 from worker_common import (
     compose_database_url,
     create_notification,
@@ -86,7 +88,7 @@ def failure_sentence(error: Exception) -> str:
     """What the owner reads for a failed export: never the exception's text."""
     return (
         error.SENTENCE
-        if isinstance(error, (ExportTooLarge, AreaOutsideNsw))
+        if isinstance(error, (ExportTooLarge, AreaOutsideTerrain))
         else GENERIC_FAILURE
     )
 
@@ -289,22 +291,29 @@ def get_sharpened_areas(conn, ids: list[str]) -> list[Area]:
 
 
 def render_area_export(conn, export_job: dict, work: Path) -> Path:
-    """An export of an area: the statewide terrain over its box, and the
-    sharpened areas in it the API chose (area_export.py)."""
+    """An export of an area: the terrain of the region the box is in over it,
+    and the sharpened areas in it the API chose (area_export.py)."""
     bbox = export_job["bbox"]
+    region = regions.export_region(
+        (bbox["west"], bbox["south"], bbox["east"], bbox["north"])
+    )
+    if region is None:
+        raise AreaOutsideTerrain("no region with heights touches the box")
     areas = get_sharpened_areas(conn, list(export_job["source_job_ids"]))
     log.info(
         f"Rendering area format={export_job['format']} "
         f"layers={list(export_job['layers'])}"
     )  # the box is a place: never logged (tests/test_export_worker_helpers.py)
     return render_area(
-        s3_archives(s3, BUCKET),
+        s3_archives(s3, BUCKET, region),
         (bbox["west"], bbox["south"], bbox["east"], bbox["north"]),
         list(export_job["layers"]),
         export_job["format"],
         work,
         export_job["vector_style_snapshot"],
         [(area, s3_area_archives(s3, BUCKET, area)) for area in areas],
+        epsg=bbox.get("epsg"),
+        top_zoom=region_top_zoom(region),
     )
 
 

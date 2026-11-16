@@ -176,7 +176,7 @@ describe("a sheet in another region", () => {
     expect(paths(read({ overlays: ["land"] }))).toEqual([nz.land!.archivePath]);
   });
 
-  // Mutation: add `?? regions[0]` after `regionInWrappedView` in sheetTerrain, and a
+  // Mutation: add `?? regions[0]` after `regionInView` in sheetTerrain, and a
   // print outside every region prefetches NSW's tiles.
   it("reads nothing where no region holds the sheet", () => {
     const outside = input(
@@ -185,6 +185,54 @@ describe("a sheet in another region", () => {
       NZ_CENTRE,
     );
     expect(statewideReads(outside)).toEqual([]);
+  });
+
+  // Mutation: pass a literal 15 to `terrainTileReader` in place of
+  // `archive.maxzoom` in planTerrainBlocks, and a sheet beside a held area
+  // reads its z17 tiles from z15, stretched.
+  it("reads at its archive's top zoom, in and beside a sharpened area", () => {
+    const { config } = input(
+      { scale: 15000, overlays: ["slope"] },
+      [],
+      NZ_CENTRE,
+    );
+    const g = printGeometry(config);
+    const whole = [{ from: 0, to: g.nativeH }];
+    const zooms = (areas: SharpenedOverlay[]) => {
+      const plan = planTerrainBlocks(
+        config,
+        g,
+        areas,
+        "slope",
+        { maxzoom: 17 },
+        whole,
+      );
+      return {
+        demZoom: plan.demZoom,
+        read: new Set(plan.blocks.flatMap((b) => b.reads.map((r) => r.z))),
+      };
+    };
+    const x15 = lon2tileX(NZ_CENTRE.lon, 15);
+    const y15 = lat2tileY(NZ_CENTRE.lat, 15);
+    const held: SharpenedOverlay = {
+      id: "nz1",
+      zmax: 16,
+      tiles15: [x15, y15, x15, y15],
+      coverage: [
+        NZ_CENTRE.lon,
+        NZ_CENTRE.lat,
+        NZ_CENTRE.lon + 0.01,
+        NZ_CENTRE.lat,
+      ],
+      contours: false,
+      credit: "Elevation: made up.",
+      createdAt: "2026-10-24T00:00:00.000Z",
+      heightsUrl: "https://bucket.test/h?sig",
+      slopeUrl: "https://bucket.test/s?sig",
+      contoursUrl: null,
+    };
+    expect(zooms([])).toEqual({ demZoom: 17, read: new Set([17]) });
+    expect(zooms([held])).toEqual({ demZoom: 17, read: new Set([16, 17]) });
   });
 
   // Mutation: read the zoom from a literal 15 in planTerrainBlocks in place of

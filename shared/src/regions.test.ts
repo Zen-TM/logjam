@@ -1,9 +1,11 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 
 import { DEM_SOURCES, TERRARIUM } from "./demSources.js";
 import { normalizeUserUiPreferences } from "./themeSchemes.js";
 import { canyonOffersFor } from "./contracts/placesList.js";
 import {
+  REGION_CHOICE,
   regionChoiceProblem,
   regionOffRefusal,
   toggleRegion,
@@ -22,29 +24,48 @@ import {
   canyonRegionsOf,
   DEFAULT_REGION_IDS,
   layerIn,
+  placeRegistryIn,
+  regionsWithRegistry,
+  regionWithRegistry,
   NSW_REGION,
   normalizeRegionIds,
   offersRegionChoice,
   REGIONS,
+  REGIONS_WITH_SIMULATED,
   regionAt,
   regionBounds,
   regionInView,
-  regionInWrappedView,
+  regionOfArea,
   regionsOf,
   regionsTouching,
   regionTouchesBox,
   simRegionsOn,
+  soleRegion,
   WORLD,
-  wrapView,
   type LonLatBox,
   type Region,
 } from "./regions.js";
+import { PLACE_REGISTRY_FORMAT } from "./placeRegistry.js";
 import { SIM_NZ, SIM_REGIONS, SIM_UTAH, SIM_WORLD } from "./simRegions.js";
 
 const ids = (list: readonly { id: string }[]) => list.map((item) => item.id);
 const ALL: readonly Region[] = [NSW_REGION, ...SIM_REGIONS, SIM_WORLD, WORLD];
 
 describe("the declaration", () => {
+  // Mutation: write a vertex of any ring at a longitude of 190 or -190, and
+  // `regionTouchesBox`, which reads a ring in [-180, 180] and the box in every
+  // world copy, misses the ground east of the line.
+  it("keeps every border longitude in [-180, 180]", () => {
+    const lons = ALL.flatMap((region) =>
+      region.borders.flat().map(([lon]) => lon),
+    );
+    expect(lons.length).toBeGreaterThan(20);
+    for (const lon of lons) {
+      expect(lon).toBeGreaterThanOrEqual(-180);
+      expect(lon).toBeLessThanOrEqual(180);
+    }
+  });
+
   // Mutation: give a second region NSW's id, and choosing one chooses both.
   it("gives each region its own id", () => {
     expect(new Set(ids(REGIONS)).size).toBe(REGIONS.length);
@@ -126,6 +147,14 @@ describe("the declaration", () => {
     }
   });
 
+  // Mutation: drop the trailing slash from `GAUGE_PREFIX`, and a feed's files
+  // are asked for at `…v1latest.json`.
+  it("every gauge feed prefix ends in a slash", () => {
+    const feeds = ALL.flatMap((region) => region.gauges ?? []);
+    expect(feeds.length).toBeGreaterThan(0);
+    for (const feed of feeds) expect(feed.endsWith("/")).toBe(true);
+  });
+
   // Stored on phones, in climb labels and in installed builds: a new value
   // here strands every copy of the old one.
   // Mutation: rename any of these, and every phone, track and build that
@@ -153,7 +182,7 @@ describe("the declaration", () => {
     expect(NSW_REGION.terrain.coverage.archivePath).toBe(
       "master/coverage/nsw-coverage.pmtiles",
     );
-    expect(NSW_REGION.vector).toEqual({
+    expect(NSW_REGION.vector).toMatchObject({
       archivePath: "master/basemap/protomaps-nsw.pmtiles",
       maxzoom: 15,
     });
@@ -219,6 +248,26 @@ describe("normalizeRegionIds", () => {
   // the default basemap change with the order a user ticked them.
   it("keeps the regions behind a choice in the picker's order", () => {
     expect(ids(regionsOf(["nz", "nsw"], two))).toEqual(["nsw", "nz"]);
+  });
+});
+
+describe("soleRegion", () => {
+  // Mutation: return `regions[0]` whatever the length, and a list of two
+  // regions is read as the first one.
+  it("is the region of a list of one, and null for none or several", () => {
+    expect(soleRegion([NSW_REGION])).toBe(NSW_REGION);
+    expect(soleRegion([])).toBeNull();
+    expect(soleRegion([NSW_REGION, SIM_NZ])).toBeNull();
+  });
+});
+
+describe("REGION_CHOICE.hint", () => {
+  // Mutation: restore the old sentence, which says the choice decides what the
+  // maps offer (ADR 0049: the map decides, the choice sets defaults).
+  it("says what a chosen region sets", () => {
+    expect(REGION_CHOICE.hint).toBe(
+      "Logjam opens on your regions and offers their canyon lists.",
+    );
   });
 });
 
@@ -385,8 +434,9 @@ describe("offeredBasemaps", () => {
     ]);
   });
 
-  // Mutation: drop `wrapView`, and a map panned a turn past the antimeridian
-  // loses New Zealand's basemaps.
+  // Mutation: in `regionTouchesBox` read the box only as given (set `first`
+  // and `last` to 0), and a map panned a turn past the antimeridian loses
+  // New Zealand's basemaps.
   it("reads a view panned past the antimeridian where it is on the globe", () => {
     expect(
       ids(
@@ -688,6 +738,90 @@ describe("regionInView", () => {
   });
 });
 
+describe("placeRegistryIn", () => {
+  const nz: Region = { ...SIM_NZ, placeSearch: "master/places/simnz/v1/" };
+  const two = [NSW_REGION, nz, SIM_UTAH];
+  const over = (lon: number, lat: number) => ({
+    west: lon - 0.05,
+    south: lat - 0.05,
+    east: lon + 0.05,
+    north: lat + 0.05,
+  });
+
+  // Mutation: return `regionInView(view)` as it is, without the `placeSearch`
+  // test, and a map over Utah (no registry) reads as having one.
+  it("is the region in view when it has a registry, and null when it has none", () => {
+    expect(placeRegistryIn(over(150.31, -33.7), two)).toBe(NSW_REGION);
+    expect(placeRegistryIn(over(...nz.view.center), two)).toBe(nz);
+    expect(placeRegistryIn(over(...SIM_UTAH.view.center), two)).toBeNull();
+  });
+
+  // Mutation: fall back to the first region with a registry for a view in
+  // none, and a map over the open sea is searched as NSW.
+  it("is null outside every region, whatever the world declares", () => {
+    expect(placeRegistryIn(over(156, -33), two, SIM_WORLD)).toBeNull();
+    expect(placeRegistryIn(over(156, -33))).toBeNull();
+  });
+
+  // Mutation: read an unknown view as the default region, and a map not yet
+  // settled asks the registry for a place it is not showing.
+  it("is null for a view that is not known yet", () => {
+    expect(placeRegistryIn(null, two)).toBeNull();
+    expect(placeRegistryIn(undefined, two)).toBeNull();
+  });
+
+  // Mutation: read the box only as given in `regionTouchesBox` (set `first` and
+  // `last` to 0) and the centre unwrapped in `regionInView`, and a map panned
+  // once round the world matches no region.
+  it("reads a map panned round the world", () => {
+    const [lon, lat] = nz.view.center;
+    expect(placeRegistryIn(over(lon + 360, lat), two)).toBe(nz);
+  });
+});
+
+describe("regionsWithRegistry and regionWithRegistry", () => {
+  const nz: Region = { ...SIM_NZ, placeSearch: "master/places/simnz/v1/" };
+  const all = [NSW_REGION, nz, SIM_UTAH];
+
+  // Mutation: return `regions` unfiltered from `regionsWithRegistry`.
+  it("lists, in order, the regions that declare a registry", () => {
+    expect(regionsWithRegistry(all)).toEqual([NSW_REGION, nz]);
+    expect(regionsWithRegistry([SIM_UTAH])).toEqual([]);
+  });
+
+  // Mutation: find by id in `regions` without the registry filter, and a
+  // region with no registry is answered as having one.
+  it("finds a region by its id only when it declares a registry, whatever the id's type", () => {
+    expect(regionWithRegistry(nz.id, all)).toBe(nz);
+    expect(regionWithRegistry(SIM_UTAH.id, all)).toBeNull();
+    expect(regionWithRegistry("nowhere", all)).toBeNull();
+    for (const id of [7, [nz.id], {}, null, undefined]) {
+      expect(regionWithRegistry(id, all), JSON.stringify(id)).toBeNull();
+    }
+  });
+});
+
+describe("a region's registry prefix", () => {
+  const current = new RegExp(`/v${PLACE_REGISTRY_FORMAT}/$`);
+
+  // The prefix carries the file's format, so a bump moves every region's
+  // registry (ADR 0034). Mutation: give any declared region a literal prefix
+  // for another format, e.g. NSW's `placeSearch` as "master/places/v0/", or a
+  // simulated region's `placeSearch` as "master/places/simnz/v0/".
+  it("carries the current registry format, for every declared and simulated region", () => {
+    const declared = regionsWithRegistry([
+      NSW_REGION,
+      ...SIM_REGIONS,
+      SIM_WORLD,
+    ]);
+    // A floor: a filter that stopped matching would check nothing.
+    expect(declared.length).toBeGreaterThanOrEqual(1);
+    for (const region of declared) {
+      expect(region.placeSearch, region.id).toMatch(current);
+    }
+  });
+});
+
 describe("layerIn", () => {
   // Mutation: return `{}` or the region for an absent layer, and a switch
   // reads "available" over no data.
@@ -735,42 +869,158 @@ describe("areasInRegion", () => {
   });
 });
 
-describe("regionInWrappedView", () => {
-  // Mutation: pass the view to `regionInView` without `wrapView`, and a map
-  // panned a turn round the world is over no region.
-  it("reads a view panned past the antimeridian by whole turns", () => {
-    const at = (lon: number): LonLatBox => ({
-      west: lon - 0.1,
-      south: -33.8,
-      east: lon + 0.1,
-      north: -33.6,
-    });
-    expect(regionInWrappedView(at(150.3))).toBe(NSW_REGION);
-    expect(regionInWrappedView(at(150.3 + 360))).toBe(NSW_REGION);
-    expect(regionInWrappedView(at(150.3 - 360))).toBe(NSW_REGION);
-    expect(regionInView(at(150.3 + 360))).toBeNull();
+describe("regionOfArea", () => {
+  // Mutation: test a corner of the box (`regionAt(west, south, regions)`) in
+  // place of its centre, and the clients credit an area to a region
+  // topo/regions.py `region_of_area` did not fill it from (its test reads the
+  // same cases).
+  it("is the region holding the centre of the area's box, as the worker picks it", () => {
+    const { cases } = JSON.parse(
+      readFileSync(
+        new URL("./__fixtures__/area-region.json", import.meta.url),
+        "utf8",
+      ),
+    ) as {
+      cases: {
+        why: string;
+        coverage: [number, number, number, number];
+        region: string | null;
+      }[];
+    };
+    expect(cases.length).toBeGreaterThanOrEqual(6);
+    for (const { why, coverage, region } of cases)
+      expect(
+        regionOfArea(coverage, REGIONS_WITH_SIMULATED)?.id ?? null,
+        why,
+      ).toBe(region);
   });
 });
 
-describe("wrapView", () => {
-  // Mutation: round the turn the other way, so a centre at 180 stays at 180.
-  it("moves a box by whole turns until its centre is in [-180, 180)", () => {
-    const at = (centre: number): LonLatBox => ({
-      west: centre - 1,
-      south: -1,
-      east: centre + 1,
-      north: 1,
-    });
-    const centreOf = (view: LonLatBox) => (view.west + view.east) / 2;
-    expect(centreOf(wrapView(at(-180)))).toBe(-180);
-    expect(centreOf(wrapView(at(179.9)))).toBeCloseTo(179.9);
-    expect(centreOf(wrapView(at(180)))).toBe(-180);
-    expect(centreOf(wrapView(at(540)))).toBe(-180);
-    expect(wrapView(at(-190))).toEqual({
-      west: 169,
-      south: -1,
-      east: 171,
-      north: 1,
-    });
+describe("a view panned round the world", () => {
+  const at = (lon: number): LonLatBox => ({
+    west: lon - 0.1,
+    south: -33.8,
+    east: lon + 0.1,
+    north: -33.6,
+  });
+
+  // Mutation: read the box only as given in `regionTouchesBox` (set `first` and
+  // `last` to 0) and the centre unwrapped in `regionInView`, and a map panned a
+  // turn round the world is over no region.
+  it("reads a view past the antimeridian by whole turns", () => {
+    expect(regionInView(at(150.3))).toBe(NSW_REGION);
+    expect(regionInView(at(150.3 + 360))).toBe(NSW_REGION);
+    expect(regionInView(at(150.3 - 360))).toBe(NSW_REGION);
+  });
+
+  // Mutation: drop `wrapLon` from the centre `regionInView` reads, and the
+  // view's centre, a turn over, is in no region; the first region the view
+  // touches (here the other) is drawn.
+  it("takes the region under the centre, in whatever world copy the view is", () => {
+    const next: Region = {
+      ...SIM_NZ,
+      id: "next",
+      borders: [
+        [
+          [154.3, -33],
+          [155, -33],
+          [155, -32],
+          [154.3, -32],
+        ],
+      ],
+    };
+    const view = { west: 153.9, south: -33.2, east: 154.9, north: -32.8 };
+    const over = { ...view, west: view.west + 360, east: view.east + 360 };
+    expect(regionsTouching(over, [NSW_REGION, next])[0]).toBe(NSW_REGION);
+    expect(regionInView(over, [NSW_REGION, next], WORLD)).toBe(next);
+  });
+});
+
+describe("regionTouchesBox across the date line", () => {
+  // Made-up ground, one ring either side of the line as a region's borders
+  // are cut (each in [-180, 180]), and a speck of ground well away from it.
+  const fiji: Region = {
+    ...NSW_REGION,
+    id: "fiji",
+    borders: [
+      [
+        [177, -19],
+        [180, -19],
+        [180, -16],
+        [177, -16],
+      ],
+      [
+        [-180, -19],
+        [-178, -19],
+        [-178, -16],
+        [-180, -16],
+      ],
+      [
+        [-177, -45],
+        [-176, -45],
+        [-176, -44],
+        [-177, -44],
+      ],
+    ],
+  };
+  const box = (west: number, east: number, south = -18, north = -17) => ({
+    west,
+    south,
+    east,
+    north,
+  });
+
+  // Mutation: read the box only as given in `regionTouchesBox` (set `first` and
+  // `last` to 0), and the view -181 to -180.5, which is 179 to 179.5 over the
+  // line, finds no ground.
+  it.each([
+    ["east of the line, unwrapped", box(178, 179)],
+    ["west of the line", box(-179.5, -179)],
+    ["across the line, unwrapped", box(179, 181)],
+    ["across the line, wrapped", box(179, -179)],
+    ["wholly on the far side, unwrapped", box(-181, -180.5)],
+    ["a turn over, west of the line", box(178.5 + 360, 179 + 360)],
+    ["a turn under, across the line", box(179 - 360, 181 - 360)],
+  ])("touches the region from a view %s", (_name, view) => {
+    expect(regionTouchesBox(fiji, view)).toBe(true);
+  });
+
+  // Mutation: read the box only as given in `regionTouchesBox` (set `first` and
+  // `last` to 0), and the view 100 to 500 misses the island at -177 to -176,
+  // which lies in its copy a turn under.
+  it("touches the region from a view more than a turn wide", () => {
+    expect(regionTouchesBox(fiji, box(-200, 200))).toBe(true);
+    expect(regionTouchesBox(fiji, box(-190, 180))).toBe(true);
+    expect(regionTouchesBox(fiji, box(100, 500, -44.8, -44.2))).toBe(true);
+    // A turn wide still has to share the region's latitudes.
+    expect(regionTouchesBox(fiji, box(-200, 200, -10, -5))).toBe(false);
+  });
+
+  // Mutation: let the wrapped box's east edge stand in its own turn (the
+  // `box.west + width` line as `box.east`), and 170 to -170 reads as empty.
+  it("reads a wrapped box as the way it runs across the line", () => {
+    expect(regionTouchesBox(fiji, box(170, -170))).toBe(true);
+    expect(regionTouchesBox(fiji, box(100, -100))).toBe(true);
+  });
+
+  // Mutation: in `regionTouchesBox` return true from the loop whatever the
+  // ring (replace its `ringTouchesBox` test by `true`).
+  it("is not touched by a box on the ground between", () => {
+    expect(regionTouchesBox(fiji, box(176, 176.5))).toBe(false);
+    expect(regionTouchesBox(fiji, box(-177.8, -177.5))).toBe(false);
+    expect(
+      regionTouchesBox(fiji, box(-176.8 + 360, -176.2 + 360, -43, -42)),
+    ).toBe(false);
+    expect(regionTouchesBox(fiji, box(179, 181, -30, -25))).toBe(false);
+  });
+
+  // Mutation: test only the first ring of the region in `regionTouchesBox`, and
+  // the island at -176.5 is never found.
+  it("finds a separate island in any world copy", () => {
+    const island = box(-176.8 + 360, -176.2 + 360, -44.8, -44.2);
+    expect(regionTouchesBox(fiji, island)).toBe(true);
+    expect(regionTouchesBox(fiji, box(-176.8, -176.2, -44.8, -44.2))).toBe(
+      true,
+    );
   });
 });

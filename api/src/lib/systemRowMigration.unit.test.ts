@@ -91,18 +91,39 @@ describe("the system rows the migration inserts", () => {
     }
   });
 
+  // Mutation: change a `position` literal in a field definition's INSERT, or
+  // an `aca_risk` bound (it fails on the bounds assertions beside it).
   it("gives every system field definition the declared key, label, type and bounds", () => {
-    for (const def of SYSTEM_FIELD_DEFS) {
+    // A floor: an empty import would pass every loop below with no iterations.
+    expect(SYSTEM_FIELD_DEFS.length).toBeGreaterThanOrEqual(14);
+    SYSTEM_FIELD_DEFS.forEach((def, index) => {
       const row = new RegExp(
         `\\('${def.id}', NULL, 'place', '([^']+)',\\s*'([^']+)',\\s*'([^']+)',\\s*([\\w.]+),\\s*([\\w.]+),\\s*(\\d+)`,
       ).exec(sql);
       expect(row, `no INSERT for the ${def.key} definition`).toBeTruthy();
-      const [, key, label, type, min, max] = row!;
+      const [, key, label, type, min, max, position] = row!;
       expect(key).toBe(def.key);
       expect(label).toBe(def.label);
       expect(type).toBe(def.type);
       expect(min === "NULL" ? null : Number(min)).toBe(def.min);
       expect(max === "NULL" ? null : Number(max)).toBe(def.max);
+      // The seed positions a definition by its place in the declaration.
+      expect(Number(position), `${def.key}'s position in SQL`).toBe(index);
+    });
+  });
+
+  // Mutation: delete one row of the `custom_field_def_place_types` INSERT in a
+  // migration.
+  it("scopes every system field definition to the place types it declares", () => {
+    expect(SYSTEM_FIELD_DEFS.length).toBeGreaterThanOrEqual(14);
+    for (const def of SYSTEM_FIELD_DEFS) {
+      for (const typeKey of def.placeTypes) {
+        const typeId = SYSTEM_PLACE_TYPES.find((t) => t.key === typeKey)!.id;
+        expect(
+          sql.includes(`('${def.id}', '${typeId}')`),
+          `no scoping row for ${def.key} on ${typeKey}`,
+        ).toBe(true);
+      }
     }
   });
 });

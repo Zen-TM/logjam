@@ -18,6 +18,7 @@ import {
   say,
   AREA_EXPORT_FORMATS,
   AREA_EXPORT_LAYERS,
+  areaExportEpsg,
   areaExportOutsideTerrain,
   areaExportTooLargeSentence,
   areaExportRequestError,
@@ -38,7 +39,7 @@ import { assertHasEgressQuota } from "../lib/egressQuota";
 import { resolveUser as getUser } from "../lib/resolveUser";
 import { visibleSharpenedAreas } from "../services/sharpenedAreas";
 
-// An export of an area: the statewide terrain over a box (topo/area_export.py).
+// An export of an area: the terrain of the box's region over it (topo/area_export.py).
 const areaRequestSchema = z.object({
   bbox: z.object({
     west: z.number(),
@@ -153,7 +154,8 @@ router.post(
       // No size signal the estimator knows yet, so no estimate.
       sourceTileCount: null,
       monthlyComputeCredits: user.monthlyComputeCredits,
-      bbox: area.data.bbox,
+      // The grid the worker warps to is decided here, where the regions are.
+      bbox: { ...area.data.bbox, epsg: areaExportEpsg(area.data.bbox) },
     });
     res.status(201).json({ id: exportJobId });
   },

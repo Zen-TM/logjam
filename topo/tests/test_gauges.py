@@ -127,6 +127,23 @@ class TestFixture(unittest.TestCase):
         self.assertIn("`master/gauges/v${GAUGE_FORMAT}/`", ts)
         self.assertEqual(g.S3_PREFIX, "master/gauges/v%d/" % g.FORMAT)
 
+    def test_the_feed_states_the_units_and_day_it_is_cut_in(self):
+        # Mutation: change UNITS or DAY_OFFSET_MINUTES without the portal's
+        # clock (`aest_epoch`) and the readers' defaults in gauges.ts → red.
+        latest = fixture_latest()
+        self.assertEqual(latest["units"], {"level": "m", "flow": "ML/d"})
+        self.assertEqual(latest["dayOffsetMinutes"], 600)
+        self.assertEqual(
+            g.aest_epoch("30-Oct-2026 20:00"),
+            int(datetime(2026, 10, 30, 10, 0, tzinfo=timezone.utc).timestamp()),
+        )
+        with open(_SHARED_TS, encoding="utf-8") as fh:
+            ts = fh.read()
+        self.assertIn(
+            'GAUGE_UNITS_DEFAULT: GaugeUnits = { level: "m", flow: "ML/d" }', ts
+        )
+        self.assertIn("GAUGE_DAY_OFFSET_DEFAULT = %d;" % g.DAY_OFFSET_MINUTES, ts)
+
 
 class TestReadings(unittest.TestCase):
     def test_a_q255_zero_never_becomes_a_reading(self):

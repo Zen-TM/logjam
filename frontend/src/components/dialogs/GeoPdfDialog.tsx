@@ -2,7 +2,7 @@
 // area, on one sheet of paper, at one scale: the form asks the paper and the
 // scale, which size the area, then where it is, then what goes on top. For a
 // GIS (GeoTIFF, GeoPackage, MBTiles) the area is a free box with no paper, and
-// the file holds the statewide terrain over it (`AreaExportFields`).
+// the file holds the terrain of the area's region over it (`AreaExportFields`).
 //
 // Nothing here is live — the paper is drawn on the map while you pick an area
 // (App's frame), and everything else only matters once Make it renders it —
@@ -35,6 +35,7 @@ import { useToast } from "../feedback/ToastProvider";
 import { sanitizeDecimalInput } from "../../numberInput";
 import {
   extentFieldErrors,
+  coordTooltip,
   extentFieldText,
   hasExtentFieldError,
   parseExtentField,
@@ -64,9 +65,12 @@ import {
   applyOrientationChange,
   applyCoordModeChange,
   extentFromCentreAndSize,
+  wrapBox,
+  wrapLon,
 } from "@logjam/shared";
 import {
   AREA_EXPORT_FORMATS,
+  areaExportGrid,
   AREA_EXPORT_LAYERS,
   AREA_EXPORT_LAYERS_BY_FORMAT,
   areaExportOutsideTerrain,
@@ -80,9 +84,11 @@ import {
   geoPdfTooLargeSentence,
   geoPdfTooLarge,
   MAP_TERRAIN,
-  t,
+  type AreaBbox,
   type AreaExportFormat,
   type AreaExportLayer,
+  type GridId,
+  t,
   type SharpenedArea,
   TERRAIN_LAYER_KEYS,
   type GeoPdfConfig,
@@ -154,13 +160,34 @@ const FORMAT_OPTIONS: ChipOption<FormatChoice>[] = [
   })),
 ];
 
-const GIS_FORMAT_NOTES: Record<AreaExportFormat, string> = {
-  geotiff:
-    "A .zip of rasters in GDA2020 / MGA, for QGIS or ArcGIS: heights in metres, slope in degrees, and hillshade.",
-  gpkg: "One file for QGIS: the rasters in GDA2020 / MGA, and the contours as lines that carry their height.",
-  mbtiles:
-    "Map data for Gaia, Locus or OruxMaps, drawn over their own map, with slope in your slope bands as they are now.",
+/** What a GIS reads a grid's EPSG code as: its datum and projection. */
+const GRID_LABELS: Record<GridId, string> = {
+  mga2020: "GDA2020 / MGA",
+  nztm2000: "NZGD2000 / NZTM 2000",
+  utm: "WGS 84 / UTM",
 };
+
+/**
+ * What a format is, for the Format rail. A GeoTIFF or GeoPackage names the
+ * grid its rasters are warped to (`areaExportGrid`, the one the worker uses);
+ * before a box is drawn it says only that the grid follows the ground.
+ */
+function gisFormatNote(
+  format: AreaExportFormat,
+  area: AreaBbox | null,
+): string {
+  const grid = area
+    ? GRID_LABELS[areaExportGrid(area)]
+    : t`the grid of the area you choose`;
+  switch (format) {
+    case "geotiff":
+      return t`A .zip of rasters in ${grid}, for QGIS or ArcGIS: heights in metres, slope in degrees, and hillshade.`;
+    case "gpkg":
+      return t`One file for QGIS: the rasters in ${grid}, and the contours as lines that carry their height.`;
+    case "mbtiles":
+      return t`Map data for Gaia, Locus or OruxMaps, drawn over their own map, with slope in your slope bands as they are now.`;
+  }
+}
 
 const COORD_OPTIONS: ChipOption<CoordMode>[] = [
   { value: "latlon", label: "Lat/Lon" },
@@ -178,8 +205,6 @@ const SHAPE_KEYS = TERRAIN_LAYER_KEYS.filter(
 const MY_PLACES = "my-places";
 const SHARED_PLACES = "shared-places";
 
-const COORD_TOOLTIP =
-  "Lat/Lon is what a GPS shows you. E/N is the MGA2020 grid, the one printed on NSW topo maps.";
 const SCALE_TOOLTIP = `1:${(25000).toLocaleString()} means 1 cm on the paper is 250 m on the ground.`;
 
 const DEFAULT_EXTENT_STATE: ExtentState = {
@@ -208,7 +233,13 @@ const PHASE_TEXT: Record<GeoPdfProgress["phase"], string> = {
 const PREFETCH_AFTER_MS = 1000;
 const NO_AREA = { north: 0, south: 0, east: 0, west: 0 };
 
-/** The sheet's area re-centred on a point, at its current paper and scale. */
+/**
+ * The sheet's area re-centred on a point, at its current paper and scale. A map
+ * panned round the world reports a longitude past ±180; the sheet is the ground
+ * it wraps to, which the Terrain tile reads need (`wrapLon`). Guard:
+ * GeoPdfDialog.render.test.tsx ("seeds the sheet from a map centre in another
+ * world copy as the ground it shows").
+ */
 function centredOn(
   prev: ExtentState,
   center: { lat: number; lng: number },
@@ -218,7 +249,12 @@ function centredOn(
   const heightM = prev.scale * ((paper.h - 2 * GEOPDF_PADDING_MM) / 1000);
   return {
     ...prev,
-    ...extentFromCentreAndSize(center.lat, center.lng, widthM, heightM),
+    ...extentFromCentreAndSize(
+      center.lat,
+      wrapLon(center.lng),
+      widthM,
+      heightM,
+    ),
   };
 }
 
@@ -494,12 +530,16 @@ function GeoPdfDialog({
   ) {
     setPendingAppliedFor({ pendingExtent, pendingScale });
     if (pendingExtent && pendingScale) {
+      // The same wrap for a pick made on a map panned round the world. Guard:
+      // GeoPdfDialog.render.test.tsx ("reads a sheet picked in another world
+      // copy as the ground it shows").
+      const picked = wrapBox(pendingExtent);
       setExtentState((prev: ExtentState) => ({
         ...prev,
-        north: pendingExtent.north,
-        south: pendingExtent.south,
-        east: pendingExtent.east,
-        west: pendingExtent.west,
+        north: picked.north,
+        south: picked.south,
+        east: picked.east,
+        west: picked.west,
         scale: pendingScale,
       }));
       setAreaPicked(true);
@@ -600,7 +640,7 @@ function GeoPdfDialog({
   // is available where no region holds the sheet").
   const offReason = (key: TerrainLayerKey): string | null =>
     layerMissingHere(sheet, key)
-      ? t`Not available here.`
+      ? `${MAP_TERRAIN.copy.notHere}.`
       : key === "contours" &&
           contoursPrintedHere(selectedBaseLayer, lidarOverlap)
         ? "This map prints its own contours."
@@ -991,7 +1031,7 @@ function GeoPdfDialog({
                 setFormat(next);
                 setError(null);
               }}
-              hint={gisFormat ? GIS_FORMAT_NOTES[gisFormat] : undefined}
+              hint={gisFormat ? gisFormatNote(gisFormat, gisArea) : undefined}
             />
           </section>
 
@@ -1218,7 +1258,10 @@ function GeoPdfDialog({
                 />
                 {coordsOpen && (
                   <div className={classes.group}>
-                    <SettingsRow label="Coordinates" tooltip={COORD_TOOLTIP}>
+                    <SettingsRow
+                      label="Coordinates"
+                      tooltip={coordTooltip(extentState)}
+                    >
                       <ChipRail
                         label="Coordinates"
                         className={classes.railCell}
@@ -1402,7 +1445,7 @@ function GeoPdfDialog({
                   ]}
                   hint={
                     layerMissingHere(sheet, "land")
-                      ? t`Not available here.`
+                      ? `${MAP_TERRAIN.copy.notHere}.`
                       : undefined
                   }
                   onToggle={(value) => {
@@ -1754,7 +1797,7 @@ function AreaExportFields({
         <FieldError message={areaError} />
         {coordsOpen && (
           <div className={classes.group}>
-            <SettingsRow label="Coordinates" tooltip={COORD_TOOLTIP}>
+            <SettingsRow label="Coordinates" tooltip={coordTooltip(edges)}>
               <ChipRail
                 label="Coordinates"
                 className={classes.railCell}

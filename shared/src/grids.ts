@@ -1,0 +1,300 @@
+// The map grids a place is surveyed in: MGA2020 (Australia), NZTM2000 (New
+// Zealand) and UTM (everywhere else). All three are transverse Mercator, so
+// one zone type and one zone rule per grid cover them. MGA is UTM south on
+// GRS80, identical to WGS84 UTM at our accuracy.
+//
+// The grid follows the place: a region declares its own (`Region.grid`) and
+// outside every region the answer is UTM, so the grid overlay works anywhere.
+// Guard: grids.test.ts, which checks the projections against LINZ's and USGS's
+// published values, not only a round trip.
+import proj4 from "proj4";
+
+import { lonTurn, wrapLon } from "./placeGeo.js";
+import { REGIONS, regionAt, type LonLatBox, type Region } from "./regions.js";
+
+export type GridId = "mga2020" | "nztm2000" | "utm";
+
+export type GridZone = {
+  grid: GridId;
+  /** What a label and a typed reference call it: "MGA 56", "NZTM", "UTM 12". */
+  name: string;
+  /** The proj4 definition. */
+  proj: string;
+  /** 7856 for MGA2020 zone 56, 2193, 32612 (UTM north) or 32756 (UTM south). */
+  epsg: number;
+  /** For grid convergence. */
+  centralMeridian: number;
+  /** The longitudes it answers for; infinite at the outer edge of MGA and for NZTM. */
+  west: number;
+  east: number;
+};
+
+const WGS84 = "EPSG:4326";
+
+/** What a grid is called in a title or a message: "MGA grid", "Not a valid NZTM easting". */
+export const GRID_NAMES: Record<GridId, string> = {
+  mga2020: "MGA",
+  nztm2000: "NZTM",
+  utm: "UTM",
+};
+
+/** NSW's three zones; the outer two run on past the state. */
+const MGA_ZONES: readonly GridZone[] = (
+  [
+    [54, -Infinity, 144],
+    [55, 144, 150],
+    [56, 150, Infinity],
+  ] as const
+).map(([zone, west, east]) => ({
+  grid: "mga2020",
+  name: `MGA ${zone}`,
+  proj: `+proj=utm +zone=${zone} +south +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs`,
+  epsg: 7800 + zone,
+  centralMeridian: (zone - 1) * 6 - 177,
+  west,
+  east,
+}));
+
+const NZTM_ZONE: GridZone = {
+  grid: "nztm2000",
+  name: "NZTM",
+  proj: "+proj=tmerc +lat_0=0 +lon_0=173 +k=0.9996 +x_0=1600000 +y_0=10000000 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs",
+  epsg: 2193,
+  centralMeridian: 173,
+  west: -Infinity,
+  east: Infinity,
+};
+
+/**
+ * UTM zone `index` (0 starts at 180°W), in the southern hemisphere when `south`. An
+ * index outside 0 to 59 is a longitude past 180°, as MapLibre reports a view
+ * panned over the date line; it names the zone it wraps to and keeps its
+ * longitudes unwrapped, so a clip against them still works.
+ * It has no Norway or Svalbard exceptions and no polar grid, which no region needs.
+ */
+function utmZone(index: number, south: boolean): GridZone {
+  const zone = (((index % 60) + 60) % 60) + 1;
+  const west = index * 6 - 180;
+  return {
+    grid: "utm",
+    name: `UTM ${zone}`,
+    proj: `+proj=utm +zone=${zone}${south ? " +south" : ""} +ellps=WGS84 +units=m +no_defs`,
+    epsg: (south ? 32700 : 32600) + zone,
+    centralMeridian: west + 3,
+    west,
+    east: west + 6,
+  };
+}
+
+/** NSW's MGA zone by its number, for a typed reference. */
+export function mgaZone(zone: 54 | 55 | 56): GridZone {
+  return MGA_ZONES.find((z) => z.name === `MGA ${zone}`)!;
+}
+
+/** `zone` in the world copy `shift` degrees east of the one it is declared in. */
+const shifted = (zone: GridZone, shift: number): GridZone =>
+  shift === 0
+    ? zone
+    : {
+        ...zone,
+        west: zone.west + shift,
+        east: zone.east + shift,
+        centralMeridian: zone.centralMeridian + shift,
+      };
+
+/** The middle of a box, which is where the grid of the ground it shows is read. */
+export function boxCentre(box: LonLatBox): { lon: number; lat: number } {
+  return {
+    lon: (box.west + box.east) / 2,
+    lat: (box.south + box.north) / 2,
+  };
+}
+
+/** The grid used at a place: the region's there, UTM anywhere else. */
+export function gridIdAt(
+  lon: number,
+  lat: number,
+  regions: readonly Region[] = REGIONS,
+): GridId {
+  return regionAt(wrapLon(lon), lat, regions)?.grid ?? "utm";
+}
+
+/** The MGA zone for a longitude in [-180, 180], where the outer two run on past NSW. */
+const mgaZoneAt = (lon: number) =>
+  MGA_ZONES.find((z) => lon < z.east) ?? MGA_ZONES[MGA_ZONES.length - 1]!;
+
+/** A longitude in any world copy (MapLibre reports one panned past 180° as such) is answered in that copy. */
+export function gridZoneAt(
+  lon: number,
+  lat: number,
+  regions: readonly Region[] = REGIONS,
+): GridZone {
+  return gridZoneOf(gridIdAt(lon, lat, regions), lon, lat);
+}
+
+/** The zone of grid `id` at a place: the grid is chosen by the caller, the zone by the place. */
+export function gridZoneOf(id: GridId, lon: number, lat: number): GridZone {
+  if (id === "nztm2000") return NZTM_ZONE;
+  if (id === "mga2020") return shifted(mgaZoneAt(wrapLon(lon)), lonTurn(lon));
+  return utmZone(Math.floor((lon + 180) / 6), lat < 0);
+}
+
+/**
+ * The zones of the grid at the box's centre that the box touches, west to
+ * east. A view draws the grid of the ground at its centre: a box over two
+ * grids gets the centre's one, and UTM when the centre is in no region, even
+ * if the box overlaps one (grids.test.ts, "draws one grid for a box over
+ * two: the centre's"). The box is unwrapped: one
+ * across the date line has `east` past 180, and the zones come back in the
+ * world copy the box is in, so a clip against their edges lands on the map.
+ * A box with no width gets the one zone at its point.
+ */
+export function gridZonesFor(
+  box: LonLatBox,
+  regions: readonly Region[] = REGIONS,
+): GridZone[] {
+  const { lon, lat } = boxCentre(box);
+  if (box.west === box.east) return [gridZoneAt(lon, lat, regions)];
+  const id = gridIdAt(lon, lat, regions);
+  if (id === "nztm2000") return [NZTM_ZONE];
+  if (id === "mga2020") {
+    const shift = lonTurn(lon);
+    const [west, east] = [box.west - shift, box.east - shift];
+    return MGA_ZONES.filter(
+      (z) => Math.max(west, z.west) < Math.min(east, z.east),
+    ).map((z) => shifted(z, shift));
+  }
+  const first = Math.floor((box.west + 180) / 6);
+  const last = Math.min(
+    Math.max(first, Math.ceil((box.east + 180) / 6) - 1),
+    first + 59,
+  );
+  return Array.from({ length: last - first + 1 }, (_, i) =>
+    utmZone(first + i, lat < 0),
+  );
+}
+
+/** Easting and northing in `zone`, which need not be the one `lon` falls in. */
+export function toGrid(
+  lat: number,
+  lon: number,
+  zone: GridZone,
+): { easting: number; northing: number } {
+  const [easting, northing] = proj4(WGS84, zone.proj, [lon, lat]);
+  return { easting, northing };
+}
+
+/** Easting and northing in the zone the point falls in. */
+export function toGridAt(
+  lat: number,
+  lon: number,
+  regions: readonly Region[] = REGIONS,
+): { easting: number; northing: number; zone: GridZone } {
+  const zone = gridZoneAt(lon, lat, regions);
+  return { ...toGrid(lat, lon, zone), zone };
+}
+
+/**
+ * Latitude and longitude of a point in `zone`. The longitude is in [-180, 180]
+ * whatever world copy the zone was chosen for; a caller working in another
+ * copy shifts it, as `mapGrid` does.
+ */
+export function fromGrid(
+  easting: number,
+  northing: number,
+  zone: GridZone,
+): { lat: number; lon: number } {
+  const [lon, lat] = proj4(zone.proj, WGS84, [easting, northing]);
+  return { lat, lon };
+}
+
+/**
+ * Grid north's angle from true north at a point, in degrees; positive means
+ * grid north is east of true north. This is the first-order rule, Δλ·sin(lat).
+ */
+export function gridConvergence(
+  lat: number,
+  lon: number,
+  zone: GridZone,
+): number {
+  const offset = wrapLon(lon - zone.centralMeridian);
+  return offset * Math.sin((lat * Math.PI) / 180);
+}
+
+// A typed grid reference: an optional grid name, a zone number, an optional
+// latitude band letter (MGRS: C-M south of the equator, N-X north of it), then
+// an easting and a northing. The zone must be set off from the easting by a
+// space, comma or the letter, or "1576041 5180000" would read as zone 1; the
+// one exception is MGA's own zones, where 54 to 56 straight before a six-digit
+// easting ("56245000 6264000") cannot be anything else.
+const REFERENCE =
+  /^(?:(MGA|UTM)\s*)?(?:zone\s*)?(\d{1,2})(?:\s*([C-HJ-NP-X])|(?<=5[456])(?=\d{6}(?!\d))|(?=[\s,;]))\s*[,;]?\s*(\d{6}(?:\.\d+)?)\s*(?:m?E)?\s*[,;]?\s*(\d{6,7}(?:\.\d+)?)\s*(?:m?N)?$/i;
+// "NZTM 1576041 5180000", or the bare pair when the map is over an NZTM region.
+const NZTM_REFERENCE =
+  /^(NZTM(?:2000)?\s*)?(\d{7}(?:\.\d+)?)\s*(?:m?E)?\s*[,;]?\s*(\d{7}(?:\.\d+)?)\s*(?:m?N)?$/i;
+
+const within = (v: number, lo: number, hi: number) => v >= lo && v <= hi;
+
+/**
+ * The point a typed grid reference names, or null. What it reads:
+ * - NZTM: "NZTM 1749046 5427521" anywhere; the bare pair only when `near` is
+ *   over an NZTM region. Seven-digit eastings and northings, inside NZ.
+ * - MGA and UTM: a zone number (required: an easting alone fits every zone and
+ *   would fly somewhere plausible and wrong), an optional band letter, a
+ *   six-digit easting from 100000 to 900000 and a northing of six or seven
+ *   digits (a six-digit one is north of the equator and south of 9°N, so only
+ *   a northern UTM reading can hold it: the latitude checks below refuse it
+ *   elsewhere).
+ *   "MGA" or "UTM" in the text names the grid. Without either, the region at
+ *   `near` decides: MGA there means zones 54 to 56 only, another grid's region
+ *   means UTM, and outside every region a letterless or southern-banded zone
+ *   54 to 56 reference that is a valid MGA point reads as MGA (as the search
+ *   box always has) and anything else reads as UTM.
+ * - A band letter is a latitude band, never "south": "12S" is Utah, "55N" is
+ *   north. With no letter the UTM hemisphere is `near`'s; MGA is south only
+ *   and ignores the letter.
+ * - MGA must land in Australia, UTM between 80°S and 84°N.
+ * Guard: mapSearch.test.ts ("parseCoordinates") and grids.test.ts ("typed grid
+ * references").
+ */
+export function parseGridReference(
+  text: string,
+  near: { lat: number; lon: number },
+  regions: readonly Region[] = REGIONS,
+): { lat: number; lon: number; label: string } | null {
+  const nearGrid = regionAt(wrapLon(near.lon), near.lat, regions)?.grid;
+  const nz = NZTM_REFERENCE.exec(text);
+  if (nz && (nz[1] || nearGrid === "nztm2000")) {
+    const [easting, northing] = [Number(nz[2]), Number(nz[3])];
+    const { lat, lon } = fromGrid(easting, northing, NZTM_ZONE);
+    if (
+      !within(lat, -55, -25) ||
+      Math.abs(wrapLon(lon - NZTM_ZONE.centralMeridian)) > 15
+    )
+      return null;
+    return { lat, lon, label: `${GRID_NAMES.nztm2000} ${easting} ${northing}` };
+  }
+  const g = REFERENCE.exec(text);
+  if (!g) return null;
+  const number = Number(g[2]);
+  const [easting, northing] = [Number(g[4]), Number(g[5])];
+  if (!within(number, 1, 60) || !within(easting, 100000, 900000)) return null;
+  const prefix = g[1]?.toUpperCase();
+  const mga = (): { lat: number; lon: number; label: string } | null => {
+    if (!within(number, 54, 56)) return null;
+    const zone = mgaZone(number as 54 | 55 | 56);
+    const { lat, lon } = fromGrid(easting, northing, zone);
+    if (!within(lat, -44, -10) || !within(lon, 112, 154)) return null;
+    return { lat, lon, label: `${zone.name} ${easting} ${northing}` };
+  };
+  const south = g[3] ? g[3].toUpperCase() < "N" : near.lat < 0;
+  if (prefix === "MGA" || (!prefix && nearGrid === "mga2020")) return mga();
+  if (!prefix && !nearGrid && (!g[3] || south)) {
+    const read = mga();
+    if (read) return read;
+  }
+  const zone = utmZone(number - 1, south);
+  const { lat, lon } = fromGrid(easting, northing, zone);
+  if (!within(lat, -80, 84)) return null;
+  return { lat, lon, label: `${zone.name} ${easting} ${northing}` };
+}

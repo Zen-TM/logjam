@@ -43,6 +43,7 @@ import psycopg2
 import psycopg2.extras
 from pmtiles.convert import mbtiles_to_pmtiles
 
+import regions
 from worker_common import (
     TOO_BIG,
     VEGETATION_LEFT_OUT,
@@ -62,6 +63,12 @@ log = logging.getLogger("worker")
 
 
 GENERIC_FAILURE = "This LiDAR map couldn't be made. Make it again."
+# The worker does not know where the ZIP came from, so it names no portal.
+# api/src/lib/failureCopy.ts words it the same, for the seed
+# (tests/test_worker_helpers.py `test_the_api_words_an_unreadable_zip_the_same`).
+UNREADABLE = (
+    "Logjam couldn't read the LiDAR data. Download the ZIP again, and make it again."
+)
 
 
 class JobInputError(Exception):
@@ -98,10 +105,7 @@ def safe_error_message(e: Exception) -> str:
     if isinstance(e, RuntimeError):
         return GENERIC_FAILURE
     if isinstance(e, (OSError, IOError)):
-        return (
-            "Logjam couldn't read the LiDAR data. Check the ZIP is the one ELVIS "
-            "sent you."
-        )
+        return UNREADABLE
     return GENERIC_FAILURE
 
 
@@ -492,9 +496,11 @@ def process_sharpen(
         total_output_bytes += local.stat().st_size
 
     vegetation = bool(job["sharpen"].get("vegetation"))
-    left_out = False
+    # A ticked job in a region without the model is finished without the
+    # layer, as one too large for it is (`TestProcessSharpen`).
+    left_out = vegetation and not vegetation_here(result)
     output_keys: list[dict] = []
-    if vegetation:
+    if vegetation and not left_out:
         veg_dir = Path(tmp) / "vegetation"
         veg_dir.mkdir()
         try:
@@ -538,6 +544,23 @@ def process_sharpen(
         pipeline_metrics,
         sharpen,
     )
+
+
+def vegetation_here(sharpen: dict) -> bool:
+    """Whether the vegetation layer can be made for a sharpened area: its
+    model's inputs are one region's (`sharpen.vegetation` in
+    shared/src/regions.ts), and the area's region is the one sharpen.py filled
+    it from."""
+    region = regions.region_of_area(sharpen["coverage"])
+    return bool(region and region["sharpen"].get("vegetation"))
+
+
+def left_out_for_size(sharpen: dict) -> bool:
+    """Whether the owner is told the vegetation layer was left out.
+    VEGETATION_LEFT_OUT says the area was too large for it, which is not why
+    an area in a region without the model has none: that one is told nothing
+    (tests/test_worker_helpers.py `TestLeftOutNotice`)."""
+    return bool(sharpen.get("vegetationLeftOut")) and vegetation_here(sharpen)
 
 
 def process_vegetation(
@@ -700,7 +723,7 @@ def main():
         completed = True
 
         log.info(f"Job {JOB_ID} complete — {len(output_keys)} layer(s) uploaded")
-        left_out = bool(sharpen.get("vegetationLeftOut"))
+        left_out = left_out_for_size(sharpen)
 
         create_notification(
             conn,

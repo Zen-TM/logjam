@@ -77,7 +77,25 @@ vi.mock("../map/recentSearches", () => ({ clearRecentSearches }));
 const forgetSlopeBandsEdit = vi.hoisted(() => vi.fn());
 vi.mock("../map/slopeBandsPreference", () => ({ forgetSlopeBandsEdit }));
 const forgetRegions = vi.hoisted(() => vi.fn());
-vi.mock("../regionsPreference", () => ({ forgetRegions }));
+vi.mock("../regionsPreference", () => ({
+  forgetRegions: () => {
+    forgetRegions();
+    record("forget:regions");
+  },
+}));
+const forgetUnits = vi.hoisted(() => vi.fn());
+vi.mock("../unitsPreference", () => ({ forgetUnits }));
+vi.mock("./placeRegistry", () => ({
+  stopPlaceRegistryForWipe: () => {
+    record("stop:placeregistry");
+    return Promise.resolve();
+  },
+  resumePlaceRegistryAfterWipe: () => record("resume:registries"),
+  lapsePlaceRegistries: () => {
+    record("lapse:registries");
+    return Promise.resolve();
+  },
+}));
 vi.mock("../map/sharpenedArchives", () => ({
   stopSharpenedAreasForWipe: () => record("stop:sharpened"),
 }));
@@ -145,6 +163,71 @@ describe("wipeAllLocalData", () => {
     expect(forgetRegions).toHaveBeenCalledOnce();
   });
 
+  // The place registries a departing account holds are kept by what it chose
+  // and saved over, which the wipe has just deleted. Mutation: drop
+  // `lapsePlaceRegistries()` from the wipe, move it above `forgetRegions()`, or
+  // move it above the offline registry's DELETE, and the next user's phone keeps
+  // the regions the last one chose or saved a map over.
+  it("lets the place registries lapse after the chosen regions and saved maps are gone", async () => {
+    await wipeAllLocalData();
+    const lapse = events.indexOf("lapse:registries");
+    expect(lapse).toBeGreaterThanOrEqual(0);
+    expect(lapse).toBeGreaterThan(events.indexOf("forget:regions"));
+    expect(lapse).toBeGreaterThan(
+      events.indexOf("sql:DELETE FROM map_artifact"),
+    );
+  });
+
+  // The registry refresh is held from the wipe's stop until its lapse has
+  // finished, and runs again for the next account whatever the lapse did.
+  // Mutation: drop `resumePlaceRegistryAfterWipe()` from the wipe, or move it
+  // above the lapse, and the next account's place names are never fetched, or a
+  // check fetches between the two.
+  it("holds the place registry refresh until the lapse has finished, then lets it run again", async () => {
+    await wipeAllLocalData();
+    const stop = events.indexOf("stop:placeregistry");
+    const lapse = events.indexOf("lapse:registries");
+    const resume = events.indexOf("resume:registries");
+    expect(stop).toBeGreaterThanOrEqual(0);
+    expect(lapse).toBeGreaterThan(stop);
+    expect(resume).toBeGreaterThan(lapse);
+
+    events.length = 0;
+    failOn = (e) => e === "lapse:registries";
+    await wipeAllLocalData();
+    expect(events).toContain("resume:registries");
+  });
+
+  // A step between the stop and the lapse that throws must not leave the
+  // refresh held until the next wipe or an app restart. Mutation: resume only
+  // after the lapse, inside the lapse's own `try`, and this goes red.
+  it("lets the place registry refresh run again when a step between its stop and its lapse throws", async () => {
+    forgetRegions.mockImplementationOnce(() => {
+      throw new Error("boom: forgetRegions");
+    });
+    await expect(wipeAllLocalData()).rejects.toThrow("boom: forgetRegions");
+    expect(events).toContain("stop:placeregistry");
+    expect(events).not.toContain("lapse:registries");
+    expect(events).toContain("resume:registries");
+  });
+
+  // Mutation: drop the try/catch around `lapsePlaceRegistries()` in the wipe, and
+  // a copy that will not delete stops the rest of the wipe, or goes unreported.
+  it("reports a place registry that will not delete, and still clears the others", async () => {
+    failOn = (e) => e === "lapse:registries";
+    const { failed } = await wipeAllLocalData();
+    expect(failed).toContain("place names");
+    expect(events).toContain("delete:file:///cache/logjam-scratch/");
+  });
+
+  // Mutation: drop forgetUnits() from wipeAllLocalData, and the next account
+  // on this phone reads the previous one's units until its own arrive.
+  it("forgets the chosen units", async () => {
+    forgetUnits.mockClear();
+    await wipeAllLocalData();
+    expect(forgetUnits).toHaveBeenCalledOnce();
+  });
+
   it("deletes every declared directory", async () => {
     const { failed } = await wipeAllLocalData();
     expect(failed).toEqual([]);
@@ -186,7 +269,9 @@ describe("wipeAllLocalData", () => {
   // delete: a live producer would re-create what the wipe just removed, and
   // the sharpened areas' transforms would keep their presigned URLs.
   // Mutation: drop `stopPlansForWipe()` from the wipe, and a plan fetch
-  // landing after sign-out writes the departing user's plan back.
+  // landing after sign-out writes the departing user's plan back; drop
+  // `stopPlaceRegistryForWipe()`, and a place-name copy fetched for the
+  // departing account's region lands after the lapse.
   it("stops every producer before deleting anything", async () => {
     await wipeAllLocalData();
     const firstDelete = events.findIndex((e) => /^(sql|delete):/.test(e));
@@ -199,6 +284,7 @@ describe("wipeAllLocalData", () => {
       "stop:sharpened",
       "stop:sharpened-areas",
       "stop:plans",
+      "stop:placeregistry",
     ]) {
       const at = events.indexOf(stop);
       expect(at).toBeGreaterThanOrEqual(0);

@@ -143,7 +143,7 @@ export function planTerrainBlocks(
   const last = t.tiles[t.tiles.length - 1]!;
   const cols = last.x - t.minTileX + 1;
   const rows = last.y - t.minTileY + 1;
-  const read = terrainTileReader(areas, archiveLayer);
+  const read = terrainTileReader(areas, archiveLayer, archive.maxzoom);
   const blocks = spans.map((span) => {
     const { r0, r1 } = demBlockRows(span.from, span.to, t, rows);
     const tiles: TileCoord[] = [];

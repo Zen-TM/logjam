@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { setDisplayUnits } from "./units.js";
 
 import {
   activityTalliesOverlap,
@@ -440,6 +441,48 @@ describe("stats presentation", () => {
       metric: { value: "7.5", suffix: "avg" },
       subtitle: "highest 12, Claustral",
     });
+  });
+
+  // Mutation: drop the unit from the "quantity" case of `fieldStatDisplay`
+  // (`shown` returns `formatStatNumber(n)`), and a longest pitch of 25 m reads
+  // "25 avg"; or round the metres first in imperial (`formatStatNumber(n)` into
+  // `lengthInputText`), and 10.8204 m reads "35.4 ft".
+  it("gives a length its unit in the display units, and another quantity none", () => {
+    const stat = (key: string) =>
+      ({
+        kind: "quantity",
+        key,
+        label: "Longest pitch",
+        total: 60,
+        average: 25,
+        best: { value: 40, label: "Claustral" },
+      }) as const;
+    expect(fieldStatDisplay(stat("longest_abseil"))).toEqual({
+      metric: { value: "25 m", suffix: "avg" },
+      subtitle: "highest 40 m, Claustral",
+    });
+    expect(fieldStatDisplay(stat("pitches"))).toEqual({
+      metric: { value: "25", suffix: "avg" },
+      subtitle: "highest 40, Claustral",
+    });
+    setDisplayUnits("imperial");
+    try {
+      expect(fieldStatDisplay(stat("longest_abseil"))).toEqual({
+        metric: { value: "82 ft", suffix: "avg" },
+        subtitle: "highest 131.2 ft, Claustral",
+      });
+      expect(fieldStatDisplay(stat("pitches")).metric?.value).toBe("25");
+      // The place page's own figures: 35 ft is stored as 10.668 m, 100 ft as
+      // 30.48 m, and 10.8204 m is 35.5 ft.
+      const average = (metres: number) =>
+        fieldStatDisplay({ ...stat("longest_abseil"), average: metres }).metric
+          ?.value;
+      expect(average(10.668)).toBe("35 ft");
+      expect(average(30.48)).toBe("100 ft");
+      expect(average(10.8204)).toBe("35.5 ft");
+    } finally {
+      setDisplayUnits("metric");
+    }
   });
 
   it("counts a vocabulary with ×, so a spaced value stays one value", () => {

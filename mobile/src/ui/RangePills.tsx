@@ -11,8 +11,9 @@ import {
 } from "@logjam/shared";
 
 /**
- * A graded axis as a row of numbered pills — the Logjam GPS form of Logjam
- * Web's double-ended grade slider. Every stop is a 36pt tap target, the current
+ * A graded axis as a row of pills, numbered or (for a labelled field) worded —
+ * the Logjam GPS form of Logjam Web's double-ended grade slider. Every stop is
+ * a 36pt tap target, the current
  * selection is readable without a tooltip, and it costs no gesture (a slider
  * inside a draggable sheet fights the sheet).
  *
@@ -24,6 +25,7 @@ export function RangePills({
   bounds,
   value,
   prefix = "",
+  word = String,
   onChange,
 }: {
   label: string;
@@ -31,6 +33,8 @@ export function RangePills({
   value: NumberRange | null;
   /** Rendered before each number in the summary ("V3–V5"), not on the pills. */
   prefix?: string;
+  /** How a stop reads, on its pill and in the summary: a labelled field's word. */
+  word?: (stop: number) => string;
   onChange: (next: NumberRange | null) => void;
 }) {
   const styles = useStyles();
@@ -46,7 +50,7 @@ export function RangePills({
         <Text style={styles.label}>{label}</Text>
         <View style={styles.valueGroup}>
           <Text style={[styles.value, active && styles.valueActive]}>
-            {formatRange(value, bounds, prefix)}
+            {formatRange(value, bounds, prefix, word)}
           </Text>
           {active ? (
             <IconButton
@@ -62,7 +66,7 @@ export function RangePills({
         {stops.map((stop) => (
           <Chip
             key={stop}
-            label={String(stop)}
+            label={word(stop)}
             active={value !== null && stop >= value[0] && stop <= value[1]}
             onPress={() => onChange(nextRange(value, stop))}
           />

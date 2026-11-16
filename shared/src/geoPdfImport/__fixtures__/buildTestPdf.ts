@@ -128,3 +128,51 @@ export function validVp(
   }
   return vp;
 }
+
+// Measure overrides for validVp: sheets in projections that do not cover
+// Sydney, over made-up boxes at published places. GPTS is (lat, lon) in
+// BL, BR, TR, TL order; the WKT is the projection's public definition.
+const box = (south: number, west: number, north: number, east: number) => [
+  south,
+  west,
+  south,
+  east,
+  north,
+  east,
+  north,
+  west,
+];
+
+const GRS80 = 'SPHEROID["GRS 1980",6378137,298.257222101]';
+const DEGREE = 'PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433]';
+
+/** NZTM2000 (EPSG:2193), a box in Wellington. */
+export const NZTM_SHEET: Record<string, TestPdfValue> = {
+  GPTS: box(-41.35, 174.75, -41.25, 174.85),
+  GCS: {
+    Type: pdfName("PROJCS"),
+    EPSG: 2193,
+    WKT: `PROJCS["NZGD2000 / New Zealand Transverse Mercator 2000",GEOGCS["NZGD2000",DATUM["New_Zealand_Geodetic_Datum_2000",${GRS80}],${DEGREE}],PROJECTION["Transverse_Mercator"],PARAMETER["latitude_of_origin",0],PARAMETER["central_meridian",173],PARAMETER["scale_factor",0.9996],PARAMETER["false_easting",1600000],PARAMETER["false_northing",10000000],UNIT["metre",1]]`,
+  },
+};
+
+/** WGS 84 / UTM zone 12N (EPSG:32612), a box at Salt Lake City. */
+export const UTM12N_SHEET: Record<string, TestPdfValue> = {
+  GPTS: box(40.65, -111.95, 40.75, -111.85),
+  GCS: {
+    Type: pdfName("PROJCS"),
+    EPSG: 32612,
+    WKT: `PROJCS["WGS 84 / UTM zone 12N",GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563]],${DEGREE}],PROJECTION["Transverse_Mercator"],PARAMETER["latitude_of_origin",0],PARAMETER["central_meridian",-111],PARAMETER["scale_factor",0.9996],PARAMETER["false_easting",500000],PARAMETER["false_northing",0],UNIT["metre",1]]`,
+  },
+};
+
+/** A Lambert azimuthal equal-area projection centred in the mid-Atlantic
+ * (33.5 N, 29 W), WKT only, and a box at its centre. proj4 throws for a
+ * point in Sydney, the antipode of that centre. */
+export const ATLANTIC_LAEA_SHEET: Record<string, TestPdfValue> = {
+  GPTS: box(33.45, -29.05, 33.55, -28.95),
+  GCS: {
+    Type: pdfName("PROJCS"),
+    WKT: `PROJCS["Atlantic LAEA",GEOGCS["GRS80 sphere",DATUM["D_GRS80",${GRS80}],${DEGREE}],PROJECTION["Lambert_Azimuthal_Equal_Area"],PARAMETER["latitude_of_center",33.5],PARAMETER["longitude_of_center",-29],PARAMETER["false_easting",0],PARAMETER["false_northing",0],UNIT["metre",1]]`,
+  },
+};

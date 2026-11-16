@@ -115,6 +115,7 @@ function dialog({
   onSelectOnMap?: (...args: unknown[]) => void;
   pendingExtent?: TBbox | null;
   pendingScale?: number | null;
+  mapCenter?: { lat: number; lng: number; zoom: number } | null;
   completedTopoJobs?: CompletedTopoJob[];
   topoJobsLoaded?: boolean;
   onClose?: () => void;
@@ -676,6 +677,46 @@ describe("GeoPdfDialog, Type the coordinates", () => {
     );
   });
 
+  // A map panned round the world reports longitudes past 180; the sheet is the
+  // ground they wrap to, or its Terrain tiles are asked for outside the world.
+  // Mutation: use `pendingExtent` as it is where the pick is applied (drop
+  // `wrapBox`), and West reads 510.2.
+  it("reads a sheet picked in another world copy as the ground it shows", () => {
+    const turned = {
+      ...extent,
+      west: extent.west + 360,
+      east: extent.east + 360,
+    };
+    render(dialog({ open: true, pendingExtent: turned, pendingScale: 50000 }));
+    typeEdges();
+    const edge = (name: string) =>
+      Number.parseFloat(
+        (screen.getByRole("textbox", { name }) as HTMLInputElement).value,
+      );
+    expect(edge("West")).toBeCloseTo(extent.west, 5);
+    expect(edge("East")).toBeCloseTo(extent.east, 5);
+    expect(edge("North")).toBeCloseTo(extent.north, 5);
+  });
+
+  // Mutation: pass `center.lng` as it is to `extentFromCentreAndSize` in
+  // `centredOn` (drop `wrapLon`), and the sheet seeded from a map centre a turn
+  // over reads 510.25.
+  it("seeds the sheet from a map centre in another world copy as the ground it shows", () => {
+    render(
+      dialog({
+        open: true,
+        mapCenter: { lat: -33.65, lng: 150.25 + 360, zoom: 12 },
+      }),
+    );
+    typeEdges();
+    const edge = (name: string) =>
+      Number.parseFloat(
+        (screen.getByRole("textbox", { name }) as HTMLInputElement).value,
+      );
+    const middle = (edge("West") + edge("East")) / 2;
+    expect(middle).toBeCloseTo(150.25, 4);
+  });
+
   // The lock and the pivot are gone: typing an edge moves the box. Mutation:
   // bring either control back.
   it("has no pivot or lock, and shows the four edges", () => {
@@ -996,6 +1037,28 @@ describe("Make a map, for GIS", () => {
     const format = screen.getByRole("radiogroup", { name: "Format" });
     for (const name of ["GeoPDF", "GeoTIFF", "GeoPackage", "MBTiles"])
       expect(within(format).getByRole("radio", { name })).toBeTruthy();
+  });
+
+  // Mutation: write "GDA2020 / MGA" in the note whatever the box (the text it
+  // had before regions), and a box outside New South Wales is told its files
+  // are MGA when the worker warps them to UTM.
+  it("names the grid the files will be in, for the box's ground", () => {
+    const { unmount } = render(dialog({ open: true, areaSeed: seed }));
+    chooseGis("GeoTIFF");
+    expect(
+      screen.getByText(/rasters in GDA2020 \/ MGA, for QGIS/),
+    ).toBeTruthy();
+    chooseGis("GeoPackage");
+    expect(
+      screen.getByText(/rasters in GDA2020 \/ MGA, and the contours/),
+    ).toBeTruthy();
+    unmount();
+
+    // Bendigo: no region has terrain there, so the grid is UTM.
+    const bendigo = { north: -36.7, south: -36.8, east: 144.3, west: 144.2 };
+    render(dialog({ open: true, areaSeed: bendigo }));
+    chooseGis("GeoTIFF");
+    expect(screen.getByText(/rasters in WGS 84 \/ UTM, for QGIS/)).toBeTruthy();
   });
 
   // A GIS file is a free box: no paper, and only the layers the format holds.

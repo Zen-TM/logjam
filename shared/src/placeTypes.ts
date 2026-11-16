@@ -19,6 +19,7 @@
 // cannot import TypeScript. `api/src/lib/systemRowMigration.unit.test.ts` reads
 // the migration and fails if the two ever disagree.
 
+import { t } from "./i18n.js";
 import { isUuidV4 } from "./sync.js";
 import { quote, say, type UserSentence } from "./userSentence.js";
 import type { TripLogCustomFieldType } from "./tripLogFields.js";
@@ -351,15 +352,26 @@ export type SystemFieldDef = {
    */
   hint?: string;
   /**
-   * The unit a VALUE is in, appended where one is displayed ("30 m"). Only
-   * where the label does not already carry it: "Hours" says hours.
+   * The unit a VALUE is stored in, written where one is displayed ("30 m").
+   * Only where the label does not already carry it: "Hours" says hours. A
+   * length is stored in metres and read and typed in the display units
+   * (`isLengthField`). Guard: `units.test.ts` ("a length field").
    */
-  unit?: string;
+  unit?: "m";
+  /**
+   * The words a stored whole number reads as: the value `min + i` is
+   * `labels[i]`, so "C2" is stored as 5 and filters and sorting keep working on
+   * numbers. Append-only: a stored value is a position in this list, so
+   * reordering or inserting renumbers every place that holds one. Guard:
+   * `placeTypes.test.ts` ("pin every labelled field's labels, in order").
+   * Reasoning: ADR 0051.
+   */
+  labels?: readonly string[];
 };
 
 /**
- * The system field definitions: seven grade/quality fields for Canyon, and
- * three campsite fields.
+ * The system field definitions: seven grade/quality fields for Canyon, the four
+ * ACA grade fields (scoped to Canyon too), and three campsite fields.
  *
  * Bounds match numeric constraints for place field values. Note `hours`,
  * `num_abseils` and `longest_abseil` are min-only (`isTripLogCustomFieldDef`).
@@ -470,12 +482,107 @@ export const SYSTEM_FIELD_DEFS: SystemFieldDef[] = [
     max: null,
     placeTypes: ["campsite"],
   },
+  {
+    id: "a0000000-0000-4000-8000-000000000011",
+    key: "aca_technical",
+    label: t`ACA technical`,
+    type: "integer",
+    min: 1,
+    max: 4,
+    hint: t`Technical difficulty of the descent, on the American Canyoneering Association rating system.`,
+    placeTypes: ["canyon"],
+    labels: ["1", "2", "3", "4"],
+  },
+  {
+    id: "a0000000-0000-4000-8000-000000000012",
+    key: "aca_water",
+    label: t`ACA water`,
+    type: "integer",
+    min: 1,
+    max: 7,
+    hint: t`Difficulty of the water, from little or no water (A) to the most powerful (C4), on the American Canyoneering Association rating system.`,
+    placeTypes: ["canyon"],
+    labels: ["A", "B", "C", "C1", "C2", "C3", "C4"],
+  },
+  {
+    id: "a0000000-0000-4000-8000-000000000013",
+    key: "aca_time",
+    label: t`ACA time`,
+    type: "integer",
+    min: 1,
+    max: 6,
+    hint: t`How long the canyon takes, in Roman numerals, on the American Canyoneering Association rating system.`,
+    placeTypes: ["canyon"],
+    labels: ["I", "II", "III", "IV", "V", "VI"],
+  },
+  {
+    id: "a0000000-0000-4000-8000-000000000014",
+    key: "aca_risk",
+    label: t`ACA risk`,
+    type: "integer",
+    min: 1,
+    max: 5,
+    hint: t`How dangerous the canyon is beyond its technical difficulty, on the American Canyoneering Association rating system.`,
+    placeTypes: ["canyon"],
+    labels: ["PG", "PG13", "R", "X", "XX"],
+  },
 ];
 
 /** The system definition for a key, or undefined for a user's own field. The
  *  one lookup for the bounds, the hint and the unit a built-in carries. */
 export function systemFieldDef(key: string): SystemFieldDef | undefined {
   return SYSTEM_FIELD_DEFS.find((def) => def.key === key);
+}
+
+/** Whether a built-in field holds a length in metres, which a form types and a
+ *  page reads in the display units. */
+export function isLengthField(key: string): boolean {
+  return systemFieldDef(key)?.unit === "m";
+}
+
+/**
+ * The stored whole number for what a cell says on a built-in field that gives
+ * its values words: the word ("C2", any case) or the number itself ("5"). The
+ * inverse of `fieldValueLabel`. Undefined for a field with no words, a blank
+ * cell, a word the field does not have and a number outside its list: the
+ * caller leaves the value unset rather than guess.
+ */
+export function fieldValueOfLabel(
+  key: string,
+  text: string,
+): number | undefined {
+  const def = systemFieldDef(key);
+  const said = text.trim().toUpperCase();
+  if (!def?.labels || def.min === null || said === "") return undefined;
+  const at = def.labels.findIndex((label) => label.toUpperCase() === said);
+  if (at !== -1) return def.min + at;
+  const number = /^\d+$/.test(said) ? Number(said) : NaN;
+  return fieldValueLabel(key, number) === undefined ? undefined : number;
+}
+
+/**
+ * How a stored whole number reads where a built-in field gives its values
+ * words ("C2" for 5), or undefined for a field that has none and for a value
+ * outside the list: the caller prints the number it holds.
+ */
+export function fieldValueLabel(
+  key: string,
+  value: unknown,
+): string | undefined {
+  const def = systemFieldDef(key);
+  if (!def?.labels || def.min === null) return undefined;
+  return typeof value === "number" && Number.isInteger(value)
+    ? def.labels[value - def.min]
+    : undefined;
+}
+
+/**
+ * How a number on a field's scale reads: its word where the field has labels
+ * ("C2"), else the number. What a rail, a filter pill or a summary prints for a
+ * stop on the scale.
+ */
+export function stopLabel(key: string, stop: number): string {
+  return fieldValueLabel(key, stop) ?? String(stop);
 }
 
 /**

@@ -1,8 +1,11 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { act, cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   GAUGES,
-  GAUGE_LATEST_PATH,
+  GAUGE_PREFIX,
+  gaugeLatestPath,
   contractSectionKeys,
   parseGaugeLatest,
   type Gauge,
@@ -22,6 +25,7 @@ const view = (gauge: Gauge, at = now, generatedAt = file.generatedAt) =>
       gauge={gauge}
       attribution={file.attribution}
       generatedAt={generatedAt}
+      units={file.units}
       now={at}
     />,
   );
@@ -64,6 +68,7 @@ describe("GaugeView", () => {
         gauge={withFlow}
         attribution={file.attribution}
         generatedAt={file.generatedAt}
+        units={file.units}
         now={now}
         onClose={onClose}
       />,
@@ -158,8 +163,8 @@ describe("GaugeView", () => {
 });
 
 describe("useGauges", () => {
-  function Probe({ on }: { on: boolean }) {
-    const { file: f, failed } = useGauges(on);
+  function Probe({ feed }: { feed: string | null }) {
+    const { file: f, failed } = useGauges(feed);
     return <p>{failed ? "failed" : f ? f.gauges.length : "none"}</p>;
   }
   beforeEach(() => vi.useFakeTimers());
@@ -175,7 +180,7 @@ describe("useGauges", () => {
       .mockRejectedValueOnce(new Error("offline"))
       .mockResolvedValue(Response.json(latestJson));
     vi.stubGlobal("fetch", fetch);
-    render(<Probe on />);
+    render(<Probe feed={GAUGE_PREFIX} />);
     await act(async () => {});
     expect(screen.getByText("failed")).toBeTruthy();
     await act(async () => {
@@ -191,18 +196,43 @@ describe("useGauges", () => {
       .mockRejectedValueOnce(new Error("offline"))
       .mockReturnValue(new Promise(() => {}));
     vi.stubGlobal("fetch", fetch);
-    const { rerender } = render(<Probe on />);
+    const { rerender } = render(<Probe feed={GAUGE_PREFIX} />);
     await act(async () => {});
     expect(screen.getByText("failed")).toBeTruthy();
-    rerender(<Probe on={false} />);
-    rerender(<Probe on />);
+    rerender(<Probe feed={null} />);
+    rerender(<Probe feed={GAUGE_PREFIX} />);
     expect(screen.queryByText("failed")).toBeNull();
+  });
+
+  // Mutation: fetch `gaugeLatestPath(GAUGE_PREFIX)` whatever the feed → red.
+  it("asks for the feed it is given", async () => {
+    const fetch = vi.fn().mockResolvedValue(Response.json(latestJson));
+    vi.stubGlobal("fetch", fetch);
+    render(<Probe feed="master/gauges/other/v1/" />);
+    await act(async () => {});
+    expect(fetch.mock.calls[0][0]).toBe("/master/gauges/other/v1/latest.json");
+  });
+
+  // Mutation: return the held file whatever feed it came from → red.
+  it("never shows one feed's file as another's", async () => {
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(Response.json(latestJson))
+      .mockReturnValue(new Promise(() => {}));
+    vi.stubGlobal("fetch", fetch);
+    const { rerender } = render(<Probe feed={GAUGE_PREFIX} />);
+    await act(async () => {});
+    expect(screen.getByText("3")).toBeTruthy();
+    rerender(<Probe feed="master/gauges/other/v1/" />);
+    expect(screen.getByText("none")).toBeTruthy();
+    rerender(<Probe feed={GAUGE_PREFIX} />);
+    expect(screen.getByText("3")).toBeTruthy();
   });
 
   it("asks nothing while the layer is off", () => {
     const fetch = vi.fn();
     vi.stubGlobal("fetch", fetch);
-    render(<Probe on={false} />);
+    render(<Probe feed={null} />);
     expect(fetch).not.toHaveBeenCalled();
   });
 
@@ -214,10 +244,10 @@ describe("useGauges", () => {
       .mockResolvedValueOnce(new Response("", { status: 500 }))
       .mockResolvedValue(Response.json({ version: 9 }));
     vi.stubGlobal("fetch", fetch);
-    render(<Probe on />);
+    render(<Probe feed={GAUGE_PREFIX} />);
     await act(async () => {});
     expect(screen.getByText("3")).toBeTruthy();
-    expect(fetch.mock.calls[0][0]).toBe(`/${GAUGE_LATEST_PATH}`);
+    expect(fetch.mock.calls[0][0]).toBe(`/${gaugeLatestPath(GAUGE_PREFIX)}`);
     await act(async () => {
       await vi.advanceTimersByTimeAsync(GAUGE_REFRESH_MS);
     });
@@ -226,6 +256,45 @@ describe("useGauges", () => {
     });
     expect(fetch).toHaveBeenCalledTimes(3);
     expect(screen.getByText("3")).toBeTruthy();
+  });
+});
+
+describe("the web map's gauge layer", () => {
+  // Mutation: pass a fixed prefix, `gaugeFeedOf(null)`, or drop the
+  // `showGauges` gate in `Map.tsx`, and the map reads the wrong region's feed
+  // or fetches while the layer is off.
+  it("reads the feed of the region the map shows, only while the layer is on", () => {
+    const map = readFileSync(
+      join(import.meta.dirname, "../map/Map.tsx"),
+      "utf8",
+    );
+    expect(map).toMatch(
+      /useGauges\(\s*showGauges \? gaugeFeedOf\(region\) : null,?\s*\)/,
+    );
+  });
+});
+
+describe("the Layers row's gauges", () => {
+  // Mutation: compute `gaugesHere` from `viewRegion?.gauges != null` or
+  // `viewRegion !== null` in `App.tsx` in place of `gaugeFeedOf(viewRegion)`,
+  // and the row, the map and Logjam GPS stop asking one question.
+  it("asks whether the region in view has a feed the way the map does", () => {
+    const app = readFileSync(join(import.meta.dirname, "../App.tsx"), "utf8");
+    expect(app).toContain(
+      "const gaugesHere = gaugeFeedOf(viewRegion) !== null;",
+    );
+  });
+});
+
+describe("a gauge picked in search", () => {
+  // Mutation: drop `onShowGauges()` from `onSelectGauge` in `Map.tsx`, and a
+  // picked gauge's panel has no feed loaded (the layer is off).
+  it("turns the gauges layer on before the map flies to it", () => {
+    const map = readFileSync(
+      join(import.meta.dirname, "../map/Map.tsx"),
+      "utf8",
+    );
+    expect(map).toMatch(/onSelectGauge=\{\(gauge\) => \{\s*onShowGauges\(\);/);
   });
 });
 

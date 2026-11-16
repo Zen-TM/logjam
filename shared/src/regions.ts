@@ -4,7 +4,7 @@
 // What a map offers follows the ground it shows: a layer, a basemap or a grid
 // is offered where its data covers the view, and the regions an account chose
 // (`uiPreferences.regions`) only set defaults: where a map first opens, the
-// first-run basemap, the canyon-list offers (ADR 0049). `regionInView` is the
+// first-run basemap, the first-run units, the canyon-list offers (ADR 0049). `regionInView` is the
 // question a map is to ask and `regionsTouching` the one for a box that is
 // saved, printed or exported; the basemap gallery asks them through
 // `offeredBasemaps` and `basemapHere` (geoPdfBaseLayers.ts). Heights, gauges and the area-export check never took a
@@ -14,6 +14,10 @@
 // every region's sources) and `areaExport.test.ts` (the check reads every
 // region with terrain).
 //
+// Each source a region declares (heights, Terrain archives, the vector cut, the
+// canyon list, the gauge feed, the place registry) carries its licence
+// (`licences.ts`; guard: `licences.test.ts`).
+//
 // Stored ids and paths keep their values: `nsw-5m`, `six-*`,
 // `master/dem/nsw-5m.pmtiles`, `master/places/v1/` and `master/gauges/v1/` are
 // on phones, in tracks' climb labels and in installed builds. A new region's
@@ -21,11 +25,22 @@
 // Guard: `regions.test.ts` ("keeps NSW's stored ids and paths").
 import type { DemSource } from "./demSources.js";
 import { GAUGE_PREFIX } from "./gauges.js";
+import type { GridId } from "./grids.js";
+import { t } from "./i18n.js";
+import type { LicenceId } from "./licences.js";
+import type { Units } from "./units.js";
 import { SYDNEY_TZ } from "./monthlyQuota.js";
 import { matchOzUltimateUrl } from "./ozUltimate.js";
+import { lonMid, lonWidth, wrapLon } from "./placeGeo.js";
 import { PLACE_REGISTRY_PREFIX } from "./placeRegistry.js";
 
 import { SIM_REGIONS, SIM_WORLD } from "./simRegions.js";
+
+/**
+ * The rating system a canyon's grade is written in: the French one (V, A and
+ * commitment) or the American Canyoneering Association's. ADR 0051.
+ */
+export type CanyonGradeSystem = "french" | "aca";
 
 /** One closed outline of [lon, lat]; the last vertex joins the first. */
 export type Ring = readonly (readonly [lon: number, lat: number])[];
@@ -49,11 +64,15 @@ export type TerrainArchive = {
   coverage: readonly [number, number, number, number];
   credit: string;
   creditHtml: string;
+  /** What the source is licensed under (`licences.ts`). */
+  licence: LicenceId;
   tileBytes: TileBytes;
 };
 
 /** The height source the other archives are cut from; one of the region's `dem`. */
 export type HeightsArchive = DemSource & {
+  /** What a save's list calls the clip, after "Elevation data,": "NSW 5 m". */
+  name: string;
   archivePath: string;
   coverage: TerrainArchive["coverage"];
   tileBytes: TileBytes;
@@ -107,6 +126,40 @@ export type RegionTerrain = {
   coverage?: CoverageArchive;
 };
 
+/**
+ * `upload`: a user's own download of a survey is sharpened, and where the
+ * survey has no ground the area is filled from the region's heights and slope,
+ * which therefore stop at z15, where a sharpened area starts (guard:
+ * topo/tests/test_regions.py `test_an_upload_region_is_filled_from_z15`). `off`:
+ * the worker refuses the survey, with a sentence for the reason
+ * (topo/sharpen.py `upload_region`).
+ */
+export type RegionSharpen =
+  | {
+      mode: "upload";
+      /**
+       * Where a user gets the survey. `steps` is what Logjam Web's sharpen
+       * dialog walks them through: `elvis` is the errand ELVIS needs (draw the
+       * area, take its shapefile there, order the tiles); `link` is only the
+       * portal's address and the reminder that an upload is one ZIP. Guard:
+       * `sharpen.test.ts` ("gives every upload region a portal").
+       */
+      portal: { name: string; url: string; steps: "elvis" | "link" };
+      /**
+       * What the survey's publisher asks a derived product to show.
+       * `{extracted}` is where topo/sharpen.py `credit` puts ", extracted
+       * <month>", or nothing when the upload does not say.
+       */
+      credit: string;
+      /** Whether the vegetation layer's inputs (topo/pipeline.py) cover the region. */
+      vegetation: boolean;
+    }
+  | {
+      mode: "off";
+      /** No survey to sharpen from, or heights already as fine as one. */
+      reason: "no-lidar" | "already-fine";
+    };
+
 export type Region = {
   /**
    * Stored in `uiPreferences.regions`: never change one. Lower-case letters
@@ -115,8 +168,10 @@ export type Region = {
    * lower-case letters and digits").
    */
   id: string;
-  /** What user copy calls it: "That area is outside NSW". */
+  /** What user copy calls it: "Import NSW from RopeWiki". */
   name: string;
+  /** What a sentence with room for it calls it: "canyoning in New South Wales". */
+  fullName: string;
   /** Where a map opens before the user has moved it. */
   view: { center: readonly [lon: number, lat: number]; zoom: number };
   /** IANA. The leaderboard's season and a trip plan's day read it; gauge days still read `SYDNEY_TZ`. */
@@ -125,7 +180,10 @@ export type Region = {
    * The border, simplified, as one ring of [lon, lat] for each island, drawn a
    * little outside the real one so it never cuts off ground the region's data
    * covers. A box would not do: neighbouring countries' boxes overlap. `WORLD`
-   * has none.
+   * has none. Longitudes are in [-180, 180]: a region across the date line has
+   * one ring each side of it, and a view past ±180 is read in every world copy
+   * it spans (`regionTouchesBox`). Guard: `regions.test.ts` ("keeps every border
+   * longitude in [-180, 180]").
    */
   borders: readonly Ring[];
   /** Ids in `BASEMAP_CATALOG`, each in one region at most (regions.test.ts). */
@@ -133,14 +191,20 @@ export type Region = {
   /** The one a map opens on before the user picks; one of `basemaps`. */
   defaultBasemap: string;
   /** The region's cut of the vector basemap, or null where it has none. */
-  vector: { archivePath: string; maxzoom: number } | null;
+  vector: { archivePath: string; maxzoom: number; licence: LicenceId } | null;
   /** Height sources, finest first. `DEM_SOURCES` is every region's, then the worldwide one. */
   dem: readonly DemSource[];
   /** The Terrain group's archives; `{}` where a region has none. */
   terrain: RegionTerrain;
   /** The CDN prefix of the place-search registry (ADR 0034), or null. */
   placeSearch: string | null;
-  /** The CDN prefix of the gauge feed (ADR 0044), or null. */
+  /** The registry's licence: not null exactly where `placeSearch` is not (`licences.test.ts`). */
+  placeSearchLicence: LicenceId | null;
+  /**
+   * The CDN prefix of the gauge feed (ADR 0044), ending in "/" because a feed's
+   * paths are this prefix and a file name (`gaugeLatestPath`, `gaugeHistoryUrl`),
+   * or null. Guard: `regions.test.ts` ("every gauge feed prefix ends in a slash").
+   */
   gauges: string | null;
   /**
    * BCP 47 tags of the languages, beyond the source, that this region's users
@@ -150,11 +214,23 @@ export type Region = {
    * tag a declared region carries is a language the catalogue knows").
    */
   languages?: readonly string[];
+  /** The feed's licence: not null exactly where `gauges` is not (`licences.test.ts`). */
+  gaugesLicence: LicenceId | null;
   /** The map grid coordinates are given in. */
-  grid: "mga2020";
+  grid: GridId;
+  /**
+   * The system a canyon's grade is written in here: a canyon form offers that
+   * system's fields (`gradeFieldsAt`). Outside every region it is French.
+   */
+  canyonGrades: CanyonGradeSystem;
+  /** How distances and heights are written for an account whose home this is, until it chooses (`unitsOf`). */
+  units: Units;
+  /** Whether a LiDAR survey of ground here can be sharpened into an area. */
+  sharpen: RegionSharpen;
   /** Where the canyon-list import reads from, or null where there is none. */
   canyons: {
     kind: "ropewiki";
+    licence: LicenceId;
     /** RopeWiki's own name for the region, as its `Located in regions` holds it. */
     ropewikiRegion: string;
     /** The hand-exported snapshot in the media bucket (api `ropeWikiCache.ts`). */
@@ -174,11 +250,13 @@ export type Region = {
  */
 const NSW_HEIGHTS = {
   id: "nsw-5m",
+  name: t`NSW 5 m`,
   sampleZoom: 15,
   // NSW and the ACT. Inside it a tile the build did not produce is simply
   // absent, and the position falls through.
   coverage: [140.9, -37.6, 153.7, -28.0],
   urlTemplate: null,
+  licence: "cc-by-3-au",
   archivePath: "master/dem/nsw-5m.pmtiles",
   // z15: full tiles of six whole sheets built by `topo/build_nsw_dem.py`, from
   // 4.7 KB on the Hay plain to 36 KB in the ranges. People save rugged ground,
@@ -204,11 +282,12 @@ const NSW_HEIGHTS = {
     "Elevation: derived from the NSW 5 m Digital Elevation Model, © State of New South Wales (Spatial Services), extracted October 2026. CC BY 3.0 AU.",
   creditHtml:
     'Elevation: derived from the NSW 5 m Digital Elevation Model, © State of New South Wales (<a href="https://www.spatial.nsw.gov.au">Spatial Services</a>), extracted October 2026. <a href="https://creativecommons.org/licenses/by/3.0/au/">CC BY 3.0 AU</a>.',
-} as const satisfies DemSource & { tileBytes: TileBytes };
+} as const satisfies DemSource & { name: string; tileBytes: TileBytes };
 
 /** A layer cut from the heights carries their credit, under its own name. */
 const derived = (layer: string) => ({
   coverage: NSW_HEIGHTS.coverage,
+  licence: NSW_HEIGHTS.licence,
   credit: NSW_HEIGHTS.credit.replace(/^Elevation/, layer),
   creditHtml: NSW_HEIGHTS.creditHtml.replace(/^Elevation/, layer),
 });
@@ -216,6 +295,7 @@ const derived = (layer: string) => ({
 export const NSW_REGION = {
   id: "nsw",
   name: "NSW",
+  fullName: t`New South Wales`,
   // The Blue Mountains.
   view: { center: [150.31, -33.7], zoom: 9 },
   timeZone: SYDNEY_TZ,
@@ -260,7 +340,11 @@ export const NSW_REGION = {
   defaultBasemap: "six-topo",
   // The catalogue entry "protomaps" (geoPdfBaseLayers.ts) reads this path and
   // zoom from here.
-  vector: { archivePath: "master/basemap/protomaps-nsw.pmtiles", maxzoom: 15 },
+  vector: {
+    archivePath: "master/basemap/protomaps-nsw.pmtiles",
+    maxzoom: 15,
+    licence: "odbl",
+  },
   dem: [NSW_HEIGHTS],
   terrain: {
     heights: NSW_HEIGHTS,
@@ -376,6 +460,7 @@ export const NSW_REGION = {
       caveat:
         "Land Council freehold can show as private land. Roads, waterways and public areas aren't properly mapped around Sydney and Wollongong.",
       coverage: NSW_HEIGHTS.coverage,
+      licence: "cc-by-4",
       credit:
         "Land: NSW Land Tenure, December 2024 v2 © State of New South Wales (Department of Primary Industries and Regional Development), CC BY 4.0",
       creditHtml:
@@ -417,6 +502,7 @@ export const NSW_REGION = {
       caveat:
         "Mapped by NSW National Parks and Wildlife Service: a fire it didn't map, often on private land, has no colour.",
       coverage: NSW_HEIGHTS.coverage,
+      licence: "cc-by-4",
       credit:
         "Fire history © State Government of NSW and NSW Department of Climate Change, Energy, the Environment and Water 2010 — NPWS Fire History - Wildfires and Prescribed Burns (CC BY 4.0)",
       creditHtml:
@@ -455,7 +541,9 @@ export const NSW_REGION = {
       // The source's limits.
       caveat:
         "It's a prediction, and valley and canyon floors are where it's most often wrong. A reseller on Telstra's network may get less than Telstra's own.",
+      // The ABS coastline in it is CC BY 4.0, which asks no more.
       coverage: NSW_HEIGHTS.coverage,
+      licence: "cc-by-2.5-au",
       credit:
         "Mobile coverage: ACCC Mobile Infrastructure Report data release © Commonwealth of Australia (ACCC), CC BY 2.5 AU; coastline © ABS, CC BY 4.0",
       creditHtml:
@@ -463,10 +551,32 @@ export const NSW_REGION = {
     },
   },
   placeSearch: PLACE_REGISTRY_PREFIX,
+  placeSearchLicence: "odbl",
   gauges: GAUGE_PREFIX,
+  // The readings are WaterNSW's; the history is the Bureau's, under CC BY. The
+  // stricter is tagged (ADR 0044).
+  gaugesLicence: "waternsw-copyright",
   grid: "mga2020",
+  canyonGrades: "french",
+  units: "metric",
+  sharpen: {
+    mode: "upload",
+    portal: {
+      name: "ELVIS",
+      url: "https://elevation.fsdf.org.au/",
+      steps: "elvis",
+    },
+    // What ELVIS's metadata asks of a derived product (CC BY 3.0 AU).
+    credit:
+      "Elevation: derived from a LiDAR survey, © Department of Customer Service (NSW Spatial Services){extracted}. CC BY 3.0 AU.",
+    // The vegetation model is NSW's: SVTM formations and the NPWS fire raster.
+    vegetation: true,
+  },
   canyons: {
     kind: "ropewiki",
+    // The licence and its version were not verified at RopeWiki's own page
+    // (`licences.ts`, `cc-by-nc-sa`).
+    licence: "cc-by-nc-sa",
     ropewikiRegion: "New South Wales",
     snapshotKey: "reference/ropewiki-nsw.csv",
     extraLinks: { label: "OzUltimate", match: matchOzUltimateUrl },
@@ -488,9 +598,19 @@ export function simRegionsOn(): boolean {
   );
 }
 
+/**
+ * NSW and the simulated regions, whatever the switch says: the list
+ * topo/regions.json is written from (topoRegions.ts). `REGIONS` is this list
+ * with the switch on.
+ */
+export const REGIONS_WITH_SIMULATED: readonly Region[] = [
+  NSW_REGION,
+  ...SIM_REGIONS,
+];
+
 /** Every region, in the order a picker lists them. */
 export const REGIONS: readonly Region[] = simRegionsOn()
-  ? [NSW_REGION, ...SIM_REGIONS]
+  ? REGIONS_WITH_SIMULATED
   : [NSW_REGION];
 
 /**
@@ -504,6 +624,7 @@ export const REGIONS: readonly Region[] = simRegionsOn()
 const EMPTY_WORLD: Region = {
   id: "world",
   name: "The world",
+  fullName: t`The world`,
   view: { center: [0, 0], zoom: 2 },
   timeZone: "UTC",
   borders: [],
@@ -515,8 +636,13 @@ const EMPTY_WORLD: Region = {
   dem: [],
   terrain: {},
   placeSearch: null,
+  placeSearchLicence: null,
   gauges: null,
-  grid: "mga2020",
+  gaugesLicence: null,
+  grid: "utm",
+  canyonGrades: "french",
+  units: "metric",
+  sharpen: { mode: "off", reason: "no-lidar" },
   canyons: null,
 };
 export const WORLD: Region = simRegionsOn() ? SIM_WORLD : EMPTY_WORLD;
@@ -555,6 +681,15 @@ export function accountRegion(
   return (
     regionsOf(normalizeRegionIds(chosen, regions), regions)[0] ?? regions[0]!
   );
+}
+
+/**
+ * The one region of a list, or null for none or several. Copy that names a
+ * region names it only while there is one to mean. Guard: `regions.test.ts`
+ * ("soleRegion").
+ */
+export function soleRegion(regions: readonly Region[]): Region | null {
+  return regions.length === 1 ? regions[0]! : null;
 }
 
 /** The regions behind a choice, in `REGIONS` order. */
@@ -596,19 +731,6 @@ export type LonLatBox = {
 /** The box of one point: the view of a map that has not yet said what it shows. */
 export function pointBox(lon: number, lat: number): LonLatBox {
   return { west: lon, south: lat, east: lon, north: lat };
-}
-
-/**
- * The same box moved by whole turns until its centre is in [-180, 180): a map
- * panned round the world reports longitudes past ±180, while a region's
- * borders and a hemisphere are read in that range. Guard: `regions.test.ts`
- * ("moves a box by whole turns until its centre is in [-180, 180)").
- */
-export function wrapView(view: LonLatBox): LonLatBox {
-  const turn = 360 * Math.floor(((view.west + view.east) / 2 + 180) / 360);
-  return turn === 0
-    ? view
-    : { ...view, west: view.west - turn, east: view.east - turn };
 }
 
 /**
@@ -684,10 +806,37 @@ function ringTouchesBox(ring: Ring, box: LonLatBox): boolean {
 
 /**
  * Whether a box and any of a region's borders share ground: a corner of one
- * inside the other, or an edge of each crossing.
+ * inside the other, or an edge of each crossing. The box is read in every
+ * world copy it spans (a map panned round the world reports longitudes past
+ * ±180, a view over the date line has an edge past it, a view wider than a
+ * turn spans several) against borders in [-180, 180]. Guard: `regions.test.ts`
+ * ("regionTouchesBox across the date line").
  */
 export function regionTouchesBox(region: Region, box: LonLatBox): boolean {
-  return region.borders.some((ring) => ringTouchesBox(ring, box));
+  const width = lonWidth(box.west, box.east);
+  return region.borders.some((ring) => {
+    let ringWest = Infinity;
+    let ringEast = -Infinity;
+    for (const [lon] of ring) {
+      if (lon < ringWest) ringWest = lon;
+      if (lon > ringEast) ringEast = lon;
+    }
+    const east = box.west + width;
+    const first = Math.ceil((box.west - ringEast) / 360);
+    const last = Math.floor((east - ringWest) / 360);
+    for (let turn = first; turn <= last; turn++) {
+      const shift = 360 * turn;
+      if (
+        ringTouchesBox(ring, {
+          ...box,
+          west: box.west - shift,
+          east: east - shift,
+        })
+      )
+        return true;
+    }
+    return false;
+  });
 }
 
 /**
@@ -723,6 +872,20 @@ export function regionAt(
 }
 
 /**
+ * The region a sharpened area was filled from and is credited to: the one that
+ * holds the centre of its survey box, which is how topo/regions.py
+ * `region_of_area` picks it when the area is made. Not `areasInRegion`, which
+ * asks where an area is drawn and counts every region its box touches. Guard:
+ * `regions.test.ts` ("regionOfArea"), on the cases the worker's test reads.
+ */
+export function regionOfArea(
+  [west, south, east, north]: readonly [number, number, number, number],
+  regions: readonly Region[] = REGIONS,
+): Region | null {
+  return regionAt((west + east) / 2, (south + north) / 2, regions);
+}
+
+/**
  * Every region whose border shares ground with a box, in `REGIONS` order: what
  * covers a box that is saved, printed or exported.
  */
@@ -744,6 +907,11 @@ function declaresAnything(region: Region): boolean {
 /**
  * The one region a map draws from: the one holding the view's centre, else the
  * first touching the view, else `world` when it declares anything, else null.
+ * The view is read as a map reports it: longitudes past ±180, in any world
+ * copy, are the ground they wrap to (`regionTouchesBox`). Guard:
+ * `regions.test.ts`, the describe "a view panned round the world" ("reads a
+ * view past the antimeridian by whole turns", "takes the region under the
+ * centre, in whatever world copy the view is").
  * // ponytail: a map that draws from this answer draws one region's Terrain
  * group and vector basemap at a time, so with two regions on screen the one
  * under the centre wins. Upgrade: a source per region per layer.
@@ -755,7 +923,7 @@ export function regionInView(
 ): Region | null {
   return (
     regionAt(
-      (view.west + view.east) / 2,
+      wrapLon(lonMid(view.west, view.east)),
       (view.south + view.north) / 2,
       regions,
     ) ??
@@ -764,18 +932,43 @@ export function regionInView(
   );
 }
 
+/** A region that declares a place registry (ADR 0034): `placeSearch` is its CDN prefix. */
+export type RegionWithRegistry = Region & { placeSearch: string };
+
 /**
- * `regionInView` for a view as a map reports it: its longitudes wrapped first
- * (`wrapView`), since a map panned round the world reports them past ±180 and
- * a region's borders are read in [-180, 180). What a map asks of the region it
- * shows. Guard: `regions.test.ts` ("reads a view panned past the antimeridian").
+ * The regions that declare a place registry, in `REGIONS` order. Guard:
+ * `regions.test.ts` ("regionsWithRegistry and regionWithRegistry").
  */
-export function regionInWrappedView(
-  view: LonLatBox,
+export function regionsWithRegistry(
+  regions: readonly Region[] = REGIONS,
+): RegionWithRegistry[] {
+  return regions.filter((r): r is RegionWithRegistry => r.placeSearch !== null);
+}
+
+/**
+ * The region with this id if it declares a place registry, else null. `id` is
+ * `unknown` because a request body names it. Guard: `regions.test.ts`
+ * ("regionsWithRegistry and regionWithRegistry").
+ */
+export function regionWithRegistry(
+  id: unknown,
+  regions: readonly Region[] = REGIONS,
+): RegionWithRegistry | null {
+  return regionsWithRegistry(regions).find((r) => r.id === id) ?? null;
+}
+
+/**
+ * The region the map shows, when it has a place registry (ADR 0034), or null:
+ * no registry answers here, and a client offers only the geocoder row. An
+ * unknown view reads as none. Guard: `regions.test.ts` ("placeRegistryIn").
+ */
+export function placeRegistryIn(
+  view: LonLatBox | null | undefined,
   regions: readonly Region[] = REGIONS,
   world: Region = WORLD,
-): Region | null {
-  return regionInView(wrapView(view), regions, world);
+): RegionWithRegistry | null {
+  const region = view ? regionInView(view, regions, world) : null;
+  return region ? regionWithRegistry(region.id, [region]) : null;
 }
 
 /** A region's archive for a Terrain layer, or null: the layer is not available here. */

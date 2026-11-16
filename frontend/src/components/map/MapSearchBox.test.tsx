@@ -7,6 +7,8 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  GAUGE_PREFIX,
+  NSW_REGION,
   PLACE_REGISTRY_ATTRIBUTION,
   PLACE_SEARCH_DEBOUNCE_MS,
   type LonLatBox,
@@ -30,13 +32,17 @@ vi.mock("../../placeUtils", async (importOriginal) => ({
   searchPlaceRegistry,
 }));
 
-const { gaugeFile } = vi.hoisted(() => ({
+const { gaugeFile, gaugeFeeds } = vi.hoisted(() => ({
   gaugeFile: {
     current: null as { gauges: Record<string, unknown>[] } | null,
   },
+  gaugeFeeds: [] as (string | null)[],
 }));
 vi.mock("../gauges/useGauges", () => ({
-  useGauges: () => ({ file: gaugeFile.current, failed: false, now: 0 }),
+  useGauges: (feed: string | null) => {
+    gaugeFeeds.push(feed);
+    return { file: gaugeFile.current, failed: false, now: 0 };
+  },
 }));
 
 const FALLS: PlaceResult = {
@@ -62,11 +68,27 @@ afterEach(() => {
   searchPlaceRegistry.mockReset();
 });
 
+/** A map showing the middle of NSW, where a registry answers. */
+const OVER_NSW: LonLatBox = {
+  west: NSW_REGION.view.center[0] - 0.1,
+  south: NSW_REGION.view.center[1] - 0.1,
+  east: NSW_REGION.view.center[0] + 0.1,
+  north: NSW_REGION.view.center[1] + 0.1,
+};
+/** A map showing open sea, in no region. */
+const OVER_SEA: LonLatBox = {
+  west: 156,
+  south: -33.1,
+  east: 156.2,
+  north: -32.9,
+};
+
 function renderBox(
   props: Partial<Parameters<typeof MapSearchBox>[0]> = {},
 ): HTMLElement {
   render(
     <MapSearchBox
+      getView={() => OVER_NSW}
       places={[]}
       sharedPlaces={[]}
       onSelectPlace={() => {}}
@@ -89,6 +111,30 @@ const settle = () =>
   act(() => vi.advanceTimersByTimeAsync(PLACE_SEARCH_DEBOUNCE_MS));
 
 describe("MapSearchBox", () => {
+  // Mutation: pass `GAUGE_PREFIX` whatever the view, or ask for the feed
+  // before the box is focused → red.
+  it("reads the gauge feed of the region the map shows, once the box is focused", () => {
+    gaugeFeeds.length = 0;
+    render(
+      <MapSearchBox
+        getView={() => OVER_NSW}
+        places={[]}
+        sharedPlaces={[]}
+        onSelectPlace={() => {}}
+        onSelectGauge={() => {}}
+        onSelectLocation={() => {}}
+        onSearchPin={() => {}}
+      />,
+    );
+    expect(gaugeFeeds).toEqual([null]);
+    fireEvent.focus(screen.getByRole("combobox"));
+    expect(gaugeFeeds[gaugeFeeds.length - 1]).toBe(GAUGE_PREFIX);
+    cleanup();
+    gaugeFeeds.length = 0;
+    renderBox({ getView: () => OVER_SEA });
+    expect(gaugeFeeds[gaugeFeeds.length - 1]).toBeNull();
+  });
+
   // Mutation: match the raw name, or leave `gaugeOptions` out of the list.
   it("finds a gauge by its readable name, and hands it back", async () => {
     gaugeFile.current = {
@@ -113,7 +159,7 @@ describe("MapSearchBox", () => {
   // Mutation: start the geocode effect from the query instead of from
   // `locationQuery`, which only "Search locations for …" sets.
   it("sends a query to the public geocoder only when the user asks it to", async () => {
-    const input = renderBox();
+    const input = renderBox({ getView: () => null });
     for (const typed of ["Hi", "Hidden", "Hidden Gorge"]) type(input, typed);
     await settle();
     expect(geocode).not.toHaveBeenCalled();
@@ -180,6 +226,7 @@ describe("MapSearchBox", () => {
       "Kat",
       expect.any(Number),
       expect.any(AbortSignal),
+      NSW_REGION.id,
     );
 
     const first = searchPlaceRegistry.mock.calls[0][2] as AbortSignal;
@@ -191,7 +238,46 @@ describe("MapSearchBox", () => {
       "Kato",
       expect.any(Number),
       expect.any(AbortSignal),
+      NSW_REGION.id,
     );
+  });
+
+  // Mutation: drop the `registryRegion === null` return from the effect, and
+  // a map over the sea asks the API for a region it is not showing; drop the
+  // `registry.region === registryRegion` test from `answer`, and NSW's answer
+  // stays on screen once the map moves off it.
+  it("asks no registry over ground none covers, and shows no answer from the ground it left", async () => {
+    let view = OVER_NSW;
+    const input = renderBox({ getView: () => view });
+    type(input, "Kat");
+    await settle();
+    expect(screen.getByRole("option", { name: /Katoomba Falls/ })).toBeTruthy();
+
+    view = OVER_SEA;
+    searchPlaceRegistry.mockClear();
+    type(input, "Kato");
+    await settle();
+    expect(searchPlaceRegistry).not.toHaveBeenCalled();
+    expect(screen.queryByRole("option", { name: /Katoomba Falls/ })).toBeNull();
+    // What the user still has: the geocoder, when asked.
+    expect(
+      screen.getByRole("option", { name: /Search locations for/ }),
+    ).toBeTruthy();
+  });
+
+  // Mutation: read the view only when the box mounts, and a map that has
+  // moved onto the sea since still asks.
+  it("reads the map's view as it is when the user types", async () => {
+    let view: LonLatBox | null = null;
+    const input = renderBox({ getView: () => view });
+    type(input, "Kat");
+    await settle();
+    expect(searchPlaceRegistry).not.toHaveBeenCalled();
+
+    view = OVER_NSW;
+    type(input, "Kato");
+    await settle();
+    expect(searchPlaceRegistry).toHaveBeenCalledOnce();
   });
 
   // Mutation: list the registry before the user's places, or after the

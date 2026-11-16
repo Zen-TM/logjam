@@ -11,8 +11,8 @@
 import { randomUUID } from "expo-crypto";
 import NetInfo from "@react-native-community/netinfo";
 import {
-  NSW_REGION,
   SHARPENED_SOURCE_PREFIX,
+  saveClipArchive,
   type RegionBbox,
 } from "@logjam/shared";
 
@@ -32,7 +32,7 @@ const ownFiles = (members: readonly MapArtifact[]) =>
 /**
  * The jobs that download a card's own files again, or null when the card holds
  * nothing to read an area from (a legacy row with no extent, or only a
- * sharpened area's clips). The card offers Update only when this is not null.
+ * sharpened area's clips) or nothing it can cut again. The card offers Update only when this is not null.
  * Guard: `regionUpdate.test.ts`.
  */
 export function regionUpdateSpecs(
@@ -52,7 +52,7 @@ export function regionUpdateSpecs(
   };
   const groupId = regionGroupKey(files[0]);
   const run = { bbox, groupId, groupLabel, allowCellular };
-  return files.map((a): RegionTaskSpec => {
+  const specs = files.flatMap((a): RegionTaskSpec[] => {
     const base = {
       id: newId(),
       label: a.label ?? groupLabel,
@@ -60,30 +60,25 @@ export function regionUpdateSpecs(
       ...run,
     };
     if (a.format === "mbtiles") {
-      return {
-        taskKind: "tile-pyramid",
-        ...base,
-        basemapId: a.logicalKey as RegionJobSpec["basemapId"],
-        zMin: a.minzoom ?? undefined,
-        zMax: a.maxzoom ?? 0,
-      };
+      return [
+        {
+          taskKind: "tile-pyramid",
+          ...base,
+          basemapId: a.logicalKey as RegionJobSpec["basemapId"],
+          zMin: a.minzoom ?? undefined,
+          zMax: a.maxzoom ?? 0,
+        },
+      ];
     }
-    return {
-      taskKind: "clip",
-      ...base,
-      basemapId: a.logicalKey,
-      ...(a.kind === "dem-region" ? { demSourceId: a.logicalKey } : {}),
-      ...(a.logicalKey === NSW_REGION.terrain.contours.id
-        ? { contours: true }
-        : {}),
-      ...(a.logicalKey === NSW_REGION.terrain.slope.id ? { slope: true } : {}),
-      ...(a.logicalKey === NSW_REGION.terrain.land.id ? { land: true } : {}),
-      ...(a.logicalKey === NSW_REGION.terrain.fire.id ? { fire: true } : {}),
-      ...(a.logicalKey === NSW_REGION.terrain.coverage.id
-        ? { coverage: true }
-        : {}),
-    };
+    // A clip of an archive no region declares now (a simulated region's, with
+    // the switch off) stays as saved: with no archive to read, it would be cut
+    // as the vector map and filed under that key. Guard: `regionUpdate.test.ts`
+    // ("leaves a clip of an archive no region declares as it was saved").
+    const archiveId = saveClipArchive(a.logicalKey) ? a.logicalKey : undefined;
+    if (!archiveId && a.logicalKey !== "protomaps") return [];
+    return [{ taskKind: "clip", ...base, basemapId: a.logicalKey, archiveId }];
   });
+  return specs.length > 0 ? specs : null;
 }
 
 export const canUpdateRegion = (members: readonly MapArtifact[]) =>

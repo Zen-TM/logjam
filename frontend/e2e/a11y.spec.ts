@@ -1111,6 +1111,51 @@ test.describe("desktop", () => {
     await expect(dialog).toHaveCount(0);
   });
 
+  // The simulated regions are switched on from the page (shared reads
+  // LOGJAM_SIM_REGIONS when it loads): Zion's portal has no errand of its own,
+  // and Makarora has no sharpening.
+  const openSimAt = async (page: Page, lat: number, lng: number) => {
+    await page.addInitScript(
+      ([mapView]) => {
+        (globalThis as { LOGJAM_SIM_REGIONS?: boolean }).LOGJAM_SIM_REGIONS =
+          true;
+        localStorage.setItem("logjam.mapView", mapView!);
+      },
+      [JSON.stringify({ lat, lng, zoom: 11, bearing: 0, pitch: 0 })],
+    );
+    await openApp(page);
+  };
+
+  test("Sharpen an area where the portal has no errand of its own", async ({
+    page,
+  }) => {
+    await openSimAt(page, 37.285, -112.945);
+    await page.getByRole("button", { name: "Tools", exact: true }).click();
+    await page
+      .getByRole("group", { name: "Tools" })
+      .getByRole("button", { name: /^Sharpen an area/ })
+      .click();
+    const dialog = page.locator("dialog[open]");
+    await expect(dialog.getByText(/^Drop your USGS ZIP here/)).toBeVisible();
+    await expectNoViolations(page, "dialog");
+    await dialog.getByRole("button", { name: /^Haven.t got one/ }).click();
+    await expect(
+      dialog.getByRole("heading", { name: "Getting LiDAR from USGS" }),
+    ).toBeVisible();
+    await expectNoViolations(page, "dialog");
+  });
+
+  test("Sharpen an area where the region has none", async ({ page }) => {
+    await openSimAt(page, -44.055, 169.25);
+    await page.getByRole("button", { name: "Tools", exact: true }).click();
+    await expect(
+      page
+        .getByRole("group", { name: "Tools" })
+        .getByRole("button", { name: /^Sharpen an area/ }),
+    ).toHaveAttribute("aria-disabled", "true");
+    await expectNoViolations(page, "[role='group'][aria-label='Tools']");
+  });
+
   test("Make a map: GeoPDF, its edges, and a GIS format", async ({ page }) => {
     await openApp(page);
     await page.getByRole("button", { name: "Tools", exact: true }).click();
