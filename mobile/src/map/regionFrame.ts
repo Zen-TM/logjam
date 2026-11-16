@@ -11,7 +11,13 @@
 // axis-aligned box around a rotated view, which no linear mapping can undo. The
 // download screen disables rotation and pitch for exactly this reason.
 import { tileMetersPerPixel } from "./scaleBar";
-import { formatGroundStep, type RegionBbox } from "@logjam/shared";
+import {
+  downloadableBasemaps,
+  formatGroundStep,
+  pointBox,
+  type LonLatBox,
+  type RegionBbox,
+} from "@logjam/shared";
 
 export type FrameInsets = {
   top: number;
@@ -190,6 +196,35 @@ export function startingArea([west, south, east, north]: [
   const dx = (east - west) * START_AREA_PAD;
   const dy = (north - south) * START_AREA_PAD;
   return [west - dx, south - dy, east + dx, north + dy];
+}
+
+/**
+ * The ground the frame starts on: a plan's area when the screen opens on one,
+ * else the point the camera opens at. What the first maps are picked from.
+ * Guard: `regionFrame.test.ts` ("the ground a save starts on").
+ */
+export function startBox(
+  area: readonly [number, number, number, number] | null,
+  center: readonly [number, number],
+): LonLatBox {
+  if (!area) return pointBox(center[0], center[1]);
+  const [west, south, east, north] = area;
+  return { west, south, east, north };
+}
+
+/**
+ * The maps picked when the screen opens: the one it was opened from if the
+ * ground offers it to save, else the first it does offer. Nothing when it was
+ * opened from the vector map, which every save brings anyway. Guard:
+ * `regionFrame.test.ts` ("the ground a save starts on").
+ */
+export function startPicks(box: LonLatBox, startBasemapId: string): string[] {
+  const here = downloadableBasemaps(box);
+  if (here.some((entry) => entry.id === startBasemapId))
+    return [startBasemapId];
+  return startBasemapId === "protomaps"
+    ? []
+    : here.slice(0, 1).map((entry) => entry.id);
 }
 
 /** Opening frame: a generous inset, so all four handles are visible at once. */

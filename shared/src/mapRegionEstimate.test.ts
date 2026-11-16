@@ -2,10 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import { TERRARIUM } from "./demSources.js";
 import { BASEMAP_CATALOG } from "./geoPdfBaseLayers.js";
-import { landClip } from "./land.js";
+import { LAND_EDGE_MINZOOM, landClip } from "./land.js";
 import {
   DEM_SOURCE_ID,
-  DOWNLOADABLE_BASEMAP_IDS,
   MAX_REGION_AREA_KM2,
   MAX_REGION_EDGE_KM,
   MAX_REGION_TILES,
@@ -18,15 +17,24 @@ import {
   planDemDownload,
   planRegionForBasemaps,
   demClipMinZoom,
+  downloadableBasemaps,
   planRegionTiles,
   regionEdgesKm,
+  saveClipArchive,
   xyzToTmsRow,
   type MultiSourceRegionPlan,
   type OfflineBasemapId,
   type RegionBbox,
   type SaveClipKind,
 } from "./mapRegionEstimate.js";
-import { NSW_REGION, REGIONS, WORLD, type Region } from "./regions.js";
+import {
+  NSW_REGION,
+  REGIONS,
+  WORLD,
+  pointBox,
+  regionBounds,
+  type Region,
+} from "./regions.js";
 import { SIM_REGIONS, SIM_UTAH, SIM_WORLD } from "./simRegions.js";
 
 describe("lonLatToTile", () => {
@@ -226,14 +234,30 @@ describe("estimateRegionSize", () => {
     expect(() => estimateRegionSize(plan, "six-nope")).toThrow();
   });
 
-  // Mutation: misspell an id in `DOWNLOADABLE_BASEMAP_IDS`, or
-  // drop an id from it, and the list no longer matches the catalogue.
-  it("lists every offline-capable raster basemap, and only those", () => {
-    const downloadable = BASEMAP_CATALOG.filter(
-      (e) => e.offlineCapable && e.kind === "raster",
-    ).map((e) => e.id);
-    expect(downloadable.length).toBeGreaterThanOrEqual(3);
-    expect([...DOWNLOADABLE_BASEMAP_IDS].sort()).toEqual(downloadable.sort());
+  // Mutation: return every offered basemap (`offeredBasemaps(view, regions)`
+  // with no filter) and the vector map is a choice; read `REGIONS` instead of
+  // the `regions` argument and a region that declares a raster offers none.
+  it("offers a save the downloadable basemaps of the ground it frames", () => {
+    const ids = (box: RegionBbox, regions?: readonly Region[]) =>
+      downloadableBasemaps(box, regions).map((e) => e.id);
+    expect(ids(TEN_KM)).toEqual(["six-topo", "six-base", "six-imagery"]);
+    // Every one is a raster the downloader can price.
+    const plan = planRegionTiles(TEN_KM, 12, 12);
+    for (const id of ids(TEN_KM))
+      expect(() => estimateRegionSize(plan, id)).not.toThrow();
+    const utah = SIM_UTAH.view.center;
+    const inUtah = pointBox(utah[0], utah[1]);
+    // The region that owns the SIX rasters is not here, and the vector map is
+    // not a choice.
+    expect(ids(inUtah, [NSW_REGION, SIM_UTAH])).toEqual([]);
+    // A region that declares one of them offers it, and only it.
+    const own: Region = { ...SIM_UTAH, basemaps: ["six-base"] };
+    expect(ids(inUtah, [NSW_REGION, own])).toEqual(["six-base"]);
+    expect(ids(TEN_KM, [NSW_REGION, own])).toEqual([
+      "six-topo",
+      "six-base",
+      "six-imagery",
+    ]);
   });
 
   // Mutation: drop the offline-capable raster check in `pyramidTileBytes` and
@@ -550,6 +574,52 @@ describe("planRegionForBasemaps", () => {
   it("starts every pyramid at REGION_MIN_ZOOM so a zoomed-out offline map is not blank", () => {
     const job = planRegionForBasemaps(TEN_KM, ["six-topo"], 14, maxZoomFor);
     expect(job.perSource[0].plan.perZoom[0].z).toBe(REGION_MIN_ZOOM);
+  });
+
+  // Mutation: read `REGIONS` instead of the `regions` argument in
+  // `saveClipArchive` and a simulated clip's id finds nothing; drop the slope's
+  // `add` line in `clipArchivesOf` and the slope's id finds nothing.
+  it("finds the archive a clip is filed under, with the zooms it is cut at", () => {
+    const every = [NSW_REGION, ...SIM_REGIONS];
+    const found = (id: string) => {
+      const clip = saveClipArchive(id, every);
+      return clip && [clip.kind, clip.archive.archivePath, clip.zooms];
+    };
+    expect(found("nsw-5m")).toEqual([
+      "heights",
+      "master/dem/nsw-5m.pmtiles",
+      { minzoom: 8, maxzoom: 15 },
+    ]);
+    expect(found("nsw-5m-slope")).toEqual([
+      "slope",
+      "master/dem/nsw-5m-slope.pmtiles",
+      { minzoom: 8, maxzoom: 15 },
+    ]);
+    expect(found("nsw-land")).toEqual([
+      "land",
+      NSW_REGION.terrain.land!.archivePath,
+      { minzoom: LAND_EDGE_MINZOOM, maxzoom: NSW_REGION.terrain.land!.maxzoom },
+    ]);
+    expect(found("simnz-contours")).toEqual([
+      "contours",
+      "master/contours/simnz-10m.pmtiles",
+      { minzoom: 11, maxzoom: 14 },
+    ]);
+    // Every archive a save prices is found under its own id, in its own region.
+    for (const region of every)
+      for (const clip of planRegionForBasemaps(
+        regionBounds(region),
+        [],
+        15,
+        maxZoomFor,
+        every,
+      ).clips.filter((c) => region.terrain[c.kind]?.id === c.archive.id))
+        expect(saveClipArchive(clip.archive.id, every)?.archive).toBe(
+          clip.archive,
+        );
+    // The hillshade shares the height archive and is not a clip of its own.
+    expect(saveClipArchive("nsw-5m-hillshade", every)).toBeNull();
+    expect(saveClipArchive("simnz-heights", [NSW_REGION])).toBeNull();
   });
 });
 

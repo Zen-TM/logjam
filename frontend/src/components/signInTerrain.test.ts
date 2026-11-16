@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { NSW_REGION } from "@logjam/shared";
+import { NSW_REGION, SIM_NZ } from "@logjam/shared";
 import { describe, expect, it } from "vitest";
 import {
   areaKeys,
@@ -11,6 +11,8 @@ import {
   dropPath,
   OUTLET,
   pickArea,
+  signInCredit,
+  SIGN_IN_SOURCE,
   sunPosition,
   traceDownhill,
   valleyLight,
@@ -113,17 +115,29 @@ describe("the area files", () => {
   });
 
   // ADR 0031: the credit names the month the sheets were downloaded. The
-  // credit shown is NSW_REGION.terrain.heights.credit, so every area must come from that month.
+  // credit shown is `signInCredit()`, so every area must come from that month.
   // Mutation that turns it red: regenerate an area with another month.
   it("are from the month the credit names", () => {
     for (const file of json) {
       const { extracted } = JSON.parse(
         readFileSync(join(ASSETS, file), "utf8"),
       ) as { extracted: string };
-      expect(NSW_REGION.terrain.heights.credit, file).toContain(
-        `extracted ${extracted}.`,
-      );
+      expect(signInCredit(), file).toContain(`extracted ${extracted}.`);
     }
+  });
+});
+
+describe("signInCredit", () => {
+  // Mutation: return the credit of the first region's heights, and a build
+  // whose first region is not the one the areas are cut from credits the
+  // wrong source; or change SIGN_IN_SOURCE and the credit is empty.
+  it("credits the source the areas are made from, whichever regions there are", () => {
+    const credit = NSW_REGION.terrain.heights!.credit;
+    expect(credit).not.toBe("");
+    expect(signInCredit()).toBe(credit);
+    expect(signInCredit([SIM_NZ, NSW_REGION])).toBe(credit);
+    expect(signInCredit([SIM_NZ])).toBe("");
+    expect(NSW_REGION.terrain.heights!.id).toBe(SIGN_IN_SOURCE);
   });
 });
 

@@ -10,6 +10,7 @@
 // The file is a lossless checkpoint and the region is offered again in the
 // layers sheet's Unfinished list, so leaving a stalled job is safe — it just
 // must not be called "saved".
+import { layerIn, REGIONS, soleRegion, t, type Region } from "@logjam/shared";
 import type { RegionJob } from "./regionDownloadQueue";
 import type { RegionFailureCode } from "./regionTileDownload";
 
@@ -48,12 +49,25 @@ export function isRetryableFailure(code: RegionFailureCode): boolean {
 /**
  * Why this area was refused: the old API clip's own sentence, as it is
  * (shared/DESIGN.md §11), or one of two codes, which the phone's own clip
- * uses and a job that failed before the phone kept the sentence holds.
+ * uses and a job that failed before the phone kept the sentence holds. The
+ * code `outside-nsw` is what jobs on phones already hold; it means outside
+ * every region's archive. The sentence names the region while one has
+ * terrain, and says so without a name when several do (`regionJobStatus.test.ts`).
  */
-export function regionRejectedLine(detail: string | undefined): string {
+export function regionRejectedLine(
+  detail: string | undefined,
+  regions: readonly Region[] = REGIONS,
+): string {
   if (detail === "too-large")
     return "Pick a smaller area — up to 40 km across.";
-  if (detail === "outside-nsw" || !detail) return "Pick an area inside NSW.";
+  if (detail === "outside-nsw" || !detail) {
+    const only = soleRegion(
+      regions.filter((region) => layerIn(region, "heights") !== null),
+    );
+    return only
+      ? t`Pick an area inside ${only.name}.`
+      : t`Pick an area inside a region Logjam covers.`;
+  }
   return detail;
 }
 

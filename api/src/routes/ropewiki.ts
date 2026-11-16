@@ -31,7 +31,7 @@ import {
   asFieldValues,
   fieldValue,
   type CanyonGradeSystem,
-  NSW_REGION,
+  DEFAULT_REGION_IDS,
   REGIONS,
   SOURCES_FIELD_KEY,
   SYSTEM_PLACE_TYPE_IDS,
@@ -43,15 +43,15 @@ const router = Router();
 const UPDATE_CHUNK_SIZE = 200;
 
 /**
- * The canyon source of the region a request names in `?region=`, or NSW's
- * when it names none (every build before regions sends none), with the grade
- * system that region's canyons are parsed into.
+ * The canyon source of the region a request names in `?region=`, or the
+ * default region's when it names none (every build before regions sends
+ * none), with the grade system that region's canyons are parsed into.
  */
 function canyonSource(req: AuthenticatedRequest): {
   source: RopeWikiSource;
   grades: CanyonGradeSystem;
 } {
-  const id = req.query.region ?? NSW_REGION.id;
+  const id = req.query.region ?? DEFAULT_REGION_IDS[0];
   const region = REGIONS.find((r) => r.id === id);
   if (!region?.canyons) throw malformed("region has no canyon source");
   return { source: region.canyons, grades: region.canyonGrades };
