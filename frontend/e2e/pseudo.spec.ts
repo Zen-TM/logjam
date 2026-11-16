@@ -33,7 +33,14 @@ const API_URL = process.env.VITE_API_URL ?? "http://localhost:8080";
  * change with the seed's rows or the day of the run.
  */
 const LIST = new URL("./pseudo-unwrapped.json", import.meta.url);
-/** Labels the walk found wider than their control when the list was last written, as `Screen at 360px: “label”`: known, so the walk is green while they are fixed. Every number is `0` in it. */
+/**
+ * Labels the walk found wider than their control, as `Screen at 360px: “label”`
+ * with every number `0`: known, so the walk is green while they are fixed.
+ * Which labels spill depends on the fonts of the machine that ran (a
+ * developer's and CI's differ), so this is the union of what each found, and an
+ * entry that fits on the machine running the walk is no failure. Rewriting the
+ * list only adds to it: remove an entry once its label is fixed.
+ */
 const OVERFLOWS = new URL("./pseudo-overflows.json", import.meta.url);
 const WRITE_LIST = !!process.env.PSEUDO_WRITE_LIST;
 const REWRITE =
@@ -293,8 +300,8 @@ test.beforeEach(async ({ page }) => {
 // and for `language` in the `/users/me` stub in `beforeEach` (no message met:
 // red on the floor); or take the messages out of `rest` once, not until none
 // is left (a date's month name is a message inside a message: red on the list);
-// or add a line no screen produces to `pseudo-unwrapped.json` or
-// `pseudo-overflows.json` (red on the stale-entry check); or have the walk
+// or add a line no screen produces to `pseudo-unwrapped.json` (red on the
+// stale-entry check); or have the walk
 // `fetch` the API with `POST` (red on the write guard).
 test("every main screen reads in the pseudo-language, bar the listed text", async ({
   page,
@@ -372,7 +379,8 @@ test("every main screen reads in the pseudo-language, bar the listed text", asyn
   const overflowing = [...walk.spills.keys()].sort();
   if (WRITE_LIST) {
     writeFileSync(LIST, `${JSON.stringify(seen, null, 2)}\n`);
-    writeFileSync(OVERFLOWS, `${JSON.stringify(overflowing, null, 2)}\n`);
+    const union = [...new Set([...read(OVERFLOWS), ...overflowing])].sort();
+    writeFileSync(OVERFLOWS, `${JSON.stringify(union, null, 2)}\n`);
   } else {
     const listed = read(LIST);
     expect(
@@ -386,11 +394,7 @@ test("every main screen reads in the pseudo-language, bar the listed text", asyn
     const known = read(OVERFLOWS);
     expect(
       overflowing.filter((label) => !known.includes(label)),
-      `a label is wider than its control in the pseudo-language, so a translation would be too: shorten it or let its control grow. Only a label that is fixed by a later change belongs on the list: ${REWRITE}`,
-    ).toEqual([]);
-    expect(
-      known.filter((label) => !overflowing.includes(label)),
-      `a label on the list of known overflows fits now: remove it, or rewrite the list: ${REWRITE}`,
+      `a label is wider than its control in the pseudo-language, so a translation would be too: shorten it or let its control grow. Only a label that a later change fixes belongs on the list of known overflows: ${REWRITE}`,
     ).toEqual([]);
   }
   expect(
