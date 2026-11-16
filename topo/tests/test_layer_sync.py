@@ -2,7 +2,7 @@
 `shared/src/topoSettings.ts` (listed below), so they cannot drift silently.
 
 Pure text parsing — no GDAL/PDAL, no worker import. Runs on the dev host via
-`python -m unittest discover -s tests`.
+`make topo-test`.
 """
 
 import ast
