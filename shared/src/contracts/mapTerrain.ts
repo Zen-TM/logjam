@@ -23,19 +23,18 @@ export const MAP_TERRAIN = {
     },
   ],
   copy: {
-    // The switches' labels and hints stay plain literals: each client's
-    // `switchCopy.test.ts` measures a switch's words by their literal types,
-    // which `t` widens to `string`.
-    contours: "Contours",
-    slope: "Slope",
-    land: "Land tenure",
-    hillshade: "Hillshade",
-    vegetation: "Vegetation",
+    // Each client's `switchCopy.test.ts` ("keeps to the limit") holds the
+    // switches' labels and hints to `SWITCH_COPY_MAX`.
+    contours: t`Contours`,
+    slope: t`Slope`,
+    land: t`Land tenure`,
+    hillshade: t`Hillshade`,
+    vegetation: t`Vegetation`,
     sharpenedAreas: t`Sharpened areas`,
     // Behind the Sharpened areas row's help button, titled with its label.
     sharpenedAreasAbout: t`About sharpened areas`,
     sharpenedAreasLegend: t`A sharpened area redraws contours, slope and hillshade from LiDAR you supply, at the survey's own detail instead of the statewide layers'. It is yours alone until you share it with a friend.`,
-    vegetationHint: "Scrub density for bushbashing",
+    vegetationHint: t`Scrub density for bushbashing`,
     // Behind the Vegetation row's help button, titled with its label.
     vegetationAbout: t`About vegetation`,
     vegetationLegend: t`Scrub density for bushbashing: denser reads darker. Orange stripes mark ground burnt since the survey, so the scrub there may have changed.`,
@@ -45,12 +44,12 @@ export const MAP_TERRAIN = {
     landAbout: t`About land tenure`,
     // Each source's own caveat is the region's (`LandArchive.caveat`).
     landLegend: t`Each colour shows who holds the land, not whether you may enter it. Crossing private land is up to its owner.`,
-    fire: "Fire history",
+    fire: t`Fire history`,
     // Behind that row's help button, titled with its label; the legend's rows
     // are `fireLegendRows`.
     fireAbout: t`About fire history`,
     fireLegend: t`Each area is coloured by how long since it last burnt: darkest within the year, fading out by 10 years. Older fires and ground with no recorded fire have no colour.`,
-    coverage: "Coverage",
+    coverage: t`Coverage`,
     // Behind that row's help button, titled with its label, over a picker of
     // the region's carriers and a swatch of the hatch.
     coverageAbout: t`About coverage`,
@@ -68,9 +67,9 @@ export const MAP_TERRAIN = {
     slopeBands: t`Slope bands`,
     // One sentence under each switch. Slope's colours are the account's bands,
     // so its key is `slopeLegendRows`, behind the row's help button.
-    contoursHint: "A line every 10 m of height",
-    slopeHint: "Coloured by steepness",
-    hillshadeHint: "Ridges and gullies stand out",
+    contoursHint: t`A line every 10 m of height`,
+    slopeHint: t`Coloured by steepness`,
+    hillshadeHint: t`Ridges and gullies stand out`,
     slopeAbout: t`About slope`,
     slopeLegend: t`Steepness in degrees from flat. An easy walk is under 10°, a steep scramble around 30°, and a cliff 45° or more. Ground flatter than the first band has no colour.`,
     // At the top of the editor on both clients.

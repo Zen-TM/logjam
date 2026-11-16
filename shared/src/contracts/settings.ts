@@ -94,13 +94,10 @@ export const SETTINGS_PHONE_ONLY = [
  * loses what the sharee could see (`themeSchemes.ts`).
  */
 export const COPY_MEDIA_SETTING = {
-  // Plain literals: a switch's words are measured through their literal types
-  // in each client's `switchCopy.test.ts`, and `t` widens them to `string`. No
-  // switch-copy test names these two, so a wrap passes there; it turns
-  // `i18nCoverage.test.ts` ("writes no new text outside the catalogue, and
-  // every ceiling is the count") red until the contracts ceiling is lowered.
-  label: "Copy photos too",
-  hint: "Shared place photos and files.",
+  // Each client's `switchCopy.test.ts` ("keeps to the limit") holds both to
+  // `SWITCH_COPY_MAX`.
+  label: t`Copy photos too`,
+  hint: t`Shared place photos and files.`,
   saveFailed: t`Couldn't save that setting.`,
 } as const;
 
@@ -245,14 +242,12 @@ export type NotificationPreferenceGroup = "email" | "inApp";
 export const NOTIFICATION_PREFERENCES = [
   // A LiDAR map or a print or GIS map mails whether it finishes or fails
   // (topo/worker.py, topo/export_worker.py, api/src/lib/topoJobReaper.ts).
-  // Plain literals: a switch's words are measured through their literal types,
-  // which `t` widens to `string`. Each client's `switchCopy.test.ts` ("keeps to
-  // the limit") asserts every label here by name, so wrapping one turns it red
-  // on both clients.
-  { key: "topoEmail", group: "email", label: "LiDAR maps" },
-  { key: "exportEmail", group: "email", label: "Print and GIS maps" },
-  { key: "friendRequestInApp", group: "inApp", label: "Friend requests" },
-  { key: "shareInApp", group: "inApp", label: "Shares with me" },
+  // Each client's `switchCopy.test.ts` ("keeps to the limit") holds every
+  // label here to `SWITCH_COPY_MAX` and asserts it by name.
+  { key: "topoEmail", group: "email", label: t`LiDAR maps` },
+  { key: "exportEmail", group: "email", label: t`Print and GIS maps` },
+  { key: "friendRequestInApp", group: "inApp", label: t`Friend requests` },
+  { key: "shareInApp", group: "inApp", label: t`Shares with me` },
 ] as const satisfies readonly {
   key: keyof NotificationPreferences;
   group: NotificationPreferenceGroup;
