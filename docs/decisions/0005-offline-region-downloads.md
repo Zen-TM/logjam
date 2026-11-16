@@ -84,11 +84,15 @@ the API path never could.
   the area touches** (`planDemDownload` in the same file), fetched like the
   vector basemap's clip and filed as a second `dem-region` artifact under that
   source's id. A guest saves the worldwide tiles only. The worldwide tiles are still
-  saved with every area, which is what holds this decision up. Everything else
+  saved with every area (updated 2026-11-16: until the world declares an archive
+  of its own, whose clip is saved in their place; the DEM is still saved with
+  every area), which is what holds this decision up. Everything else
   above stands.
 - **Update 2026-10-18: a guest's run saves those clips too**, cut on the phone
   from the public archives with no call to the API ([0036](0036-the-phone-cuts-its-own-offline-clips.md)). The worldwide
-  tiles are still saved with every area. Everything else above stands.
+  tiles are still saved with every area (updated 2026-11-16: until the world
+  declares an archive of its own, whose clip is saved in their place).
+  Everything else above stands.
 - **Update 2026-11-16: where the world has a heights archive of its own, the
   worldwide DEM is saved as a clip, not a tile pyramid.** `planRegionForBasemaps`
   adds the world entry's clips (`WORLD.terrain`, `shared/src/regions.ts`) after

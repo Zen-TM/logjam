@@ -31,6 +31,20 @@ import {
 
 export const WORLDWIDE_TERRAIN_SOURCE = "3d-terrain-dem";
 
+/** A heights archive read whole, at `url` (same-origin, like the vector basemap). */
+function archiveTerrainSource(
+  url: string,
+  creditHtml: string,
+): RasterDEMSourceSpecification {
+  return {
+    type: "raster-dem",
+    url: `pmtiles://${url}`,
+    tileSize: 256,
+    encoding: "terrarium",
+    attribution: creditHtml,
+  };
+}
+
 /**
  * The worldwide raster-dem source `WORLDWIDE_TERRAIN_SOURCE` holds: the world
  * entry's heights archive where it declares one (same-origin, like a region's
@@ -43,13 +57,10 @@ export function worldwideTerrainSpec(
 ): RasterDEMSourceSpecification {
   const heights = layerIn(world, "heights");
   return heights
-    ? {
-        type: "raster-dem",
-        url: `pmtiles://${origin}/${heights.archivePath}`,
-        tileSize: 256,
-        encoding: "terrarium",
-        attribution: heights.creditHtml,
-      }
+    ? archiveTerrainSource(
+        `${origin}/${heights.archivePath}`,
+        heights.creditHtml,
+      )
     : {
         type: "raster-dem",
         tiles: [TERRARIUM.urlTemplate],
@@ -145,13 +156,7 @@ export async function terrainSourceFor(
           encoding: "terrarium",
           attribution: routedAttribution(heights.creditHtml, held),
         }
-      : {
-          type: "raster-dem",
-          url: `pmtiles://${url}`,
-          tileSize: 256,
-          encoding: "terrarium",
-          attribution: heights.creditHtml,
-        },
+      : archiveTerrainSource(url, heights.creditHtml),
   );
   return id;
 }

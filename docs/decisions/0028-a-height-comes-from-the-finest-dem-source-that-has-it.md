@@ -169,7 +169,9 @@ parity pair `api/src/services/elevation.unit.test.ts` and
   (`frontend/src/components/map/Map.tsx`) cannot follow the list and uses one
   source.
 - **Neutral:** Heights from different sources are in different vertical
-  datums (AHD for NSW, EGM96 for the worldwide tiles). They differ by well
+  datums (AHD for NSW, EGM96 for the worldwide tiles; updated 2026-11-16: the
+  world's own archive, where declared, is in the datum of the model it is cut
+  from). They differ by well
   under a metre in NSW and are not corrected. A value computed from a DEM and
   stored must store the source id beside it.
 

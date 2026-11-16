@@ -371,6 +371,9 @@ describe("climb sources", () => {
     }
   });
 
+  // Mutation: have `climbRank` rank the Terrarium id as another source
+  // (`"nsw-5m"`, say), and a stored Terrarium climb no longer ranks at its own
+  // `CLIMB_SOURCES` index.
   it("rank the Terrarium tiles where they are the worldwide source, as before", () => {
     expect(climbRank("terrarium")).toBe(CLIMB_SOURCES.indexOf("terrarium"));
   });
