@@ -27,7 +27,6 @@ import {
 import type { PDFContext, PDFObject } from "@cantoo/pdf-lib";
 
 import { installFastStreamScan } from "./fastStreamScan.js";
-import { t } from "../i18n.js";
 
 export interface GeoPdfControlPoint {
   /** PDF user space, points, origin bottom-left. */

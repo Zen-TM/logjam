@@ -8,7 +8,6 @@
 import { fromGrid, gridZonesFor, toGrid, type GridZone } from "./grids.js";
 import { lonNear } from "./placeGeo.js";
 import { REGIONS, type Region } from "./regions.js";
-import { t } from "./i18n.js";
 
 export interface GridBbox {
   west: number;

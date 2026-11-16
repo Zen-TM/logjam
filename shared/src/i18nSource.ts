@@ -210,14 +210,40 @@ export const EXEMPT_FILES: Readonly<Record<string, string>> = {
     "notes on why a field is withheld from a sharee, read by developers",
 };
 
+const FORMATION =
+  "a vegetation formation as the map data and the topo build name it";
+const CREDIT = "a credit the topo build writes too, as its source asks";
+
 /**
- * Text that reads as words and is not words a user reads: an operator
- * the place filter stores, a land tenure class as the map data spells it,
+ * Text that reads as words and is not words a user reads: an operator the
+ * place filter stores, a land tenure class as the map data spells it,
  * RopeWiki's name for a region, the producer a PDF names, a noun in a
- * developer's error. A literal equal to one is never counted or converted. `i18nCoverage.test.ts` ("lists only literals that exist") fails
- * on an entry no source file holds.
+ * developer's error, a vegetation formation, a credit the topo build writes
+ * too. A literal equal to one is never counted or converted.
+ * `i18nCoverage.test.ts` ("lists only literals that exist") fails on an entry
+ * no source file holds.
  */
 export const DATA_LITERALS: Readonly<Record<string, string>> = {
+  "Not classified": FORMATION,
+  "Wet Sclerophyll Forests (Grassy sub-formation)": FORMATION,
+  "Wet Sclerophyll Forests (Shrubby sub-formation)": FORMATION,
+  "Dry Sclerophyll Forests (Shrub/grass sub-formation)": FORMATION,
+  "Dry Sclerophyll Forests (Shrubby sub-formation)": FORMATION,
+  "Grassy Woodlands": FORMATION,
+  "Forested Wetlands": FORMATION,
+  "Freshwater Wetlands": FORMATION,
+  "Saline Wetlands": FORMATION,
+  "Semi-arid Woodlands (Grassy sub-formation)": FORMATION,
+  "Semi-arid Woodlands (Shrubby sub-formation)": FORMATION,
+  "Arid Shrublands (Acacia sub-formation)": FORMATION,
+  "Arid Shrublands (Chenopod sub-formation)": FORMATION,
+  "Alpine Complex": FORMATION,
+  "Land: NSW Land Tenure, December 2024 v2 © State of New South Wales (Department of Primary Industries and Regional Development), CC BY 4.0":
+    CREDIT,
+  "Fire history © State Government of NSW and NSW Department of Climate Change, Energy, the Environment and Water 2010 — NPWS Fire History - Wildfires and Prescribed Burns (CC BY 4.0)":
+    CREDIT,
+  "Mobile coverage: ACCC Mobile Infrastructure Report data release © Commonwealth of Australia (ACCC), CC BY 2.5 AU; coastline © ABS, CC BY 4.0":
+    CREDIT,
   "Less than": "a stored operator of a number filter",
   "More than": "a stored operator of a number filter",
   "National Park": "a tenure class as the land map data spells it",

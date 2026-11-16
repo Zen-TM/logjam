@@ -464,7 +464,8 @@ export const NSW_REGION = {
       caveat: t`Land Council freehold can show as private land. Roads, waterways and public areas aren't properly mapped around Sydney and Wollongong.`,
       coverage: NSW_HEIGHTS.coverage,
       licence: "cc-by-4",
-      credit: t`Land: NSW Land Tenure, December 2024 v2 © State of New South Wales (Department of Primary Industries and Regional Development), CC BY 4.0`,
+      credit:
+        "Land: NSW Land Tenure, December 2024 v2 © State of New South Wales (Department of Primary Industries and Regional Development), CC BY 4.0",
       creditHtml:
         'Land: <a href="https://data.nsw.gov.au/data/dataset/nsw-land-tenure">NSW Land Tenure</a>, December 2024 v2 &copy; State of New South Wales (Department of Primary Industries and Regional Development), <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>',
     },
@@ -504,7 +505,8 @@ export const NSW_REGION = {
       caveat: t`Mapped by NSW National Parks and Wildlife Service: a fire it didn't map, often on private land, has no colour.`,
       coverage: NSW_HEIGHTS.coverage,
       licence: "cc-by-4",
-      credit: t`Fire history © State Government of NSW and NSW Department of Climate Change, Energy, the Environment and Water 2010 — NPWS Fire History - Wildfires and Prescribed Burns (CC BY 4.0)`,
+      credit:
+        "Fire history © State Government of NSW and NSW Department of Climate Change, Energy, the Environment and Water 2010 — NPWS Fire History - Wildfires and Prescribed Burns (CC BY 4.0)",
       creditHtml:
         'Fire history &copy; State Government of NSW and NSW Department of Climate Change, Energy, the Environment and Water 2010 — <a href="https://datasets.seed.nsw.gov.au/dataset/fire-history-wildfires-and-prescribed-burns-1e8b6">NPWS Fire History - Wildfires and Prescribed Burns</a> (<a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>)',
     },
@@ -543,7 +545,8 @@ export const NSW_REGION = {
       // The ABS coastline in it is CC BY 4.0, which asks no more.
       coverage: NSW_HEIGHTS.coverage,
       licence: "cc-by-2.5-au",
-      credit: t`Mobile coverage: ACCC Mobile Infrastructure Report data release © Commonwealth of Australia (ACCC), CC BY 2.5 AU; coastline © ABS, CC BY 4.0`,
+      credit:
+        "Mobile coverage: ACCC Mobile Infrastructure Report data release © Commonwealth of Australia (ACCC), CC BY 2.5 AU; coastline © ABS, CC BY 4.0",
       creditHtml:
         'Mobile coverage: <a href="https://data.gov.au/data/dataset/accc-mobile-infrastructure-report-data-release">ACCC Mobile Infrastructure Report data release</a> &copy; Commonwealth of Australia (ACCC), <a href="https://creativecommons.org/licenses/by/2.5/au/">CC BY 2.5 AU</a>; coastline &copy; <a href="https://www.abs.gov.au/statistics/standards/australian-statistical-geography-standard-asgs-edition-3">ABS</a>, <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>',
     },
