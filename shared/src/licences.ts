@@ -17,11 +17,12 @@ import { GEOCODER_LICENCE } from "./geocode.js";
 import { TERRARIUM } from "./demSources.js";
 import { BASEMAP_CATALOG } from "./geoPdfBaseLayers.js";
 import { REGIONS, WORLD, type Region } from "./regions.js";
+import { SHARPENED_LICENCE } from "./sharpen.js";
 import { WEATHER_LICENCE } from "./weather.js";
 
 export type Licence = {
   name: string;
-  /** The terms, read at their source. */
+  /** A page of the licence's or the service's terms. */
   url: string;
   commercialUse: boolean;
 };
@@ -55,10 +56,23 @@ export const LICENCES = {
     url: "https://creativecommons.org/licenses/",
     commercialUse: false,
   },
-  // Made-up data, such as the simulated regions', which Logjam releases as it likes.
+  // Invented data, which Logjam releases as it likes: the simulated regions'
+  // land, fire history and coverage.
   cc0: {
     name: "CC0 1.0",
     url: "https://creativecommons.org/publicdomain/zero/1.0/",
+    commercialUse: true,
+  },
+  // USGS-authored data is in the U.S. public domain; it asks for a credit.
+  "us-public-domain": {
+    name: "U.S. public domain (USGS)",
+    url: "https://www.usgs.gov/information-policies-and-instructions/copyrights-and-credits",
+    commercialUse: true,
+  },
+  // The Copernicus DEM's full, free and open licence.
+  "copernicus-dem": {
+    name: "Copernicus DEM licence",
+    url: "https://dataspace.copernicus.eu/explore-data/data-collections/copernicus-contributing-missions/collections-description/COP-DEM",
     commercialUse: true,
   },
   odbl: {
@@ -117,11 +131,26 @@ export type DataSource = {
   credit?: string;
 };
 
+function unlicensed(
+  region: Region,
+  what: string,
+  licence: LicenceId | null,
+): LicenceId {
+  if (licence === null)
+    throw new Error(
+      `Region ${region.id} declares a ${what} and no licence for it: set its licence beside it in the region's declaration.`,
+    );
+  return licence;
+}
+
 /**
  * Every source of data the app reads, once each: the catalogue's basemaps, the
- * worldwide height tiles, the geocoder and the forecast, then each region's
- * (and the world entry's) own. A height source that is also a Terrain archive
- * counts once.
+ * worldwide height tiles, the geocoder and the forecast, the sharpened heights
+ * of a user's own survey (one entry for the kind), then each region's (and the
+ * world entry's) own. A height source that is also a Terrain archive counts
+ * once. Throws for a region with a gauge feed or place registry and no licence
+ * for it, which the type allows. Guard: `licences.test.ts` ("refuses a feed or
+ * a registry with no licence").
  */
 export function dataSources(
   regions: readonly Region[] = REGIONS,
@@ -136,6 +165,7 @@ export function dataSources(
   add(`dem:${TERRARIUM.id}`, TERRARIUM.licence, TERRARIUM.credit);
   add("geocoder", GEOCODER_LICENCE);
   add("weather", WEATHER_LICENCE);
+  add("dem:sharpened", SHARPENED_LICENCE);
 
   for (const region of [...regions, world]) {
     for (const dem of region.dem) add(`dem:${dem.id}`, dem.licence, dem.credit);
@@ -144,10 +174,16 @@ export function dataSources(
         add(`terrain:${archive.id}`, archive.licence, archive.credit);
     if (region.vector) add(`vector:${region.id}`, region.vector.licence);
     if (region.canyons) add(`canyons:${region.id}`, region.canyons.licence);
-    if (region.gauges !== null && region.gaugesLicence !== null)
-      add(`gauges:${region.id}`, region.gaugesLicence);
-    if (region.placeSearch !== null && region.placeSearchLicence !== null)
-      add(`placeSearch:${region.id}`, region.placeSearchLicence);
+    if (region.gauges !== null)
+      add(
+        `gauges:${region.id}`,
+        unlicensed(region, "gauge feed", region.gaugesLicence),
+      );
+    if (region.placeSearch !== null)
+      add(
+        `placeSearch:${region.id}`,
+        unlicensed(region, "place registry", region.placeSearchLicence),
+      );
   }
   return [...found.values()];
 }

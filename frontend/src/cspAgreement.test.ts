@@ -142,6 +142,8 @@ const NOT_FETCHED: Record<string, string> = {
   "opendatacommons.org": "licence terms link in licences.ts",
   "operations.osmfoundation.org": "usage policy link in licences.ts",
   "www.waternsw.com.au": "copyright notice link in licences.ts",
+  "www.usgs.gov": "copyright notice link in licences.ts",
+  "dataspace.copernicus.eu": "licence page link in licences.ts",
   "www.spatial.nsw.gov.au": "terms link and credit",
   "spatial.nsw.gov.au": "credit link",
   "data.nsw.gov.au": "credit link",

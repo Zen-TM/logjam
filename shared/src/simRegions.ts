@@ -11,6 +11,7 @@
 // `master/<kind>/<id>-…`.
 import type { DemSource } from "./demSources.js";
 import { t } from "./i18n.js";
+import type { LicenceId } from "./licences.js";
 import type {
   CoverageArchive,
   Region,
@@ -44,16 +45,22 @@ function placeholderTileBytes(minzoom: number, maxzoom: number): TileBytes {
   );
 }
 
-/** The heights, slope, hillshade and contours of a simulated region. */
+/**
+ * The heights, slope, hillshade and contours of a simulated region, under
+ * `licence`: the real publisher's, because the archives are cut from published
+ * elevation models (`licences.test.ts`, "tags each simulated archive by where
+ * its ground comes from"). The credit text is a placeholder until they are built.
+ */
 function simTerrain(
   id: string,
   name: string,
   coverage: Box,
   topZoom: number,
+  licence: LicenceId,
 ): RegionTerrain {
   const credit = (layer: string) => ({
     coverage,
-    licence: "cc0" as const,
+    licence,
     credit: `${layer}: simulated data for ${name}, not a real survey.`,
     creditHtml: `${layer}: simulated data for ${name}, not a real survey.`,
   });
@@ -173,7 +180,9 @@ const NZ_COVERAGE: Box = [
   NZ_NORTH_BOX[3],
 ];
 const NZ_TERRAIN: RegionTerrain = {
-  ...simTerrain("simnz", "New Zealand", NZ_COVERAGE, 17),
+  // LINZ's 1 m model (CC BY 4.0); outside its survey the heights are the
+  // Copernicus model's, also open.
+  ...simTerrain("simnz", "New Zealand", NZ_COVERAGE, 17, "cc-by-4"),
   ...simOverlays("simnz", "New Zealand", NZ_COVERAGE, [
     { id: "simone", name: t`Simulated One` },
     { id: "simtwo", name: t`Simulated Two` },
@@ -189,6 +198,8 @@ export const SIM_NZ: Region = {
   // The worldwide entries are the only basemaps a simulated region has.
   basemaps: [],
   defaultBasemap: "osm-topo",
+  // Each simulated vector archive is a cut of the OpenStreetMap-derived
+  // vector basemap, so ODbL, as NSW's is.
   vector: {
     archivePath: "master/basemap/protomaps-simnz.pmtiles",
     maxzoom: 15,
@@ -211,7 +222,8 @@ export const SIM_NZ: Region = {
 const UTAH_BOX: Box = [-113.0, 37.24, -112.89, 37.33];
 // No coverage: a second simulated region that lacks a layer NZ has.
 const UTAH_TERRAIN: RegionTerrain = {
-  ...simTerrain("simutah", "Utah", UTAH_BOX, 15),
+  // USGS's 3D Elevation Program.
+  ...simTerrain("simutah", "Utah", UTAH_BOX, 15, "us-public-domain"),
   ...simOverlays("simutah", "Utah", UTAH_BOX),
 };
 
@@ -247,6 +259,7 @@ const WORLD_TERRAIN = simTerrain(
   "the world",
   [-180, -85.06, 180, 85.06],
   13,
+  "copernicus-dem",
 );
 
 export const SIM_WORLD: Region = {
