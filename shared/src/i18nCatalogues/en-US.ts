@@ -77,6 +77,8 @@ export const enUS: Catalogue = {
     "Scrub density for bushwhacking: denser reads darker. Orange stripes mark ground burned since the survey, so the scrub there may have changed.",
   "Steepness in degrees from flat. An easy walk is under 10°, a steep scramble around 30°, and a cliff 45° or more. Ground flatter than the first band has no colour.":
     "Steepness in degrees from flat. An easy walk is under 10°, a steep scramble around 30°, and a cliff 45° or more. Ground flatter than the first band has no color.",
+  "The sharpened area is deleted from your account, and friends you shared it with lose it too. Map files already made from it stay until they expire; one still waiting to start is cancelled.":
+    "The sharpened area is deleted from your account, and friends you shared it with lose it too. Map files already made from it stay until they expire; one still waiting to start is canceled.",
   "Tick list": "Checklist",
   "Tick only what you don't have.": "Check only what you don't have.",
   "Tick something to add.": "Check something to add.",

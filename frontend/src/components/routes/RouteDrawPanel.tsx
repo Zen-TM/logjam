@@ -28,6 +28,7 @@ import {
   mapMeasurePointsLabel,
   pairedStatLayout,
   type SnapMode,
+  t,
 } from "@logjam/shared";
 import {
   DraftPeek,
@@ -140,7 +141,7 @@ export function RouteDrawPanel({
   return (
     <div className={classes.root}>
       <Hero
-        title={editingName ? `Editing ${editingName}` : "New route"}
+        title={editingName ? t`Editing ${editingName}` : t`New route`}
         onClose={onCancel}
         closeDisabled={saving}
       />
@@ -155,7 +156,7 @@ export function RouteDrawPanel({
           distance={stats[0].value}
           onUndo={onUndo}
           undoDisabled={!canUndo || saving}
-          undoReason={saving ? "Saving…" : "Nothing to undo"}
+          undoReason={saving ? t`Saving…` : t`Nothing to undo`}
         />
       ) : (
         <>
@@ -166,9 +167,10 @@ export function RouteDrawPanel({
             goes the moment the first point lands, so nothing below it ever
             moves again. */}
             {anchorCount === 0 && (
-              <p className={classes.hint} role="status">
-                Click the map to place the first point.
-              </p>
+              <p
+                className={classes.hint}
+                role="status"
+              >{t`Click the map to place the first point.`}</p>
             )}
 
             {/* FROM HERE DOWN THIS IS THE SAME PAGE A SAVED WAY SHOWS: figures,
@@ -182,13 +184,13 @@ export function RouteDrawPanel({
 
             {atCap && (
               <FieldError
-                message={`Maximum of ${MAX_ROUTE_POINTS} points reached.`}
+                message={t`Maximum of ${MAX_ROUTE_POINTS} points reached.`}
               />
             )}
             <FieldError
               message={
                 shortAt === points.length
-                  ? "A route needs at least two points."
+                  ? t`A route needs at least two points.`
                   : null
               }
             />
@@ -201,12 +203,11 @@ export function RouteDrawPanel({
                 {profile ? (
                   <>
                     {profile.minM != null && profile.maxM != null && (
-                      <p className={classes.band}>
-                        {formatHeightRange(profile.minM, profile.maxM)} above
-                        sea level
-                      </p>
+                      <p
+                        className={classes.band}
+                      >{t`${formatHeightRange(profile.minM, profile.maxM)} above sea level`}</p>
                     )}
-                    <SectionHeader title="Elevation vs distance" />
+                    <SectionHeader title={t`Elevation vs distance`} />
                     <ProfileChart
                       series={elevationSeries(profile)}
                       formatValue={formatElevationM}
@@ -229,7 +230,7 @@ export function RouteDrawPanel({
                   <p className={classes.note}>
                     {profileLoading
                       ? MAP_MEASURE.copy.readingTerrain
-                      : "Pause to read the terrain under this line."}
+                      : t`Pause to read the terrain under this line.`}
                   </p>
                 )}
               </section>
@@ -241,7 +242,7 @@ export function RouteDrawPanel({
               this colour as it is built, so it is a property of the draft, not
               a question asked at the end. */}
               <ColourField
-                label="Colour"
+                label={t`Colour`}
                 palette={TRACK_COLORS}
                 value={color ?? undefined}
                 nameOf={trackColorName}
@@ -267,43 +268,39 @@ export function RouteDrawPanel({
             <div className={classes.buttons}>
               <IconButton
                 icon="undo"
-                label="Undo"
+                label={t`Undo`}
                 onClick={onUndo}
                 disabled={!canUndo || saving}
-                disabledReason={saving ? "Saving…" : "Nothing to undo"}
+                disabledReason={saving ? t`Saving…` : t`Nothing to undo`}
               />
               <IconButton
                 icon="reverse"
-                label="Reverse direction"
+                label={t`Reverse direction`}
                 onClick={onReverse}
                 disabled={!hasLine || saving}
-                disabledReason={saving ? "Saving…" : "Needs two points"}
+                disabledReason={saving ? t`Saving…` : t`Needs two points`}
               />
               <IconButton
                 icon="delete"
-                label="Clear all points"
+                label={t`Clear all points`}
                 onClick={onClear}
                 disabled={points.length === 0 || saving}
-                disabledReason={saving ? "Saving…" : "Nothing to clear"}
+                disabledReason={saving ? t`Saving…` : t`Nothing to clear`}
               />
               <span className={classes.spacer} />
               <Button
                 compact
                 onClick={onCancel}
                 disabled={saving}
-                disabledReason="Saving…"
-              >
-                Cancel
-              </Button>
+                disabledReason={t`Saving…`}
+              >{t`Cancel`}</Button>
               <Button
                 compact
                 variant="filled"
                 icon="done"
                 onClick={() => (hasLine ? onSave() : setShortAt(points.length))}
                 busy={saving}
-              >
-                Save
-              </Button>
+              >{t`Save`}</Button>
             </div>
           </footer>
         </>

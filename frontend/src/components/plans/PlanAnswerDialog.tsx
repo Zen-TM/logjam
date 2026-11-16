@@ -22,6 +22,7 @@ import {
   type TripPlanAnswers,
   type TripPlanFormView,
   type TripPlanQuestion,
+  t,
 } from "@logjam/shared";
 import {
   Button,
@@ -301,10 +302,8 @@ function AnswerForm({
             <Button
               onClick={requestClose}
               disabled={busy}
-              disabledReason="Sending…"
-            >
-              Cancel
-            </Button>
+              disabledReason={t`Sending…`}
+            >{t`Cancel`}</Button>
             <Button type="submit" form={formId} variant="filled" busy={busy}>
               {copy.save}
             </Button>

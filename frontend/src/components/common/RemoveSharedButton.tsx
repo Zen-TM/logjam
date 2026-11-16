@@ -17,7 +17,7 @@ import ConfirmDialog from "../dialogs/ConfirmDialog";
 import { useToast } from "../feedback/ToastProvider";
 import { messageFromError } from "../../errors/messageFromError";
 import { Button, Icon } from "../../ui";
-import { removeShareConfirm } from "@logjam/shared";
+import { removeShareConfirm, t } from "@logjam/shared";
 
 export default function RemoveSharedButton({
   kindLabel,
@@ -56,7 +56,7 @@ export default function RemoveSharedButton({
     try {
       await remove();
       setConfirming(false);
-      toast.done(`${itemName} removed.`);
+      toast.done(t`${itemName} removed.`);
       onRemoved();
     } catch (err) {
       console.error(err);
@@ -67,7 +67,7 @@ export default function RemoveSharedButton({
   }
 
   const label = title ?? `Remove this shared ${kindLabel}`;
-  const off = busy ? "Removing…" : disabledReason;
+  const off = busy ? t`Removing…` : disabledReason;
 
   return (
     <>
@@ -99,7 +99,7 @@ export default function RemoveSharedButton({
           disabledReason={off ?? ""}
           onClick={() => setConfirming(true)}
         >
-          {children ?? "Remove"}
+          {children ?? t`Remove`}
         </Button>
       )}
 
@@ -110,7 +110,7 @@ export default function RemoveSharedButton({
         copy={{
           confirmTitle: confirm.title,
           confirmBody: confirm.body,
-          confirmLabel: "Remove",
+          confirmLabel: t`Remove`,
           tone: "filled",
         }}
         busy={busy}

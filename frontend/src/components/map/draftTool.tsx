@@ -2,7 +2,12 @@
 // (`routes/RouteDrawPanel.tsx`) and the measure tool (`MeasurePanel.tsx`) are
 // one interaction, so the parts that would otherwise be written twice are here.
 import { useEffect, useState } from "react";
-import { MAP_MEASURE, MAP_SNAP_OPTIONS, type SnapMode } from "@logjam/shared";
+import {
+  MAP_MEASURE,
+  MAP_SNAP_OPTIONS,
+  type SnapMode,
+  t,
+} from "@logjam/shared";
 import { IconButton, Select } from "../../ui";
 import classes from "./draftTool.module.css";
 
@@ -116,7 +121,7 @@ export function DraftPeek({
       </p>
       <IconButton
         icon="undo"
-        label="Undo"
+        label={t`Undo`}
         onClick={onUndo}
         disabled={undoDisabled}
         disabledReason={undoReason}
