@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { FriendShareRow } from "./sharing.js";
+import { inTimeZone } from "./timeZone.testHelper.js";
 
 import {
   buildShareCards,
@@ -48,17 +49,13 @@ describe("buildShareCards", () => {
   // Mutation: write `formatShareDay` with `utcDay` for `localDay`, and a share
   // at 04:00 UTC on the 12th reads as the 12th in Los Angeles, where it is the 11th.
   it("names the day it was shared as a short day and month", () => {
-    const previous = process.env.TZ;
-    process.env.TZ = "America/Los_Angeles";
-    try {
+    inTimeZone("America/Los_Angeles", () => {
       const [card] = buildShareCards([PLACE], {
         direction: "theySee",
         friendName: FRIEND,
       });
       expect(card.subtitle).toBe("Place · shared 11 Aug");
-    } finally {
-      process.env.TZ = previous;
-    }
+    });
   });
 
   // An untitled job still needs something to tap. The wording comes from

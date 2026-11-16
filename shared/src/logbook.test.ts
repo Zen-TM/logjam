@@ -26,6 +26,7 @@ import {
   yearBuckets,
 } from "./logbook.js";
 import { computeLogbookStats, UNTAGGED_ACTIVITY } from "./logbookStats.js";
+import { inTimeZone } from "./timeZone.testHelper.js";
 import type { TripLogCustomFieldDef } from "./tripLogFields.js";
 
 /** UTC midnight of a "YYYY-MM-DD" key — the instant the API stores. */
@@ -42,16 +43,12 @@ describe("date handling", () => {
   // Mutation: write `formatDateKey` with `localDay` for `utcDay`, and a
   // UTC-midnight date reads as the 14th in Los Angeles.
   it("writes a date-only value as its own day in a zone behind UTC", () => {
-    const previous = process.env.TZ;
-    process.env.TZ = "America/Los_Angeles";
-    try {
+    inTimeZone("America/Los_Angeles", () => {
       expect(formatDateKey("2026-03-15T00:00:00.000Z")).toBe("15 Mar 2026");
       expect(formatTripDate("2026-03-15T00:00:00.000Z")).toBe(
         "Sun, 15 Mar 2026",
       );
-    } finally {
-      process.env.TZ = previous;
-    }
+    });
   });
 });
 
@@ -174,16 +171,6 @@ describe("countTripsInLastMonths", () => {
 // is the users' timezone too — so a bug that only shows east of Greenwich is
 // invisible in all of them. These run the same maths under a fixed non-UTC zone
 // at the hour of day where local and UTC disagree about the calendar month.
-function inTimeZone<T>(timeZone: string, run: () => T): T {
-  const previous = process.env.TZ;
-  process.env.TZ = timeZone;
-  try {
-    return run();
-  } finally {
-    process.env.TZ = previous;
-  }
-}
-
 describe("todayDateKey", () => {
   it("is the LOCAL calendar day, not the UTC one", () => {
     // 07:00 on 15 March in Sydney is still 14 March in UTC.
