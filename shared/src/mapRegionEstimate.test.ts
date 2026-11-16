@@ -35,7 +35,7 @@ import {
   regionBounds,
   type Region,
 } from "./regions.js";
-import { SIM_REGIONS, SIM_UTAH, SIM_WORLD } from "./simRegions.js";
+import { SIM_NZ, SIM_REGIONS, SIM_UTAH, SIM_WORLD } from "./simRegions.js";
 
 describe("lonLatToTile", () => {
   it("maps the origin to the centre tile", () => {
@@ -481,6 +481,41 @@ describe("planRegionForBasemaps", () => {
     ).toEqual(["nsw-5m-slope", "simutah-slope"]);
     // Utah's heights lie far from this box, so its other archives add and its heights do not.
     expect(job.clips.filter((c) => c.kind === "heights")).toHaveLength(1);
+  });
+
+  // Mutation: list the first declared vector archive whatever the box, and
+  // a save in simulated New Zealand clips NSW's vector map; stop at the first
+  // region touching, and the second's is never saved.
+  it("plans the vector archive of every region a box touches", () => {
+    const makarora = {
+      west: 169.22,
+      south: -44.08,
+      east: 169.28,
+      north: -44.03,
+    };
+    expect(
+      planRegionForBasemaps(makarora, [], 15, maxZoomFor, [
+        NSW_REGION,
+        ...SIM_REGIONS,
+      ]).vectors,
+    ).toEqual([SIM_NZ.vector]);
+    const overlap: Region = { ...SIM_UTAH, borders: NSW_REGION.borders };
+    expect(
+      planRegionForBasemaps(TEN_KM, [], 15, maxZoomFor, [NSW_REGION, overlap])
+        .vectors,
+    ).toEqual([NSW_REGION.vector, SIM_UTAH.vector]);
+  });
+
+  // Mutation: read the planet's archive whatever the box touches, and a save in
+  // a region clips the planet's vector map as well.
+  it("plans the world's vector archive only for a box no region touches", () => {
+    const sea = { west: 160, south: -40.1, east: 160.1, north: -40 };
+    const plan = (box: RegionBbox, world?: Region) =>
+      planRegionForBasemaps(box, [], 15, maxZoomFor, [NSW_REGION], world)
+        .vectors;
+    expect(plan(sea, SIM_WORLD)).toEqual([SIM_WORLD.vector]);
+    expect(plan(sea)).toEqual([]);
+    expect(plan(TEN_KM, SIM_WORLD)).toEqual([NSW_REGION.vector]);
   });
 
   // Mutation: price every region's clips whatever the box, and a box in

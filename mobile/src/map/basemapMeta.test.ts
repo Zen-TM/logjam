@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { pointBox } from "@logjam/shared";
+import { NSW_REGION, pointBox } from "@logjam/shared";
 
 import {
   defaultBasemap,
@@ -42,7 +42,7 @@ describe("the basemaps Logjam GPS offers", () => {
     expect(ids.length).toBeGreaterThan(0);
     for (const id of ids) {
       const [source] = resolveMapSource(
-        { kind: "basemap", basemapId: id },
+        { kind: "basemap", basemapId: id, region: NSW_REGION },
         { connectivity: "online", artifacts: [], cdnBaseUrl: "https://cdn" },
       );
       expect(source?.status, id).toBe("ok");

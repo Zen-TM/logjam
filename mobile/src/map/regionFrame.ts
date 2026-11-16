@@ -14,7 +14,9 @@ import { tileMetersPerPixel } from "./scaleBar";
 import {
   downloadableBasemaps,
   pointBox,
+  vectorIn,
   type LonLatBox,
+  type Region,
   type RegionBbox,
 } from "@logjam/shared";
 
@@ -212,9 +214,23 @@ export function startBox(
 }
 
 /**
+ * The map the save screen previews when none is chosen: the vector map where
+ * the region shown has an archive of it, else the first map the ground offers
+ * to save (`downloadable`), else the vector map, which previews nothing.
+ * Guard: `regionFrame.test.ts` ("the map previewed by default").
+ */
+export function defaultPreviewFor(
+  region: Region | null,
+  downloadable: readonly { id: string }[],
+): string {
+  return vectorIn(region) ? "protomaps" : (downloadable[0]?.id ?? "protomaps");
+}
+
+/**
  * The maps picked when the screen opens: the one it was opened from if the
  * ground offers it to save, else the first it does offer. Nothing when it was
- * opened from the vector map, which every save brings anyway. Guard:
+ * opened from the vector map, which a save brings anyway where the region has
+ * a vector archive (`regionClipSpecs`). Guard:
  * `regionFrame.test.ts` ("the ground a save starts on").
  */
 export function startPicks(box: LonLatBox, startBasemapId: string): string[] {

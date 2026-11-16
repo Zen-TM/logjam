@@ -110,6 +110,9 @@ export type RegionTerrain = {
   coverage?: CoverageArchive;
 };
 
+/** An archive of the vector basemap: a CDN-relative path and its deepest zoom. */
+export type VectorArchive = { archivePath: string; maxzoom: number };
+
 export type Region = {
   /**
    * Stored in `uiPreferences.regions`: never change one. Lower-case letters
@@ -137,8 +140,14 @@ export type Region = {
   basemaps: readonly string[];
   /** The one a map opens on before the user picks; one of `basemaps`. */
   defaultBasemap: string;
-  /** The region's cut of the vector basemap, or null where it has none. */
-  vector: { archivePath: string; maxzoom: number } | null;
+  /**
+   * The region's cut of the vector basemap, or null where it has none. The one
+   * catalogue entry "protomaps" is drawn, snapped to and saved from it, so the
+   * entry is offered where the region in view declares one (`vectorIn`) and is
+   * never listed in `basemaps`. Guard: `regions.test.ts` ("leaves the vector
+   * basemap out of every region's basemaps").
+   */
+  vector: VectorArchive | null;
   /** Height sources, finest first. `DEM_SOURCES` is every region's, then the worldwide one. */
   dem: readonly DemSource[];
   /** The Terrain group's archives; `{}` where a region has none. */
@@ -254,11 +263,9 @@ export const NSW_REGION = {
       [142.13, -34.28],
     ],
   ],
-  // The vector basemap is the region's own extract of OpenStreetMap.
-  basemaps: ["protomaps", "six-topo", "six-base", "six-imagery"],
+  basemaps: ["six-topo", "six-base", "six-imagery"],
   defaultBasemap: "six-topo",
-  // The catalogue entry "protomaps" (geoPdfBaseLayers.ts) reads this path and
-  // zoom from here.
+  // The vector basemap is the region's own extract of OpenStreetMap.
   vector: { archivePath: "master/basemap/protomaps-nsw.pmtiles", maxzoom: 15 },
   dem: [NSW_HEIGHTS],
   terrain: {
@@ -824,6 +831,45 @@ export function regionInWrappedView(
   world: Region = WORLD,
 ): Region | null {
   return regionInView(wrapView(view), regions, world);
+}
+
+/** A region's vector basemap archive, or null: the vector map is not available here. */
+export function vectorIn(region: Region | null): VectorArchive | null {
+  return region?.vector ?? null;
+}
+
+/**
+ * The vector archive at this CDN path, in a region or the world, or null: no
+ * one declares it now (a simulated region's, with the switch off). Guard:
+ * `regions.test.ts` ("vectorArchiveAt").
+ */
+export function vectorArchiveAt(
+  archivePath: string,
+  regions: readonly Region[] = REGIONS,
+  world: Region = WORLD,
+): VectorArchive | null {
+  return (
+    [...regions, world]
+      .map(vectorIn)
+      .find((archive) => archive?.archivePath === archivePath) ?? null
+  );
+}
+
+/**
+ * The vector archives a save of `box` clips: that of every region touching it,
+ * else `world`'s when no region does, else none. Guard: `regions.test.ts`
+ * ("vectorsTouching").
+ */
+export function vectorsTouching(
+  box: LonLatBox,
+  regions: readonly Region[] = REGIONS,
+  world: Region = WORLD,
+): VectorArchive[] {
+  const touching = regionsTouching(box, regions);
+  return (touching.length > 0 ? touching : [world]).flatMap((region) => {
+    const archive = vectorIn(region);
+    return archive ? [archive] : [];
+  });
 }
 
 /** A region's archive for a Terrain layer, or null: the layer is not available here. */

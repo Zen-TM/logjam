@@ -44,7 +44,7 @@ import {
   type MapRef,
 } from "@maplibre/maplibre-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { pointBox, type RegionBbox } from "@logjam/shared";
+import { pointBox, regionInWrappedView, type RegionBbox } from "@logjam/shared";
 
 import { config } from "../config";
 import { spacing, makeStyles } from "../theme";
@@ -141,9 +141,21 @@ export function PickAreaScreen({
     () => ({ connectivity, artifacts, cdnBaseUrl: config.topoCdnBaseUrl }),
     [connectivity, artifacts],
   );
+  // The vector basemap is read from the archive of the region the map shows:
+  // what the camera opened on until the map first reports its bounds.
+  const [openLon, openLat] = initialArea
+    ? [
+        (initialArea.west + initialArea.east) / 2,
+        (initialArea.south + initialArea.north) / 2,
+      ]
+    : (lastCamera?.center ?? home.center);
+  const region = useMemo(
+    () => regionInWrappedView(viewport ?? pointBox(openLon!, openLat!)),
+    [viewport, openLon, openLat],
+  );
   const basemapResolved = useMemo(
-    () => resolveMapSource({ kind: "basemap", basemapId }, ctx),
-    [basemapId, ctx],
+    () => resolveMapSource({ kind: "basemap", basemapId, region }, ctx),
+    [basemapId, region, ctx],
   );
 
   const places = useMirrorPlaces();

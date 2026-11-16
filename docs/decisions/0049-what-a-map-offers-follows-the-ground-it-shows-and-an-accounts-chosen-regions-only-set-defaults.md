@@ -78,6 +78,17 @@ what is offered at a location.**
   (`placeRegistryIn`), and the chosen regions never decide it. Guard:
   `mobile/src/offline/placeRegistry.test.ts` ("lets a copy lapse once its
   region is neither chosen nor saved over"). Everything else above stands.
+- **Update 2026-11-16: the vector map is offered where the region in view
+  declares one.** The vector basemap is each region's own extract
+  (`Region.vector`), so `offeredBasemaps` lists it when
+  `vectorIn(regionInWrappedView(view))` is not null, not when a region
+  touching the view lists it (no region lists it in `basemaps`), and falls to
+  the world's archive only where no region is in view. The map, a route's
+  snapping and a printed sheet read that one region's archive; a saved box
+  clips the archive of every region it touches ([0036](0036-the-phone-cuts-its-own-offline-clips.md)).
+  Guard: `shared/src/regions.test.ts` ("the vector basemap" block, "is offered
+  where the region in view declares an archive of it"). Everything else above
+  stands.
 - **Guard.** `shared/src/regions.test.ts` holds the resolvers against
   `SIM_REGIONS` (`shared/src/simRegions.ts`); `shared/src/regionNeutral.test.ts`
   fails on a source file that names NSW's constants and is not on its list,
