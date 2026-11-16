@@ -13,6 +13,13 @@
  * timezone.
  */
 
+import { monthInitial } from "./dateNames.js";
+import {
+  formatDayMonthYear,
+  formatMonthYear,
+  formatWeekdayDayMonthYear,
+  utcDay,
+} from "./dateFormat.js";
 import {
   UNTAGGED_ACTIVITY,
   type ActivityTally,
@@ -46,23 +53,12 @@ export function defaultTrackName(now: Date = new Date()): string {
 
 /** "Sun 15 Mar 2026" — a logbook entry's own line; the year group supplies context. */
 export function formatTripDate(isoDate: string): string {
-  return new Date(isoDate).toLocaleDateString(undefined, {
-    weekday: "short",
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-    timeZone: "UTC",
-  });
+  return formatWeekdayDayMonthYear(utcDay(new Date(isoDate)));
 }
 
 /** "15 Mar 2026" — where the weekday would be noise (sheet titles, filter summaries). */
 export function formatDateKey(isoDate: string): string {
-  return new Date(isoDate).toLocaleDateString(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-    timeZone: "UTC",
-  });
+  return formatDayMonthYear(utcDay(new Date(isoDate)));
 }
 
 /** "1 Jan 2026 → Today": a date filter summarised in words. Either bound may be
@@ -168,9 +164,7 @@ export function monthlyTripCounts(
     const year = Math.floor(total / 12);
     const month = ((total % 12) + 12) % 12;
     buckets.push({
-      label: new Date(Date.UTC(year, month, 1))
-        .toLocaleDateString("en-AU", { month: "narrow", timeZone: "UTC" })
-        .charAt(0),
+      label: monthInitial(month),
       count: counts.get(`${year}-${month}`) ?? 0,
       current: offset === 0,
     });
@@ -264,9 +258,7 @@ export function monthBucketsForYear(
 ): MonthBucket[] {
   const current = currentCalendarMonth(now);
   return Array.from({ length: 12 }, (_, month) => ({
-    label: new Date(Date.UTC(2000, month, 1))
-      .toLocaleDateString("en-AU", { month: "narrow", timeZone: "UTC" })
-      .charAt(0),
+    label: monthInitial(month),
     count:
       monthly.find((entry) => entry.year === year && entry.month === month)
         ?.count ?? 0,
@@ -402,13 +394,7 @@ export function statsCadence(
   }
   return {
     busiest: busiest
-      ? `busiest ${new Date(
-          Date.UTC(busiest.year, busiest.month, 1),
-        ).toLocaleDateString(undefined, {
-          month: "short",
-          year: "numeric",
-          timeZone: "UTC",
-        })} · ${pluralCount(busiest.count, "trip")}`
+      ? `busiest ${formatMonthYear({ month: busiest.month, year: busiest.year })} · ${pluralCount(busiest.count, "trip")}`
       : undefined,
     lines,
   };

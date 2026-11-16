@@ -1,0 +1,28 @@
+{
+  "2026-03-15": {
+    "formatWeekdayDayMonthYear": "Sun 15 Mar 2026",
+    "formatWeekdayDayMonth": "Sun 15 Mar",
+    "formatWeekdayDay": "Sun 15",
+    "formatDayMonthYear": "15 Mar 2026",
+    "formatDayMonth": "15 Mar",
+    "formatMonthYear": "Mar 2026",
+    "formatDayLongMonth": "15 March",
+    "formatDayLongMonthYear": "15 March 2026",
+    "formatLongMonthYear": "March 2026",
+    "formatFullDay": "Sunday 15 March 2026",
+    "formatNumericDay": "15/03/2026"
+  },
+  "2025-09-08": {
+    "formatWeekdayDayMonthYear": "Mon 8 Sept 2025",
+    "formatWeekdayDayMonth": "Mon 8 Sept",
+    "formatWeekdayDay": "Mon 8",
+    "formatDayMonthYear": "8 Sept 2025",
+    "formatDayMonth": "8 Sept",
+    "formatMonthYear": "Sept 2025",
+    "formatDayLongMonth": "8 September",
+    "formatDayLongMonthYear": "8 September 2025",
+    "formatLongMonthYear": "September 2025",
+    "formatFullDay": "Monday 8 September 2025",
+    "formatNumericDay": "08/09/2025"
+  }
+}

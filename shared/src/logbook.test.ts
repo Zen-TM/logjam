@@ -32,11 +32,26 @@ import type { TripLogCustomFieldDef } from "./tripLogFields.js";
 const fromDateKey = (key: string) => new Date(`${key}T00:00:00.000Z`);
 
 describe("date handling", () => {
+  // Mutation: write `formatTripDate` without the weekday, or with the month in full.
   it("reads a UTC-midnight date as its own calendar day", () => {
     // In AEST, a local-time read of this instant is 14 March.
     expect(tripYear("2026-01-01T00:00:00.000Z")).toBe(2026);
-    expect(formatTripDate("2026-03-15T00:00:00.000Z")).toContain("15");
-    expect(formatTripDate("2026-03-15T00:00:00.000Z")).toContain("2026");
+    expect(formatTripDate("2026-03-15T00:00:00.000Z")).toBe("Sun 15 Mar 2026");
+  });
+
+  // Mutation: write `formatDateKey` with `localDay` for `utcDay`, and a
+  // UTC-midnight date reads as the 14th in Los Angeles.
+  it("writes a date-only value as its own day in a zone behind UTC", () => {
+    const previous = process.env.TZ;
+    process.env.TZ = "America/Los_Angeles";
+    try {
+      expect(formatDateKey("2026-03-15T00:00:00.000Z")).toBe("15 Mar 2026");
+      expect(formatTripDate("2026-03-15T00:00:00.000Z")).toBe(
+        "Sun 15 Mar 2026",
+      );
+    } finally {
+      process.env.TZ = previous;
+    }
   });
 });
 
@@ -391,7 +406,7 @@ describe("stats presentation", () => {
 
   it("names the busiest month and states the cadence in words", () => {
     const { busiest, lines } = statsCadence(base, null);
-    expect(busiest).toMatch(/^busiest .*2026 · 2 trips$/);
+    expect(busiest).toBe("busiest Mar 2026 · 2 trips");
     expect(lines[0]).toMatch(/^first trip /);
     // 2 Mar 2024, 7 Mar 2026 and 8 Mar 2026: a Saturday, a Saturday, a Sunday.
     expect(lines).toContain("3 of 3 trips fell on a weekend");

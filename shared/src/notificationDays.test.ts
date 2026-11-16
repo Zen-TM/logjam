@@ -90,12 +90,19 @@ describe("groupNotificationsByDay", () => {
       NOW,
     );
     expect(sections).toHaveLength(3);
-    // The middle title is a formatted date — locale-dependent by design (it
-    // follows the device), so assert the shape rather than one locale's spelling.
     expect(sections[0].title).toBe("Today");
-    expect(sections[1].title).toContain("28");
-    expect(sections[1].title).not.toBe("Today");
+    expect(sections[1].title).toBe("28 Jul");
     expect(sections[2].title).toBe("Today");
+  });
+
+  // Mutation: drop the year branch in `dayTitle`, and a December notification
+  // read in July says only "12 Dec".
+  it("adds the year once the day is not in this one", () => {
+    const sections = groupNotificationsByDay(
+      [at(localIso(2025, 11, 12, 9))],
+      NOW,
+    );
+    expect(sections[0].title).toBe("12 Dec 2025");
   });
 
   it("gives an unparseable timestamp a home rather than dropping it", () => {

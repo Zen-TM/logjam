@@ -9,7 +9,7 @@
 // PRIVACY: counts and timestamps only. Never a row's contents, never a server
 // error message (shared/DESIGN.md §11 — failure copy is ours, not the error's).
 
-import { LONG_MONTHS } from "@logjam/shared";
+import { formatDayLongMonth, localDay, longWeekday } from "@logjam/shared";
 
 export type SyncTone = "ok" | "info" | "pending" | "problem";
 
@@ -95,16 +95,6 @@ export function relativeTime(iso: string, now: number): string {
   return `${days} days ago`;
 }
 
-const WEEKDAYS = [
-  "Sunday",
-  "Monday",
-  "Tuesday",
-  "Wednesday",
-  "Thursday",
-  "Friday",
-  "Saturday",
-];
-
 /**
  * The day something started, as someone would say it: "yesterday", "Tuesday",
  * then "28 September" once a weekday could mean two different days. In the
@@ -119,8 +109,8 @@ function sinceDay(iso: string, now: number): string {
   const days = Math.round((midnight(new Date(now)) - midnight(then)) / DAY_MS);
   if (days <= 0) return "today";
   if (days === 1) return "yesterday";
-  if (days < 7) return WEEKDAYS[then.getDay()];
-  return `${then.getDate()} ${LONG_MONTHS[then.getMonth()]}`;
+  if (days < 7) return longWeekday(then.getDay());
+  return formatDayLongMonth(localDay(then));
 }
 
 function plural(count: number, singular: string, pluralForm: string): string {

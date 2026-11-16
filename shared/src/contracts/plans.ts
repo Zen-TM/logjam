@@ -32,7 +32,13 @@ import { friendMatches } from "../friendSearch.js";
 import { mediaSkippedSentence } from "../friendShareRows.js";
 import { todayDateKey } from "../logbook.js";
 import { PLACE_FORM } from "./placeForm.js";
-import { SHORT_MONTHS, SHORT_WEEKDAYS } from "../dateNames.js";
+import {
+  type Day,
+  dayOfKey,
+  formatWeekdayDay,
+  formatWeekdayDayMonth,
+  formatWeekdayDayMonthYear,
+} from "../dateFormat.js";
 import { plural, t } from "../i18n.js";
 
 export const TRIP_PLANS_LIST = {
@@ -191,21 +197,10 @@ export function tripPlansEmpty(
   };
 }
 
-function dayParts(date: DateOnly) {
-  const [year, month, day] = date.split("-").map(Number);
-  const weekday = new Date(Date.UTC(year, month - 1, day)).getUTCDay();
-  return {
-    year,
-    month: SHORT_MONTHS[month - 1],
-    day,
-    weekday: SHORT_WEEKDAYS[weekday],
-  };
-}
-
 /**
  * "Sat 8 – Sun 9 Nov", "Fri 31 Oct – Sun 2 Nov", "Sat 8 Nov", "No dates yet".
  * The year shows only when it is not this year's. A date-only value is a
- * calendar day, so no time zone touches it. English words: the copy is.
+ * calendar day, so no time zone touches it.
  */
 export function tripPlanDatesLabel(
   startDate: DateOnly | null,
@@ -217,16 +212,15 @@ export function tripPlanDatesLabel(
     return t`Until ${tripPlanDayLabel(endDate!, thisYear)}`;
   if (endDate == null || endDate === startDate)
     return tripPlanDayLabel(startDate, thisYear);
-  const start = dayParts(startDate);
-  const end = dayParts(endDate);
-  const year = (y: number) => (y === thisYear ? "" : ` ${y}`);
+  const start = dayOfKey(startDate);
+  const end = dayOfKey(endDate);
   const startText =
     start.year !== end.year
-      ? `${start.weekday} ${start.day} ${start.month}${year(start.year)}`
+      ? dayLabel(start, thisYear)
       : start.month !== end.month
-        ? `${start.weekday} ${start.day} ${start.month}`
-        : `${start.weekday} ${start.day}`;
-  return `${startText} – ${end.weekday} ${end.day} ${end.month}${year(end.year)}`;
+        ? formatWeekdayDayMonth(start)
+        : formatWeekdayDay(start);
+  return t`${startText} – ${dayLabel(end, thisYear)}`;
 }
 
 /** "Sat 8 Nov", or "Sat 8 Nov 2025" in another year. */
@@ -234,8 +228,13 @@ export function tripPlanDayLabel(
   date: DateOnly,
   thisYear: number = new Date().getFullYear(),
 ): string {
-  const parts = dayParts(date);
-  return `${parts.weekday} ${parts.day} ${parts.month}${parts.year === thisYear ? "" : ` ${parts.year}`}`;
+  return dayLabel(dayOfKey(date), thisYear);
+}
+
+function dayLabel(day: Day, thisYear: number): string {
+  return day.year === thisYear
+    ? formatWeekdayDayMonth(day)
+    : formatWeekdayDayMonthYear(day);
 }
 
 /** A list row's status, as a word: an invite and a request outrank a role,

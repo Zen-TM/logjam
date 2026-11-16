@@ -5,6 +5,7 @@
 // types fall back to a generic label rather than rendering nothing.
 import type { TNotification } from "./apiTypes.js";
 import { ANNOUNCEMENT } from "./contracts/inbox.js";
+import { formatDayMonth, formatDayMonthYear, localDay } from "./dateFormat.js";
 import { formatBytes } from "./format.js";
 import { EXPORT_FORMAT_LABELS, type ExportFormat } from "./topoExport.js";
 
@@ -501,12 +502,9 @@ function dayTitle(
   if (key === "unknown") return "Unknown date";
   if (key === todayKey) return "Today";
   if (key === yesterdayKey) return "Yesterday";
-  return at.toLocaleDateString(undefined, {
-    day: "numeric",
-    month: "short",
-    // Only worth the width once the year is ambiguous.
-    ...(at.getFullYear() !== new Date(todayKey).getFullYear()
-      ? { year: "numeric" }
-      : {}),
-  });
+  const day = localDay(at);
+  // Only worth the width once the year is ambiguous.
+  return day.year !== new Date(todayKey).getFullYear()
+    ? formatDayMonthYear(day)
+    : formatDayMonth(day);
 }
