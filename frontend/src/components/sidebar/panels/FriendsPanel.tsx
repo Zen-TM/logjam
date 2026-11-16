@@ -340,7 +340,7 @@ function FriendsPanel({
       <div className={classes.rails}>
         {selecting ? (
           <SelectionBar
-            countLabel={`${selectedFriends.length} selected`}
+            countLabel={t`${selectedFriends.length} selected`}
             onClear={clear}
           >
             <SelectionVerb danger onClick={() => setRemovingSelected(true)}>

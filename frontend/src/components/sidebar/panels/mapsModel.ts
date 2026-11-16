@@ -45,9 +45,6 @@ export const MAP_IDENTITY: Record<
   },
 };
 
-export const plural = (count: number, noun: string) =>
-  `${count} ${noun}${count === 1 ? "" : "s"}`;
-
 /**
  * Hand a finished file to the browser. The URL is presigned and short-lived,
  * which is why the list is refetched rather than the link kept.

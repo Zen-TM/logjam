@@ -58,11 +58,14 @@ import {
   type SharpenOffer,
   type TripLogCustomFieldDef,
   formatDayLongMonthYear,
+  plural,
+  rich,
   utcDay,
   t,
 } from "@logjam/shared";
 import { placesBounds } from "./placesModel";
 import classes from "./PlaceDetailPanel.module.css";
+import { Rich } from "../../../ui/rich";
 import { useToast } from "../../feedback/ToastProvider";
 import { messageFromError } from "../../../errors/messageFromError";
 import { PlaceGauge } from "../../gauges/PlaceGauge";
@@ -520,14 +523,20 @@ function PlaceDetailPanel({
       sharedNames.length <= 3 ? (
         joinWithAnd(sharedNames)
       ) : (
-        <>
-          {sharedNames[0]}, {sharedNames[1]}, and{" "}
-          <button
-            type="button"
-            className={classes.sharedMoreLink}
-            onClick={() => setShowShareDialog(true)}
-          >{t`${sharedNames.length - 2} more`}</button>
-        </>
+        <Rich
+          parts={rich`${sharedNames[0]}, ${sharedNames[1]}, and <button>${t`${sharedNames.length - 2} more`}</button>`}
+          tags={{
+            button: (text) => (
+              <button
+                type="button"
+                className={classes.sharedMoreLink}
+                onClick={() => setShowShareDialog(true)}
+              >
+                {text}
+              </button>
+            ),
+          }}
+        />
       )
     ) : null;
 
@@ -594,8 +603,16 @@ function PlaceDetailPanel({
       if (skipped > 0) {
         toast.error(
           copied.mediaOutOfSpace
-            ? `Copied, but your storage is full — ${skipped === 1 ? "1 photo or file" : `${skipped} photos and files`} weren't copied.`
-            : `Copied, but ${skipped === 1 ? "1 photo or file" : `${skipped} photos and files`} couldn't be copied.`,
+            ? plural(
+                skipped,
+                "Copied, but your storage is full — # photo or file weren't copied.",
+                "Copied, but your storage is full — # photos and files weren't copied.",
+              )
+            : plural(
+                skipped,
+                "Copied, but # photo or file couldn't be copied.",
+                "Copied, but # photos and files couldn't be copied.",
+              ),
         );
       } else {
         toast.done(

@@ -198,6 +198,12 @@ function LeaderboardPage({
   );
 }
 
+const MEDAL_LABEL: Record<Medal, string> = {
+  gold: t`gold medal`,
+  silver: t`silver medal`,
+  bronze: t`bronze medal`,
+};
+
 /** A medal is a fill with the award glyph, its name for assistive tech. */
 function medalTile(medal: Medal | null) {
   return (
@@ -205,7 +211,7 @@ function medalTile(medal: Medal | null) {
       <IconTile
         icon="leaderboard"
         hue={MEDAL_HUE[medal]}
-        label={`${medal} medal`}
+        label={MEDAL_LABEL[medal]}
       />
     )
   );
