@@ -238,8 +238,10 @@ export function PlaceEditSheet({
   //
   // The units are in the key: the form's length text and its conversion are in
   // one unit, so a change of units reseeds it (dropping what was typed) rather
-  // than saving feet as metres. Guard: `lengthFieldClients.test.ts` ("every form
-  // of a length field converts it").
+  // than saving feet as metres. Only the fields: the photos and way staged so
+  // far stay (`seed({ unitsOnly: true })`), as Logjam Web's dialog keeps its
+  // media. Guards: `lengthFieldClients.test.ts` ("every form of a length field
+  // converts it").
   const seedKey = {
     placeId: place?.id,
     initialCoords,
@@ -260,10 +262,18 @@ export function PlaceEditSheet({
     setSeededFor(seedKey);
     // A return from the map picker keeps the form (`resuming`), unless the
     // units changed while it was away: the typed length is in the old ones.
-    if (visible && (!resuming || seededUnits !== seedKey.units)) seed();
+    // A return from the picker, or a flip of units under the open form, keeps
+    // the media; opening a sheet starts it afresh.
+    const onlyUnits =
+      seededFor !== null &&
+      seededFor.placeId === seedKey.placeId &&
+      seededFor.initialCoords === seedKey.initialCoords &&
+      seededFor.visible === seedKey.visible;
+    if (visible && (!resuming || seededUnits !== seedKey.units))
+      seed({ unitsOnly: resuming || onlyUnits });
   }
 
-  function seed() {
+  function seed({ unitsOnly = false } = {}) {
     setSeededUnits(displayUnits());
     setNameError(null);
     setLatitudeError(null);
@@ -305,7 +315,7 @@ export function PlaceEditSheet({
     setMode("form");
     setEditingField(null);
     setDateFieldKey(null);
-    media.reset();
+    if (!unitsOnly) media.reset();
   }
 
   // A point back from the picker touches the two coordinate fields and nothing

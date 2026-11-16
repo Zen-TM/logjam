@@ -33,6 +33,8 @@ import {
   type TripPlanRole,
   coordinateEntry,
   displayUnits,
+  itemElevationLabel,
+  lengthFromInput,
 } from "@logjam/shared";
 
 import { unavailableReasonText } from "../auth/capabilities";
@@ -190,7 +192,9 @@ export function PlanItemSheet({
           longitude: blank(values.longitude)
             ? undefined
             : Number(values.longitude),
-          elevation: blank(values.elevation) ? null : Number(values.elevation),
+          elevation: blank(values.elevation)
+            ? null
+            : lengthFromInput(Number(values.elevation)),
           fieldValues: Object.fromEntries(
             Object.entries(coerceCustomFields(attrs, defs)).filter(
               ([, value]) => value != null,
@@ -373,7 +377,7 @@ export function PlanItemSheet({
                 </View>
               </View>
               <TextField
-                label={copy.itemElevation}
+                label={itemElevationLabel()}
                 value={values.elevation}
                 hint={theirs("elevation")}
                 keyboardType="numbers-and-punctuation"

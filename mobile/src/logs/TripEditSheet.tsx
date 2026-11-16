@@ -258,8 +258,9 @@ export function TripEditSheet({
   //
   // The units are in the key: the form's length text and its conversion are in
   // one unit, so a change of units reseeds it (dropping what was typed) rather
-  // than saving feet as metres. Guard: `lengthFieldClients.test.ts` ("every form
-  // of a length field converts it").
+  // than saving feet as metres. Only the fields: the photos and way staged so
+  // far stay, and still count as unsaved. Guard: `lengthFieldClients.test.ts`
+  // ("every form of a length field converts it").
   const openKey = visible ? `${trip?.id ?? "new"}|${displayUnits()}` : null;
   const [seededFor, setSeededFor] = useState<string | null>(null);
   if (openKey !== seededFor) setSeededFor(openKey);
@@ -297,9 +298,13 @@ export function TripEditSheet({
     );
     setPlacesError(null);
     setSaveError(null);
-    media.reset();
-    if (!trip && fromTrack)
-      media.setStaged({ files: [], way: trackSourceWay(fromTrack) });
+    // `seededFor` is null while the sheet is closed: a key that changes under
+    // an open sheet is the units.
+    if (seededFor === null) {
+      media.reset();
+      if (!trip && fromTrack)
+        media.setStaged({ files: [], way: trackSourceWay(fromTrack) });
+    }
   }
 
   // Linking a CANYON means "I did that canyon", so the API force-tags
@@ -325,8 +330,10 @@ export function TripEditSheet({
 
   // The form once it has settled after opening (the canyoning tag above lands
   // in the opening render), to tell an edit from an untouched sheet (§10). An
-  // emptied field is the same as one never filled.
-  const fingerprint = JSON.stringify({
+  // emptied field is the same as one never filled. The staged media is
+  // compared apart: a flip of units re-seeds the fields and takes a new
+  // baseline for them, but the photos staged by then stay unsaved.
+  const fieldsPrint = JSON.stringify({
     dateKey,
     selected,
     displayName,
@@ -335,12 +342,16 @@ export function TripEditSheet({
     fieldValues: Object.entries(fieldValues)
       .filter(([, value]) => value !== "")
       .sort(([a], [b]) => a.localeCompare(b)),
+  });
+  const mediaPrint = JSON.stringify({
     photos: staged.files.map((file) => file.uri),
     way: staged.way?.label ?? null,
   });
-  const [pristine, setPristine] = useState<{ for: string; of: string } | null>(
-    null,
-  );
+  const [pristine, setPristine] = useState<{
+    for: string;
+    fields: string;
+    media: string;
+  } | null>(null);
   if (openKey === null && pristine !== null) setPristine(null);
   if (
     openKey !== null &&
@@ -348,11 +359,16 @@ export function TripEditSheet({
     taggedFor === linkedCanyon &&
     pristine?.for !== openKey
   )
-    setPristine({ for: openKey, of: fingerprint });
+    setPristine({
+      for: openKey,
+      fields: fieldsPrint,
+      // `pristine` outlives a flip of units and not the sheet closing.
+      media: pristine?.media ?? mediaPrint,
+    });
   const dirty =
     mode === "form" &&
     pristine?.for === openKey &&
-    fingerprint !== pristine?.of;
+    (fieldsPrint !== pristine?.fields || mediaPrint !== pristine?.media);
 
   // The place-cap error belongs to the picker mode; leaving it clears it, same
   // as any other field's error clearing when the user moves on.
