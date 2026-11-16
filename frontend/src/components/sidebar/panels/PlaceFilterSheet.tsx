@@ -153,7 +153,7 @@ export const FILTER_SHEET_SECTIONS: Record<
               label={areaSizeLabel(filters.area)}
               icon="pickArea"
               active
-              aria-label={t`Area set, ${areaSizeLabel(filters.area)}. Draw area again`}
+              aria-label={t`Area set, ${areaSizeLabel(filters.area)}. Draw on map again`}
               onClick={onDrawArea}
             />
             <Chip label={copy.clear} onClick={() => patch({ area: null })} />
