@@ -140,51 +140,127 @@ test("with the map wholly outside New South Wales, and no switch, the entry says
   await expect(page.locator("dialog[open]")).toHaveCount(0);
 });
 
-// A completion link names a job that exists: it opens the dialog whatever the
-// map shows, and "Not available here" belongs to starting a new sharpen.
-// Mutation: in App.tsx change `sharpenFor(pendingTopoBbox ?? topoJobBox)` to
-// `sharpenFor(pendingTopoBbox)`, and the link over Queenstown opens the off state.
-test("a completion link opens the dialog over ground the map's region cannot sharpen", async ({
-  page,
-}) => {
-  const ring = [
-    [150.2, -33.8],
-    [150.3, -33.8],
-    [150.3, -33.7],
-    [150.2, -33.7],
-    [150.2, -33.8],
-  ];
+// A link to a job that exists (the completion email's, or the failure email's)
+// opens the dialog whatever the map shows: "Not available here" belongs to
+// starting a new sharpen. The job the link names is made up here.
+const SYDNEY_FOOTPRINT = {
+  type: "Polygon",
+  coordinates: [
+    [
+      [150.2, -33.8],
+      [150.3, -33.8],
+      [150.3, -33.7],
+      [150.2, -33.7],
+      [150.2, -33.8],
+    ],
+  ],
+};
+
+async function openLink(
+  page: Page,
+  job: { status: "complete" | "failed"; footprint: unknown },
+  mapView: string,
+  sim: boolean,
+) {
   await page.route(/\/topo-jobs\/job-from-link$/, (route) =>
     route.fulfill({
       json: {
         id: "job-from-link",
-        status: "complete",
         name: "Made-up gully",
-        footprint: { type: "Polygon", coordinates: [ring] },
         tileCount: 1,
         estimatedSeconds: null,
         layerOptions: null,
-        errorMessage: null,
+        errorMessage: job.status === "failed" ? "It failed." : null,
         createdAt: "2026-11-01T00:00:00.000Z",
         updatedAt: "2026-11-01T00:00:00.000Z",
         s3OutputKeys: null,
         syncRole: "owner",
+        ...job,
       },
     }),
   );
   await stubMaster(page);
   await page.addInitScript(
-    ([stored]) => localStorage.setItem("logjam.mapView", stored!),
-    [QUEENSTOWN],
+    ([stored, simulated]) => {
+      if (simulated)
+        (globalThis as { LOGJAM_SIM_REGIONS?: boolean }).LOGJAM_SIM_REGIONS =
+          true;
+      localStorage.setItem("logjam.mapView", stored!);
+    },
+    [mapView, sim] as const,
   );
   await page.goto("/?topoJob=job-from-link");
+}
+
+const ELVIS_DROP =
+  "Drop your ELVIS ZIP here, or select it in your file system.";
+
+// Mutation: in App.tsx change `topoJobOffer ?? sharpenFor(null)` to
+// `sharpenFor(null)`, and the link over Queenstown opens the off state.
+test("a completion link opens the dialog over ground the map's region cannot sharpen", async ({
+  page,
+}) => {
+  await openLink(
+    page,
+    { status: "complete", footprint: SYDNEY_FOOTPRINT },
+    QUEENSTOWN,
+    false,
+  );
   const dialog = page.locator("dialog[open]");
-  await expect(
-    dialog.getByText(
-      "Drop your ELVIS ZIP here, or select it in your file system.",
-    ),
-  ).toBeVisible({ timeout: 30_000 });
+  await expect(dialog.getByText(ELVIS_DROP)).toBeVisible({ timeout: 30_000 });
   await expect(dialog.getByText(MAP_TERRAIN.copy.notHere)).toHaveCount(0);
+});
+
+// A failed job has no footprint, and the failure email links to it too.
+// Mutation: in shared/src/sharpen.ts change `regions.find((r) => r.sharpen.mode === "upload")`
+// in `sharpenOfferForJob` to `null`, and a failure link over Queenstown opens
+// the off state.
+test("a failure link, whose job has no footprint, opens the dialog the same way", async ({
+  page,
+}) => {
+  await openLink(
+    page,
+    { status: "failed", footprint: null },
+    QUEENSTOWN,
+    false,
+  );
+  const dialog = page.locator("dialog[open]");
+  await expect(dialog.getByText(ELVIS_DROP)).toBeVisible({ timeout: 30_000 });
+  await expect(dialog.getByText(MAP_TERRAIN.copy.notHere)).toHaveCount(0);
+});
+
+// Mutation: delete `setTopoJobOffer(null);` from `onSelectBbox` in App.tsx, and
+// Sharpen an area from Layers, after drawing was started from the link's
+// dialog, is judged by the link's job and names ELVIS over Zion.
+test("a link's job does not decide the dialog once the user goes off to draw an area", async ({
+  page,
+}) => {
+  await openLink(
+    page,
+    { status: "complete", footprint: SYDNEY_FOOTPRINT },
+    ZION,
+    true,
+  );
+  const dialog = page.locator("dialog[open]");
+  await expect(dialog.getByText(ELVIS_DROP)).toBeVisible({ timeout: 30_000 });
+  await dialog
+    .getByRole("button", { name: "Haven't got one? Order LiDAR from ELVIS" })
+    .click();
+  await dialog.getByRole("button", { name: "Draw the area" }).click();
+  await expect(page.locator("dialog[open]")).toHaveCount(0);
+  await page.getByRole("button", { name: "Layers", exact: true }).click();
+  await page
+    .getByRole("dialog", { name: "Map layers" })
+    .getByRole("radio", { name: "Terrain" })
+    .click();
+  await page.getByRole("button", { name: /^Sharpened areas/ }).click();
+  await page.getByRole("button", { name: "Sharpen an area" }).click();
+  // The dialog comes back in the sub-view it was left in.
+  await expect(
+    page
+      .locator("dialog[open]")
+      .getByRole("heading", { name: "Getting LiDAR from USGS" }),
+  ).toBeVisible();
 });
 
 // Mutation: rename NSW's portal in shared/src/regions.ts, and prod's one

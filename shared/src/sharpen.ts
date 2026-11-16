@@ -80,6 +80,20 @@ export function sharpenOffer(region: Region | null): SharpenOffer {
     : { mode: "off", reason: SHARPEN_OFF_REASON[entry.reason] };
 }
 
+/**
+ * The offer for the dialog a link to an existing job opens: the job exists, so
+ * sharpening was offered where it ran, whatever ground the map shows. Judged by
+ * the job's footprint when it has one (a failed job has none), else by the
+ * first upload region. Guard: `sharpen.test.ts` ("sharpenOfferForJob").
+ */
+export function sharpenOfferForJob(
+  footprint: LonLatBox | null,
+  regions: readonly Region[] = REGIONS,
+): SharpenOffer {
+  if (footprint) return sharpenOfferFor(footprint, null, regions);
+  return sharpenOffer(regions.find((r) => r.sharpen.mode === "upload") ?? null);
+}
+
 /** What an entry point to sharpening says where it is off: `state` beside it, `reason` for a tooltip or a screen reader. */
 export type SharpenUnavailable = { state: string; reason: string };
 

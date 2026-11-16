@@ -16,6 +16,7 @@ import {
   demSourcesFor,
   sharpenOffer,
   sharpenOfferFor,
+  sharpenOfferForJob,
   sharpenUnavailable,
   SHARPEN_OFF_REASON,
   terrainTileArchive,
@@ -410,6 +411,33 @@ describe("sharpenOfferFor", () => {
     expect(sharpenOfferFor(null, NSW_REGION, all)).toEqual(
       sharpenOffer(NSW_REGION),
     );
+  });
+});
+
+describe("sharpenOfferForJob", () => {
+  const all = [SIM_NZ, SIM_UTAH, NSW_REGION];
+  const inUtah = { west: -112.97, south: 37.26, east: -112.93, north: 37.3 };
+
+  // Mutation: in sharpen.ts change `sharpenOfferFor(footprint, null, regions)`
+  // to `sharpenOffer(null)`, and a job's footprint no longer decides.
+  it("is judged by the job's footprint when it has one", () => {
+    expect(sharpenOfferForJob(inUtah, all)).toEqual(sharpenOffer(SIM_UTAH));
+  });
+
+  // Mutation: in sharpen.ts change `regions.find((r) => r.sharpen.mode === "upload")`
+  // to `null`, and a failed job, which has no footprint, reads as off.
+  it("is the first upload region's for a job with no footprint", () => {
+    expect(sharpenOfferForJob(null, all)).toEqual(sharpenOffer(SIM_UTAH));
+    expect(sharpenOfferForJob(null, [NSW_REGION])).toEqual(
+      sharpenOffer(NSW_REGION),
+    );
+  });
+
+  // Mutation: in sharpen.ts change `?? null);` at the end of
+  // `sharpenOfferForJob` to `?? REGIONS[0]!);`, and a world with no upload
+  // region offers an errand there is nowhere to do.
+  it("is off where no region takes an upload", () => {
+    expect(sharpenOfferForJob(null, [SIM_NZ])).toEqual(sharpenOffer(null));
   });
 });
 
