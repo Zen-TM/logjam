@@ -25,7 +25,6 @@ import {
   statsTruncatedNote,
   statsUnderActivitiesNote,
   tripYear,
-  TRIPS_LIST,
   UNTAGGED_ACTIVITY,
   type FieldStat,
   type LoadState,
@@ -35,6 +34,7 @@ import {
   type SectionKeysOn,
   type StatsSpark,
   formatLongMonthYear,
+  rich,
   t,
 } from "@logjam/shared";
 
@@ -55,6 +55,7 @@ import {
   Icon,
   ListBody,
 } from "../../../ui";
+import { Rich } from "../../../ui/rich";
 import { placeTypeLucideIcon } from "./placeTypeIcon";
 import { tripTypeLook } from "./tripTypeIcon";
 import classes from "./AnalyticsPanel.module.css";
@@ -228,9 +229,7 @@ function AnalyticsPanel({
         <Hero
           title={title}
           onBack={activity ? closeActivity : onBack}
-          backLabel={
-            activity ? copy.backToActivities : `Back to ${TRIPS_LIST.title}`
-          }
+          backLabel={activity ? copy.backToActivities : t`Back to Trips`}
         />
         {tripLogs.length > 0 && (
           <div className={classes.rails}>
@@ -393,8 +392,12 @@ function PlacesVisited({
             }
             trailing={
               <span className={classes.metric}>
-                <b className={classes.metricValue}>{entry.logged}</b> of{" "}
-                {entry.total}
+                <Rich
+                  parts={rich`<b>${entry.logged}</b> of ${entry.total}`}
+                  tags={{
+                    b: (text) => <b className={classes.metricValue}>{text}</b>,
+                  }}
+                />
               </span>
             }
             footer={

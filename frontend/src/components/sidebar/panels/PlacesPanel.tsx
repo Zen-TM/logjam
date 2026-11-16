@@ -28,9 +28,9 @@ import {
   placeTypeHasTab,
   placesEmptyState,
   placesFilterNote,
-  placeSortLabel,
   placeStatus,
   placeSummary,
+  plural,
   qualityLabel,
   ROPEWIKI_OFFER,
   type PlaceSortKey,
@@ -127,8 +127,12 @@ const ANY_TYPE = "any";
 
 type Listed = { place: TPlace; owned: boolean; status: PlaceStatus };
 
-const plural = (count: number, noun: string) =>
-  `${count} ${noun}${count === 1 ? "" : "s"}`;
+const SORTED_BY_LABEL: Record<PlaceSortKey, string> = {
+  name: t`Sorted by name`,
+  recent: t`Sorted by recently added`,
+  grade: t`Sorted by easiest first`,
+  quality: t`Sorted by best rated`,
+};
 
 function download(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
@@ -491,8 +495,8 @@ function PlacesPanel({
         messageFromError(
           err,
           count === 1
-            ? "Couldn't delete that place."
-            : "Couldn't delete those places.",
+            ? t`Couldn't delete that place.`
+            : t`Couldn't delete those places.`,
         ),
       );
     } finally {
@@ -522,20 +526,30 @@ function PlacesPanel({
       // so the import isn't silent. The corpus is a hand-refreshed
       // snapshot, so date it (RopeWiki blocks server-side fetches).
       const done = [
-        result.added > 0 ? `${result.added} added` : null,
-        result.autoLinked > 0 ? `${result.autoLinked} linked` : null,
-        result.updated > 0 ? `${result.updated} updated` : null,
+        result.added > 0 ? plural(result.added, "# added", "# added") : null,
+        result.autoLinked > 0
+          ? plural(result.autoLinked, "# linked", "# linked")
+          : null,
+        result.updated > 0
+          ? plural(result.updated, "# updated", "# updated")
+          : null,
       ].filter(Boolean);
       const review =
         result.review.length > 0
-          ? ` · ${plural(result.review.length, "possible duplicate")} to review`
-          : "";
+          ? plural(
+              result.review.length,
+              "# possible duplicate to review",
+              "# possible duplicates to review",
+            )
+          : null;
       const source = result.sourceUpdatedAt
-        ? ` · source ${formatNumericDay(localDay(new Date(result.sourceUpdatedAt)))}`
-        : "";
-      toast.done(
-        `RopeWiki import: ${done.length > 0 ? done.join(", ") : "no new places"}${review}${source}`,
+        ? t`source ${formatNumericDay(localDay(new Date(result.sourceUpdatedAt)))}`
+        : null;
+      const summary = done.length > 0 ? done.join(", ") : t`no new places`;
+      const parts = [t`RopeWiki import: ${summary}`, review, source].filter(
+        Boolean,
       );
+      toast.done(parts.join(" · "));
     } catch (err) {
       console.error(err);
       toast.error(messageFromError(err, t`Couldn't import from RopeWiki.`));
@@ -555,7 +569,11 @@ function PlacesPanel({
       icon="filter"
       label={
         sheetCount > 0
-          ? `${PLACES_FILTER_SHEET.title}, ${plural(sheetCount, "filter")} on`
+          ? plural(
+              sheetCount,
+              "Sort and filter, # filter on",
+              "Sort and filter, # filters on",
+            )
           : PLACES_FILTER_SHEET.title
       }
       tone={sheetCount > 0 || sheetOpen ? "filled" : "default"}
@@ -824,8 +842,16 @@ function PlacesPanel({
                   {shareCount > 0 && (
                     <span
                       className={classes.meta}
-                      title={`Shared with ${plural(shareCount, "friend")}`}
-                      aria-label={`Shared with ${plural(shareCount, "friend")}`}
+                      title={plural(
+                        shareCount,
+                        "Shared with # friend",
+                        "Shared with # friends",
+                      )}
+                      aria-label={plural(
+                        shareCount,
+                        "Shared with # friend",
+                        "Shared with # friends",
+                      )}
                     >
                       <Icon idea="friends" size={12} aria-hidden />
                       {shareCount}
@@ -919,7 +945,7 @@ function PlacesPanel({
         <span>
           {selecting
             ? t`Shift-click to select a range · Ctrl+A selects all`
-            : `Sorted by ${placeSortLabel(sort).toLowerCase()}`}
+            : SORTED_BY_LABEL[sort]}
         </span>
         <span>{visible.length}</span>
       </div>
