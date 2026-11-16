@@ -153,8 +153,8 @@ export type Region = {
   /**
    * The Terrain group's archives; `{}` where a region has none. A saved clip is
    * filed by its archive's `id` and a save does not dedupe by it, so no two
-   * archives of any region share one. Guard: `regions.test.ts` ("share no id or
-   * archive path with each other or with NSW").
+   * archives of any region share one. Guard: `regions.test.ts` ("gives every
+   * terrain archive an id no other has, across every region").
    */
   terrain: RegionTerrain;
   /** The CDN prefix of the place-search registry (ADR 0034), or null. */

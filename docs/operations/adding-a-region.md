@@ -69,8 +69,8 @@ constant to `REGIONS`.
 
 - `id`: lower-case letters and digits, and never changed once shipped: it is
   stored in accounts' preferences and in every map layer id. Archive ids are
-  unique across regions (`regions.test.ts`, "share no id or archive path with
-  each other or with NSW").
+  unique across regions (`regions.test.ts`, "gives every terrain archive an id no
+  other has, across every region").
 - `borders`: one ring for each island or separate piece, drawn a little outside
   the real border. A box would overlap a neighbour's.
 - `basemaps` and `defaultBasemap`: ids in `BASEMAP_CATALOG`, each listed by one
@@ -87,8 +87,16 @@ cd shared && npm test -- src/regions.test.ts src/regionNeutral.test.ts src/demSo
 ```
 
 Four topo tests read `regions.ts` by pattern, so run them too if you touched
-the Land, Fire or Coverage archives or the heights (`python -m unittest
-discover -s tests` from `topo/`, on Python 3.12: [topo/AGENTS.md](../../topo/AGENTS.md)).
+the Land, Fire or Coverage archives or the heights:
+
+```
+cd topo && python -m unittest discover -s tests
+```
+
+Use the Python version CI does (`python-version` in the `topo` job of
+[`.github/workflows/ci.yml`](../../.github/workflows/ci.yml)), after
+`pip install -r requirements-test.txt`; [topo/AGENTS.md](../../topo/AGENTS.md) says how the
+suite runs.
 
 To see the region on screen before any archive exists, switch on the simulated
 regions ([README](../../README.md)): they exercise every place-aware path the
@@ -173,5 +181,6 @@ cd ../frontend && npm test && npm run typecheck
 cd ../mobile && npm test && npm run typecheck
 ```
 
-The API's integration tests run through `web-dev.sh`, as
-[api/AGENTS.md](../../api/AGENTS.md) says.
+The API's unit suite is `npm run test:unit` in `api/`. Its integration suite is
+`npm test` against a running local API (`make dev`); see
+[api/AGENTS.md](../../api/AGENTS.md).

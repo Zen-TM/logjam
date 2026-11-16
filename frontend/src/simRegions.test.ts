@@ -55,6 +55,7 @@ describe("the module in a build that signs in through a real provider", () => {
   // page that sets LOGJAM_SIM_REGIONS before the bundle loads turns the
   // simulated regions on in any build.
   it("clears a switch the page set before the bundle loaded", async () => {
+    vi.stubEnv("VITE_SIM_REGIONS", "");
     vi.stubEnv("VITE_AUTH_MODE", "oidc");
     (globalThis as Record<string, unknown>).LOGJAM_SIM_REGIONS = true;
     vi.resetModules();
@@ -67,6 +68,7 @@ describe("the module in a build that signs in through a real provider", () => {
   // Mutation: delete the `authMode !== "fake"` test, so the module clears the
   // global in a fake-auth dev build too, where a test or a dev page may set it.
   it("leaves a switch the page set in a fake-auth build", async () => {
+    vi.stubEnv("VITE_SIM_REGIONS", "");
     vi.stubEnv("VITE_AUTH_MODE", "fake");
     (globalThis as Record<string, unknown>).LOGJAM_SIM_REGIONS = true;
     vi.resetModules();

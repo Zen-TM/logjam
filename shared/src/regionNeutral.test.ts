@@ -56,7 +56,7 @@ describe("files that name a region", () => {
   it("name NSW's region, fire and coverage constants nowhere but the declaration", () => {
     expect(
       naming(NSW_NAMES).filter((path) => !DECLARES.includes(path)),
-      "Read the region in view (regionInView, layerIn) instead of NSW's constants: docs/decisions/0049-what-a-map-offers-follows-the-ground-it-shows-and-an-accounts-chosen-regions-only-set-defaults.md",
+      "Read the region in view (regionInView, layerIn) instead of NSW's constants, so a second region is answered from its own data. Adding a region: docs/operations/adding-a-region.md. Why: docs/decisions/0049-what-a-map-offers-follows-the-ground-it-shows-and-an-accounts-chosen-regions-only-set-defaults.md",
     ).toEqual([]);
   });
 
@@ -66,7 +66,7 @@ describe("files that name a region", () => {
   it("name the simulated regions nowhere but the declaration", () => {
     expect(
       naming(SIM_NAMES, SIM_ENV_VAR).filter((path) => !DECLARES.includes(path)),
-      "Only `REGIONS` and `WORLD` (regions.ts) take in the simulated regions, and only where the dev switch is on: docs/decisions/0049-what-a-map-offers-follows-the-ground-it-shows-and-an-accounts-chosen-regions-only-set-defaults.md",
+      "Only `REGIONS` and `WORLD` (regions.ts) take in the simulated regions, and only where the dev switch is on; a client that reads one offers made-up regions in prod. Use `REGIONS`. Adding a region: docs/operations/adding-a-region.md. Why: docs/decisions/0049-what-a-map-offers-follows-the-ground-it-shows-and-an-accounts-chosen-regions-only-set-defaults.md",
     ).toEqual([]);
   });
 });
