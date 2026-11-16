@@ -62,10 +62,10 @@ const FIELD_LABEL: Record<string, string> = {
   v_grade: "water grade",
   a_grade: "difficulty grade",
   commitment: "commitment grade",
-  aca_technical: t`ACA technical grade`,
-  aca_water: t`ACA water grade`,
-  aca_time: t`ACA time grade`,
-  aca_risk: t`ACA risk rating`,
+  aca_technical: "ACA technical grade",
+  aca_water: "ACA water grade",
+  aca_time: "ACA time grade",
+  aca_risk: "ACA risk rating",
   quality: "star rating",
   hours: "trip time",
   date: "date",
@@ -127,7 +127,7 @@ export function opTitle(op: ParkedOp): string {
       return `Couldn't delete ${subject}`;
     case "markRead":
     case "markUnread":
-      return "Couldn't update a notification";
+      return t`Couldn't update a notification`;
     default:
       return `Couldn't sync ${subject}`;
   }
@@ -155,13 +155,13 @@ export function opAdvice(op: ParkedOp): IssueAdvice {
   if (!error) {
     // No reason recorded. Retry is offered, because the alternative is telling
     // the user it is permanent on no evidence and inviting them to discard work.
-    return { line: "This change couldn't be saved.", canRetry: true };
+    return { line: t`This change couldn't be saved.`, canRetry: true };
   }
   if (error.code === 0) {
     // An upload that threw on this phone five times with no status at all
     // (flush.ts): nothing refused it and no day went by, so neither sentence
     // below is true of it.
-    return { line: "This keeps failing on this phone.", canRetry: true };
+    return { line: t`This keeps failing on this phone.`, canRetry: true };
   }
   if (isTransientSyncError(error.code)) {
     // ONE line for every temporary refusal: a 503 and a 429 are different
@@ -172,7 +172,7 @@ export function opAdvice(op: ParkedOp): IssueAdvice {
     // that. Blaming signal would be misleading, as an unanswered send does not
     // park here.
     return {
-      line: "Your account kept turning this down for a day.",
+      line: t`Your account kept turning this down for a day.`,
       canRetry: true,
       hint:
         "Nothing is wrong with the change itself, and Logjam GPS has stopped " +
@@ -185,7 +185,7 @@ export function opAdvice(op: ParkedOp): IssueAdvice {
   return { line: error.sentence ?? CANT_SAVE, canRetry: false };
 }
 
-const CANT_SAVE = "This change can't be saved as it is.";
+const CANT_SAVE = t`This change can't be saved as it is.`;
 
 /**
  * Whether "Recreate" will actually recreate something, rather than quietly
@@ -263,7 +263,7 @@ export function opChanges(op: ParkedOp): OpChange[] {
   if (op.entity === "media") {
     const filename = fields.filename;
     return typeof filename === "string"
-      ? [{ label: "File", value: filename, rejected: false }]
+      ? [{ label: t`File`, value: filename, rejected: false }]
       : [];
   }
   // Which line the rejection is ABOUT. Without it the sheet showed two changes
@@ -358,9 +358,9 @@ export function opTarget(
  */
 export function discardExplanation(op: ParkedOp): string {
   if (op.entity === "media") {
-    return "The waiting upload is deleted from this phone. The original file is untouched.";
+    return t`The waiting upload is deleted from this phone. The original file is untouched.`;
   }
-  return "What you typed is deleted from this phone. It can't be got back.";
+  return t`What you typed is deleted from this phone. It can't be got back.`;
 }
 
 /**
@@ -381,7 +381,7 @@ export function shelfTitle(entry: ShelfEntry): string {
 /** The supporting line: what the user's text replaced, and how long ago. */
 export function shelfSubtitle(entry: ShelfEntry, now: number): string {
   const when = relativeTime(entry.at, now);
-  if (entry.serverValue === null) return `Yours was saved · ${when}`;
+  if (entry.serverValue === null) return t`Yours was saved · ${when}`;
   return `Replaced: ${readableValue(entry.field, entry.serverValue)} · ${when}`;
 }
 
@@ -396,12 +396,12 @@ export function shelfSubtitle(entry: ShelfEntry, now: number): string {
  */
 export function shelfExplanation(entry: ShelfEntry): string {
   if (entry.changedSince) {
-    return "This was changed again after your version was saved. The earlier text is still here.";
+    return t`This was changed again after your version was saved. The earlier text is still here.`;
   }
   if (entry.serverValue === null) {
-    return "Your version was saved. Another device had changed this item in the meantime.";
+    return t`Your version was saved. Another device had changed this item in the meantime.`;
   }
-  return "Your version was saved. It replaced a different one that another device wrote.";
+  return t`Your version was saved. It replaced a different one that another device wrote.`;
 }
 
 /**
@@ -416,9 +416,9 @@ export function restoreBlockReason(entry: ShelfEntry): string {
       // belonged to" is the sentence you write when you have not looked.
       return `The ${entityNoun(entry.entity)} this belonged to has been deleted, so there's nothing to restore it into.`;
     case "unsupported":
-      return "This one can't be restored automatically — make the change again yourself.";
+      return t`This one can't be restored automatically — make the change again yourself.`;
     case "nothing":
-      return "There was nothing there before, so there's no earlier version to restore.";
+      return t`There was nothing there before, so there's no earlier version to restore.`;
     default:
       return "";
   }
@@ -426,7 +426,7 @@ export function restoreBlockReason(entry: ShelfEntry): string {
 
 /** What restoring the earlier version does, for the row's subtitle. */
 export function restoreSubtitle(): string {
-  return "Replaces yours, on every device.";
+  return t`Replaces yours, on every device.`;
 }
 
 /**
@@ -458,7 +458,7 @@ export function restoreConfirmBody(count: number, replacing?: string): string {
  * copy. Quoted for the same reason as `restoreConfirmBody`.
  */
 export function keepMineConfirmBody(replaced: string): string {
-  return `Your version stays. The earlier one, “${truncate(replaced)}”, is deleted.`;
+  return t`Your version stays. The earlier one, “${truncate(replaced)}”, is deleted.`;
 }
 
 /** Long values are quoted in a system dialog, which has no room for an essay. */
@@ -544,7 +544,7 @@ export function bulkDiscardBody({
         : `${lostCount} earlier versions are deleted — they are the only copies left. Yours stay`,
     );
   }
-  if (clauses.length === 0) return "Nothing is selected.";
+  if (clauses.length === 0) return t`Nothing is selected.`;
   return `${clauses.join(". ")}.`;
 }
 

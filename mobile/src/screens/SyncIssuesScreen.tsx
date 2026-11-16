@@ -98,6 +98,7 @@ import {
   shelfTitle,
 } from "./syncIssueDisplay";
 import { relativeTime, syncIssuesTitle } from "./syncHealth";
+import { t } from "@logjam/shared";
 
 type Issue =
   | { kind: "stuck"; key: string; op: ParkedOp }
@@ -171,18 +172,18 @@ export function SyncIssuesScreen({
   const confirmResync = useCallback(async () => {
     if (
       !(await confirm({
-        confirmTitle: "Get a fresh copy?",
+        confirmTitle: t`Get a fresh copy?`,
         confirmBody:
           "Re-downloads your places, trips and photos from scratch. " +
           "Uploads still waiting are kept.",
-        confirmLabel: "Download again",
+        confirmLabel: t`Download again`,
         tone: "filled",
       }))
     )
       return;
     void resyncFromScratch()
       .then(() => {
-        notify("Downloading a fresh copy…");
+        notify(t`Downloading a fresh copy…`);
         load();
       })
       .catch((err: unknown) => console.error(err));
@@ -207,7 +208,7 @@ export function SyncIssuesScreen({
         })
         .catch((err: unknown) => {
           console.error(err);
-          notify("Couldn't do that. Try again in a moment.", "error");
+          notify(t`Couldn't do that. Try again in a moment.`, "error");
         });
     },
     [load, notify],
@@ -304,7 +305,7 @@ export function SyncIssuesScreen({
           ? readableValue(restorable[0].field, restorable[0].currentValue)
           : undefined,
       ),
-      confirmLabel: "Restore",
+      confirmLabel: t`Restore`,
       tone: "destructive",
     });
     if (!ok) return;
@@ -320,7 +321,7 @@ export function SyncIssuesScreen({
       })
       .catch((err: unknown) => {
         console.error(err);
-        notify("Couldn't restore those.", "error");
+        notify(t`Couldn't restore those.`, "error");
       });
   }, [clearSelection, load, notify, restorable]);
 
@@ -338,7 +339,7 @@ export function SyncIssuesScreen({
     const ok = await confirm({
       confirmTitle: total === 1 ? "Discard this?" : `Discard ${total} entries?`,
       confirmBody: body,
-      confirmLabel: "Discard",
+      confirmLabel: t`Discard`,
       tone: "destructive",
     });
     if (!ok) return;
@@ -365,12 +366,12 @@ export function SyncIssuesScreen({
       const dropped = rejectedFields(op);
       const kept = salvageableFields(op);
       const ok = await confirm({
-        confirmTitle: "Send the rest?",
+        confirmTitle: t`Send the rest?`,
         confirmBody:
           `${listFields(kept)} ${kept.length === 1 ? "is" : "are"} saved to your account. ` +
           `${listFields(dropped)} ${dropped.length === 1 ? "is" : "are"} deleted — ` +
           `${dropped.length === 1 ? "it's" : "they're"} what your account refused.`,
-        confirmLabel: "Send the rest",
+        confirmLabel: t`Send the rest`,
         tone: "destructive",
       });
       if (!ok) return;
@@ -378,14 +379,14 @@ export function SyncIssuesScreen({
         .then(() => {
           notify(
             online
-              ? "Sending the rest of that change…"
-              : "Queued. It goes up when you have signal.",
+              ? t`Sending the rest of that change…`
+              : t`Queued. It goes up when you have signal.`,
           );
           load();
         })
         .catch((err: unknown) => {
           console.error(err);
-          notify("Couldn't do that. Try again in a moment.", "error");
+          notify(t`Couldn't do that. Try again in a moment.`, "error");
         });
     },
     [load, notify, online],
@@ -395,9 +396,9 @@ export function SyncIssuesScreen({
     async (op: ParkedOp) => {
       setMenuIssue(null);
       const ok = await confirm({
-        confirmTitle: "Discard this change?",
+        confirmTitle: t`Discard this change?`,
         confirmBody: discardExplanation(op),
-        confirmLabel: "Discard",
+        confirmLabel: t`Discard`,
         tone: "destructive",
       });
       if (!ok) return;
@@ -405,8 +406,8 @@ export function SyncIssuesScreen({
         .then(() => {
           notify(
             op.entity === "media"
-              ? "Upload deleted from this phone."
-              : "Change discarded.",
+              ? t`Upload deleted from this phone.`
+              : t`Change discarded.`,
           );
           load();
         })
@@ -423,18 +424,18 @@ export function SyncIssuesScreen({
       // With nothing replaced there is nothing to lose, so no dialog.
       if (hasEarlierVersion(entry)) {
         const ok = await confirm({
-          confirmTitle: "Keep my version?",
+          confirmTitle: t`Keep my version?`,
           confirmBody: keepMineConfirmBody(
             readableValue(entry.field, entry.serverValue),
           ),
-          confirmLabel: "Keep mine",
+          confirmLabel: t`Keep mine`,
           tone: "destructive",
         });
         if (!ok) return;
       }
       void dismissShelfEntry(entry.id)
         .then(() => {
-          notify("Kept your version.");
+          notify(t`Kept your version.`);
           load();
         })
         .catch((err: unknown) => console.error(err));
@@ -450,9 +451,9 @@ export function SyncIssuesScreen({
       // was showing it has closed behind the alert.
       const replacing = readableValue(entry.field, entry.currentValue);
       const ok = await confirm({
-        confirmTitle: "Restore the earlier version?",
+        confirmTitle: t`Restore the earlier version?`,
         confirmBody: restoreConfirmBody(1, replacing),
-        confirmLabel: "Restore",
+        confirmLabel: t`Restore`,
         tone: "destructive",
       });
       if (!ok) return;
@@ -460,14 +461,14 @@ export function SyncIssuesScreen({
         .then(() => {
           notify(
             online
-              ? "Earlier version restored. It'll reach your other devices next sync."
-              : "Earlier version restored on this phone. It syncs when you have signal.",
+              ? t`Earlier version restored. It'll reach your other devices next sync.`
+              : t`Earlier version restored on this phone. It syncs when you have signal.`,
           );
           load();
         })
         .catch((err: unknown) => {
           console.error(err);
-          notify("Couldn't restore that version.", "error");
+          notify(t`Couldn't restore that version.`, "error");
         });
     },
     [load, notify, online],
@@ -486,7 +487,7 @@ export function SyncIssuesScreen({
         // The row can outlive the trip — the mirror is refetched under it — so
         // say so rather than pushing a screen with nothing in it.
         if (trip) onOpenTrip(trip);
-        else notify("That trip isn't on this phone any more.", "error");
+        else notify(t`That trip isn't on this phone any more.`, "error");
       });
     },
     [notify, onOpenPlace, onOpenTrip],
@@ -540,8 +541,8 @@ export function SyncIssuesScreen({
                       icon="refresh"
                       accessibilityLabel={
                         online
-                          ? `Try ${retryable.length} selected changes again`
-                          : `Queue ${retryable.length} selected changes again`
+                          ? t`Try ${retryable.length} selected changes again`
+                          : t`Queue ${retryable.length} selected changes again`
                       }
                       color={theme.accent}
                       onPress={runRetry}
@@ -550,7 +551,7 @@ export function SyncIssuesScreen({
                   {restorable.length > 0 ? (
                     <IconButton
                       icon="undo"
-                      accessibilityLabel={`Restore ${restorable.length} earlier versions`}
+                      accessibilityLabel={t`Restore ${restorable.length} earlier versions`}
                       color={theme.accent}
                       onPress={confirmBulkRestore}
                     />
@@ -563,9 +564,10 @@ export function SyncIssuesScreen({
             />
           ) : (
             <View style={styles.railHint}>
-              <Text style={styles.railHintText} numberOfLines={2}>
-                Tap one to see what happened and what you can do.
-              </Text>
+              <Text
+                style={styles.railHintText}
+                numberOfLines={2}
+              >{t`Tap one to see what happened and what you can do.`}</Text>
             </View>
           )}
         </View>
@@ -576,11 +578,11 @@ export function SyncIssuesScreen({
           <Row
             icon="warning"
             hue={theme.warning}
-            title="This phone couldn't apply an update"
-            subtitle="Nothing new is arriving. Download a fresh copy to fix it."
+            title={t`This phone couldn't apply an update`}
+            subtitle={t`Nothing new is arriving. Download a fresh copy to fix it.`}
             titleNumberOfLines={2}
             onPress={confirmResync}
-            right={<StatusPill label="Stuck" tone="warning" />}
+            right={<StatusPill label={t`Stuck`} tone="warning" />}
           />
         </View>
       ) : null}
@@ -609,16 +611,16 @@ export function SyncIssuesScreen({
               act(
                 retryParkedOp(op.seq),
                 online
-                  ? "Sending it again…"
-                  : "Queued. It goes up when you have signal.",
+                  ? t`Sending it again…`
+                  : t`Queued. It goes up when you have signal.`,
               )
             }
             onRecreate={(op) =>
               act(
                 recreateFromDeadRemote(op.seq),
                 op.entity === "place"
-                  ? "Place recreated with your change."
-                  : "Place recreated with your change.",
+                  ? t`Place recreated with your change.`
+                  : t`Place recreated with your change.`,
               )
             }
             onSendRest={confirmSendRest}
@@ -632,7 +634,7 @@ export function SyncIssuesScreen({
             onKeepBoth={(entry) =>
               act(
                 keepBothShelfValue(entry.id),
-                "Both kept — the earlier text is above yours.",
+                t`Both kept — the earlier text is above yours.`,
               )
             }
             onKeepMine={keepMine}
@@ -675,7 +677,7 @@ function StuckMenu({
           is about an edit the user is being asked to judge unseen. */}
       {changes.length > 0 ? (
         <View style={styles.valueBlock}>
-          <Text style={styles.menuLabel}>What you changed</Text>
+          <Text style={styles.menuLabel}>{t`What you changed`}</Text>
           {changes.map((change) => (
             <Text
               key={change.label}
@@ -698,8 +700,8 @@ function StuckMenu({
       {canRecreate(op) ? (
         <Row
           icon="retry"
-          title="Recreate place"
-          subtitle="Makes a new place from this phone's copy, with your change."
+          title={t`Recreate place`}
+          subtitle={t`Makes a new place from this phone's copy, with your change.`}
           onPress={() => onRecreate(op)}
         />
       ) : null}
@@ -714,7 +716,7 @@ function StuckMenu({
               ? "Send the other change"
               : "Send the other changes"
           }
-          subtitle={`Saves ${listFields(salvageable)}, and drops ${listFields(rejectedFields(op))}.`}
+          subtitle={t`Saves ${listFields(salvageable)}, and drops ${listFields(rejectedFields(op))}.`}
           onPress={() => onSendRest(op)}
         />
       ) : null}
@@ -725,10 +727,10 @@ function StuckMenu({
           icon="openExternal"
           title={
             target.kind === "place"
-              ? "Open the place and fix it"
-              : "Open the trip and fix it"
+              ? t`Open the place and fix it`
+              : t`Open the trip and fix it`
           }
-          subtitle="Change it there, and it'll save."
+          subtitle={t`Change it there, and it'll save.`}
           onPress={() => onOpen(op)}
         />
       ) : null}
@@ -736,15 +738,15 @@ function StuckMenu({
       {advice.canRetry ? (
         <Row
           icon="refresh"
-          title={online ? "Try again" : "Queue it again"}
-          subtitle={online ? undefined : "It goes up when you have signal."}
+          title={online ? t`Try again` : t`Queue it again`}
+          subtitle={online ? undefined : t`It goes up when you have signal.`}
           onPress={() => onRetry(op)}
         />
       ) : null}
       <Row
         icon="delete"
         hue={theme.warning}
-        title="Discard this change"
+        title={t`Discard this change`}
         onPress={() => onDiscard(op)}
       />
     </View>
@@ -775,7 +777,7 @@ function LostMenu({
           selection is the platform's copy affordance and costs no dependency. */}
       <View style={styles.valueBlock}>
         <Text style={styles.menuLabel}>
-          {entry.changedSince ? "Saved now" : "Yours (saved)"}
+          {entry.changedSince ? t`Saved now` : t`Yours (saved)`}
         </Text>
         <Text style={styles.menuValue} selectable>
           {readableValue(entry.field, entry.currentValue)}
@@ -783,7 +785,7 @@ function LostMenu({
       </View>
       {hasEarlier ? (
         <View style={styles.valueBlock}>
-          <Text style={styles.menuLabel}>Replaced</Text>
+          <Text style={styles.menuLabel}>{t`Replaced`}</Text>
           <Text style={styles.menuValue} selectable>
             {readableValue(entry.field, entry.serverValue)}
           </Text>
@@ -791,31 +793,31 @@ function LostMenu({
       ) : null}
       <Text style={styles.menuCause}>
         {hasEarlier
-          ? "Press and hold either value to copy it."
-          : "Press and hold the value to copy it."}
+          ? t`Press and hold either value to copy it.`
+          : t`Press and hold the value to copy it.`}
       </Text>
       {/* Keep both first: it is the only way out of this sheet that destroys
           nothing. */}
       {entry.canKeepBoth ? (
         <Row
           icon="merge"
-          title="Keep both"
-          subtitle="Puts the earlier text above yours."
+          title={t`Keep both`}
+          subtitle={t`Puts the earlier text above yours.`}
           onPress={() => onKeepBoth(entry)}
         />
       ) : null}
       <Row
         icon="done"
-        title="Keep my version"
+        title={t`Keep my version`}
         subtitle={
-          hasEarlier ? "Already saved. Deletes the earlier text." : undefined
+          hasEarlier ? t`Already saved. Deletes the earlier text.` : undefined
         }
         onPress={() => onKeepMine(entry)}
       />
       {entry.restoreBlock === null ? (
         <Row
           icon="undo"
-          title="Restore the earlier version"
+          title={t`Restore the earlier version`}
           subtitle={restoreSubtitle()}
           onPress={() => onRestore(entry)}
         />
@@ -865,7 +867,7 @@ const IssueRow = memo(function IssueRow({
   ) : (
     <IconButton
       icon="overflow"
-      accessibilityLabel="What can I do about this?"
+      accessibilityLabel={t`What can I do about this?`}
       onPress={() => onMenu(item)}
     />
   );
@@ -903,8 +905,8 @@ const IssueRow = memo(function IssueRow({
 function EmptyPanel() {
   return (
     <EmptyState
-      title="Nothing to sort out"
-      hint="Every change you've made has reached your account."
+      title={t`Nothing to sort out`}
+      hint={t`Every change you've made has reached your account.`}
     />
   );
 }

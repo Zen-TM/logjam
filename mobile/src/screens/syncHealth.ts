@@ -9,7 +9,7 @@
 // PRIVACY: counts and timestamps only. Never a row's contents, never a server
 // error message (shared/DESIGN.md §11 — failure copy is ours, not the error's).
 
-import { formatDayLongMonth, localDay, longWeekday } from "@logjam/shared";
+import { formatDayLongMonth, localDay, longWeekday, t } from "@logjam/shared";
 
 export type SyncTone = "ok" | "info" | "pending" | "problem";
 
@@ -76,15 +76,15 @@ const DAY_MS = 24 * HOUR_MS;
  */
 export function relativeTime(iso: string, now: number): string {
   const then = Date.parse(iso);
-  if (Number.isNaN(then)) return "at an unknown time";
+  if (Number.isNaN(then)) return t`at an unknown time`;
   const elapsed = now - then;
   // A clock that jumped (timezone change, NTP correction) must not produce
   // "in -3 minutes" (guard: mobile/src/screens/syncHealth.test.ts); treat any
   // future stamp as just now.
-  if (elapsed < MINUTE_MS) return "just now";
+  if (elapsed < MINUTE_MS) return t`just now`;
   if (elapsed < HOUR_MS) {
     const minutes = Math.floor(elapsed / MINUTE_MS);
-    return `${minutes} min ago`;
+    return t`${minutes} min ago`;
   }
   if (elapsed < DAY_MS) {
     const hours = Math.floor(elapsed / HOUR_MS);
@@ -92,7 +92,7 @@ export function relativeTime(iso: string, now: number): string {
   }
   const days = Math.floor(elapsed / DAY_MS);
   if (days === 1) return "yesterday";
-  return `${days} days ago`;
+  return t`${days} days ago`;
 }
 
 /**
@@ -103,7 +103,7 @@ export function relativeTime(iso: string, now: number): string {
  */
 function sinceDay(iso: string, now: number): string {
   const then = new Date(iso);
-  if (Number.isNaN(then.getTime())) return "some time ago";
+  if (Number.isNaN(then.getTime())) return t`some time ago`;
   const midnight = (date: Date) =>
     new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
   const days = Math.round((midnight(new Date(now)) - midnight(then)) / DAY_MS);
@@ -118,8 +118,8 @@ function plural(count: number, singular: string, pluralForm: string): string {
 }
 
 function lastSyncDetail(lastSyncAt: string | null, now: number): string {
-  if (!lastSyncAt) return "Nothing has reached your account yet.";
-  return `Last synced ${relativeTime(lastSyncAt, now)}.`;
+  if (!lastSyncAt) return t`Nothing has reached your account yet.`;
+  return t`Last synced ${relativeTime(lastSyncAt, now)}.`;
 }
 
 /**
@@ -156,8 +156,8 @@ export function syncHealth(input: SyncHealthInput): SyncHealth {
   //    worth saying is where the data lives, and that nothing else holds a copy.
   if (input.accountState === "guest") {
     return {
-      headline: "Saved on this phone",
-      detail: "You don't have an account, so nothing is uploaded or backed up.",
+      headline: t`Saved on this phone`,
+      detail: t`You don't have an account, so nothing is uploaded or backed up.`,
       // Not "ok": a check beside "nothing is backed up" says done to a user who
       // has a risk to know about.
       tone: "info",
@@ -175,9 +175,8 @@ export function syncHealth(input: SyncHealthInput): SyncHealth {
   //      full bars to go looking for signal.
   if (input.errorKind === "applyFailed") {
     return {
-      headline: "Couldn't download new data on this phone",
-      detail:
-        "Retrying won't fix it. Open Account sync issues to download a fresh copy.",
+      headline: t`Couldn't download new data on this phone`,
+      detail: t`Retrying won't fix it. Open Account sync issues to download a fresh copy.`,
       tone: "problem",
     };
   }
@@ -190,7 +189,7 @@ export function syncHealth(input: SyncHealthInput): SyncHealth {
   if (input.errorKind === "unsupported") {
     return {
       headline: "The server isn't ready to sync",
-      detail: "Your changes are safe on this phone and will upload once it is.",
+      detail: t`Your changes are safe on this phone and will upload once it is.`,
       tone: "problem",
     };
   }
@@ -217,7 +216,7 @@ export function syncHealth(input: SyncHealthInput): SyncHealth {
   if (input.waitingSince && pendingCount > 0 && online) {
     return {
       headline: `${plural(pendingCount, "change has", "changes have")} been waiting since ${sinceDay(input.waitingSince, now)}`,
-      detail: "Logjam GPS keeps trying.",
+      detail: t`Logjam GPS keeps trying.`,
       tone: "pending",
     };
   }
@@ -229,8 +228,7 @@ export function syncHealth(input: SyncHealthInput): SyncHealth {
     if (bulk) {
       return {
         headline: `Uploading ${plural(pendingCount, "change", "changes")}…`,
-        detail:
-          "This can take a while, and photos are the slow part. You can keep using Logjam GPS.",
+        detail: t`This can take a while, and photos are the slow part. You can keep using Logjam GPS.`,
         tone: "pending",
       };
     }
@@ -249,15 +247,15 @@ export function syncHealth(input: SyncHealthInput): SyncHealth {
     if (bulk && online) {
       return {
         headline: `${plural(pendingCount, "change", "changes")} to upload`,
-        detail: "They upload in batches. This can take a while.",
+        detail: t`They upload in batches. This can take a while.`,
         tone: "pending",
       };
     }
     return {
       headline: `${plural(pendingCount, "change", "changes")} waiting to sync`,
       detail: online
-        ? "It will go up on the next sync."
-        : "Saved on this phone. It goes up when you have signal.",
+        ? t`It will go up on the next sync.`
+        : t`Saved on this phone. It goes up when you have signal.`,
       tone: "pending",
     };
   }
@@ -267,7 +265,7 @@ export function syncHealth(input: SyncHealthInput): SyncHealth {
   //    the answer is "yes, and then the connection went".
   if (state === "error") {
     return {
-      headline: "Can't reach your account",
+      headline: t`Can't reach your account`,
       detail: `${lastSyncDetail(lastSyncAt, now)} It will keep retrying.`,
       tone: "problem",
     };
@@ -276,10 +274,10 @@ export function syncHealth(input: SyncHealthInput): SyncHealth {
   // 5. Genuinely clean. Offline with an empty outbox is a fine state, not a
   //    warning — the whole app is built to work this way.
   return {
-    headline: "Everything's synced",
+    headline: t`Everything's synced`,
     detail: online
       ? lastSyncDetail(lastSyncAt, now)
-      : "You're offline, and nothing is waiting.",
+      : t`You're offline, and nothing is waiting.`,
     tone: "ok",
   };
 }

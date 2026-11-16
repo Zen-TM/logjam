@@ -18,6 +18,7 @@ import {
   USERNAME_HINT,
   usernameTaken,
   verifyIntro,
+  t,
 } from "@logjam/shared";
 
 import { accountCalls } from "../auth/oidcSession";
@@ -113,9 +114,9 @@ export function AccountForms({
 
   const sendCode = (to: string) =>
     accountCalls.resendSignUpCode(to).then(
-      () => setNotice("We sent a new code."),
+      () => setNotice(t`We sent a new code.`),
       (err: unknown) =>
-        setError(messageFromError(err, "Couldn't send a code. Try again.")),
+        setError(messageFromError(err, t`Couldn't send a code. Try again.`)),
     );
 
   const signInWith = async (newAccountUsername?: string) => {
@@ -146,15 +147,15 @@ export function AccountForms({
 
   const onSignIn = () => {
     if (!isValidEmailFormat(email)) {
-      setEmailError("Enter a valid email address.");
+      setEmailError(t`Enter a valid email address.`);
       return;
     }
     setEmailError(null);
     if (!password) {
-      setError("Enter your password.");
+      setError(t`Enter your password.`);
       return;
     }
-    return submit("Couldn't sign in. Try again.", () => signInWith());
+    return submit(t`Couldn't sign in. Try again.`, () => signInWith());
   };
 
   const onSignUp = () => {
@@ -171,7 +172,7 @@ export function AccountForms({
     setUsernameError(problem?.field === "username" ? problem.message : null);
     setError(problem?.field === "form" ? problem.message : null);
     if (problem) return;
-    return submit("Couldn't sign up. Try again.", async () => {
+    return submit(t`Couldn't sign up. Try again.`, async () => {
       if (!(await isUsernameFree(username.trim()))) {
         setUsernameError(usernameTaken());
         return;
@@ -187,7 +188,7 @@ export function AccountForms({
   };
 
   const onConfirmSignUp = () =>
-    submit("Couldn't confirm your code. Try again.", async () => {
+    submit(t`Couldn't confirm your code. Try again.`, async () => {
       await accountCalls.confirmSignUp(email.trim(), code.trim());
       // The password is held from the form that led here, so the just-verified
       // account signs in without asking again.
@@ -196,11 +197,11 @@ export function AccountForms({
 
   const onForgot = () => {
     if (!isValidEmailFormat(email)) {
-      setEmailError("Enter a valid email address.");
+      setEmailError(t`Enter a valid email address.`);
       return;
     }
     setEmailError(null);
-    return submit("Couldn't send a reset code. Try again.", async () => {
+    return submit(t`Couldn't send a reset code. Try again.`, async () => {
       await accountCalls.forgotPassword(email.trim());
       goTo("confirmForgotPassword");
     });
@@ -208,16 +209,16 @@ export function AccountForms({
 
   const onConfirmForgot = () => {
     if (password !== confirmPassword) {
-      setError("Passwords do not match");
+      setError(t`Passwords do not match`);
       return;
     }
     if (!isValidPassword(password)) {
       setError(
-        "Password must be at least 8 characters and include uppercase, lowercase, number, and symbol",
+        t`Password must be at least 8 characters and include uppercase, lowercase, number, and symbol`,
       );
       return;
     }
-    return submit("Couldn't reset the password. Try again.", async () => {
+    return submit(t`Couldn't reset the password. Try again.`, async () => {
       await accountCalls.confirmForgotPassword(
         email.trim(),
         code.trim(),
@@ -225,13 +226,13 @@ export function AccountForms({
       );
       clearPasswords();
       goTo("signIn");
-      setNotice("Password reset. Sign in with the new one.");
+      setNotice(t`Password reset. Sign in with the new one.`);
     });
   };
 
   const emailField = () => (
     <TextField
-      label="Email"
+      label={t`Email`}
       value={email}
       onChangeText={(text) => {
         setEmail(text);
@@ -258,7 +259,7 @@ export function AccountForms({
         editable={!submitting}
       />
       <TextField
-        label="Confirm password"
+        label={t`Confirm password`}
         value={confirmPassword}
         onChangeText={setConfirmPassword}
         secureTextEntry
@@ -292,24 +293,28 @@ export function AccountForms({
   if (screen === "confirmSignUp") {
     return (
       <FormStack>
-        <Text style={styles.heading}>Check your email</Text>
+        <Text style={styles.heading}>{t`Check your email`}</Text>
         <Text style={styles.body}>{verifyIntro(email)}</Text>
-        {codeField("Verification code")}
+        {codeField(t`Verification code`)}
         {noticeText}
         {banner}
-        <Button label="Verify" onPress={onConfirmSignUp} loading={submitting} />
+        <Button
+          label={t`Verify`}
+          onPress={onConfirmSignUp}
+          loading={submitting}
+        />
         <View style={styles.secondary}>
           <Button
             label={SIGN_IN_COPY.resendCode}
             variant="ghost"
             onPress={() =>
-              submit("Couldn't send a code. Try again.", () =>
+              submit(t`Couldn't send a code. Try again.`, () =>
                 sendCode(email.trim()),
               )
             }
           />
           <Button
-            label="Back to sign in"
+            label={t`Back to sign in`}
             variant="ghost"
             onPress={() => goTo("signIn")}
           />
@@ -321,17 +326,17 @@ export function AccountForms({
   if (screen === "forgotPassword") {
     return (
       <FormStack>
-        <Text style={styles.heading}>Reset your password</Text>
+        <Text style={styles.heading}>{t`Reset your password`}</Text>
         <Text style={styles.body}>{SIGN_IN_COPY.resetIntro}</Text>
         {emailField()}
         {banner}
         <Button
-          label="Send reset code"
+          label={t`Send reset code`}
           onPress={onForgot}
           loading={submitting}
         />
         <Button
-          label="Back to sign in"
+          label={t`Back to sign in`}
           variant="ghost"
           onPress={() => goTo("signIn")}
         />
@@ -342,18 +347,18 @@ export function AccountForms({
   if (screen === "confirmForgotPassword") {
     return (
       <FormStack>
-        <Text style={styles.heading}>Choose a new password</Text>
-        <Text style={styles.body}>We sent a code to {email.trim()}.</Text>
-        {codeField("Reset code")}
-        {passwordFields("New password")}
+        <Text style={styles.heading}>{t`Choose a new password`}</Text>
+        <Text style={styles.body}>{t`We sent a code to ${email.trim()}.`}</Text>
+        {codeField(t`Reset code`)}
+        {passwordFields(t`New password`)}
         {banner}
         <Button
-          label="Reset password"
+          label={t`Reset password`}
           onPress={onConfirmForgot}
           loading={submitting}
         />
         <Button
-          label="Back to sign in"
+          label={t`Back to sign in`}
           variant="ghost"
           onPress={() => goTo("signIn")}
         />
@@ -365,7 +370,7 @@ export function AccountForms({
     return (
       <FormStack>
         <TextField
-          label="Name"
+          label={t`Name`}
           value={name}
           onChangeText={setName}
           autoComplete="name"
@@ -374,7 +379,7 @@ export function AccountForms({
         />
         {emailField()}
         <TextField
-          label="Username"
+          label={t`Username`}
           value={username}
           onChangeText={(text) => {
             setUsername(text);
@@ -388,7 +393,7 @@ export function AccountForms({
           textContentType="username"
           editable={!submitting}
         />
-        {passwordFields("Password")}
+        {passwordFields(t`Password`)}
         <TermsSwitch checked={agreed} onChange={setAgreed} />
         <SwitchRow
           title={SIGN_IN_COPY.ageConfirm}
@@ -414,7 +419,7 @@ export function AccountForms({
     <FormStack>
       {emailField()}
       <TextField
-        label="Password"
+        label={t`Password`}
         value={password}
         onChangeText={setPassword}
         secureTextEntry
@@ -428,9 +433,9 @@ export function AccountForms({
       />
       {noticeText}
       {banner}
-      <Button label="Sign in" onPress={onSignIn} loading={submitting} />
+      <Button label={t`Sign in`} onPress={onSignIn} loading={submitting} />
       <TextLink
-        label="Forgot password?"
+        label={t`Forgot password?`}
         onPress={() => goTo("forgotPassword")}
       />
 
@@ -443,12 +448,16 @@ export function AccountForms({
         />
         {offersGuest ? (
           <Button
-            label="Continue without an account"
+            label={t`Continue without an account`}
             variant="ghost"
             onPress={onExplainGuest}
           />
         ) : (
-          <Button label="Back" variant="ghost" onPress={auth.backToChooser} />
+          <Button
+            label={t`Back`}
+            variant="ghost"
+            onPress={auth.backToChooser}
+          />
         )}
       </View>
     </FormStack>

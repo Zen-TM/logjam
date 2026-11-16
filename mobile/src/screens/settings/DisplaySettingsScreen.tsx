@@ -27,6 +27,7 @@ import {
   type ThemeSchemeId,
   UNITS_CHOICE,
   type Units,
+  t,
 } from "@logjam/shared";
 
 import { apiFetch } from "../../api/apiFetch";
@@ -67,11 +68,11 @@ import { ChoiceGroup } from "./settingsKit";
 /** Chip labels for the multiplier. The number is the honest label here — a
  *  vocabulary ("Small / Medium / Large") hides that 1.0 is the OS's own size. */
 const TEXT_SCALE_LABELS: Record<TextScale, string> = {
-  0.9: "Smaller",
-  1: "Default",
-  1.15: "Large",
-  1.3: "Larger",
-  1.5: "Largest",
+  0.9: t`Smaller`,
+  1: t`Default`,
+  1.15: t`Large`,
+  1.3: t`Larger`,
+  1.5: t`Largest`,
 };
 
 export function DisplaySettingsScreen() {
@@ -95,7 +96,7 @@ export function DisplaySettingsScreen() {
       // below.
       if (!setThemeSchemeId(id)) {
         notify(
-          "This phone wouldn't store that theme, so it lasts until Logjam GPS closes.",
+          t`This phone wouldn't store that theme, so it lasts until Logjam GPS closes.`,
           "error",
         );
         return;
@@ -111,7 +112,7 @@ export function DisplaySettingsScreen() {
         console.error(err);
         // True, and specific: the phone kept it, the account didn't get it.
         notify(
-          "Saved on this phone, but it didn't reach your account.",
+          t`Saved on this phone, but it didn't reach your account.`,
           "error",
         );
       });
@@ -123,7 +124,7 @@ export function DisplaySettingsScreen() {
   const chooseTextScale = useCallback(
     (next: TextScale) => {
       if (!persistTextScale(next)) {
-        notify("This phone wouldn't store that text size.", "error");
+        notify(t`This phone wouldn't store that text size.`, "error");
         return;
       }
       setTextScale(next);
@@ -150,7 +151,7 @@ export function DisplaySettingsScreen() {
   return (
     <>
       <ScreenScroll>
-        <SectionHeader title="Theme" />
+        <SectionHeader title={t`Theme`} />
         <View style={styles.schemes}>
           {THEME_SCHEME_ORDER.map((id) => (
             <SchemeCard
@@ -163,7 +164,7 @@ export function DisplaySettingsScreen() {
         </View>
 
         <ChoiceGroup
-          label="Text size"
+          label={t`Text size`}
           options={TEXT_SCALES.map((scale) => ({
             value: String(scale),
             label: TEXT_SCALE_LABELS[scale],
@@ -174,7 +175,7 @@ export function DisplaySettingsScreen() {
           hint={
             textScale === chosenTextScale
               ? undefined
-              : "Applies next time you open Logjam GPS."
+              : t`Applies next time you open Logjam GPS.`
           }
         />
 
