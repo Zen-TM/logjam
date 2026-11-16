@@ -40,7 +40,7 @@ resource "aws_cognito_user_pool" "main" {
   }
 
   # Route all verification/code emails through Resend (see lambda_cognito_email.tf)
-  # so they pass DKIM/DMARC on notifications.logjamnsw.com and reach the inbox.
+  # so they pass DKIM/DMARC on notifications.logjam.earth and reach the inbox.
   # kms_key_id is the CMK Cognito uses to encrypt the code before invoking the
   # Lambda, which decrypts and sends.
   lambda_config {
