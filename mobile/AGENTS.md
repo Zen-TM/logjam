@@ -70,6 +70,9 @@ navigation failure. [0006](../docs/decisions/0006-on-device-data-privacy.md)
 
 - `npm run typecheck`, `lint` (no warnings allowed) and `test` gate every change. Nothing in CI
   bundles: run `npx expo export --platform android` before a Gradle build.
+- **Lint's `react-hooks/preserve-manual-memoization`** (React Compiler rules)
+  fails a `useMemo` or `useCallback` that reads a value computed inline
+  from props or state: memoise that value as well, keyed on primitives.
 - **Metro does not rebuild `shared/`** (typecheck and test do): `make shared` first.
 - **A fresh worktree needs real installs** (`npm ci` in `shared/` and `mobile/`):
   symlinked `node_modules` pass typecheck and vitest, then Metro fails. It also

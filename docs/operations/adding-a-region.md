@@ -362,13 +362,11 @@ GPS supports.
 
 ## Before the pull request
 
-Run the topo suite with the Python version CI uses (`python-version` in the
-`topo` job of [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml)), after
-`pip install -r requirements-test.txt`; [topo/AGENTS.md](../../topo/AGENTS.md)
-says how it runs. Several of its tests read `regions.ts` and `regions.json`:
+Run the topo suite, which reads `regions.ts` and `regions.json` in several
+tests ([topo/AGENTS.md](../../topo/AGENTS.md) says how it runs):
 
 ```
-cd topo && python -m unittest discover -s tests
+make topo-test
 ```
 
 Then every package that reads the declaration:
