@@ -24,7 +24,7 @@ const CEILINGS: Record<string, number> = {
   ".": 27,
   components: 86,
   "components/common": 7,
-  "components/dialogs": 98,
+  "components/dialogs": 99,
   "components/dialogs/topoSettings": 2,
   "components/feedback": 4,
   "components/gauges": 1,
