@@ -22,6 +22,7 @@ import {
   type TripPlanFormView,
   type TripPlanQuestion,
   type TripPlanQuestionKind,
+  t,
 } from "@logjam/shared";
 import {
   Button,
@@ -175,14 +176,16 @@ function Builder({
   const [leaving, setLeaving] = useState(false);
   const footer = (requestClose: () => void) => (
     <>
-      <Button onClick={requestClose} disabled={busy} disabledReason="Saving…">
-        Cancel
-      </Button>
+      <Button
+        onClick={requestClose}
+        disabled={busy}
+        disabledReason={t`Saving…`}
+      >{t`Cancel`}</Button>
       {!form && values && (
         <Button
           onClick={() => (dirty ? setLeaving(true) : setValues(null))}
           disabled={busy}
-          disabledReason="Saving…"
+          disabledReason={t`Saving…`}
           icon="back"
         >
           {copy.chooseBack}
@@ -286,14 +289,14 @@ function Builder({
                     icon="collapse"
                     label={copy.moveUp}
                     disabled={index === 0}
-                    disabledReason="It's first already"
+                    disabledReason={t`It's first already`}
                     onClick={() => moveQuestion(index, -1)}
                   />
                   <IconButton
                     icon="expand"
                     label={copy.moveDown}
                     disabled={index === values.questions.length - 1}
-                    disabledReason="It's last already"
+                    disabledReason={t`It's last already`}
                     onClick={() => moveQuestion(index, 1)}
                   />
                   <IconButton
@@ -380,7 +383,7 @@ function Builder({
                           (question.options?.length ?? 0) >=
                           TRIP_PLAN_MAX_OPTIONS
                         }
-                        disabledReason={`${TRIP_PLAN_MAX_OPTIONS} options at most`}
+                        disabledReason={t`${TRIP_PLAN_MAX_OPTIONS} options at most`}
                         onClick={() =>
                           setQuestion(index, {
                             options: [
@@ -407,7 +410,7 @@ function Builder({
                 variant="outline"
                 icon="add"
                 disabled={values.questions.length >= TRIP_PLAN_MAX_QUESTIONS}
-                disabledReason={`${TRIP_PLAN_MAX_QUESTIONS} questions at most`}
+                disabledReason={t`${TRIP_PLAN_MAX_QUESTIONS} questions at most`}
                 onClick={() =>
                   set({
                     questions: [...values.questions, tripPlanBlankQuestion()],

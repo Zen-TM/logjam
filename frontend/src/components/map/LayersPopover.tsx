@@ -26,6 +26,7 @@ import {
   type SectionKeysOn,
   type SlopeBand,
   type TerrainSwitchKey,
+  t,
 } from "@logjam/shared";
 import type { CompletedTopoJob } from "../../topoLayerTypes";
 import type { GeoJsonPolygonal, TopoJob } from "../dialogs/TopoDialog";
@@ -215,7 +216,7 @@ export default function LayersPopover({
           ? terrainCopy.slopeBands
           : view === "sharpened"
             ? terrainCopy.sharpenedAreas
-            : "Map layers"
+            : t`Map layers`
       }
       className={classes.popover}
       // Panning or pressing the map closes it; the Layers button toggles.
@@ -256,7 +257,7 @@ export default function LayersPopover({
         <>
           <div className={classes.head}>
             <ChipRail
-              label="Layers view"
+              label={t`Layers view`}
               className={classes.grow}
               options={contractSectionKeys(MAP_LAYERS, "web").map((key) =>
                 key === "basemap"
@@ -272,7 +273,7 @@ export default function LayersPopover({
               value={view}
               onChange={setView}
             />
-            <IconButton icon="close" label="Close" onClick={close} />
+            <IconButton icon="close" label={t`Close`} onClick={close} />
           </div>
           {/* Exhaustive by type: a tab the contract names and this popover
               does not draw, or the reverse, fails `tsc` (`MAP_LAYERS`). */}
@@ -284,7 +285,7 @@ export default function LayersPopover({
               basemap: () => (
                 <div className={classes.galleryPane}>
                   <BasemapGallery
-                    label="Map"
+                    label={t`Map`}
                     layers={baseLayers}
                     activeLayerId={activeLayerId}
                     onChange={onActiveLayerChange}
@@ -345,7 +346,7 @@ export default function LayersPopover({
                     title={copy.ways}
                     subtitle={
                       wayCount == null
-                        ? "Every line you have"
+                        ? t`Every line you have`
                         : countOf(wayCount, "way")
                     }
                     checked={showWays}
@@ -534,7 +535,7 @@ export function TerrainPane({
               <Toggle
                 checked={layers.vegetation}
                 onChange={(on) => onChange("vegetation", on)}
-                label="Show vegetation"
+                label={t`Show vegetation`}
               />
             </>
           }
@@ -615,11 +616,11 @@ function SlopeBandsView({
   return (
     <>
       <div className={classes.head}>
-        <IconButton icon="back" label="Back to terrain" onClick={onBack} />
+        <IconButton icon="back" label={t`Back to terrain`} onClick={onBack} />
         <div className={classes.titleBlock}>
           <span className={classes.title}>{terrainCopy.slopeBands}</span>
         </div>
-        <IconButton icon="close" label="Close" onClick={onClose} />
+        <IconButton icon="close" label={t`Close`} onClick={onClose} />
       </div>
       <div className={classes.body}>
         <SlopeSettings

@@ -3,6 +3,7 @@ import { signOut } from "../../useAuth";
 import BrandMark from "../brand/BrandMark";
 import { Button } from "../../ui";
 import classes from "./RootErrorBoundary.module.css";
+import { t } from "@logjam/shared";
 
 interface Props {
   children: ReactNode;
@@ -46,19 +47,19 @@ export class RootErrorBoundary extends Component<Props, State> {
       <div className={classes.overlay} role="alert">
         <div className={classes.card}>
           <BrandMark className={classes.brandMark} />
-          <h1 className={classes.heading}>Something went wrong</h1>
-          <p className={classes.message}>
-            Logjam Web hit an unexpected error. Reloading usually fixes it. If
-            it keeps happening, sign out and back in.
-          </p>
+          <h1 className={classes.heading}>{t`Something went wrong`}</h1>
+          <p
+            className={classes.message}
+          >{t`Logjam Web hit an unexpected error. Reloading usually fixes it. If it keeps happening, sign out and back in.`}</p>
           <div className={classes.actions}>
             {/* The kit's own Button: CSS modules and static tokens, so it
                 renders correctly above the theme provider that may be the
                 thing that failed. */}
-            <Button variant="filled" onClick={this.handleReload}>
-              Reload
-            </Button>
-            <Button onClick={this.handleSignOut}>Sign out</Button>
+            <Button
+              variant="filled"
+              onClick={this.handleReload}
+            >{t`Reload`}</Button>
+            <Button onClick={this.handleSignOut}>{t`Sign out`}</Button>
           </div>
         </div>
       </div>
