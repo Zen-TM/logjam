@@ -83,15 +83,18 @@ export function sharpenOffer(region: Region | null): SharpenOffer {
 
 /**
  * The offer for the dialog a link to an existing job opens: the job exists, so
- * sharpening was offered where it ran, whatever ground the map shows. Judged by
- * the job's footprint when it has one (a failed job has none), else by the
- * first upload region. Guard: `sharpen.test.ts` ("sharpenOfferForJob").
+ * sharpening was offered where it ran, whatever ground the map shows. Judged
+ * by the job's footprint when its ground takes an upload; otherwise (a failed
+ * job has no footprint, and a footprint's centre can lie in a region with no
+ * sharpening or in none) by the first upload region. Off only where no region
+ * takes an upload. Guard: `sharpen.test.ts` ("sharpenOfferForJob").
  */
 export function sharpenOfferForJob(
   footprint: LonLatBox | null,
   regions: readonly Region[] = REGIONS,
 ): SharpenOffer {
-  if (footprint) return sharpenOfferFor(footprint, null, regions);
+  const offer = footprint ? sharpenOfferFor(footprint, null, regions) : null;
+  if (offer?.mode === "upload") return offer;
   return sharpenOffer(regions.find((r) => r.sharpen.mode === "upload") ?? null);
 }
 

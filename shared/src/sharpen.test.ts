@@ -416,12 +416,13 @@ describe("sharpenOfferFor", () => {
 
 describe("sharpenOfferForJob", () => {
   const all = [SIM_NZ, SIM_UTAH, NSW_REGION];
-  const inUtah = { west: -112.97, south: 37.26, east: -112.93, north: 37.3 };
 
   // Mutation: in sharpen.ts change `sharpenOfferFor(footprint, null, regions)`
   // to `sharpenOffer(null)`, and a job's footprint no longer decides.
   it("is judged by the job's footprint when it has one", () => {
-    expect(sharpenOfferForJob(inUtah, all)).toEqual(sharpenOffer(SIM_UTAH));
+    const inSydney = { west: 150.2, south: -33.8, east: 150.3, north: -33.7 };
+    // Utah is the first upload region here, so only the footprint can give NSW's.
+    expect(sharpenOfferForJob(inSydney, all)).toEqual(sharpenOffer(NSW_REGION));
   });
 
   // Mutation: in sharpen.ts change `regions.find((r) => r.sharpen.mode === "upload")`
@@ -431,6 +432,16 @@ describe("sharpenOfferForJob", () => {
     expect(sharpenOfferForJob(null, [NSW_REGION])).toEqual(
       sharpenOffer(NSW_REGION),
     );
+  });
+
+  // Mutation: in sharpen.ts change `if (offer?.mode === "upload") return offer;`
+  // to `if (offer) return offer;`, and a footprint centred in a region that is
+  // off, or in none, reads as off.
+  it("is the first upload region's too when the footprint's own ground is off", () => {
+    const inNz = { west: 169.2, south: -44.1, east: 169.3, north: -44.0 };
+    const atSea = { west: 0, south: 0, east: 0.1, north: 0.1 };
+    expect(sharpenOfferForJob(inNz, all)).toEqual(sharpenOffer(SIM_UTAH));
+    expect(sharpenOfferForJob(atSea, all)).toEqual(sharpenOffer(SIM_UTAH));
   });
 
   // Mutation: in sharpen.ts change `?? null);` at the end of
