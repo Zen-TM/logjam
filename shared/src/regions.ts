@@ -243,6 +243,12 @@ export type Region = {
   } | null;
 };
 
+const heightsCredit = (layer: string) =>
+  t`${layer}: derived from the NSW 5 m Digital Elevation Model, © State of New South Wales (Spatial Services), extracted October 2026. CC BY 3.0 AU.`;
+
+const heightsCreditHtml = (layer: string) =>
+  `${layer}: derived from the NSW 5 m Digital Elevation Model, © State of New South Wales (<a href="https://www.spatial.nsw.gov.au">Spatial Services</a>), extracted October 2026. <a href="https://creativecommons.org/licenses/by/3.0/au/">CC BY 3.0 AU</a>.`;
+
 /**
  * NSW Spatial Services' 5 m DEM: bare earth, from LiDAR in the east and
  * photogrammetry in the west, built by `topo/build_nsw_dem.py`. A z15 pixel is
@@ -278,18 +284,16 @@ const NSW_HEIGHTS = {
   },
   // The licence asks for the credit, the licence's name, a note that this is
   // derived, and the date it was extracted from Spatial Services.
-  credit:
-    "Elevation: derived from the NSW 5 m Digital Elevation Model, © State of New South Wales (Spatial Services), extracted October 2026. CC BY 3.0 AU.",
-  creditHtml:
-    'Elevation: derived from the NSW 5 m Digital Elevation Model, © State of New South Wales (<a href="https://www.spatial.nsw.gov.au">Spatial Services</a>), extracted October 2026. <a href="https://creativecommons.org/licenses/by/3.0/au/">CC BY 3.0 AU</a>.',
+  credit: heightsCredit(t`Elevation`),
+  creditHtml: heightsCreditHtml(t`Elevation`),
 } as const satisfies DemSource & { name: string; tileBytes: TileBytes };
 
 /** A layer cut from the heights carries their credit, under its own name. */
 const derived = (layer: string) => ({
   coverage: NSW_HEIGHTS.coverage,
   licence: NSW_HEIGHTS.licence,
-  credit: NSW_HEIGHTS.credit.replace(/^Elevation/, layer),
-  creditHtml: NSW_HEIGHTS.creditHtml.replace(/^Elevation/, layer),
+  credit: heightsCredit(layer),
+  creditHtml: heightsCreditHtml(layer),
 });
 
 export const NSW_REGION = {
@@ -371,7 +375,7 @@ export const NSW_REGION = {
         14: { meanBytes: 36_000, p90Bytes: 45_000 },
         15: { meanBytes: 28_000, p90Bytes: 33_000 },
       },
-      ...derived("Slope"),
+      ...derived(t`Slope`),
     },
     // MapLibre's own `hillshade` layer on the height archive itself, at the
     // zooms it was built at, so it needs no pipeline at all.
@@ -383,7 +387,7 @@ export const NSW_REGION = {
       // Shaded from the height archive itself, so a save clips it once, as the
       // heights.
       tileBytes: NSW_HEIGHTS.tileBytes,
-      ...derived("Hillshade"),
+      ...derived(t`Hillshade`),
     },
     // 10 m contours cut from the heights by `topo/build_nsw_dem.py contours`,
     // in the schema a topo area's own contour layer has, so both clients
@@ -406,7 +410,7 @@ export const NSW_REGION = {
         13: { meanBytes: 15_000, p90Bytes: 18_000 },
         14: { meanBytes: 24_000, p90Bytes: 28_000 },
       },
-      ...derived("Contours"),
+      ...derived(t`Contours`),
     },
     // Who holds the land, from the NSW Land Tenure layer, built by
     // `topo/build_land_tenure.py` (land.ts draws it).
@@ -436,33 +440,31 @@ export const NSW_REGION = {
        * be under Private.
        */
       classes: [
-        { source: "Private", name: "Private land", colour: "#8e6bbf" },
-        { source: "National Park", name: "National park", colour: "#2f9c95" },
-        { source: "State Forest", name: "State forest", colour: "#7f8f3a" },
+        { source: "Private", name: t`Private land`, colour: "#8e6bbf" },
+        { source: "National Park", name: t`National park`, colour: "#2f9c95" },
+        { source: "State Forest", name: t`State forest`, colour: "#7f8f3a" },
         {
           source: "Crownland-Leasehold",
-          name: "Crown leasehold",
+          name: t`Crown leasehold`,
           colour: "#d9a441",
         },
-        { source: "Crownland-Other", name: "Crown land", colour: "#e6d34f" },
+        { source: "Crownland-Other", name: t`Crown land`, colour: "#e6d34f" },
         {
           source: "Indigenous Owned",
-          name: "Aboriginal Area",
+          name: t`Aboriginal Area`,
           colour: "#3b78c4",
         },
         {
           source: "Unresolved Tenure",
-          name: "Tenure unresolved",
+          name: t`Tenure unresolved`,
           colour: "#8a8a8a",
         },
       ],
       // The source's two known gaps.
-      caveat:
-        "Land Council freehold can show as private land. Roads, waterways and public areas aren't properly mapped around Sydney and Wollongong.",
+      caveat: t`Land Council freehold can show as private land. Roads, waterways and public areas aren't properly mapped around Sydney and Wollongong.`,
       coverage: NSW_HEIGHTS.coverage,
       licence: "cc-by-4",
-      credit:
-        "Land: NSW Land Tenure, December 2024 v2 © State of New South Wales (Department of Primary Industries and Regional Development), CC BY 4.0",
+      credit: t`Land: NSW Land Tenure, December 2024 v2 © State of New South Wales (Department of Primary Industries and Regional Development), CC BY 4.0`,
       creditHtml:
         'Land: <a href="https://data.nsw.gov.au/data/dataset/nsw-land-tenure">NSW Land Tenure</a>, December 2024 v2 &copy; State of New South Wales (Department of Primary Industries and Regional Development), <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>',
     },
@@ -497,14 +499,12 @@ export const NSW_REGION = {
         12: { meanBytes: 3_100, p90Bytes: 9_000 },
       },
       // A code not listed reads as a plain "Fire" (fireHistory.ts).
-      types: { 1: "Wildfire", 2: "Prescribed burn" },
+      types: { 1: t`Wildfire`, 2: t`Prescribed burn` },
       // The source's gap.
-      caveat:
-        "Mapped by NSW National Parks and Wildlife Service: a fire it didn't map, often on private land, has no colour.",
+      caveat: t`Mapped by NSW National Parks and Wildlife Service: a fire it didn't map, often on private land, has no colour.`,
       coverage: NSW_HEIGHTS.coverage,
       licence: "cc-by-4",
-      credit:
-        "Fire history © State Government of NSW and NSW Department of Climate Change, Energy, the Environment and Water 2010 — NPWS Fire History - Wildfires and Prescribed Burns (CC BY 4.0)",
+      credit: t`Fire history © State Government of NSW and NSW Department of Climate Change, Energy, the Environment and Water 2010 — NPWS Fire History - Wildfires and Prescribed Burns (CC BY 4.0)`,
       creditHtml:
         'Fire history &copy; State Government of NSW and NSW Department of Climate Change, Energy, the Environment and Water 2010 — <a href="https://datasets.seed.nsw.gov.au/dataset/fire-history-wildfires-and-prescribed-burns-1e8b6">NPWS Fire History - Wildfires and Prescribed Burns</a> (<a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>)',
     },
@@ -539,13 +539,11 @@ export const NSW_REGION = {
         { id: "tpg", name: "TPG" },
       ],
       // The source's limits.
-      caveat:
-        "It's a prediction, and valley and canyon floors are where it's most often wrong. A reseller on Telstra's network may get less than Telstra's own.",
+      caveat: t`It's a prediction, and valley and canyon floors are where it's most often wrong. A reseller on Telstra's network may get less than Telstra's own.`,
       // The ABS coastline in it is CC BY 4.0, which asks no more.
       coverage: NSW_HEIGHTS.coverage,
       licence: "cc-by-2.5-au",
-      credit:
-        "Mobile coverage: ACCC Mobile Infrastructure Report data release © Commonwealth of Australia (ACCC), CC BY 2.5 AU; coastline © ABS, CC BY 4.0",
+      credit: t`Mobile coverage: ACCC Mobile Infrastructure Report data release © Commonwealth of Australia (ACCC), CC BY 2.5 AU; coastline © ABS, CC BY 4.0`,
       creditHtml:
         'Mobile coverage: <a href="https://data.gov.au/data/dataset/accc-mobile-infrastructure-report-data-release">ACCC Mobile Infrastructure Report data release</a> &copy; Commonwealth of Australia (ACCC), <a href="https://creativecommons.org/licenses/by/2.5/au/">CC BY 2.5 AU</a>; coastline &copy; <a href="https://www.abs.gov.au/statistics/standards/australian-statistical-geography-standard-asgs-edition-3">ABS</a>, <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>',
     },
@@ -579,7 +577,7 @@ export const NSW_REGION = {
     licence: "cc-by-nc-sa",
     ropewikiRegion: "New South Wales",
     snapshotKey: "reference/ropewiki-nsw.csv",
-    extraLinks: { label: "OzUltimate", match: matchOzUltimateUrl },
+    extraLinks: { label: t`OzUltimate`, match: matchOzUltimateUrl },
   },
 } as const satisfies Region;
 
@@ -623,7 +621,7 @@ export const REGIONS: readonly Region[] = simRegionsOn()
  */
 const EMPTY_WORLD: Region = {
   id: "world",
-  name: "The world",
+  name: t`The world`,
   fullName: t`The world`,
   view: { center: [0, 0], zoom: 2 },
   timeZone: "UTC",

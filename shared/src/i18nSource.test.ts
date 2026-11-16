@@ -190,6 +190,15 @@ describe("bareCopyIn", () => {
     expect(bare("const a = `Enter a ${what}`;")).toEqual(["Enter a …"]);
   });
 
+  // Mutation: delete the `DATA_LITERALS` test from `add` in `bareCopyIn`.
+  it("leaves a listed data literal alone, in any position", () => {
+    expect(
+      bare(
+        'const a = { source: "National Park" }; const b = <p>Less than</p>; const c = "Open the park";',
+      ),
+    ).toEqual(["Open the park"]);
+  });
+
   // Mutation: change the template case's `if (!copy) {` to `if (true) {`, so a
   // template in a copy position is judged as one unit too.
   it("flags each part of a template in a copy position", () => {
@@ -260,7 +269,9 @@ describe("bareCopyIn", () => {
   });
 
   // One position per row, each a string that reads as prose and must not be flagged.
-  // Mutation: remove the matching branch of `bareCopyIn` (or the pattern) in turn.
+  // Mutation: remove the matching branch of `bareCopyIn` (or the pattern) in
+  // turn: the markup alternative of `CODE`, the `BarBarToken` case of `isText`,
+  // `super` from `NOT_COPY_CALLS`.
   it.each([
     ["an import", 'import x from "some module name";'],
     ["a type", 'type A = "an open file"; const b = c as "an open file";'],
@@ -270,6 +281,19 @@ describe("bareCopyIn", () => {
     ["logger", 'logger.warn({ id }, "Opened the file");'],
     ["new Error", 'throw new Error("Could not open the file");'],
     ["an error built with +", 'throw new Error("Could not open " + name);'],
+    [
+      "an error's default message",
+      'throw new Error(m || "Could not open the file");',
+    ],
+    [
+      "a super call",
+      "class E extends Error { constructor(s) { super(`API error ${s}: could not open the file`); } }",
+    ],
+    [
+      "a line of XML",
+      'const a = `<name>${n}</name>`; const b = "<?xml version=1.0?>";',
+    ],
+    ["a line of HTML", 'const a = "<a href=x>open the file</a>";'],
     ["a property's name", 'const a = { "open the file": 1 };'],
     ["an element access", 'const a = b["open the file"];'],
     ["a styling attribute", 'const a = <p className="flex items-center" />;'],

@@ -9,6 +9,7 @@ import type {
 } from "./placeFilter.js";
 import type { TripLogCustomFieldDef } from "./tripLogFields.js";
 import { lengthInputText } from "./units.js";
+import { t } from "./i18n.js";
 
 /** The widest span still drawn as pills; a wider axis gets two number boxes. */
 export const MAX_FILTER_PILL_SPAN = 12;
@@ -37,15 +38,15 @@ export function filterPillStops(
 }
 
 export const PLACE_SORT_OPTIONS: { key: PlaceSortKey; label: string }[] = [
-  { key: "name", label: "Name" },
-  { key: "recent", label: "Recently added" },
-  { key: "grade", label: "Easiest first" },
-  { key: "quality", label: "Best rated" },
+  { key: "name", label: t`Name` },
+  { key: "recent", label: t`Recently added` },
+  { key: "grade", label: t`Easiest first` },
+  { key: "quality", label: t`Best rated` },
 ];
 
 export function placeSortLabel(sort: PlaceSortKey): string {
   return (
-    PLACE_SORT_OPTIONS.find((option) => option.key === sort)?.label ?? "Name"
+    PLACE_SORT_OPTIONS.find((option) => option.key === sort)?.label ?? t`Name`
   );
 }
 
@@ -53,9 +54,9 @@ export const PLACE_ROPEWIKI_OPTIONS: {
   value: PlaceFilters["ropewiki"];
   label: string;
 }[] = [
-  { value: "any", label: "Any" },
-  { value: "linked", label: "From RopeWiki" },
-  { value: "unlinked", label: "Not from RopeWiki" },
+  { value: "any", label: t`Any` },
+  { value: "linked", label: t`From RopeWiki` },
+  { value: "unlinked", label: t`Not from RopeWiki` },
 ];
 
 export const THRESHOLD_OPERATORS: PlaceThresholdFilter[0][] = [
@@ -68,10 +69,10 @@ export const THRESHOLD_OPERATOR_LABELS: Record<
   PlaceThresholdFilter[0],
   string
 > = {
-  Any: "Any",
-  "Less than": "Under",
-  "More than": "Over",
-  Exactly: "Exactly",
+  Any: t`Any`,
+  "Less than": t`Under`,
+  "More than": t`Over`,
+  Exactly: t`Exactly`,
 };
 
 /**

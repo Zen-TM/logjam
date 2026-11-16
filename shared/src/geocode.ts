@@ -20,6 +20,7 @@ import {
   type LonLatBox,
   type Region,
 } from "./regions.js";
+import { t } from "./i18n.js";
 
 export interface GeocodeResult {
   displayName: string;
@@ -57,7 +58,7 @@ const RESULT_LIMIT = 5;
 
 /** The one sentence both clients offer for asking the geocoder. */
 export function searchLocationsLabel(query: string): string {
-  return `Search locations for “${query.trim()}”`;
+  return t`Search locations for “${query.trim()}”`;
 }
 
 // Nominatim allows one request a second per APPLICATION. A client can only

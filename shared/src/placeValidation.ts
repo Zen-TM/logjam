@@ -3,6 +3,7 @@
 // (api/src/routes/placesBulk.ts), and the frontend dialogs so every surface
 // rejects the same out-of-range values.
 
+import { t } from "./i18n.js";
 export const PLACE_NAME_MAX_LENGTH = 200;
 export const PLACE_MAX_ALT_NAMES = 50;
 
@@ -77,20 +78,20 @@ export function numericConstraintError(
   constraint: NumericConstraint,
 ): string | null {
   const { min, max, integer, label } = constraint;
-  if (!Number.isFinite(value)) return `${label} must be a number`;
+  if (!Number.isFinite(value)) return t`${label} must be a number`;
   if (integer && !Number.isInteger(value)) {
-    return `${label} must be a whole number`;
+    return t`${label} must be a whole number`;
   }
   if (min !== null && value < min) {
-    if (min === 0) return `${label} can't be negative`;
+    if (min === 0) return t`${label} can't be negative`;
     return max === null
-      ? `${label} must be at least ${min}`
-      : `${label} must be between ${min} and ${max}`;
+      ? t`${label} must be at least ${min}`
+      : t`${label} must be between ${min} and ${max}`;
   }
   if (max !== null && value > max) {
     return min === null
-      ? `${label} must be at most ${max}`
-      : `${label} must be between ${min} and ${max}`;
+      ? t`${label} must be at most ${max}`
+      : t`${label} must be between ${min} and ${max}`;
   }
   return null;
 }
@@ -120,15 +121,15 @@ export function validateFieldValues(
     const def = byKey.get(key);
     if (!def) continue;
     if (def.type === "integer" || def.type === "float") {
-      if (typeof value !== "number") return `${def.label} must be a number`;
+      if (typeof value !== "number") return t`${def.label} must be a number`;
       const constraint = constraintFromDef(def);
       const error = constraint && numericConstraintError(value, constraint);
       if (error) return error;
     } else if (def.type === "boolean") {
       if (typeof value !== "boolean")
-        return `${def.label} must be true or false`;
+        return t`${def.label} must be true or false`;
     } else if (typeof value !== "string") {
-      return `${def.label} must be text`;
+      return t`${def.label} must be text`;
     }
   }
   return null;
@@ -201,12 +202,12 @@ export function validatePlacePayload(
 
   if (opts.requireCoords || latitude !== undefined) {
     if (!isValidLatitude(latitude)) {
-      return `Latitude must be a number between ${LATITUDE_RANGE.min} and ${LATITUDE_RANGE.max}`;
+      return t`Latitude must be a number between ${LATITUDE_RANGE.min} and ${LATITUDE_RANGE.max}`;
     }
   }
   if (opts.requireCoords || longitude !== undefined) {
     if (!isValidLongitude(longitude)) {
-      return `Longitude must be a number between ${LONGITUDE_RANGE.min} and ${LONGITUDE_RANGE.max}`;
+      return t`Longitude must be a number between ${LONGITUDE_RANGE.min} and ${LONGITUDE_RANGE.max}`;
     }
   }
 
@@ -215,7 +216,7 @@ export function validatePlacePayload(
       typeof payload.elevation !== "number" ||
       !Number.isFinite(payload.elevation)
     ) {
-      return "elevation must be a number";
+      return t`elevation must be a number`;
     }
   }
 
@@ -225,7 +226,7 @@ export function validatePlacePayload(
       typeof payload.fieldValues !== "object" ||
       Array.isArray(payload.fieldValues)
     ) {
-      return "Field values must be an object";
+      return t`Field values must be an object`;
     }
     const error = validateFieldValues(
       payload.fieldValues as Record<string, unknown>,
@@ -303,17 +304,17 @@ export function normalizeLinkedPlaceIds(
   if (value === undefined) return { placeIds: undefined };
   if (value === null) return { placeIds: [] };
   if (!Array.isArray(value)) {
-    return { error: "placeIds must be an array of strings or null" };
+    return { error: t`placeIds must be an array of strings or null` };
   }
   const placeIds: string[] = [];
   for (const item of value) {
     if (typeof item !== "string") {
-      return { error: "placeIds must be an array of strings" };
+      return { error: t`placeIds must be an array of strings` };
     }
     if (!placeIds.includes(item)) placeIds.push(item);
   }
   if (placeIds.length > MAX_LINKS_PER_PLACE) {
-    return { error: `At most ${MAX_LINKS_PER_PLACE} linked places` };
+    return { error: t`At most ${MAX_LINKS_PER_PLACE} linked places` };
   }
   return { placeIds };
 }

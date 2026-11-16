@@ -11,16 +11,16 @@ import { usernameRule, isValidUsername } from "./username.js";
  * `AccountForms.test.ts` and the Logjam Web form tests read these, not a copy.
  */
 export const SIGN_IN_COPY = {
-  createAccount: "Create account",
-  creatingAccount: "Creating account…",
+  createAccount: t`Create account`,
+  creatingAccount: t`Creating account…`,
   /** The link from the sign-in form to the sign-up form. */
-  goToSignUp: "Create an account",
+  goToSignUp: t`Create an account`,
   /** Before the link back to sign-in: "Have an account? Sign in". */
-  haveAccount: "Have an account?",
-  signIn: "Sign in",
-  resendCode: "Send a new code",
-  ageConfirm: "I am 18 or older",
-  resetIntro: "Enter your email and we'll send you a reset code.",
+  haveAccount: t`Have an account?`,
+  signIn: t`Sign in`,
+  resendCode: t`Send a new code`,
+  ageConfirm: t`I am 18 or older`,
+  resetIntro: t`Enter your email and we'll send you a reset code.`,
 } as const;
 
 /**
@@ -39,7 +39,7 @@ export function signInIntro(regions: readonly Region[] = REGIONS): string {
 
 /** The verify form's intro: where the code went, and where it may be hiding. */
 export function verifyIntro(email: string): string {
-  return `We sent a code to ${email.trim()}. Check your spam folder too.`;
+  return t`We sent a code to ${email.trim()}. Check your spam folder too.`;
 }
 
 /** "Send a new code (30s)": the resend button while it cannot be pressed. */
@@ -47,8 +47,7 @@ export function resendCodeWaiting(seconds: number): string {
   return `${SIGN_IN_COPY.resendCode} (${seconds}s)`;
 }
 
-export const PASSWORD_HINT =
-  "At least 8 characters, with an upper and a lower case letter, a number and a symbol.";
+export const PASSWORD_HINT = t`At least 8 characters, with an upper and a lower case letter, a number and a symbol.`;
 
 const PASSWORD_PATTERN =
   /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^a-zA-Z\d]).{8,}$/;
@@ -80,34 +79,33 @@ export function signUpFormProblem(form: {
 }): SignUpFormProblem | null {
   // The pool requires it (infra/terraform/envs/prod/cognito.tf).
   if (!form.name.trim()) {
-    return { field: "form", message: "Enter your name." };
+    return { field: "form", message: t`Enter your name.` };
   }
   if (!isValidEmailFormat(form.email)) {
-    return { field: "email", message: "Enter a valid email address." };
+    return { field: "email", message: t`Enter a valid email address.` };
   }
   if (!isValidUsername(form.username)) {
     return { field: "username", message: usernameRule() };
   }
   if (form.password !== form.confirmPassword) {
-    return { field: "form", message: "Passwords do not match" };
+    return { field: "form", message: t`Passwords do not match` };
   }
   if (!isValidPassword(form.password)) {
     return {
       field: "form",
-      message:
-        "Password must be at least 8 characters and include uppercase, lowercase, number, and symbol",
+      message: t`Password must be at least 8 characters and include uppercase, lowercase, number, and symbol`,
     };
   }
   if (!form.agreed) {
     return {
       field: "form",
-      message: "Agree to the Terms of Use and Privacy Policy to sign up.",
+      message: t`Agree to the Terms of Use and Privacy Policy to sign up.`,
     };
   }
   if (!form.ageConfirmed) {
     return {
       field: "form",
-      message: "Confirm you are 18 or older to sign up.",
+      message: t`Confirm you are 18 or older to sign up.`,
     };
   }
   return null;

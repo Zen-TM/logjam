@@ -12,6 +12,7 @@
 
 /** Bumped when the file's shape changes. Each format has its own prefix, so
  *  an older client keeps reading builds in the format it knows. */
+import { t } from "./i18n.js";
 export const PLACE_REGISTRY_FORMAT = 1;
 
 /** NSW's path under the topo CDN base URL (TOPO_CDN_BASE_URL). Another
@@ -29,7 +30,7 @@ export const PLACE_REGISTRY_POINTER_PATH = placeRegistryPointerPath(
 );
 
 /** Shown wherever registry results are, as the ODbL asks. */
-export const PLACE_REGISTRY_ATTRIBUTION = "© OpenStreetMap contributors";
+export const PLACE_REGISTRY_ATTRIBUTION = t`© OpenStreetMap contributors`;
 
 /** Shorter than this, a query matches too much to rank usefully. */
 export const PLACE_SEARCH_MIN_QUERY_LENGTH = 2;
@@ -139,37 +140,37 @@ export function placeRegistryUrl(
 // Words for the kinds whose OSM value reads wrong to a walker ("residential"
 // for a street). Every other kind reads as its value: camp_site → "Camp site".
 const KIND_LABELS: Record<string, string> = {
-  "boundary=protected_area": "Reserve",
-  "boundary=national_park": "National park",
-  "leisure=nature_reserve": "Nature reserve",
-  "waterway=stream": "Creek",
-  "waterway=river": "River",
-  "waterway=waterfall": "Waterfall",
-  "highway=motorway": "Road",
-  "highway=trunk": "Road",
-  "highway=primary": "Road",
-  "highway=secondary": "Road",
-  "highway=tertiary": "Road",
-  "highway=unclassified": "Road",
-  "highway=residential": "Street",
-  "highway=living_street": "Street",
-  "highway=service": "Road",
-  "highway=track": "Track",
-  "highway=path": "Path",
-  "highway=footway": "Path",
-  "highway=trailhead": "Trailhead",
-  "tourism=viewpoint": "Lookout",
-  "place=isolated_dwelling": "Homestead",
+  "boundary=protected_area": t`Reserve`,
+  "boundary=national_park": t`National park`,
+  "leisure=nature_reserve": t`Nature reserve`,
+  "waterway=stream": t`Creek`,
+  "waterway=river": t`River`,
+  "waterway=waterfall": t`Waterfall`,
+  "highway=motorway": t`Road`,
+  "highway=trunk": t`Road`,
+  "highway=primary": t`Road`,
+  "highway=secondary": t`Road`,
+  "highway=tertiary": t`Road`,
+  "highway=unclassified": t`Road`,
+  "highway=residential": t`Street`,
+  "highway=living_street": t`Street`,
+  "highway=service": t`Road`,
+  "highway=track": t`Track`,
+  "highway=path": t`Path`,
+  "highway=footway": t`Path`,
+  "highway=trailhead": t`Trailhead`,
+  "tourism=viewpoint": t`Lookout`,
+  "place=isolated_dwelling": t`Homestead`,
 };
 
 // `key=yes` says only which key it is: `natural=yes` is a natural feature.
 const YES_LABELS: Record<string, string> = {
-  natural: "Natural feature",
-  tourism: "Attraction",
-  historic: "Historic site",
-  man_made: "Structure",
-  landuse: "Area",
-  leisure: "Leisure area",
+  natural: t`Natural feature`,
+  tourism: t`Attraction`,
+  historic: t`Historic site`,
+  man_made: t`Structure`,
+  landuse: t`Area`,
+  leisure: t`Leisure area`,
 };
 
 function capitalised(text: string): string {

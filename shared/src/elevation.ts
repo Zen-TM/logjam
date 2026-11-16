@@ -31,6 +31,7 @@ import {
   LONGITUDE_RANGE,
 } from "./placeValidation.js";
 import type { RoutePoint } from "./routeValidation.js";
+import { t } from "./i18n.js";
 
 /**
  * Upper bound on samples in one profile. Caps both the DEM work per request
@@ -116,8 +117,8 @@ export type ElevationPoint = {
 
 export const ELEVATION_POINT_ERRORS = {
   shape: "point must be a [longitude, latitude] pair",
-  longitude: `Longitude must be a number between ${LONGITUDE_RANGE.min} and ${LONGITUDE_RANGE.max}`,
-  latitude: `Latitude must be a number between ${LATITUDE_RANGE.min} and ${LATITUDE_RANGE.max}`,
+  longitude: t`Longitude must be a number between ${LONGITUDE_RANGE.min} and ${LONGITUDE_RANGE.max}`,
+  latitude: t`Latitude must be a number between ${LATITUDE_RANGE.min} and ${LATITUDE_RANGE.max}`,
 } as const;
 
 /** The request body's `point`: a GeoJSON-order [longitude, latitude] pair. */

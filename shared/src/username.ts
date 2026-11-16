@@ -1,4 +1,5 @@
 import { say, type UserSentence } from "./userSentence.js";
+import { t } from "./i18n.js";
 
 /** The username rule: the API enforces it, and a client checks it before asking. */
 export const USERNAME_MIN = 3;
@@ -9,7 +10,7 @@ export function usernameRule(): UserSentence {
   return say`A username is 3 to 32 letters, numbers, dots, dashes or underscores.`;
 }
 
-export const USERNAME_HINT = "Your public display name.";
+export const USERNAME_HINT = t`Your public display name.`;
 
 export function usernameTaken(): UserSentence {
   return say`That username is taken. Choose another.`;

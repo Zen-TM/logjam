@@ -95,7 +95,7 @@ export function placeTypeNameError(
   types: readonly { id: string; name: string }[],
   editing?: { id: string; name: string } | null,
 ): string | null {
-  if (!name.trim()) return "A place type needs a name.";
+  if (!name.trim()) return t`A place type needs a name.`;
   if (editing && nameKey(editing.name) === nameKey(name)) return null;
   return placeTypeNameTaken(name, types, editing?.id)
     ? placeTypeNameTakenError(name)
@@ -155,7 +155,7 @@ export const SYSTEM_PLACE_TYPES: SystemPlaceType[] = [
   {
     key: "canyon",
     id: SYSTEM_PLACE_TYPE_IDS.canyon,
-    name: "Canyon",
+    name: t`Canyon`,
     iconKey: "droplet",
     color: "#E4C5AA",
     position: 0,
@@ -163,7 +163,7 @@ export const SYSTEM_PLACE_TYPES: SystemPlaceType[] = [
   {
     key: "campsite",
     id: SYSTEM_PLACE_TYPE_IDS.campsite,
-    name: "Campsite",
+    name: t`Campsite`,
     iconKey: "triangle",
     color: "#BED9B5",
     position: 1,
@@ -171,7 +171,7 @@ export const SYSTEM_PLACE_TYPES: SystemPlaceType[] = [
   {
     key: "marker",
     id: SYSTEM_PLACE_TYPE_IDS.marker,
-    name: "Marker",
+    name: t`Marker`,
     iconKey: "map-pin",
     color: "#B7D0E1",
     position: 2,
@@ -304,25 +304,25 @@ export type PlaceTypeColor = (typeof PLACE_TYPE_COLORS)[number];
  * palette unnamed.
  */
 export const PLACE_TYPE_COLOR_NAMES: Record<PlaceTypeColor, string> = {
-  "#E4C5AA": "Banksia orange",
-  "#E3D0AB": "Ochre",
-  "#E2D9AC": "Wattle",
-  "#D5DCB2": "Lichen",
-  "#BED9B5": "Scrub green",
-  "#B5D9C4": "Fern",
-  "#B5D9D6": "Pool teal",
-  "#B7D0E1": "Water blue",
-  "#B9C2DF": "Dusk blue",
-  "#E1B7C5": "Heath pink",
-  "#E1BCB7": "Clay rose",
-  "#CDC8C1": "Stone",
+  "#E4C5AA": t`Banksia orange`,
+  "#E3D0AB": t`Ochre`,
+  "#E2D9AC": t`Wattle`,
+  "#D5DCB2": t`Lichen`,
+  "#BED9B5": t`Scrub green`,
+  "#B5D9C4": t`Fern`,
+  "#B5D9D6": t`Pool teal`,
+  "#B7D0E1": t`Water blue`,
+  "#B9C2DF": t`Dusk blue`,
+  "#E1B7C5": t`Heath pink`,
+  "#E1BCB7": t`Clay rose`,
+  "#CDC8C1": t`Stone`,
 };
 
 /** The spoken name of a type's colour. A colour outside the palette comes back
  *  AS ITS HEX rather than as "Custom", the same way `trackColorName` does:
  *  unhelpful is better than wrong. */
 export function placeTypeColorName(color: string | null | undefined): string {
-  if (!color) return "No colour";
+  if (!color) return t`No colour`;
   return PLACE_TYPE_COLOR_NAMES[color.toUpperCase() as PlaceTypeColor] ?? color;
 }
 
@@ -387,78 +387,78 @@ export const SYSTEM_FIELD_DEFS: SystemFieldDef[] = [
   {
     id: "a0000000-0000-4000-8000-000000000001",
     key: "v_grade",
-    label: "V grade",
+    label: t`V grade`,
     type: "integer",
     min: 1,
     max: 7,
-    hint: "Vertical technical difficulty, on the French rating system.",
+    hint: t`Vertical technical difficulty, on the French rating system.`,
     placeTypes: ["canyon"],
   },
   {
     id: "a0000000-0000-4000-8000-000000000002",
     key: "a_grade",
-    label: "A grade",
+    label: t`A grade`,
     type: "integer",
     min: 1,
     max: 7,
-    hint: "Aquatic difficulty of the water sections, on the French rating system.",
+    hint: t`Aquatic difficulty of the water sections, on the French rating system.`,
     placeTypes: ["canyon"],
   },
   {
     id: "a0000000-0000-4000-8000-000000000003",
     key: "commitment",
-    label: "Commitment",
+    label: t`Commitment`,
     type: "integer",
     min: 1,
     max: 6,
-    hint: "How hard the canyon is to escape or retreat from once committed, on the French rating system.",
+    hint: t`How hard the canyon is to escape or retreat from once committed, on the French rating system.`,
     placeTypes: ["canyon"],
   },
   {
     id: "a0000000-0000-4000-8000-000000000004",
     key: "quality",
-    label: "Quality",
+    label: t`Quality`,
     type: "float",
     min: 1,
     max: 5,
-    hint: "Your own verdict. 1 is unremarkable, 5 is exceptional.",
+    hint: t`Your own verdict. 1 is unremarkable, 5 is exceptional.`,
     placeTypes: ["canyon", "campsite"],
   },
   {
     id: "a0000000-0000-4000-8000-000000000005",
     key: "hours",
-    label: "Hours",
+    label: t`Hours`,
     type: "float",
     min: 0,
     max: null,
-    hint: "How long it takes an average group, car to car.",
+    hint: t`How long it takes an average group, car to car.`,
     placeTypes: ["canyon"],
   },
   {
     id: "a0000000-0000-4000-8000-000000000006",
     key: "num_abseils",
-    label: "Pitches",
+    label: t`Pitches`,
     type: "integer",
     min: 0,
     max: null,
-    hint: "How many abseils.",
+    hint: t`How many abseils.`,
     placeTypes: ["canyon"],
   },
   {
     id: "a0000000-0000-4000-8000-000000000007",
     key: "longest_abseil",
-    label: "Longest pitch",
+    label: t`Longest pitch`,
     type: "float",
     min: 0,
     max: null,
-    hint: "The longest single abseil, measured along the rope.",
+    hint: t`The longest single abseil, measured along the rope.`,
     unit: "m",
     placeTypes: ["canyon"],
   },
   {
     id: "a0000000-0000-4000-8000-000000000008",
     key: "capacity",
-    label: "Capacity",
+    label: t`Capacity`,
     type: "integer",
     min: 0,
     max: null,
@@ -467,7 +467,7 @@ export const SYSTEM_FIELD_DEFS: SystemFieldDef[] = [
   {
     id: "a0000000-0000-4000-8000-000000000009",
     key: "is_cave",
-    label: "Is a cave?",
+    label: t`Is a cave?`,
     type: "boolean",
     min: null,
     max: null,
@@ -476,7 +476,7 @@ export const SYSTEM_FIELD_DEFS: SystemFieldDef[] = [
   {
     id: "a0000000-0000-4000-8000-000000000010",
     key: "has_water",
-    label: "Has a water source?",
+    label: t`Has a water source?`,
     type: "boolean",
     min: null,
     max: null,

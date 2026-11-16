@@ -7,6 +7,7 @@ import { enUS } from "./i18nCatalogues/en-US.js";
 import {
   bareCopyIn,
   ceilingFailures,
+  DATA_LITERALS,
   EXEMPT_FILES,
   I18N_ADR,
   messagesIn,
@@ -26,10 +27,7 @@ import {
 const SRC = dirname(fileURLToPath(import.meta.url));
 
 /** Bare literals a user may read, per directory under src. Lower an entry when its text moves; never raise one. */
-const CEILINGS: Record<string, number> = {
-  ".": 663,
-  geoPdfImport: 1,
-};
+const CEILINGS: Record<string, number> = {};
 
 function sources(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
@@ -132,6 +130,33 @@ describe("the en-US catalogue", () => {
   // without an entry for that message.
   it("has an entry for every message that holds an Australian spelling", () => {
     expect(missingEntries(enUS, keys, AUSTRALIAN_WORDS)).toEqual([]);
+  });
+});
+
+describe("the literals the scan leaves out", () => {
+  const held = new Set<string>();
+  beforeAll(() => {
+    const REPO = join(SRC, "../..");
+    for (const pkg of ["shared", "frontend", "mobile", "api"])
+      for (const path of sources(join(REPO, pkg, "src"))) {
+        // The list itself holds every entry.
+        if (path.endsWith("i18nSource.ts")) continue;
+        const text = readFileSync(path, "utf8");
+        for (const literal of Object.keys(DATA_LITERALS))
+          if (text.includes(`"${literal}"`)) held.add(literal);
+      }
+  }, 30_000);
+
+  // Mutation: add `"Open the file": "a test"` to `DATA_LITERALS`.
+  it("lists only literals that exist", () => {
+    expect(
+      Object.keys(DATA_LITERALS)
+        .filter((literal) => !held.has(literal))
+        .map(
+          (literal) =>
+            `"${literal}" is in DATA_LITERALS (i18nSource.ts) but no source holds it: delete the entry (${I18N_ADR}).`,
+        ),
+    ).toEqual([]);
   });
 });
 

@@ -139,9 +139,9 @@ export function messagesIn(
 const NOT_COPY_ATTRS =
   /^(?:className|class|style|id|key|ref|testID|nativeID|role|type|name|href|src|to|target|rel|htmlFor|for|value|defaultValue|autoComplete|inputMode|pointerEvents|resizeMode|source|d|viewBox|fill|stroke|transform|data-.*|aria-(?!label).*)$/;
 
-/** Calls whose string arguments are code, a log line or a developer's message, never words a user reads. */
+/** Calls whose string arguments are code, a log line or a developer's message, never words a user reads (`super` passes an error's message up to `Error`). */
 const NOT_COPY_CALLS =
-  /^(?:console\.\w+|logger\.\w+|log\.\w+|require|malformed|fault|\w+\.\$(?:query|execute)Raw\w*|Prisma\.sql|matchMedia|\w+\.(?:querySelector\w*|getElementById|setItem|getItem|removeItem|addEventListener|removeEventListener|getAttribute|setAttribute|setHeader|header|set|append))$/;
+  /^(?:console\.\w+|logger\.\w+|log\.\w+|require|super|malformed|fault|\w+\.\$(?:query|execute)Raw\w*|Prisma\.sql|matchMedia|\w+\.(?:querySelector\w*|getElementById|setItem|getItem|removeItem|addEventListener|removeEventListener|getAttribute|setAttribute|setHeader|header|set|append))$/;
 
 /** An all-capitals SQL keyword: a string holding one is a query, and so is every part of a template that does. */
 const SQL =
@@ -174,10 +174,11 @@ const HEX = /^#[0-9a-f]{3,8}$/i;
 /**
  * Code that reads as words: a bracket or underscore (a selector, a path), a
  * media query `(hover: none)`, a CSS value, a selector list `input, textarea`,
- * an HTTP header value.
+ * an HTTP header value, a line of XML or HTML (a tag that opens or closes, or
+ * the `<?xml` declaration).
  */
 const CODE =
-  /[[\]{}_]|^\([^()]*:[^()]*\)$|var\(--|color-mix\(|^[a-z0-9]+(?:, ?[a-z0-9]+)+$|^(?:attachment|inline);|; charset=|\dpx|xxpx/;
+  /[[\]{}_]|^\([^()]*:[^()]*\)$|var\(--|color-mix\(|^[a-z0-9]+(?:, ?[a-z0-9]+)+$|^(?:attachment|inline);|; charset=|\dpx|xxpx|<[?!/]?[A-Za-z][^>]*>/;
 
 /** A map style property ("text-font", "icon-image"): its value is a font, an expression or an id. Another hyphenated key ("six-base") names a thing, and its value may be words. */
 const MAP_STYLE_KEY =
@@ -193,6 +194,13 @@ export const EXEMPT_FILES: Readonly<Record<string, string>> = {
     "what a failing copy test tells the developer to write instead",
   "shared/src/i18nSource.ts": "what a failing i18n test tells the developer",
   "shared/src/i18nCodemod.ts": "what the codemod tells the developer it left",
+  "shared/src/areaExport.ts":
+    "what the API logs about a request only a broken client can send (`malformed`)",
+  "shared/src/geoPdfConfig.ts":
+    "what a render request is refused for, read by the developer of a broken client",
+  "shared/src/announcementMarkdown.ts":
+    "the Markdown an announcement lost, listed for the maintainer who wrote it",
+  "shared/src/topoRegions.ts": "the header of a generated file",
   "shared/src/kit.ts":
     "notes on each kit component, read by the people who build it",
   "shared/src/webTokens.ts": "the CSS generated from the design tokens",
@@ -200,6 +208,27 @@ export const EXEMPT_FILES: Readonly<Record<string, string>> = {
     "notes on why a model is left out of what a user downloads, read by developers",
   "api/src/lib/placeVisibility.ts":
     "notes on why a field is withheld from a sharee, read by developers",
+};
+
+/**
+ * Text that reads as words and is not words a user reads: an operator
+ * the place filter stores, a land tenure class as the map data spells it,
+ * RopeWiki's name for a region, the producer a PDF names, a noun in a
+ * developer's error. A literal equal to one is never counted or converted. `i18nCoverage.test.ts` ("lists only literals that exist") fails
+ * on an entry no source file holds.
+ */
+export const DATA_LITERALS: Readonly<Record<string, string>> = {
+  "Less than": "a stored operator of a number filter",
+  "More than": "a stored operator of a number filter",
+  "National Park": "a tenure class as the land map data spells it",
+  "State Forest": "a tenure class as the land map data spells it",
+  "Indigenous Owned": "a tenure class as the land map data spells it",
+  "Unresolved Tenure": "a tenure class as the land map data spells it",
+  "New South Wales": "RopeWiki's name for the region",
+  "gauge feed": "a noun in the error a region's declaration throws",
+  "place registry": "a noun in the error a region's declaration throws",
+  "Logjam GeoPDF Generator":
+    "the producer Logjam writes into a PDF and recognises on import",
 };
 
 export type BareLiteral = {
@@ -237,7 +266,13 @@ export function bareCopyIn(
   const found: BareLiteral[] = [];
   const plurals = pluralNames(ts, sf);
   const add = (node: TypeScript.Node, text: string, copy: boolean) => {
-    if (!/\p{L}/u.test(text) || SQL.test(text) || HEX.test(text)) return;
+    if (
+      !/\p{L}/u.test(text) ||
+      SQL.test(text) ||
+      HEX.test(text) ||
+      Object.prototype.hasOwnProperty.call(DATA_LITERALS, text)
+    )
+      return;
     const prose = PROSE.test(text) && !CODE.test(text);
     const word = !!options.words && LABEL.test(text);
     if (!copy && !prose && !word) return;
@@ -296,12 +331,14 @@ export function bareCopyIn(
   const visit = (node: TypeScript.Node, copy: boolean): void => {
     const into = (child: TypeScript.Node, c = copy) => visit(child, c);
     const all = (c = copy) => ts.forEachChild(node, (child) => visit(child, c));
-    // `"a" + b` and `"a" ${b}`: text built in place.
+    // `"a" + b`, `"a" ${b}` and `b || "a"`: text built or defaulted in place.
     const isText = (arg: TypeScript.Node): boolean =>
       ts.isStringLiteralLike(arg) ||
       ts.isTemplateExpression(arg) ||
       (ts.isBinaryExpression(arg) &&
-        arg.operatorToken.kind === ts.SyntaxKind.PlusToken &&
+        (arg.operatorToken.kind === ts.SyntaxKind.PlusToken ||
+          arg.operatorToken.kind === ts.SyntaxKind.BarBarToken ||
+          arg.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken) &&
         (isText(arg.left) || isText(arg.right)));
     // An argument that is text is code here; any other (a callback) is read.
     const codeArguments = (

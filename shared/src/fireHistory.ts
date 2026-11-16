@@ -12,7 +12,7 @@ import { t } from "./i18n.js";
 import type { FireArchive } from "./regions.js";
 
 /** What a fire reads as when its type code is not in the region's `types`: a new code still shows its date. */
-const FIRE_UNKNOWN_TYPE = "Fire";
+const FIRE_UNKNOWN_TYPE = t`Fire`;
 
 /**
  * The tint by years since the area last burnt, as stops a map interpolates
@@ -114,9 +114,9 @@ function mixHex(from: string, to: string, t: number): string {
  */
 export function fireLegendRows(): { label: string; colour: string }[] {
   return [
-    { label: "Under a year ago", years: 0 },
-    { label: "4 years ago", years: 4 },
-    { label: "7 years ago", years: 7 },
+    { label: t`Under a year ago`, years: 0 },
+    { label: t`4 years ago`, years: 4 },
+    { label: t`7 years ago`, years: 7 },
   ].map(({ label, years }) => {
     const { colour, fill } = fireTintAt(years);
     return { label, colour: mixHex("#ffffff", colour, fill) };

@@ -11,6 +11,7 @@
  * a GB matters for that; a tenth of a MB does not. Anything non-zero reads as at
  * least 1 KB rather than "0 KB", which looks like a failed measurement.
  */
+import { t } from "./i18n.js";
 export function formatBytes(bytes: number): string {
   const gb = bytes / 1024 ** 3;
   if (gb >= 1) return `${gb.toFixed(1)} GB`;
@@ -25,9 +26,9 @@ export function formatBytes(bytes: number): string {
  * surfaces so two surfaces do not phrase the same wait differently.
  */
 export function formatMinutes(seconds: number): string {
-  if (seconds < 90) return "under a minute";
+  if (seconds < 90) return t`under a minute`;
   const minutes = Math.round(seconds / 60);
-  if (minutes < 60) return `about ${minutes} min`;
+  if (minutes < 60) return t`about ${minutes} min`;
   const hours = Math.floor(minutes / 60);
-  return `about ${hours} h ${minutes % 60} min`;
+  return t`about ${hours} h ${minutes % 60} min`;
 }

@@ -24,6 +24,7 @@
 // The image itself, re-exported so this module is the ONE import surface for
 // drawing arrows — a client should never have to know the generated file's name
 // to get the arrowhead that goes with these constants.
+import { t } from "./i18n.js";
 export { ROUTE_ARROW_SDF_URI } from "./routeArrowSdf.js";
 
 /** Style-image name. Registered once per map, by whatever owns the style. */

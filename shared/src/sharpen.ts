@@ -30,13 +30,13 @@ import {
  * once (sharpen.test.ts).
  */
 export const LIDAR_JOB_COPY = {
-  make: "Sharpen an area",
-  makeHere: "Sharpen an area here",
-  noun: "Sharpened area",
-  starting: "Starting to sharpen",
-  startingLine: "Uploaded. Checking it over and starting to sharpen…",
-  unnamed: "Your area",
-  beingMade: "is being sharpened",
+  make: t`Sharpen an area`,
+  makeHere: t`Sharpen an area here`,
+  noun: t`Sharpened area`,
+  starting: t`Starting to sharpen`,
+  startingLine: t`Uploaded. Checking it over and starting to sharpen…`,
+  unnamed: t`Your area`,
+  beingMade: t`is being sharpened`,
 } as const;
 
 type SharpenUpload = Extract<RegionSharpen, { mode: "upload" }>;

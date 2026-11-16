@@ -27,6 +27,7 @@ import {
   type ImportedPosition,
   type VectorImportResult,
 } from "./vectorImport.js";
+import { t } from "./i18n.js";
 
 /**
  * Maximum vertices in one route. DERIVED, not arbitrary: the API caps request
@@ -49,14 +50,14 @@ export const ROUTE_COORD_DECIMALS = 6;
 export type RoutePoint = [number, number];
 
 export const ROUTE_ERRORS = {
-  pointsRequired: "points is required",
+  pointsRequired: t`points is required`,
   pointsShape: "points must be an array of [longitude, latitude] pairs",
-  tooFewPoints: `A route needs at least ${MIN_ROUTE_POINTS} points`,
-  tooManyPoints: `A route can have at most ${MAX_ROUTE_POINTS} points`,
-  nameRequired: "name is required",
-  nameTooLong: `name must be at most ${ROUTE_NAME_MAX_LENGTH} characters`,
-  anchorsShape: "anchors must be an array of point indices",
-  colorUnknown: "color must be one of the track palette colours",
+  tooFewPoints: t`A route needs at least ${MIN_ROUTE_POINTS} points`,
+  tooManyPoints: t`A route can have at most ${MAX_ROUTE_POINTS} points`,
+  nameRequired: t`name is required`,
+  nameTooLong: t`name must be at most ${ROUTE_NAME_MAX_LENGTH} characters`,
+  anchorsShape: t`anchors must be an array of point indices`,
+  colorUnknown: t`color must be one of the track palette colours`,
 } as const;
 
 export type RouteFieldPayload = {
@@ -150,12 +151,12 @@ export function parseRoutePoints(
     // the array is GeoJSON [lon, lat].
     if (!isValidLongitude(lon)) {
       return {
-        error: `Longitude must be a number between ${LONGITUDE_RANGE.min} and ${LONGITUDE_RANGE.max}`,
+        error: t`Longitude must be a number between ${LONGITUDE_RANGE.min} and ${LONGITUDE_RANGE.max}`,
       };
     }
     if (!isValidLatitude(lat)) {
       return {
-        error: `Latitude must be a number between ${LATITUDE_RANGE.min} and ${LATITUDE_RANGE.max}`,
+        error: t`Latitude must be a number between ${LATITUDE_RANGE.min} and ${LATITUDE_RANGE.max}`,
       };
     }
     points.push([roundCoord(lon), roundCoord(lat)]);

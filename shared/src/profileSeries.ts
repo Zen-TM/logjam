@@ -136,11 +136,11 @@ export function speedTimeFormatter(
  * who assumes otherwise reads a plateau as a rest.
  */
 export const TRACK_PROFILE_COPY = {
-  reading: "Reading the track…",
-  elevationTitle: "Elevation vs distance",
-  elevationLabel: "Elevation profile",
-  speedTitle: "Speed vs time",
-  speedLabel: "Speed profile",
+  reading: t`Reading the track…`,
+  elevationTitle: t`Elevation vs distance`,
+  elevationLabel: t`Elevation profile`,
+  speedTitle: t`Speed vs time`,
+  speedLabel: t`Speed profile`,
 } as const;
 
 /**
@@ -149,9 +149,9 @@ export const TRACK_PROFILE_COPY = {
  * source a climb can be stored from" in profileSeries.test.ts.
  */
 const HEIGHT_SOURCE_NAMES: Record<string, string> = {
-  [SHARPENED_CLIMB_SOURCE]: "LiDAR terrain data",
-  [TERRARIUM.id]: "30 m terrain data",
-  [GPS_CLIMB_SOURCE]: "GPS heights",
+  [SHARPENED_CLIMB_SOURCE]: t`LiDAR terrain data`,
+  [TERRARIUM.id]: t`30 m terrain data`,
+  [GPS_CLIMB_SOURCE]: t`GPS heights`,
 };
 
 /** A region's own heights, named by the archive's `name`: "NSW 5 m terrain data". */
@@ -167,7 +167,7 @@ function nameOfHeightSource(id: string): string {
   return regionHeightsName(id) ?? HEIGHT_SOURCE_NAMES[id] ?? UNNAMED_SOURCE;
 }
 /** A source this build does not know was written by a newer one. */
-const UNNAMED_SOURCE = "terrain data";
+const UNNAMED_SOURCE = t`terrain data`;
 
 /** The name of the one climb source a profile was read from, if just one. */
 function heightSourceName(sourceIds: readonly string[] | undefined): string {
@@ -184,7 +184,7 @@ function heightSourceName(sourceIds: readonly string[] | undefined): string {
  * different sources; each says its own, in the same words.
  */
 export function storedClimbCaption(source: string | null | undefined): string {
-  return `Ascent and descent from ${nameOfHeightSource(source ?? GPS_CLIMB_SOURCE)}`;
+  return t`Ascent and descent from ${nameOfHeightSource(source ?? GPS_CLIMB_SOURCE)}`;
 }
 
 /**
@@ -216,20 +216,20 @@ export function trackHeights(
     ? demLoading
       ? MAP_MEASURE.copy.readingTerrain
       : detail.maxAltitudeM == null
-        ? "No heights for this track"
-        : "Not enough height readings to chart"
+        ? t`No heights for this track`
+        : t`Not enough height readings to chart`
     : dem?.filledFromGps
-      ? "Terrain data covers part of this track — the rest is from GPS"
+      ? t`Terrain data covers part of this track — the rest is from GPS`
       : dem
         ? // Named only when ONE source answered, counting every sharpened
           // area as one (`lidar`), as a stored climb is: a line read from two
           // has no single name, and the credit beside it lists both.
-          `Heights from ${heightSourceName(dem.demSourceIds)}`
+          t`Heights from ${heightSourceName(dem.demSourceIds)}`
         : demProfile
-          ? "Terrain data incomplete — heights from GPS"
+          ? t`Terrain data incomplete — heights from GPS`
           : demLoading
-            ? "Heights from GPS — loading terrain…"
-            : "Heights from GPS — no terrain data here";
+            ? t`Heights from GPS — loading terrain…`
+            : t`Heights from GPS — no terrain data here`;
   return { dem, elevation, note };
 }
 

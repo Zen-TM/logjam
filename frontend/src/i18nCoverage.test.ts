@@ -28,16 +28,16 @@ const CEILINGS: Record<string, number> = {
   "components/dialogs/topoSettings": 21,
   "components/feedback": 4,
   "components/gauges": 1,
-  "components/map": 65,
+  "components/map": 64,
   "components/media": 31,
   "components/plans": 41,
   "components/routes": 25,
   "components/sidebar": 9,
   "components/sidebar/panels": 347,
   csvImport: 68,
-  geoPdf: 4,
+  geoPdf: 3,
   "geoPdf/draw": 3,
-  ui: 39,
+  ui: 38,
 };
 
 function sources(dir: string): string[] {

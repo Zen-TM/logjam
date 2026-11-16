@@ -19,15 +19,14 @@ import {
 // tiles are actually fetched — so layers set `requiresExtractionDate` and the
 // renderer appends the dated line at draw time.
 // Terms: https://www.spatial.nsw.gov.au/products_and_services/web_services/terms_and_conditions
-export const SIX_EXTRACTION_CREDIT_PREFIX = "© Department of Customer Service";
+export const SIX_EXTRACTION_CREDIT_PREFIX = t`© Department of Customer Service`;
 
 // ── Basemap catalog ───────────────────────────────────────────────────────────
 // Canonical catalog of raster basemap providers, shared by the web map
 // (frontend BASE_LAYERS derives from it), the GeoPDF renderer (via
 // GEOPDF_BASE_LAYER_CONFIG below), and the mobile map. One list, no third copy.
 
-const SIX_ATTRIBUTION =
-  "Base map © State of New South Wales (Spatial Services, a business unit of the Department of Customer Service NSW). For current information go to spatial.nsw.gov.au.";
+const SIX_ATTRIBUTION = t`Base map © State of New South Wales (Spatial Services, a business unit of the Department of Customer Service NSW). For current information go to spatial.nsw.gov.au.`;
 const SIX_ATTRIBUTION_HTML =
   '&copy; State of New South Wales (Spatial Services, a business unit of the Department of Customer Service NSW). For current information go to <a href="https://spatial.nsw.gov.au">spatial.nsw.gov.au</a>.';
 
@@ -135,13 +134,13 @@ export const BASEMAP_CATALOG: BasemapCatalogEntry[] = [
     // It is also the only OSM default either picker offers (the "osm" raster
     // entry below is offered by neither): same cartography, drawn rather than
     // fetched and downloadable, so the name says which rendering it is.
-    name: "OSM Vector",
+    name: t`OSM Vector`,
     kind: "vector",
     urlTemplate: NSW_REGION.vector.archivePath,
     maxNativeZoom: NSW_REGION.vector.maxzoom,
     licence: NSW_REGION.vector.licence,
     displayMaxZoom: 15,
-    attribution: "Base map © OpenStreetMap contributors (Protomaps build)",
+    attribution: t`Base map © OpenStreetMap contributors (Protomaps build)`,
     attributionHtml:
       '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors | <a href="https://protomaps.com">Protomaps</a>',
     offlineCapable: true,
@@ -150,13 +149,13 @@ export const BASEMAP_CATALOG: BasemapCatalogEntry[] = [
   },
   {
     id: "osm",
-    name: "Default",
+    name: t`Default`,
     kind: "raster",
     urlTemplate: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
     maxNativeZoom: 19,
     displayMaxZoom: 19,
     licence: "osmf-tiles",
-    attribution: "Base map © OpenStreetMap contributors",
+    attribution: t`Base map © OpenStreetMap contributors`,
     attributionHtml:
       '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
     offlineCapable: false,
@@ -172,14 +171,13 @@ export const BASEMAP_CATALOG: BasemapCatalogEntry[] = [
   {
     id: "osm-topo",
     printsContours: true,
-    name: "OSM Topo",
+    name: t`OSM Topo`,
     kind: "raster",
     urlTemplate: "https://a.tile.opentopomap.org/{z}/{x}/{y}.png",
     maxNativeZoom: 17,
     displayMaxZoom: 17,
     licence: "cc-by-sa-3",
-    attribution:
-      "Base map © OpenTopoMap (CC-BY-SA), © OpenStreetMap contributors, SRTM",
+    attribution: t`Base map © OpenTopoMap (CC-BY-SA), © OpenStreetMap contributors, SRTM`,
     attributionHtml:
       '<a href="https://github.com/der-stefan/OpenTopoMap">OpenTopo</a> | &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
     offlineCapable: false,
@@ -192,14 +190,14 @@ export const BASEMAP_CATALOG: BasemapCatalogEntry[] = [
   {
     id: "osm-cycle",
     printsContours: true,
-    name: "OSM Cycle Topo",
+    name: t`OSM Cycle Topo`,
     kind: "raster",
     urlTemplate:
       "https://a.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png",
     maxNativeZoom: 20,
     displayMaxZoom: 20,
     licence: "osmf-tiles",
-    attribution: "Base map © CyclOSM, © OpenStreetMap contributors",
+    attribution: t`Base map © CyclOSM, © OpenStreetMap contributors`,
     attributionHtml:
       '<a href="https://github.com/cyclosm/cyclosm-cartocss-style/releases">CyclOSM</a> | &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
     offlineCapable: false,
@@ -210,7 +208,7 @@ export const BASEMAP_CATALOG: BasemapCatalogEntry[] = [
   {
     id: "six-topo",
     printsContours: true,
-    name: "SIX Maps Topo",
+    name: t`SIX Maps Topo`,
     chipName: t`Topo`,
     kind: "raster",
     urlTemplate:
@@ -250,7 +248,7 @@ export const BASEMAP_CATALOG: BasemapCatalogEntry[] = [
   {
     id: "six-base",
     printsContours: true,
-    name: "SIX Maps Base Map",
+    name: t`SIX Maps Base Map`,
     chipName: t`Base Map`,
     kind: "raster",
     urlTemplate:
@@ -277,7 +275,7 @@ export const BASEMAP_CATALOG: BasemapCatalogEntry[] = [
   {
     id: "six-imagery",
     photo: true,
-    name: "SIX Maps Imagery",
+    name: t`SIX Maps Imagery`,
     chipName: t`Imagery`,
     kind: "raster",
     urlTemplate:
@@ -285,8 +283,7 @@ export const BASEMAP_CATALOG: BasemapCatalogEntry[] = [
     maxNativeZoom: 20,
     displayMaxZoom: 18,
     licence: "six-web-services",
-    attribution:
-      "Imagery © State of New South Wales (Spatial Services, a business unit of the Department of Customer Service NSW). For current information go to spatial.nsw.gov.au.",
+    attribution: t`Imagery © State of New South Wales (Spatial Services, a business unit of the Department of Customer Service NSW). For current information go to spatial.nsw.gov.au.`,
     attributionHtml: SIX_ATTRIBUTION_HTML,
     offlineCapable: true,
     // `six-imagery` returns 404 for some z18 tiles, where advertised LOD differs
@@ -441,12 +438,9 @@ export function extractionCreditLine(
 export type OverlaySource = "elevation" | "vegetation" | "features";
 
 export const GEOPDF_OVERLAY_ATTRIBUTION: Record<OverlaySource, string> = {
-  elevation:
-    "Elevation derived from LiDAR via ELVIS (elevation.fsdf.org.au) © State of NSW (Spatial Services) / Commonwealth of Australia (Geoscience Australia), CC BY 4.0. See dataset metadata for the specific custodian.",
-  vegetation:
-    "Vegetation © State Government of NSW and NSW Department of Climate Change, Energy, the Environment and Water 2020 — State Vegetation Type Map (CC BY 4.0). " +
-    NSW_REGION.terrain.fire.credit,
-  features: "Features © OpenStreetMap contributors",
+  elevation: t`Elevation derived from LiDAR via ELVIS (elevation.fsdf.org.au) © State of NSW (Spatial Services) / Commonwealth of Australia (Geoscience Australia), CC BY 4.0. See dataset metadata for the specific custodian.`,
+  vegetation: t`Vegetation © State Government of NSW and NSW Department of Climate Change, Energy, the Environment and Water 2020 — State Vegetation Type Map (CC BY 4.0). ${NSW_REGION.terrain.fire.credit}`,
+  features: t`Features © OpenStreetMap contributors`,
 };
 
 // Maps each selectable overlay layer name to its underlying data source(s).

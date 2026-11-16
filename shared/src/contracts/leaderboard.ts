@@ -5,9 +5,8 @@
 // and the one way in is the switch in Settings (`LEADERBOARD_SETTING`). Every number is
 // `computeLeaderboard` on the server (shared/src/leaderboard.ts).
 import { formatDayLongMonth } from "../dateFormat.js";
-import { t } from "../i18n.js";
+import { plural, t } from "../i18n.js";
 import { seasonOpening, type SeasonRegion } from "../leaderboard.js";
-import { pluralCount } from "../logbook.js";
 import type { ScreenContract } from "./types.js";
 
 export const LEADERBOARD = {
@@ -96,7 +95,7 @@ export function leaderboardSeasonLine(season: string): string {
 }
 
 export function leaderboardCount(count: number): string {
-  return pluralCount(count, "canyon");
+  return plural(count, "# canyon", "# canyons");
 }
 
 export function leaderboardPodiumLine(podium: {

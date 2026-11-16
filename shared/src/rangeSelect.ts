@@ -11,6 +11,7 @@
  * - Tapping inside a wider range → collapses to just that value, so narrowing
  *   never needs two taps in a row that both widen.
  */
+import { t } from "./i18n.js";
 export type NumberRange = [number, number];
 
 export function nextRange(
@@ -42,7 +43,7 @@ export function formatRange(
   prefix = "",
   word: (stop: number) => string = String,
 ): string {
-  if (isFullRange(range, bounds)) return "Any";
+  if (isFullRange(range, bounds)) return t`Any`;
   const [low, high] = range as NumberRange;
   return low === high
     ? `${prefix}${word(low)}`

@@ -16,6 +16,7 @@ import {
   parseRoutePoints,
   ROUTE_ERRORS,
 } from "./routeValidation.js";
+import { t } from "./i18n.js";
 
 /** What a member may do in a plan. A plan can have more than one leader. */
 export const TRIP_PLAN_ROLES = ["leader", "editor", "member"] as const;
@@ -389,29 +390,29 @@ export const TRIP_PLAN_FORM_PRESETS: Record<
   TripPlanFormCreate
 > = {
   gear: {
-    title: "Gear to borrow",
+    title: t`Gear to borrow`,
     preset: "gear",
     visibleTo: "leaders",
     questions: [
       {
         id: "items",
         kind: "multiChoice",
-        label: "What do you need to borrow?",
-        help: "Tick only what you don't have.",
+        label: t`What do you need to borrow?`,
+        help: t`Tick only what you don't have.`,
         required: false,
         options: options(
-          ["harness", "Harness"],
-          ["helmet", "Helmet"],
-          ["descender", "Descender and carabiner"],
-          ["wetsuit", "Wetsuit"],
-          ["pack", "Pack and dry bag"],
-          ["rope", "Rope (leaders only)"],
+          ["harness", t`Harness`],
+          ["helmet", t`Helmet`],
+          ["descender", t`Descender and carabiner`],
+          ["wetsuit", t`Wetsuit`],
+          ["pack", t`Pack and dry bag`],
+          ["rope", t`Rope (leaders only)`],
         ),
       },
       {
         id: "wetsuitSize",
         kind: "choice",
-        label: "Wetsuit size",
+        label: t`Wetsuit size`,
         required: false,
         options: options(
           ["xs", "XS"],
@@ -425,117 +426,117 @@ export const TRIP_PLAN_FORM_PRESETS: Record<
       {
         id: "notes",
         kind: "text",
-        label: "Anything else?",
-        help: "For example, your own descender is a figure 8.",
+        label: t`Anything else?`,
+        help: t`For example, your own descender is a figure 8.`,
         required: false,
       },
     ],
   },
   carpool: {
-    title: "Carpooling",
+    title: t`Carpooling`,
     preset: "carpool",
     visibleTo: "members",
     questions: [
       {
         id: "mode",
         kind: "choice",
-        label: "How are you getting there?",
+        label: t`How are you getting there?`,
         required: true,
         options: options(
-          ["seats", "Driving, with seats to offer"],
-          ["full", "Driving, car is full"],
-          ["lift", "Need a lift"],
-          ["own", "Making my own way"],
+          ["seats", t`Driving, with seats to offer`],
+          ["full", t`Driving, car is full`],
+          ["lift", t`Need a lift`],
+          ["own", t`Making my own way`],
         ),
       },
       {
         id: "seats",
         kind: "number",
-        label: "Seats you can offer",
+        label: t`Seats you can offer`,
         required: false,
       },
       {
         id: "from",
         kind: "text",
-        label: "Leaving from",
-        help: "A suburb is enough.",
+        label: t`Leaving from`,
+        help: t`A suburb is enough.`,
         required: false,
       },
       {
         id: "notes",
         kind: "text",
-        label: "Anything else?",
-        help: "For example, can leave after 7 am.",
+        label: t`Anything else?`,
+        help: t`For example, can leave after 7 am.`,
         required: false,
       },
     ],
   },
   experience: {
-    title: "Experience",
+    title: t`Experience`,
     preset: "experience",
     visibleTo: "leaders",
     questions: [
       {
         id: "trips",
         kind: "choice",
-        label: "How many canyon trips have you done?",
+        label: t`How many canyon trips have you done?`,
         required: true,
         options: options(
-          ["none", "None yet"],
+          ["none", t`None yet`],
           ["few", "1 to 5"],
           ["some", "6 to 20"],
-          ["many", "More than 20"],
+          ["many", t`More than 20`],
         ),
       },
       {
         id: "abseil",
         kind: "yesNo",
-        label: "Can you set up and do an abseil on your own?",
+        label: t`Can you set up and do an abseil on your own?`,
         required: true,
       },
       {
         id: "swim",
         kind: "yesNo",
-        label: "Can you swim 50 m in a pack?",
+        label: t`Can you swim 50 m in a pack?`,
         required: true,
       },
       {
         id: "notes",
         kind: "longText",
-        label: "Anything the leader should know?",
-        help: "Fitness, injuries, fear of heights or water.",
+        label: t`Anything the leader should know?`,
+        help: t`Fitness, injuries, fear of heights or water.`,
         required: false,
       },
     ],
   },
   firstAid: {
-    title: "First aid",
+    title: t`First aid`,
     preset: "firstAid",
     visibleTo: "leaders",
     questions: [
       {
         id: "cert",
         kind: "choice",
-        label: "Do you hold a current first aid certificate?",
+        label: t`Do you hold a current first aid certificate?`,
         required: true,
         options: options(
-          ["no", "No"],
-          ["yes", "Yes"],
-          ["remote", "Yes, remote or wilderness first aid"],
+          ["no", t`No`],
+          ["yes", t`Yes`],
+          ["remote", t`Yes, remote or wilderness first aid`],
         ),
       },
       {
         id: "conditions",
         kind: "longText",
-        label: "Medical conditions or allergies",
-        help: "Only what the group needs to know in an emergency.",
+        label: t`Medical conditions or allergies`,
+        help: t`Only what the group needs to know in an emergency.`,
         required: false,
       },
       {
         id: "medication",
         kind: "text",
-        label: "Medication you carry",
-        help: "For example, an EpiPen in the lid of your pack.",
+        label: t`Medication you carry`,
+        help: t`For example, an EpiPen in the lid of your pack.`,
         required: false,
       },
     ],
@@ -543,49 +544,49 @@ export const TRIP_PLAN_FORM_PRESETS: Record<
   // Members, and required: whoever is standing there when something goes
   // wrong needs them, leader or not.
   safetyContacts: {
-    title: "Safety contacts",
+    title: t`Safety contacts`,
     preset: "safetyContacts",
     visibleTo: "members",
     questions: [
       {
         id: "name",
         kind: "text",
-        label: "Contact's name",
-        help: "Someone not on the trip who can act if you're overdue.",
+        label: t`Contact's name`,
+        help: t`Someone not on the trip who can act if you're overdue.`,
         required: true,
       },
-      { id: "phone", kind: "phone", label: "Contact's phone", required: true },
+      { id: "phone", kind: "phone", label: t`Contact's phone`, required: true },
       {
         id: "relation",
         kind: "text",
-        label: "How do they know you?",
-        help: "For example, partner or mum.",
+        label: t`How do they know you?`,
+        help: t`For example, partner or mum.`,
         required: false,
       },
       {
         id: "name2",
         kind: "text",
-        label: "Second contact's name",
+        label: t`Second contact's name`,
         required: false,
       },
       {
         id: "phone2",
         kind: "phone",
-        label: "Second contact's phone",
+        label: t`Second contact's phone`,
         required: false,
       },
     ],
   },
   rules: {
-    title: "Trip rules",
+    title: t`Trip rules`,
     preset: "rules",
     visibleTo: "leaders",
     questions: [
       {
         id: "agree",
         kind: "agree",
-        label: "I've read the trip rules and agree to follow them.",
-        help: "The rules are in the plan's write-up.",
+        label: t`I've read the trip rules and agree to follow them.`,
+        help: t`The rules are in the plan's write-up.`,
         required: true,
       },
     ],
@@ -644,7 +645,7 @@ class Refused {
 function refuse(sentence: UserSentence, status: 400 | 409 | 413 = 400): never {
   throw new Refused({ sentence, status });
 }
-function bad(detail: string, status?: 413): never {
+function malformed(detail: string, status?: 413): never {
   throw new Refused(
     status ? { malformed: detail, status } : { malformed: detail },
   );
@@ -660,24 +661,25 @@ function checked<T>(parse: () => T): TripPlanParsed<T> {
 
 function record(value: unknown, what: string): Record<string, unknown> {
   if (typeof value !== "object" || value === null || Array.isArray(value))
-    bad(`${what} must be an object`);
+    malformed(`${what} must be an object`);
   return value as Record<string, unknown>;
 }
 
 function text(value: unknown, what: string): string {
-  if (typeof value !== "string") bad(`${what} must be a string`);
+  if (typeof value !== "string") malformed(`${what} must be a string`);
   return value;
 }
 
 /** A Cas pair's shape; `to` is checked by the caller with the create rules. */
 function cas(value: unknown, what: string): { from: unknown; to: unknown } {
   const pair = record(value, what);
-  if (!("from" in pair) || !("to" in pair)) bad(`${what} needs from and to`);
+  if (!("from" in pair) || !("to" in pair))
+    malformed(`${what} needs from and to`);
   return { from: pair.from, to: pair.to };
 }
 
 function nothingToChange(patch: object): void {
-  if (Object.keys(patch).length === 0) bad("the patch changes nothing");
+  if (Object.keys(patch).length === 0) malformed("the patch changes nothing");
 }
 
 const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
@@ -691,7 +693,7 @@ export function isDateOnly(value: unknown): value is DateOnly {
 
 function dateOrNull(value: unknown, what: string): DateOnly | null {
   if (value === undefined || value === null) return null;
-  if (!isDateOnly(value)) bad(`${what} must be YYYY-MM-DD or null`);
+  if (!isDateOnly(value)) malformed(`${what} must be YYYY-MM-DD or null`);
   return value;
 }
 
@@ -716,12 +718,12 @@ function planDates(value: unknown): TripPlanDates {
 }
 
 function tripTypes(value: unknown, field: string): string[] {
-  if (!Array.isArray(value)) bad(`${field} must be an array of strings`);
+  if (!Array.isArray(value)) malformed(`${field} must be an array of strings`);
   const result: string[] = [];
   const seen = new Set<string>();
   for (const item of value) {
     const type = text(item, `${field} entry`).trim();
-    if (!type) bad(`${field} entries must not be empty`);
+    if (!type) malformed(`${field} entries must not be empty`);
     if (type.length > TRIP_TYPE_MAX_LENGTH)
       refuse(say`A trip type can be up to ${TRIP_TYPE_MAX_LENGTH} characters.`);
     const key = type.toLowerCase();
@@ -751,7 +753,7 @@ export function parseTripTypeList(
 }
 
 function stringList(value: unknown, what: string): string[] {
-  if (!Array.isArray(value)) bad(`${what} must be an array of strings`);
+  if (!Array.isArray(value)) malformed(`${what} must be an array of strings`);
   return value.map((item) => text(item, what));
 }
 
@@ -798,7 +800,7 @@ export function parseTripPlanPatch(
       const { from, to } = cas(input.tripTypes, "tripTypes");
       const was = stringList(from, "tripTypes.from");
       if (was.length > MAX_TRIP_TYPES_PER_TRIP)
-        bad("tripTypes.from is over the cap", 413);
+        malformed("tripTypes.from is over the cap", 413);
       patch.tripTypes = { from: was, to: tripTypes(to, "tripTypes") };
     }
     nothingToChange(patch);
@@ -866,9 +868,9 @@ export function parseTripPlanOrder(
 ): TripPlanParsed<string[]> {
   return checked(() => {
     const ids = stringList(record(body, "body").ids, "ids");
-    if (ids.length === 0) bad("ids is empty");
-    if (ids.length > max) bad("ids is over the cap", 413);
-    if (new Set(ids).size !== ids.length) bad("ids repeats an id");
+    if (ids.length === 0) malformed("ids is empty");
+    if (ids.length > max) malformed("ids is over the cap", 413);
+    if (new Set(ids).size !== ids.length) malformed("ids repeats an id");
     return ids;
   });
 }
@@ -880,7 +882,7 @@ const QUESTION_ID = /^[A-Za-z0-9_-]{1,40}$/;
 function questionId(value: unknown, what: string, seen: Set<string>): string {
   const id = text(value, what);
   if (!QUESTION_ID.test(id) || id in Object.prototype || seen.has(id))
-    bad(`${what} must be a unique slug`);
+    malformed(`${what} must be a unique slug`);
   seen.add(id);
   return id;
 }
@@ -904,12 +906,13 @@ function formTitle(value: unknown): string {
 }
 
 function visibility(value: unknown, what: string): TripPlanFormVisibility {
-  if (!isTripPlanFormVisibility(value)) bad(`${what} is not a visibility`);
+  if (!isTripPlanFormVisibility(value))
+    malformed(`${what} is not a visibility`);
   return value;
 }
 
 function flag(value: unknown, what: string): boolean {
-  if (typeof value !== "boolean") bad(`${what} must be a boolean`);
+  if (typeof value !== "boolean") malformed(`${what} must be a boolean`);
   return value;
 }
 
@@ -944,7 +947,8 @@ function questions(value: unknown): TripPlanQuestion[] {
   return value.map((raw) => {
     const input = record(raw, "question");
     const id = questionId(input.id, "question.id", seen);
-    if (!isTripPlanQuestionKind(input.kind)) bad("question.kind is not a kind");
+    if (!isTripPlanQuestionKind(input.kind))
+      malformed("question.kind is not a kind");
     const label = text(input.label, "question.label").trim();
     if (!label) refuse(say`Every question needs a label.`);
     if (label.length > TRIP_PLAN_QUESTION_LABEL_MAX_LENGTH)
@@ -974,7 +978,7 @@ function questions(value: unknown): TripPlanQuestion[] {
       Array.isArray(input.options) &&
       input.options.length > TRIP_PLAN_MAX_OPTIONS
     )
-      bad("question.options is over the cap", 413);
+      malformed("question.options is over the cap", 413);
     return question;
   });
 }
@@ -987,7 +991,7 @@ export function parseTripPlanFormCreate(
     const input = record(body, "body");
     const preset = input.preset ?? null;
     if (preset !== null && !isTripPlanFormPresetId(preset))
-      bad("preset is not a preset");
+      malformed("preset is not a preset");
     return {
       title: formTitle(input.title),
       preset,
@@ -1040,11 +1044,13 @@ function answerValue(
 ): TripPlanAnswerValue | undefined {
   if (Array.isArray(value)) {
     if (value.length > TRIP_PLAN_MAX_OPTIONS)
-      bad("an answer list is over the cap", 413);
+      malformed("an answer list is over the cap", 413);
     if (value.some((item) => typeof item !== "string"))
-      bad("an answer list holds only strings");
+      malformed("an answer list holds only strings");
   } else if (!["string", "number", "boolean"].includes(typeof value))
-    bad("an answer is a string, a number, a boolean or a list of strings");
+    malformed(
+      "an answer is a string, a number, a boolean or a list of strings",
+    );
   const optionIds = new Set(question.options?.map((option) => option.id));
   switch (question.kind) {
     case "text":
@@ -1179,9 +1185,9 @@ export function parseTripPlanItemAdd(
 ): TripPlanParsed<TripPlanItemAdd> {
   return checked(() => {
     const input = record(body, "body");
-    if (!isTripPlanItemKind(input.kind)) bad("kind is not an item kind");
+    if (!isTripPlanItemKind(input.kind)) malformed("kind is not an item kind");
     const id = text(input.id, "id");
-    if (!id) bad("id is empty");
+    if (!id) malformed("id is empty");
     return { kind: input.kind, id };
   });
 }
@@ -1193,7 +1199,7 @@ export function parseTripPlanItemAdd(
 
 function onlyFields(input: Record<string, unknown>, fields: readonly string[]) {
   for (const field of Object.keys(input))
-    if (!fields.includes(field)) bad("a field can't be edited");
+    if (!fields.includes(field)) malformed("a field can't be edited");
 }
 
 function textOrNull(value: unknown, what: string): string | null {
@@ -1202,37 +1208,38 @@ function textOrNull(value: unknown, what: string): string | null {
 
 function numberOrNull(value: unknown, what: string): number | null {
   if (value !== null && typeof value !== "number")
-    bad(`${what} must be a number or null`);
+    malformed(`${what} must be a number or null`);
   return value;
 }
 
 function cappedStrings(value: unknown, what: string, max: number): string[] {
   const list = stringList(value, what);
-  if (list.length > max) bad(`${what} is over the cap`, 413);
+  if (list.length > max) malformed(`${what} is over the cap`, 413);
   return list;
 }
 
 function position(value: unknown, what: string) {
   const at = record(value, what);
   if (typeof at.latitude !== "number" || typeof at.longitude !== "number")
-    bad(`${what} needs a latitude and a longitude`);
+    malformed(`${what} needs a latitude and a longitude`);
   return { latitude: at.latitude, longitude: at.longitude };
 }
 
 /** A route's stored points as a client last saw them: not re-rounded. */
 function seenGeometry(value: unknown) {
   const geometry = record(value, "geometry.from");
-  if (!Array.isArray(geometry.points)) bad(ROUTE_ERRORS.pointsShape);
-  if (geometry.points.length < MIN_ROUTE_POINTS) bad(ROUTE_ERRORS.tooFewPoints);
+  if (!Array.isArray(geometry.points)) malformed(ROUTE_ERRORS.pointsShape);
+  if (geometry.points.length < MIN_ROUTE_POINTS)
+    malformed(ROUTE_ERRORS.tooFewPoints);
   if (geometry.points.length > MAX_ROUTE_POINTS)
-    bad("geometry.from.points is over the cap", 413);
+    malformed("geometry.from.points is over the cap", 413);
   for (const point of geometry.points)
     if (
       !Array.isArray(point) ||
       point.length !== 2 ||
       point.some((n) => typeof n !== "number")
     )
-      bad(ROUTE_ERRORS.pointsShape);
+      malformed(ROUTE_ERRORS.pointsShape);
   const anchors = geometry.anchors ?? null;
   if (anchors !== null) {
     if (
@@ -1240,9 +1247,9 @@ function seenGeometry(value: unknown) {
       anchors.length < 2 ||
       anchors.some((n) => typeof n !== "number")
     )
-      bad(ROUTE_ERRORS.anchorsShape);
+      malformed(ROUTE_ERRORS.anchorsShape);
     if (anchors.length > MAX_ROUTE_POINTS)
-      bad("geometry.from.anchors is over the cap", 413);
+      malformed("geometry.from.anchors is over the cap", 413);
   }
   return {
     points: geometry.points as [number, number][],
@@ -1303,7 +1310,7 @@ export function parseTripPlanPlacePatch(
       patch.fieldValues = Object.fromEntries(
         Object.entries(values).map(([key, pair]) => [
           key,
-          cas(pair, "a field value"),
+          cas(pair, t`a field value`),
         ]),
       );
     }
@@ -1334,11 +1341,11 @@ export function parseTripPlanRoutePatch(
     if (input.geometry !== undefined) {
       const { from, to } = cas(input.geometry, "geometry");
       const next = record(to, "geometry.to");
-      if (next.points === undefined) bad(ROUTE_ERRORS.pointsRequired);
+      if (next.points === undefined) malformed(ROUTE_ERRORS.pointsRequired);
       const points = parseRoutePoints(next.points);
-      if ("error" in points) bad(points.error);
+      if ("error" in points) malformed(points.error);
       const anchors = parseRouteAnchors(next.anchors, points.points.length);
-      if ("error" in anchors) bad(anchors.error);
+      if ("error" in anchors) malformed(anchors.error);
       patch.geometry = {
         from: seenGeometry(from),
         to: { points: points.points, anchors: anchors.anchors },
