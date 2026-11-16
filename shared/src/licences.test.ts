@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { TERRARIUM } from "./demSources.js";
+import { BASEMAP_CATALOG } from "./geoPdfBaseLayers.js";
 import {
   dataSources,
   LICENCES,
@@ -163,6 +164,20 @@ describe("dataSources", () => {
     expect(Object.keys(expected).length).toBe(18);
     for (const [id, licence] of Object.entries(expected))
       expect(tagged.get(id), id).toBe(licence);
+  });
+
+  // Mutation: set one region's `vector.licence` to `cc-by-4`, and it differs
+  // from the "protomaps" catalogue entry's, which credits the same
+  // OpenStreetMap data.
+  it("gives every region's vector cut the licence the Protomaps basemap carries", () => {
+    const protomaps = BASEMAP_CATALOG.find((entry) => entry.id === "protomaps");
+    expect(protomaps).toBeDefined();
+    const withVector = [...REGIONS, WORLD, ...SIM_REGIONS, SIM_WORLD].filter(
+      (region) => region.vector !== null,
+    );
+    expect(withVector.length).toBeGreaterThanOrEqual(4);
+    for (const region of withVector)
+      expect(region.vector!.licence, region.id).toBe(protomaps!.licence);
   });
 
   // Mutation: tag the land layer `cc-by-3-au`, whose name its credit does not hold.
