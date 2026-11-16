@@ -3,7 +3,7 @@
 // new default back. A friend's place (CopySheet) and a plan's (Save a copy)
 // both ask it this way.
 import { useCallback, useState } from "react";
-import { messageFromError } from "@logjam/shared";
+import { messageFromError, t } from "@logjam/shared";
 
 import { apiFetch } from "../api/apiFetch";
 import { fetchCurrentUser, useApiQuery } from "../api/queries";
@@ -19,7 +19,7 @@ export function useRememberedCopyMedia(active: boolean): [boolean, () => void] {
   // apiFetch, which makes the open itself free anyway.)
   const userQuery = useApiQuery(
     fetchCurrentUser,
-    "Couldn't load your settings.",
+    t`Couldn't load your settings.`,
     active && accountState !== "guest",
   );
   // Undefined until the account answers; the switch renders from the same
@@ -44,7 +44,7 @@ export function useRememberedCopyMedia(active: boolean): [boolean, () => void] {
       }).catch((err: unknown) => {
         // The copy still honours THIS sheet's answer (it is sent explicitly),
         // so a failed save costs the memory, not the action.
-        console.error(messageFromError(err, "Couldn't save that preference."));
+        console.error(messageFromError(err, t`Couldn't save that preference.`));
       });
       return next;
     });

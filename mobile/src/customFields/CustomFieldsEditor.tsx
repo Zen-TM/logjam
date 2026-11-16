@@ -14,6 +14,7 @@ import {
   TRIP_TYPE_SUGGESTIONS,
   type ScopedCustomFieldDef,
   type TripLogCustomFieldType,
+  t,
 } from "@logjam/shared";
 
 import { spacing, makeStyles, useTheme, muted } from "../theme";
@@ -277,8 +278,8 @@ export function useCustomFieldForm({
     if (!appliesToAll && typeIds.length === 0) {
       setScopeError(
         entity === "place"
-          ? `Pick at least one place type, or “All”.`
-          : `Pick at least one trip type, or “All”.`,
+          ? t`Pick at least one place type, or “All”.`
+          : t`Pick at least one trip type, or “All”.`,
       );
       return;
     }
@@ -397,8 +398,8 @@ export function useCustomFieldForm({
           under a heading of their own put them next to the place-type picker,
           which is the other thing on this screen called a "type". */}
       <Field
-        label="What it holds"
-        hint={editing ? "Existing values are kept." : undefined}
+        label={t`What it holds`}
+        hint={editing ? t`Existing values are kept.` : undefined}
       >
         <ChipRail
           options={CUSTOM_FIELD_TYPES.map((entry) => ({
@@ -416,8 +417,8 @@ export function useCustomFieldForm({
         <FormStack>
           <SwitchRow
             icon="filter"
-            title="Limit to a range"
-            description={bounded ? "Between your min and max" : "Any number"}
+            title={t`Limit to a range`}
+            description={bounded ? t`Between your min and max` : t`Any number`}
             checked={bounded}
             onChange={(next) => patch({ bounded: next })}
           />
@@ -425,7 +426,7 @@ export function useCustomFieldForm({
             <View style={styles.boundsRow}>
               <View style={styles.bound}>
                 <TextField
-                  label="Min"
+                  label={t`Min`}
                   value={min}
                   onChangeText={(next) => {
                     patch({ min: next });
@@ -438,7 +439,7 @@ export function useCustomFieldForm({
               </View>
               <View style={styles.bound}>
                 <TextField
-                  label="Max"
+                  label={t`Max`}
                   value={max}
                   onChangeText={(next) => {
                     patch({ max: next });
@@ -470,8 +471,8 @@ export function useCustomFieldForm({
           types and "Other" adds one — a field can be set up for an activity
           before its first trip. */}
       <ChipPicker
-        label={entity === "place" ? "Place types" : "Trip types"}
-        options={[{ value: ALL_TYPES_CHIP, label: "All" }, ...scopeOptions]}
+        label={entity === "place" ? t`Place types` : t`Trip types`}
+        options={[{ value: ALL_TYPES_CHIP, label: t`All` }, ...scopeOptions]}
         selected={appliesToAll ? [ALL_TYPES_CHIP, ...allScopeValues] : typeIds}
         disabledValues={appliesToAll ? new Set(allScopeValues) : undefined}
         error={scopeError}
@@ -507,7 +508,7 @@ export function useCustomFieldForm({
                 });
               }
         }
-        addPlaceholder="Other"
+        addPlaceholder={t`Other`}
       />
 
       {editing ? (
@@ -528,7 +529,7 @@ export function useCustomFieldForm({
     <FormStack>
       {formError ? <ErrorBanner message={formError} /> : null}
       <Button
-        label={editing ? "Save" : `Add ${ATTRIBUTE_NOUN.one}`}
+        label={editing ? t`Save` : `Add ${ATTRIBUTE_NOUN.one}`}
         icon="done"
         loading={saving}
         onPress={() => void save()}

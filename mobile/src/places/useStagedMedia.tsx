@@ -9,7 +9,7 @@
 // (`stagedPlaceMedia.ts`), so cancelling leaves nothing behind but the picked
 // files, which `reset` and `cancel` delete.
 import { useState } from "react";
-import { mediaCategory } from "@logjam/shared";
+import { mediaCategory, t } from "@logjam/shared";
 
 import { useHues } from "../theme";
 import { ADD_PHOTO_LABEL, PHOTO_SOURCES, pickMedia } from "../media/pickMedia";
@@ -123,7 +123,7 @@ export function StagedPhotosSection({
       <SectionHeader title={title} />
       {media.staged.files.map((file, index) => {
         const video = mediaCategory(file.mimeType ?? "image/jpeg") === "video";
-        const name = file.fileName ?? (video ? "Video" : "Photo");
+        const name = file.fileName ?? (video ? t`Video` : t`Photo`);
         return (
           <Row
             key={`${file.uri}-${index}`}
@@ -133,7 +133,7 @@ export function StagedPhotosSection({
             right={
               <IconButton
                 icon="close"
-                accessibilityLabel={`Remove ${name}`}
+                accessibilityLabel={t`Remove ${name}`}
                 onPress={() => {
                   void discardPickedFile(file.uri);
                   media.setStaged((current) => ({
@@ -184,7 +184,7 @@ export function StagedWaySection({
           right={
             <IconButton
               icon="close"
-              accessibilityLabel={`Remove ${way.label}`}
+              accessibilityLabel={t`Remove ${way.label}`}
               onPress={media.removeWay}
             />
           }

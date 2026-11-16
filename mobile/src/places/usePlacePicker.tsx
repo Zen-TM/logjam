@@ -20,6 +20,7 @@ import {
   SHARE_SENTENCES,
   truncationHint,
   WayRemovalError,
+  t,
 } from "@logjam/shared";
 
 import { spacing, makeStyles, useTheme, useHues, muted } from "../theme";
@@ -137,7 +138,7 @@ export function usePlacePicker({
         }).then((filled) => {
           if (filled) onDone();
         }),
-      "Couldn't link that to the place.",
+      t`Couldn't link that to the place.`,
     );
   };
 
@@ -149,19 +150,23 @@ export function usePlacePicker({
       <View style={styles.header}>
         {promise ? <Text style={styles.hint}>{promise}</Text> : null}
         <Text style={styles.hint}>{SHARE_SENTENCES.linkedRoutes}</Text>
-        <TextField label="Find a place" value={query} onChangeText={setQuery} />
+        <TextField
+          label={t`Find a place`}
+          value={query}
+          onChangeText={setQuery}
+        />
       </View>
     ),
     body: (
       <View style={styles.body}>
         {linkedPlace && onUnlink ? (
           <Row
-            title={`Unlink from ${linkedPlace.name}`}
+            title={t`Unlink from ${linkedPlace.name}`}
             icon="link"
             hue={theme.warning}
             disabled={busy}
             onPress={() =>
-              run(() => onUnlink().then(onDone), "Couldn't change the link.")
+              run(() => onUnlink().then(onDone), t`Couldn't change the link.`)
             }
           />
         ) : null}
@@ -169,8 +174,8 @@ export function usePlacePicker({
         {matches.length === 0 ? (
           <Text style={styles.hint}>
             {query
-              ? "No place of yours matches that."
-              : "You have no places yet."}
+              ? t`No place of yours matches that.`
+              : t`You have no places yet.`}
           </Text>
         ) : (
           matches.map((place) => {
@@ -192,9 +197,9 @@ export function usePlacePicker({
                 // no new information.
                 subtitle={
                   here
-                    ? "Already this place's route"
+                    ? t`Already this place's route`
                     : occupied
-                      ? "Has a route already"
+                      ? t`Has a route already`
                       : undefined
                 }
                 icon={here ? "done" : "place"}

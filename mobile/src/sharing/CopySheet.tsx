@@ -27,6 +27,7 @@ import {
   COPY_MEDIA_SETTING,
   copyAndRemoveConfirm,
   copyConfirm,
+  t,
 } from "@logjam/shared";
 
 import { unavailableReasonText } from "../auth/capabilities";
@@ -180,7 +181,7 @@ export function useCopyPanel({
             share verb follows (`useShareRowProps`). */}
         {!online ? (
           <View style={styles.note}>
-            <FieldError message="Saving a copy needs a connection." />
+            <FieldError message={t`Saving a copy needs a connection.`} />
           </View>
         ) : null}
       </>
@@ -188,14 +189,14 @@ export function useCopyPanel({
     footer: (
       <Button
         label={
-          mode === "copyAndRemove" ? "Save a copy and remove" : "Save a copy"
+          mode === "copyAndRemove" ? t`Save a copy and remove` : t`Save a copy`
         }
         onPress={() =>
           onConfirm(media.count > 0 ? { copyMedia: withMedia } : {})
         }
         disabled={busy || !online}
         disabledReason={
-          online ? "Saving…" : unavailableReasonText("needs-connection")
+          online ? t`Saving…` : unavailableReasonText("needs-connection")
         }
         loading={busy}
         grow

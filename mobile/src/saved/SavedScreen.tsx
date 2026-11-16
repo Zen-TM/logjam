@@ -66,6 +66,7 @@ import {
   type ToastAction,
   formatDayMonth,
   localDay,
+  t,
 } from "@logjam/shared";
 
 import { apiFetch } from "../api/apiFetch";
@@ -222,7 +223,7 @@ function formatDay(iso: string): string {
 /** A basemap-region artifact's logicalKey IS the basemap it holds tiles for. */
 function basemapName(logicalKey: string): string {
   return (
-    BASEMAP_CATALOG.find((entry) => entry.id === logicalKey)?.name ?? "Map"
+    BASEMAP_CATALOG.find((entry) => entry.id === logicalKey)?.name ?? t`Map`
   );
 }
 
@@ -230,14 +231,14 @@ function basemapName(logicalKey: string): string {
 function regionMemberName(artifact: MapArtifact): string {
   // A sharpened area's clip, labelled when saved (offline/sharpenedClips.ts).
   if (artifact.logicalKey.startsWith(SHARPENED_SOURCE_PREFIX))
-    return artifact.label ?? "Sharpened area";
-  if (artifact.kind === "contours-region") return "Contours";
-  if (artifact.kind === "slope-region") return "Slope";
+    return artifact.label ?? t`Sharpened area`;
+  if (artifact.kind === "contours-region") return t`Contours`;
+  if (artifact.kind === "slope-region") return t`Slope`;
   if (artifact.kind === "land-region") return MAP_TERRAIN.copy.land;
   if (artifact.kind === "fire-region") return MAP_TERRAIN.copy.fire;
   if (artifact.kind === "coverage-region") return MAP_TERRAIN.copy.coverage;
   if (artifact.kind !== "dem-region") return basemapName(artifact.logicalKey);
-  return archiveLabel(artifact.logicalKey) ?? "Elevation data";
+  return archiveLabel(artifact.logicalKey) ?? t`Elevation data`;
 }
 
 /** A topo-overlay artifact's logicalKey is `<jobId>/<layer>`. */
@@ -277,13 +278,13 @@ const CATEGORY_META: Record<
     icon: IconIdea;
   }
 > = {
-  region: { label: "Offline map", plural: "Offline maps", icon: "map" },
+  region: { label: t`Offline map`, plural: t`Offline maps`, icon: "map" },
   overlay: {
-    label: "Sharpened area",
-    plural: "Sharpened areas",
+    label: t`Sharpened area`,
+    plural: t`Sharpened areas`,
     icon: "lidar",
   },
-  geoPdf: { label: "GeoPDF", plural: "GeoPDFs", icon: "geoPdf" },
+  geoPdf: { label: t`GeoPDF`, plural: "GeoPDFs", icon: "geoPdf" },
   // The three kinds of line are `WAY_KIND_WORDS`, shared with Logjam Web's Ways
   // page. Route stays a category of its own beside import: a route is editable
   // in place and an import is an opaque file, and a list that mixed them would
@@ -520,7 +521,7 @@ export function SavedScreen({
   const lidarReady = lidarStatus.status === "available";
   const lidarWhyNot =
     lidarStatus.status === "available"
-      ? "Another download is running"
+      ? t`Another download is running`
       : unavailableReasonText(lidarStatus.reason);
   const pendingCount = usePendingSyncCount();
   const pendingCreates = usePendingCreateIds();
@@ -756,9 +757,9 @@ export function SavedScreen({
 
   const discardOrphan = useCallback(async (group: UnfinishedRegionGroup) => {
     const ok = await confirm({
-      confirmTitle: `Discard ${group.label}?`,
-      confirmBody: "The download so far will be deleted from this phone.",
-      confirmLabel: "Discard",
+      confirmTitle: t`Discard ${group.label}?`,
+      confirmBody: t`The download so far will be deleted from this phone.`,
+      confirmLabel: t`Discard`,
       tone: "destructive",
     });
     if (!ok) return;
@@ -779,14 +780,14 @@ export function SavedScreen({
   const confirmStopGroup = useCallback(async (group: RegionDownloadGroup) => {
     const ok = await confirm({
       confirmTitle: group.update
-        ? "Stop updating?"
+        ? t`Stop updating?`
         : group.label
-          ? `Stop saving ${group.label}?`
-          : "Stop saving these maps?",
+          ? t`Stop saving ${group.label}?`
+          : t`Stop saving these maps?`,
       confirmBody: group.update
-        ? "Maps already updated stay. The rest keep the version you have."
-        : "The download so far will be deleted from this phone.",
-      confirmLabel: "Stop",
+        ? t`Maps already updated stay. The rest keep the version you have.`
+        : t`The download so far will be deleted from this phone.`,
+      confirmLabel: t`Stop`,
       tone: "destructive",
     });
     if (ok) stopRegionGroup(group);
@@ -794,7 +795,7 @@ export function SavedScreen({
 
   const overlaysQuery = useApiQuery(
     getCompletedOverlays,
-    "Couldn't load your sharpened areas.",
+    t`Couldn't load your sharpened areas.`,
     accountState !== "guest",
   );
   const mergedOverlays = mergeSavedOverlayJobs(overlaysQuery.data, artifacts);
@@ -808,7 +809,7 @@ export function SavedScreen({
   const downloadableJobs = mergedOverlays.jobs
     .map((job) => ({
       jobId: job.jobId,
-      label: job.name ?? `LiDAR map ${job.jobId.slice(0, 8)}`,
+      label: job.name ?? t`LiDAR map ${job.jobId.slice(0, 8)}`,
       bbox: bboxOfFootprint(job.footprint),
       // A synthetic job (built from what is on disk when the account list is
       // unreachable) carries no URL, so there is nothing to offer.
@@ -829,9 +830,9 @@ export function SavedScreen({
     const netState = await NetInfo.fetch();
     if (netState.type !== "cellular") return true;
     return confirm({
-      confirmTitle: "Use mobile data?",
-      confirmBody: "You're not on Wi-Fi. Download over mobile data?",
-      confirmLabel: "Download",
+      confirmTitle: t`Use mobile data?`,
+      confirmBody: t`You're not on Wi-Fi. Download over mobile data?`,
+      confirmLabel: t`Download`,
       tone: "filled",
     });
   }, []);
@@ -854,7 +855,7 @@ export function SavedScreen({
         setOverlayBusyKey(item.jobId);
         for (const [index, layer] of item.missing.entries()) {
           setActiveOp({
-            label: `Saving ${item.label} — ${index + 1} of ${item.missing.length} layers`,
+            label: t`Saving ${item.label} — ${index + 1} of ${item.missing.length} layers`,
             category: "overlay",
             fraction: null,
           });
@@ -881,7 +882,7 @@ export function SavedScreen({
         refreshFreeSpace();
       } catch (err) {
         console.error(err);
-        fail(messageFromError(err, "Couldn't save this overlay."));
+        fail(messageFromError(err, t`Couldn't save this overlay.`));
       } finally {
         setOverlayBusyKey(null);
         setActiveOp(null);
@@ -903,7 +904,7 @@ export function SavedScreen({
     try {
       setImportBusy(true);
       setActiveOp({
-        label: "Importing file",
+        label: t`Importing file`,
         category: "import",
         fraction: null,
       });
@@ -911,7 +912,7 @@ export function SavedScreen({
       if (outcome.status === "imported") {
         const { record } = outcome;
         info(WAY_IMPORT.saved(record.name), {
-          label: "Open",
+          label: t`Open`,
           onPress: () =>
             onOpenMap(record.bbox, undefined, {
               category: "import",
@@ -1003,7 +1004,7 @@ export function SavedScreen({
       // layers appear under the card's ⋯ and become this row when it is done.
       if (downloadGroups.some((run) => run.groupId === group.key)) continue;
       const first = group.members[0];
-      const title = group.label ?? "Offline map";
+      const title = group.label ?? t`Offline map`;
       const savedLine = `${formatDay(dates.savedAt)}${
         dates.updatedAt ? ` · updated ${formatDay(dates.updatedAt)}` : ""
       }`;
@@ -1041,7 +1042,7 @@ export function SavedScreen({
               busy: isGroupBusy(regionJobs, group.key),
               running: updatingCards.get(group.key),
               run: () =>
-                startRegionUpdate(group.members, group.label ?? "Offline map"),
+                startRegionUpdate(group.members, group.label ?? t`Offline map`),
             }
           : undefined,
         members: group.members.map((artifact) => ({
@@ -1053,7 +1054,7 @@ export function SavedScreen({
             : { delete: () => deleteDownloadedArtifact(artifact.id) }),
         })),
         delete: {
-          confirmTitle: `Delete ${title}?`,
+          confirmTitle: t`Delete ${title}?`,
           synced: false,
           confirmBody: `The map data for this area (${countOf(group.members.length, "layer")}) is removed from the device.`,
           run: async () => {
@@ -1071,14 +1072,14 @@ export function SavedScreen({
         (candidate) => candidate.jobId === group.key,
       );
       const title =
-        group.label ?? job?.name ?? `LiDAR map ${group.key.slice(0, 8)}`;
+        group.label ?? job?.name ?? t`LiDAR map ${group.key.slice(0, 8)}`;
       rows.push({
         key: savedOverlayKey(group.key),
         category: "overlay",
         title,
         subtitle: countOf(group.members.length, "layer"),
         sizeBytes: group.sizeBytes,
-        pill: { label: "Offline", tone: "accent" },
+        pill: { label: t`Offline`, tone: "accent" },
         // Withheld only when we KNOW it is not ours (`syncRole === "shared"` —
         // the API answers a non-owner's share with 403). Absent ownership is
         // not a no: a synthetic job rebuilt from a downloaded artifact carries
@@ -1137,7 +1138,7 @@ export function SavedScreen({
           delete: () => deleteDownloadedArtifact(artifact.id),
         })),
         delete: {
-          confirmTitle: `Delete ${title}?`,
+          confirmTitle: t`Delete ${title}?`,
           synced: false,
           confirmBody: `Its ${countOf(group.members.length, "layer")} are removed from the device. You can download them again later.`,
           run: async () => {
@@ -1173,21 +1174,21 @@ export function SavedScreen({
         // and hue say the kind, and "Unfinished" is already a pill.
         subtitle: failed
           ? (geoPdf.errorCode && GEOPDF_ERRORS[geoPdf.errorCode]) ||
-            "Import failed."
+            t`Import failed.`
           : incomplete
             ? undefined
-            : `Imported ${formatDay(geoPdf.createdAt)}`,
+            : t`Imported ${formatDay(geoPdf.createdAt)}`,
         sizeBytes: geoPdf.sourceSizeBytes + (tiles?.sizeBytes ?? 0),
         ...(failed
-          ? { pill: { label: "Failed", tone: "warning" as const } }
+          ? { pill: { label: t`Failed`, tone: "warning" as const } }
           : incomplete
-            ? { pill: { label: "Unfinished", tone: "muted" as const } }
+            ? { pill: { label: t`Unfinished`, tone: "muted" as const } }
             : {}),
         ...(geoPdf.state !== "ready" && !geoPdfBusy
           ? {
               inlineAction: {
                 icon: "refresh" as const,
-                label: "Resume this import",
+                label: t`Resume this import`,
                 onPress: () => handleResumeGeoPdf(geoPdf.id, geoPdf.label),
               },
             }
@@ -1204,7 +1205,7 @@ export function SavedScreen({
         // Length is DERIVED, never stored — a saved length goes stale the
         // moment a vertex moves. Nothing about sharing here: the mark says it,
         // and a subtitle that repeats a pill costs the title its width.
-        subtitle: `${formatDistanceM(routeLengthM(route.points))} · drawn ${formatDay(route.createdAt)}`,
+        subtitle: t`${formatDistanceM(routeLengthM(route.points))} · drawn ${formatDay(route.createdAt)}`,
         // Routes live in the sync mirror as a row of coordinates, not as a file
         // on this device, so they take no meaningful storage. Same deliberate
         // treatment as recorded tracks.
@@ -1238,7 +1239,7 @@ export function SavedScreen({
         // permanent. Same word for opposite promises is the confusion the
         // Share / Send-a-copy split exists to prevent.
         ...(imported.sentBy
-          ? { pill: { label: "Copy", tone: "muted" as const } }
+          ? { pill: { label: t`Copy`, tone: "muted" as const } }
           : {}),
         ...vectorImportActions(imported),
       });
@@ -1249,7 +1250,7 @@ export function SavedScreen({
         key: track.id,
         category: "track",
         title: track.name,
-        subtitle: `${formatDistanceM(track.distanceM)} · recorded ${formatDay(track.startedAt)}`,
+        subtitle: t`${formatDistanceM(track.distanceM)} · recorded ${formatDay(track.startedAt)}`,
         // Tracks are DB rows, not files — they carry no meaningful on-disk
         // size, so they stay out of the capacity meter.
         sizeBytes: 0,
@@ -1281,8 +1282,8 @@ export function SavedScreen({
         title: mediaDisplayName(file),
         subtitle:
           file.metadata.distanceM != null && file.metadata.startedAt
-            ? `${formatDistanceM(file.metadata.distanceM)} · recorded ${formatDay(file.metadata.startedAt)}`
-            : "Recorded on another device",
+            ? t`${formatDistanceM(file.metadata.distanceM)} · recorded ${formatDay(file.metadata.startedAt)}`
+            : t`Recorded on another device`,
         sizeBytes: file.fileSizeBytes ?? 0,
         ...remoteTrackActions(file, loggedTrackIds),
       });
@@ -1340,7 +1341,7 @@ export function SavedScreen({
   const usedBytes = segments.reduce((sum, segment) => sum + segment.value, 0);
 
   const filterOptions: ChipOption<Category | "all">[] = [
-    { value: "all", label: "All", count: items.length },
+    { value: "all", label: t`All`, count: items.length },
     ...CATEGORY_ORDER.map((category) => ({
       value: category,
       label: CATEGORY_META[category].plural,
@@ -1365,21 +1366,24 @@ export function SavedScreen({
   } | null => {
     switch (filter) {
       case "all":
-        return { label: "Add to device", onPress: () => setAddSheetOpen(true) };
+        return {
+          label: t`Add to device`,
+          onPress: () => setAddSheetOpen(true),
+        };
       case "region":
         return {
-          label: "Save an offline map",
+          label: t`Save an offline map`,
           onPress: onDownloadRegion,
-          ...(online ? {} : { disabledReason: "Needs a connection" }),
+          ...(online ? {} : { disabledReason: t`Needs a connection` }),
         };
       case "overlay":
         return null;
       case "geoPdf":
-        return { label: "Import a GeoPDF", onPress: handleImportGeoPdf };
+        return { label: t`Import a GeoPDF`, onPress: handleImportGeoPdf };
       case "track":
-        return { label: "Record a track", onPress: onRecordTrack };
+        return { label: t`Record a track`, onPress: onRecordTrack };
       case "route":
-        return { label: "Draw a route", onPress: onDrawRoute };
+        return { label: t`Draw a route`, onPress: onDrawRoute };
       case "import":
         return importBusy
           ? null
@@ -1482,7 +1486,7 @@ export function SavedScreen({
     const ok = await confirm({
       confirmTitle: `Delete ${countOf(targets.length, "item")}?`,
       confirmBody: body,
-      confirmLabel: "Delete",
+      confirmLabel: t`Delete`,
       tone: "destructive",
     });
     if (!ok) return;
@@ -1505,7 +1509,7 @@ export function SavedScreen({
     clearSelection();
     refreshFreeSpace();
     if (failures === 0) info(`Deleted ${countOf(targets.length, "item")}.`);
-    else fail(`${failures} of ${targets.length} couldn't be deleted.`);
+    else fail(t`${failures} of ${targets.length} couldn't be deleted.`);
   };
 
   const deleteItem = useCallback(
@@ -1515,7 +1519,7 @@ export function SavedScreen({
       const ok = await confirm({
         confirmTitle: removal.confirmTitle,
         confirmBody: removal.confirmBody,
-        confirmLabel: "Delete",
+        confirmLabel: t`Delete`,
         tone: "destructive",
       });
       if (!ok) return;
@@ -1524,7 +1528,7 @@ export function SavedScreen({
         .then(refreshFreeSpace)
         .catch((err: unknown) => {
           console.error(err);
-          fail(messageFromError(err, "Couldn't delete that."));
+          fail(messageFromError(err, t`Couldn't delete that.`));
         });
     },
     [fail, refreshFreeSpace],
@@ -1541,7 +1545,7 @@ export function SavedScreen({
       if (!removal) return;
       const ok = await confirm({
         ...removal,
-        confirmLabel: "Remove",
+        confirmLabel: t`Remove`,
         tone: "filled",
       });
       if (!ok) return;
@@ -1550,7 +1554,7 @@ export function SavedScreen({
         .then(refreshFreeSpace)
         .catch((err: unknown) => {
           console.error(err);
-          fail(messageFromError(err, "Couldn't remove that."));
+          fail(messageFromError(err, t`Couldn't remove that.`));
         });
     },
     [fail, refreshFreeSpace],
@@ -1562,10 +1566,9 @@ export function SavedScreen({
       const remove = member.delete;
       if (!remove) return;
       const ok = await confirm({
-        confirmTitle: `Delete ${member.title}?`,
-        confirmBody:
-          "This offline map is removed from the device. The rest of this area stays.",
-        confirmLabel: "Delete",
+        confirmTitle: t`Delete ${member.title}?`,
+        confirmBody: t`This offline map is removed from the device. The rest of this area stays.`,
+        confirmLabel: t`Delete`,
         tone: "destructive",
       });
       if (!ok) return;
@@ -1573,7 +1576,7 @@ export function SavedScreen({
         .then(refreshFreeSpace)
         .catch((err: unknown) => {
           console.error(err);
-          fail(messageFromError(err, "Couldn't delete that."));
+          fail(messageFromError(err, t`Couldn't delete that.`));
         });
     },
     [fail, refreshFreeSpace],
@@ -1585,7 +1588,7 @@ export function SavedScreen({
         .resolveBbox()
         .then((bbox) => {
           if (!bbox) {
-            fail("This one has no saved location to show.");
+            fail(t`This one has no saved location to show.`);
             return;
           }
           onOpenMap(bbox, item.focusBasemapId, {
@@ -1595,7 +1598,7 @@ export function SavedScreen({
         })
         .catch((err: unknown) => {
           console.error(err);
-          fail("Couldn't work out where this is.");
+          fail(t`Couldn't work out where this is.`);
         });
     },
     [fail, onOpenMap],
@@ -1618,7 +1621,7 @@ export function SavedScreen({
   const showJobOnMap = useCallback(
     (job: { jobId: string; bbox: Bbox | null }) => {
       if (!job.bbox) {
-        fail("This one has no saved location to show.");
+        fail(t`This one has no saved location to show.`);
         return;
       }
       onOpenMap(job.bbox, undefined, {
@@ -1714,7 +1717,7 @@ export function SavedScreen({
               value={formatBytes(usedBytes)}
               valueSuffix={
                 freeBytes != null
-                  ? `used · ${formatBytes(freeBytes)} free`
+                  ? t`used · ${formatBytes(freeBytes)} free`
                   : "used"
               }
               // The pinned row names the filter even when it is compact (an Inbox
@@ -1722,7 +1725,7 @@ export function SavedScreen({
               title={(() => {
                 const name =
                   filter === "all"
-                    ? "Saved"
+                    ? t`Saved`
                     : `Saved · ${CATEGORY_META[filter].plural}`;
                 return compact
                   ? compactHeroTitle(name, activeCategoryCount)
@@ -1731,7 +1734,7 @@ export function SavedScreen({
               titleNumberOfLines={2}
               actions={
                 <Button
-                  label="Add"
+                  label={t`Add`}
                   icon="addSaved"
                   compact
                   onPress={() => setAddSheetOpen(true)}
@@ -1827,7 +1830,7 @@ export function SavedScreen({
             subtitle={
               activeOp.fraction != null
                 ? `${Math.round(activeOp.fraction * 100)}%`
-                : "Working…"
+                : t`Working…`
             }
             icon="saveOffline"
             hue={assetHue[activeOp.category]}
@@ -1864,10 +1867,10 @@ export function SavedScreen({
                 // Honest about which half of the run this reaches: the token is
                 // read between rasteriser batches, so during the front phases
                 // there is nothing yet for it to interrupt.
-                accessibilityLabel="Cancel this import"
+                accessibilityLabel={t`Cancel this import`}
                 onPress={cancelGeoPdfImportRun}
                 disabled={!CANCELLABLE_PHASES.includes(importRun.phase)}
-                disabledReason="Can't be cancelled at this step"
+                disabledReason={t`Can't be cancelled at this step`}
               />
             }
           />
@@ -1880,7 +1883,7 @@ export function SavedScreen({
             {downloadGroups.map((group) => (
               <Row
                 key={group.groupId}
-                title={group.label || "Saving maps"}
+                title={group.label || t`Saving maps`}
                 subtitle={regionGroupStatusLine(group)}
                 icon="saveOffline"
                 hue={group.settled ? theme.warning : assetHue.region}
@@ -1889,7 +1892,7 @@ export function SavedScreen({
                   <View style={styles.rowActions}>
                     {group.settled && retryableJobs(group.jobs).length > 0 ? (
                       <Button
-                        label="Try again"
+                        label={t`Try again`}
                         variant="outlineAccent"
                         compact
                         onPress={() => {
@@ -1900,7 +1903,7 @@ export function SavedScreen({
                     ) : null}
                     <IconButton
                       icon="close"
-                      accessibilityLabel="Stop saving these maps"
+                      accessibilityLabel={t`Stop saving these maps`}
                       onPress={() => confirmStopGroup(group)}
                     />
                     <IconButton
@@ -1912,9 +1915,9 @@ export function SavedScreen({
                 }
               />
             ))}
-            <Text style={styles.downloadNote}>
-              Downloads keep going after you leave Logjam GPS.
-            </Text>
+            <Text
+              style={styles.downloadNote}
+            >{t`Downloads keep going after you leave Logjam GPS.`}</Text>
           </>
         ) : null}
 
@@ -1924,13 +1927,13 @@ export function SavedScreen({
               <Row
                 key={group.groupId}
                 title={group.label}
-                subtitle="Didn't finish · some map data is already saved"
+                subtitle={t`Didn't finish · some map data is already saved`}
                 icon="saveOffline"
                 hue={theme.warning}
                 right={
                   <View style={styles.rowActions}>
                     <Button
-                      label="Resume"
+                      label={t`Resume`}
                       variant="outlineAccent"
                       compact
                       onPress={() => resumeOrphan(group)}
@@ -1938,7 +1941,7 @@ export function SavedScreen({
                     <IconButton
                       icon="delete"
                       color={theme.warning}
-                      accessibilityLabel={`Discard the unfinished download ${group.label}`}
+                      accessibilityLabel={t`Discard the unfinished download ${group.label}`}
                       onPress={() => discardOrphan(group)}
                     />
                   </View>
@@ -2049,21 +2052,21 @@ export function SavedScreen({
                         idea="sync"
                         size={15}
                         color={theme.textMuted}
-                        label="Backed up to your account"
+                        label={t`Backed up to your account`}
                       />
                     ) : item.waitingToSync ? (
                       <Icon
                         idea="uploading"
                         size={15}
                         color={theme.text}
-                        label="Waiting to sync"
+                        label={t`Waiting to sync`}
                       />
                     ) : null}
                     {item.update?.running?.settled &&
                     retryableJobs(item.update.running.jobs).length > 0 &&
                     !selecting ? (
                       <Button
-                        label="Try again"
+                        label={t`Try again`}
                         variant="outlineAccent"
                         compact
                         onPress={() => {
@@ -2077,7 +2080,7 @@ export function SavedScreen({
                     {item.update?.running && !selecting ? (
                       <IconButton
                         icon="close"
-                        accessibilityLabel={`Stop updating ${item.title}`}
+                        accessibilityLabel={t`Stop updating ${item.title}`}
                         onPress={() => {
                           const run = item.update?.running;
                           if (run) confirmStopGroup(run);
@@ -2093,7 +2096,7 @@ export function SavedScreen({
                         // but still rendered, because its absence would resize the
                         // row (see the note above).
                         disabled={selecting}
-                        disabledReason="Tap the row to pick it"
+                        disabledReason={t`Tap the row to pick it`}
                         onPress={item.inlineAction.onPress}
                       />
                     ) : null}
@@ -2109,7 +2112,7 @@ export function SavedScreen({
                     ) : (
                       <IconButton
                         icon="overflow"
-                        accessibilityLabel={`Actions for ${item.title}`}
+                        accessibilityLabel={t`Actions for ${item.title}`}
                         onPress={() => openItemSheet(item.key)}
                       />
                     )}
@@ -2124,14 +2127,14 @@ export function SavedScreen({
             failure is only worth reporting inside the filter that needs it. */}
         {filter === "overlay" && overlaysQuery.error ? (
           <Row
-            title="Couldn't reach Logjam"
-            subtitle="Your saved overlays still work offline."
+            title={t`Couldn't reach Logjam`}
+            subtitle={t`Your saved overlays still work offline.`}
             icon="offline"
             hue={theme.warning}
             right={
               <IconButton
                 icon="refresh"
-                accessibilityLabel="Try loading your overlays again"
+                accessibilityLabel={t`Try loading your overlays again`}
                 color={theme.accent}
                 onPress={overlaysQuery.refetch}
               />
@@ -2144,7 +2147,7 @@ export function SavedScreen({
             stays an inventory of what is actually here. */}
         {filter === "overlay" && downloadableJobs.length > 0 ? (
           <>
-            <SectionHeader title="Available to download" />
+            <SectionHeader title={t`Available to download`} />
             {downloadableJobs.map((job) => (
               // The same key a downloaded topo's row carries, so a "LiDAR map
               // ready" notification points at the job whichever side of the
@@ -2163,14 +2166,14 @@ export function SavedScreen({
                   subtitle={
                     lidarReady
                       ? countOf(job.missing.length, "layer")
-                      : "Connect to download"
+                      : t`Connect to download`
                   }
                   icon="lidar"
                   hue={assetHue.overlay}
                   right={
                     <IconButton
                       icon="saveOffline"
-                      accessibilityLabel={`Save ${job.label} for offline use`}
+                      accessibilityLabel={t`Save ${job.label} for offline use`}
                       color={theme.accent}
                       disabled={!lidarReady || overlayBusyKey != null}
                       disabledReason={lidarWhyNot}
@@ -2202,7 +2205,7 @@ export function SavedScreen({
       <BottomSheet
         visible={addSheetOpen}
         onClose={() => setAddSheetOpen(false)}
-        title="Add to this device"
+        title={t`Add to this device`}
       >
         {/* NO SUBTITLES. Every row here names a verb and an object — "Import a
             GeoPDF file" — and a second line explaining that a file comes from
@@ -2211,7 +2214,7 @@ export function SavedScreen({
             source above its account one. */}
         <View style={styles.sheetBody}>
           <Row
-            title="Save an offline map"
+            title={t`Save an offline map`}
             icon="map"
             hue={assetHue.region}
             disabled={!online}
@@ -2221,7 +2224,7 @@ export function SavedScreen({
             }}
           />
           <Row
-            title="Import a GeoPDF file"
+            title={t`Import a GeoPDF file`}
             icon="geoPdf"
             hue={assetHue.geoPdf}
             onPress={() => {
@@ -2232,7 +2235,7 @@ export function SavedScreen({
           {/* Not up with the regions: this is something you made on the web and
               are pulling down, which is less like a basemap download. */}
           <Row
-            title="Sharpened areas from my account"
+            title={t`Sharpened areas from my account`}
             icon="lidar"
             hue={assetHue.overlay}
             {...capabilityRowProps("lidarOverlays", accountState, online)}
@@ -2252,7 +2255,7 @@ export function SavedScreen({
               map: arming either needs the location prompt, which cannot be
               raised from an open sheet (DESIGN.md). */}
           <Row
-            title="Record a track"
+            title={t`Record a track`}
             icon="track"
             hue={assetHue.track}
             onPress={() => {
@@ -2261,7 +2264,7 @@ export function SavedScreen({
             }}
           />
           <Row
-            title="Draw a route"
+            title={t`Draw a route`}
             icon="draw"
             hue={assetHue.route}
             onPress={() => {
@@ -2323,7 +2326,7 @@ export function SavedScreen({
                 if (changed.name && target.rename) {
                   target.rename(changed.name).catch((err: unknown) => {
                     console.error(err);
-                    fail(messageFromError(err, "Couldn't rename that."));
+                    fail(messageFromError(err, t`Couldn't rename that.`));
                   });
                 }
                 closeItemSheet();
@@ -2336,7 +2339,7 @@ export function SavedScreen({
             <>
               {menuItem.locatable ? (
                 <Row
-                  title="Show on map"
+                  title={t`Show on map`}
                   icon="place"
                   hue={assetHue[menuItem.category]}
                   onPress={() => {
@@ -2357,7 +2360,7 @@ export function SavedScreen({
                   hue={assetHue[menuItem.category]}
                   subtitle={
                     menuItem.logTrip.needsConnection && !online
-                      ? "Needs a connection"
+                      ? t`Needs a connection`
                       : undefined
                   }
                   disabled={menuItem.logTrip.needsConnection && !online}
@@ -2374,7 +2377,7 @@ export function SavedScreen({
                   anything shared WITH this user — the API refuses it. */}
               {menuItem.share ? (
                 <Row
-                  title="Share"
+                  title={t`Share`}
                   icon="shareFriend"
                   hue={theme.neutral}
                   {...shareRowProps}
@@ -2389,7 +2392,7 @@ export function SavedScreen({
                   rather than twice in two voices. */}
               {menuItem.sendCopy ? (
                 <Row
-                  title="Send a copy"
+                  title={t`Send a copy`}
                   icon="send"
                   hue={theme.neutral}
                   {...shareRowProps}
@@ -2399,7 +2402,7 @@ export function SavedScreen({
               {/* Absent on a shared route: shared items are read-only and cannot be renamed. */}
               {menuItem.rename ? (
                 <Row
-                  title="Rename"
+                  title={t`Rename`}
                   icon="edit"
                   hue={theme.neutral}
                   onPress={() => setMenuMode("rename")}
@@ -2407,12 +2410,12 @@ export function SavedScreen({
               ) : null}
               {menuItem.update ? (
                 <Row
-                  title="Update"
+                  title={t`Update`}
                   icon="refresh"
                   hue={assetHue[menuItem.category]}
                   subtitle={
                     menuItem.update.busy
-                      ? "Updating…"
+                      ? t`Updating…`
                       : `Saved ${menuItem.update.savedLine}`
                   }
                   disabled={menuItem.update.busy}
@@ -2427,7 +2430,7 @@ export function SavedScreen({
                       .catch((err: unknown) => {
                         console.error(err);
                         fail(
-                          messageFromError(err, "Couldn't start the update."),
+                          messageFromError(err, t`Couldn't start the update.`),
                         );
                       });
                   }}
@@ -2438,7 +2441,7 @@ export function SavedScreen({
                   save. */}
               {menuItem.update?.running ? (
                 <>
-                  <SectionHeader title="Updating" />
+                  <SectionHeader title={t`Updating`} />
                   {menuItem.update.running.jobs.map((job) => (
                     <RegionDownloadRow key={job.spec.id} job={job} />
                   ))}
@@ -2467,7 +2470,7 @@ export function SavedScreen({
                   says so). */}
               {menuItem.removeShare ? (
                 <Row
-                  title="Remove from my account"
+                  title={t`Remove from my account`}
                   icon="hide"
                   hue={theme.warning}
                   {...shareRowProps}
@@ -2483,7 +2486,7 @@ export function SavedScreen({
                   delete, so one map can go without losing the rest. */}
               {menuItem.members && menuItem.members.length > 1 ? (
                 <>
-                  <SectionHeader title="Includes" />
+                  <SectionHeader title={t`Includes`} />
                   {menuItem.members.map((member) => (
                     <Row
                       key={member.id}
@@ -2498,7 +2501,7 @@ export function SavedScreen({
                           {member.delete ? (
                             <IconButton
                               icon="delete"
-                              accessibilityLabel={`Delete ${member.title} from device`}
+                              accessibilityLabel={t`Delete ${member.title} from device`}
                               color={theme.warning}
                               onPress={() => {
                                 closeItemSheet();
@@ -2587,15 +2590,15 @@ export function SavedScreen({
       <BottomSheet
         visible={downloadSheetGroup != null}
         onClose={() => setDownloadSheetId(null)}
-        title={downloadSheetGroup?.label || "Saving maps"}
+        title={downloadSheetGroup?.label || t`Saving maps`}
       >
         <View style={styles.sheetBody}>
           {downloadSheetGroup?.jobs.map((job) => (
             <RegionDownloadRow key={job.spec.id} job={job} />
           ))}
-          <Text style={styles.downloadNote}>
-            Downloads keep going after you leave Logjam GPS.
-          </Text>
+          <Text
+            style={styles.downloadNote}
+          >{t`Downloads keep going after you leave Logjam GPS.`}</Text>
         </View>
       </BottomSheet>
 
@@ -2626,42 +2629,42 @@ function EmptyPanel({
   const isGuest = useAccountState().accountState === "guest";
   const copy: Record<Category | "all", { title: string; hint: string }> = {
     route: {
-      title: "No routes yet",
-      hint: "Draw one with the draw tool, or on Logjam Web.",
+      title: t`No routes yet`,
+      hint: t`Draw one with the draw tool, or on Logjam Web.`,
     },
     all: {
-      title: "Nothing saved yet",
-      hint: "Places need maps that work with no signal. Save an offline map before you leave town.",
+      title: t`Nothing saved yet`,
+      hint: t`Places need maps that work with no signal. Save an offline map before you leave town.`,
     },
     region: {
-      title: "No offline map",
-      hint: "Without an offline map the map is blank once you lose signal.",
+      title: t`No offline map`,
+      hint: t`Without an offline map the map is blank once you lose signal.`,
     },
     overlay: {
-      title: "No sharpened areas here",
+      title: t`No sharpened areas here`,
       hint: isGuest
-        ? "Logjam Web makes sharpened areas, and they need a Logjam account."
+        ? t`Logjam Web makes sharpened areas, and they need a Logjam account.`
         : online
-          ? "Save the sharpened areas you make on Logjam Web for offline use."
-          : "Connect to see the sharpened areas on your account.",
+          ? t`Save the sharpened areas you make on Logjam Web for offline use.`
+          : t`Connect to see the sharpened areas on your account.`,
     },
     geoPdf: {
-      title: "No GeoPDF maps",
-      hint: "Import a GeoPDF from this phone's storage.",
+      title: t`No GeoPDF maps`,
+      hint: t`Import a GeoPDF from this phone's storage.`,
     },
     import: {
-      title: "No imported files",
-      hint: "Bring in GPX, KML or GeoJSON from another app to see it on the map.",
+      title: t`No imported files`,
+      hint: t`Bring in GPX, KML or GeoJSON from another app to see it on the map.`,
     },
     track: {
-      title: "No recorded tracks",
-      hint: "Tracks you record on the Map tab are saved here.",
+      title: t`No recorded tracks`,
+      hint: t`Tracks you record on the Map tab are saved here.`,
     },
   };
   const { title, hint } = searching
     ? {
         title: `No ${searchNoun(filter)} match that`,
-        hint: "Try a different search.",
+        hint: t`Try a different search.`,
       }
     : copy[filter];
   return (
