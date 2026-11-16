@@ -51,6 +51,8 @@ test.beforeEach(async ({ page }) => {
       json: {
         ...user,
         uiPreferences: { ...user.uiPreferences, language: "en-US" },
+        // Noon UTC is the same calendar day in every time zone a runner uses.
+        monthlyComputeResetAt: "2026-12-01T12:00:00.000Z",
       },
     });
   });
@@ -82,8 +84,8 @@ test("Logjam Web reads in US English: spelling, vocabulary and the day order", a
     .getByRole("navigation")
     .getByRole("button", { name: "Account" })
     .click();
-  // The credits reset on the 1st: "resets Dec 1", not "resets 1 Dec".
-  await expect(page.locator("aside")).toContainText(
-    /resets (?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) 1\b/,
-  );
+  // "resets Dec 1", not "resets 1 Dec".
+  const aside = page.locator("aside");
+  await expect(aside).toContainText("resets Dec 1");
+  await expect(aside).not.toContainText("resets 1 Dec");
 });
