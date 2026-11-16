@@ -2,7 +2,8 @@
 // the phone or browser itself is offline is a different question and is the
 // client's to answer first: an offline device marks nothing down.
 
-export const BASEMAP_UNAVAILABLE_LABEL = "Not available right now";
+import { t } from "./i18n.js";
+export const BASEMAP_UNAVAILABLE_LABEL = t`Not available right now`;
 
 /** Consecutive failed tile loads of the active basemap before it counts as down. */
 export const BASEMAP_FAIL_AFTER = 3;
@@ -61,5 +62,5 @@ export function basemapToShow(
 }
 
 export function basemapFallbackNotice(name: string, fallbackName: string) {
-  return `${name} isn't available right now. Showing ${fallbackName} instead.`;
+  return t`${name} isn't available right now. Showing ${fallbackName} instead.`;
 }

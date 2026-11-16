@@ -32,6 +32,7 @@ export function regionNameFromSurvey(survey: string): string {
 }
 
 import { say, type UserSentence } from "./userSentence.js";
+import { t } from "./i18n.js";
 
 // Said before anyone knows where the ZIP's ground is, so no sentence here
 // names a region or the portal a survey came from (elvisZip.test.ts, "names no
@@ -471,8 +472,8 @@ export function classifyElvisEntries(entries: ZipEntry[]): ElvisStats {
   const mode: ElvisStats["mode"] = lazCount > 0 ? "LAZ_ONLY" : "DEM_ONLY";
   // Vegetation is the form's own choice, so the label says only the ground.
   const modeLabel = groundDem
-    ? "Ground from the DEM"
-    : "Ground from the point clouds";
+    ? t`Ground from the DEM`
+    : t`Ground from the point clouds`;
 
   // Fall back to file count if no tile IDs parsed
   const tileCount = tileIds.size > 0 ? tileIds.size : lazCount + demCount;

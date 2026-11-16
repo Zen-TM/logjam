@@ -453,29 +453,28 @@ export const NSW_REGION = {
        * be under Private.
        */
       classes: [
-        { source: "Private", name: "Private land", colour: "#8e6bbf" },
-        { source: "National Park", name: "National park", colour: "#2f9c95" },
-        { source: "State Forest", name: "State forest", colour: "#7f8f3a" },
+        { source: "Private", name: t`Private land`, colour: "#8e6bbf" },
+        { source: "National Park", name: t`National park`, colour: "#2f9c95" },
+        { source: "State Forest", name: t`State forest`, colour: "#7f8f3a" },
         {
           source: "Crownland-Leasehold",
-          name: "Crown leasehold",
+          name: t`Crown leasehold`,
           colour: "#d9a441",
         },
-        { source: "Crownland-Other", name: "Crown land", colour: "#e6d34f" },
+        { source: "Crownland-Other", name: t`Crown land`, colour: "#e6d34f" },
         {
           source: "Indigenous Owned",
-          name: "Aboriginal Area",
+          name: t`Aboriginal Area`,
           colour: "#3b78c4",
         },
         {
           source: "Unresolved Tenure",
-          name: "Tenure unresolved",
+          name: t`Tenure unresolved`,
           colour: "#8a8a8a",
         },
       ],
       // The source's two known gaps.
-      caveat:
-        "Land Council freehold can show as private land. Roads, waterways and public areas aren't properly mapped around Sydney and Wollongong.",
+      caveat: t`Land Council freehold can show as private land. Roads, waterways and public areas aren't properly mapped around Sydney and Wollongong.`,
       coverage: NSW_HEIGHTS.coverage,
       licence: "cc-by-4",
       credit:
@@ -514,10 +513,9 @@ export const NSW_REGION = {
         12: { meanBytes: 3_100, p90Bytes: 9_000 },
       },
       // A code not listed reads as a plain "Fire" (fireHistory.ts).
-      types: { 1: "Wildfire", 2: "Prescribed burn" },
+      types: { 1: t`Wildfire`, 2: t`Prescribed burn` },
       // The source's gap.
-      caveat:
-        "Mapped by NSW National Parks and Wildlife Service: a fire it didn't map, often on private land, has no colour.",
+      caveat: t`Mapped by NSW National Parks and Wildlife Service: a fire it didn't map, often on private land, has no colour.`,
       coverage: NSW_HEIGHTS.coverage,
       licence: "cc-by-4",
       credit:
@@ -556,8 +554,7 @@ export const NSW_REGION = {
         { id: "tpg", name: "TPG" },
       ],
       // The source's limits.
-      caveat:
-        "It's a prediction, and valley and canyon floors are where it's most often wrong. A reseller on Telstra's network may get less than Telstra's own.",
+      caveat: t`It's a prediction, and valley and canyon floors are where it's most often wrong. A reseller on Telstra's network may get less than Telstra's own.`,
       // The ABS coastline in it is CC BY 4.0, which asks no more.
       coverage: NSW_HEIGHTS.coverage,
       licence: "cc-by-2.5-au",
@@ -646,7 +643,7 @@ export const REGIONS: readonly Region[] = simRegionsOn()
  */
 const EMPTY_WORLD: Region = {
   id: "world",
-  name: "The world",
+  name: t`The world`,
   fullName: t`The world`,
   view: { center: [0, 0], zoom: 2 },
   timeZone: "UTC",

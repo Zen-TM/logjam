@@ -44,7 +44,7 @@ const CEILINGS: Record<string, number> = {
   sharing: 72,
   sync: 13,
   tracks: 58,
-  ui: 51,
+  ui: 50,
 };
 
 function sources(dir: string): string[] {

@@ -1,6 +1,6 @@
 import { INK } from "./designTokens.js";
 import { normalizeRegionIds } from "./regions.js";
-import { isLanguage, type Language } from "./i18n.js";
+import { isLanguage, type Language, t } from "./i18n.js";
 import { isUnits, type Units } from "./units.js";
 import {
   parseSlopeBands,
@@ -210,8 +210,8 @@ export function schemeForOs(prefersDark: boolean): ThemeSchemeId {
 export const THEME_SCHEMES: Record<ThemeSchemeId, ThemeScheme> = {
   sandstone: {
     id: "sandstone",
-    name: "Sandstone",
-    description: "Warm weathered sandstone with iron-rich accents.",
+    name: t`Sandstone`,
+    description: t`Warm weathered sandstone with iron-rich accents.`,
     mode: "dark",
     tokens: {
       page: "#4E4944",
@@ -233,8 +233,8 @@ export const THEME_SCHEMES: Record<ThemeSchemeId, ThemeScheme> = {
   },
   basalt: {
     id: "basalt",
-    name: "Basalt",
-    description: "Cool plunge-water blues against dark gorge rock.",
+    name: t`Basalt`,
+    description: t`Cool plunge-water blues against dark gorge rock.`,
     mode: "dark",
     tokens: {
       page: "#26394B",
@@ -256,9 +256,8 @@ export const THEME_SCHEMES: Record<ThemeSchemeId, ThemeScheme> = {
   },
   scribblyGum: {
     id: "scribblyGum",
-    name: "Scribbly Gum",
-    description:
-      "Bushland greys with a hint of green, and fog-softened neutrals.",
+    name: t`Scribbly Gum`,
+    description: t`Bushland greys with a hint of green, and fog-softened neutrals.`,
     mode: "dark",
     tokens: {
       page: "#2D3E38",
@@ -284,9 +283,8 @@ export const THEME_SCHEMES: Record<ThemeSchemeId, ThemeScheme> = {
   // where they clear 4.5:1 under the dark `onFill` AND 3:1 on the pale page.
   ghostGum: {
     id: "ghostGum",
-    name: "Ghost Gum",
-    description:
-      "Pale smooth bark and grey-green leaves, for reading in full sun.",
+    name: t`Ghost Gum`,
+    description: t`Pale smooth bark and grey-green leaves, for reading in full sun.`,
     mode: "light",
     tokens: {
       page: "#ECEEE8",

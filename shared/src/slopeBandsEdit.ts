@@ -10,6 +10,7 @@ import {
   slopeBandsError,
   type SlopeBand,
 } from "./topoSettings.js";
+import { t } from "./i18n.js";
 
 const DEFAULT_INSERT_WIDTH = 10;
 // Replaced by the scale at once; only here so an insert is a valid band.
@@ -147,7 +148,7 @@ export function slopeBoundaryError(
     deg <= range.max
   )
     return null;
-  return `Use a whole number from ${range.min} to ${range.max}.`;
+  return t`Use a whole number from ${range.min} to ${range.max}.`;
 }
 
 /**

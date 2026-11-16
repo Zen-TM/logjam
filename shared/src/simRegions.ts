@@ -61,8 +61,8 @@ function simTerrain(
   const credit = (layer: string) => ({
     coverage,
     licence,
-    credit: `${layer}: simulated data for ${name}, not a real survey.`,
-    creditHtml: `${layer}: simulated data for ${name}, not a real survey.`,
+    credit: t`${layer}: simulated data for ${name}, not a real survey.`,
+    creditHtml: t`${layer}: simulated data for ${name}, not a real survey.`,
   });
   const heights = {
     id: `${id}-heights`,
@@ -71,7 +71,7 @@ function simTerrain(
     urlTemplate: null,
     archivePath: `master/dem/${id}-heights.pmtiles`,
     tileBytes: placeholderTileBytes(8, topZoom),
-    ...credit("Elevation"),
+    ...credit(t`Elevation`),
   } as const satisfies DemSource & { name: string; tileBytes: TileBytes };
   return {
     heights,
@@ -81,7 +81,7 @@ function simTerrain(
       minzoom: 8,
       maxzoom: topZoom,
       tileBytes: placeholderTileBytes(8, topZoom),
-      ...credit("Slope"),
+      ...credit(t`Slope`),
     },
     hillshade: {
       id: `${id}-hillshade`,
@@ -89,7 +89,7 @@ function simTerrain(
       minzoom: 8,
       maxzoom: heights.sampleZoom,
       tileBytes: heights.tileBytes,
-      ...credit("Hillshade"),
+      ...credit(t`Hillshade`),
     },
     contours: {
       id: `${id}-contours`,
@@ -97,7 +97,7 @@ function simTerrain(
       minzoom: 11,
       maxzoom: 14,
       tileBytes: placeholderTileBytes(11, 14),
-      ...credit("Contours"),
+      ...credit(t`Contours`),
     },
   };
 }
@@ -116,8 +116,8 @@ function simOverlays(
   const credit = (layer: string) => ({
     coverage,
     licence: "cc0" as const,
-    credit: `${layer}: simulated data for ${name}, not a real survey.`,
-    creditHtml: `${layer}: simulated data for ${name}, not a real survey.`,
+    credit: t`${layer}: simulated data for ${name}, not a real survey.`,
+    creditHtml: t`${layer}: simulated data for ${name}, not a real survey.`,
   });
   const caveat = t`Simulated data for ${name}: it describes no real ground.`;
   return {
@@ -130,12 +130,20 @@ function simOverlays(
       maxzoom: 13,
       tileBytes: placeholderTileBytes(8, 13),
       classes: [
-        { source: "Public", name: t`Simulated public land`, colour: "#2a9d8f" },
-        { source: "Leased", name: t`Simulated leased land`, colour: "#e9c46a" },
+        {
+          source: "Public",
+          name: t`Simulated public land`,
+          colour: "#2a9d8f",
+        },
+        {
+          source: "Leased",
+          name: t`Simulated leased land`,
+          colour: "#e9c46a",
+        },
         { source: "Owned", name: t`Simulated owned land`, colour: "#9b5de5" },
       ],
       caveat,
-      ...credit("Land"),
+      ...credit(t`Land`),
     },
     fire: {
       id: `${id}-fire`,
@@ -149,7 +157,7 @@ function simOverlays(
       tileBytes: placeholderTileBytes(8, 12),
       types: { 1: t`Simulated wildfire`, 3: t`Simulated clearing burn` },
       caveat,
-      ...credit("Fire history"),
+      ...credit(t`Fire history`),
     },
     ...(carriers && {
       coverage: {
@@ -163,7 +171,7 @@ function simOverlays(
         tileBytes: placeholderTileBytes(12, 12),
         carriers,
         caveat,
-        ...credit("Mobile coverage"),
+        ...credit(t`Mobile coverage`),
       },
     }),
   };
@@ -183,8 +191,8 @@ const NZ_COVERAGE: Box = [
 const NZ_TERRAIN: RegionTerrain = {
   // LINZ's 1 m model (CC BY 4.0); outside its survey the heights are the
   // Copernicus model's, also open.
-  ...simTerrain("simnz", "New Zealand", NZ_COVERAGE, 17, "cc-by-4"),
-  ...simOverlays("simnz", "New Zealand", NZ_COVERAGE, [
+  ...simTerrain("simnz", t`New Zealand`, NZ_COVERAGE, 17, "cc-by-4"),
+  ...simOverlays("simnz", t`New Zealand`, NZ_COVERAGE, [
     { id: "simone", name: t`Simulated One` },
     { id: "simtwo", name: t`Simulated Two` },
   ]),
@@ -192,7 +200,7 @@ const NZ_TERRAIN: RegionTerrain = {
 
 export const SIM_NZ: Region = {
   id: "simnz",
-  name: "Simulated New Zealand",
+  name: t`Simulated New Zealand`,
   fullName: t`Simulated New Zealand`,
   view: { center: [169.25, -44.055], zoom: 11 },
   timeZone: "Pacific/Auckland",
@@ -233,7 +241,7 @@ const UTAH_TERRAIN: RegionTerrain = {
 
 export const SIM_UTAH: Region = {
   id: "simutah",
-  name: "Simulated Utah",
+  name: t`Simulated Utah`,
   fullName: t`Simulated Utah`,
   view: { center: [-112.945, 37.285], zoom: 11 },
   timeZone: "America/Denver",
@@ -275,7 +283,7 @@ export const SIM_UTAH: Region = {
 // make is absent. Its heights stop at z13, as the planet file does.
 const WORLD_TERRAIN = simTerrain(
   "simworld",
-  "the world",
+  t`the world`,
   [-180, -85.06, 180, 85.06],
   13,
   "copernicus-dem",
@@ -283,7 +291,7 @@ const WORLD_TERRAIN = simTerrain(
 
 export const SIM_WORLD: Region = {
   id: "world",
-  name: "The world",
+  name: t`The world`,
   fullName: t`The world`,
   view: { center: [0, 0], zoom: 2 },
   timeZone: "UTC",

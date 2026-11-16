@@ -179,6 +179,11 @@ const HEX = /^#[0-9a-f]{3,8}$/i;
 const CODE =
   /[[\]{}_]|^\([^()]*:[^()]*\)$|var\(--|color-mix\(|^[a-z0-9]+(?:, ?[a-z0-9]+)+$|^(?:attachment|inline);|; charset=|\dpx|xxpx/;
 
+/** A literal that is only markup: a tag, an XML declaration, a GPX element, with no word outside the tags (a hole's stand-in is not one). A tag with words between its tags is copy. */
+const isMarkup = (text: string): boolean =>
+  /<[?!/]?[A-Za-z][^>]*>/.test(text) &&
+  !new RegExp(WORD, "u").test(text.replace(/<[^>]*>/g, " "));
+
 /** A map style property ("text-font", "icon-image"): its value is a font, an expression or an id. Another hyphenated key ("six-base") names a thing, and its value may be words. */
 const MAP_STYLE_KEY =
   /^(?:text|icon|line|circle|symbol|fill|raster|background|heatmap|hillshade|source)-/;
@@ -193,6 +198,17 @@ export const EXEMPT_FILES: Readonly<Record<string, string>> = {
     "what a failing copy test tells the developer to write instead",
   "shared/src/i18nSource.ts": "what a failing i18n test tells the developer",
   "shared/src/i18nCodemod.ts": "what the codemod tells the developer it left",
+  "shared/src/areaExport.ts":
+    "what the API logs about a request only a broken client can send (`malformed`)",
+  "shared/src/geoPdfConfig.ts":
+    "what a render request is refused for, read by the developer of a broken client",
+  "shared/src/announcementMarkdown.ts":
+    "the Markdown an announcement lost, listed for the maintainer who wrote it",
+  "shared/src/topoRegions.ts": "the header of a generated file",
+  "shared/src/routeValidation.ts":
+    "what the API logs about a route it refuses (`malformed`), which no client shows",
+  "shared/src/elevation.ts":
+    "what the API logs about an elevation point it refuses (`malformed`), which no client shows",
   "shared/src/kit.ts":
     "notes on each kit component, read by the people who build it",
   "shared/src/webTokens.ts": "the CSS generated from the design tokens",
@@ -200,6 +216,208 @@ export const EXEMPT_FILES: Readonly<Record<string, string>> = {
     "notes on why a model is left out of what a user downloads, read by developers",
   "api/src/lib/placeVisibility.ts":
     "notes on why a field is withheld from a sharee, read by developers",
+};
+
+const FORMATION =
+  "a vegetation formation as the map data and the build script name it";
+/** A source's credit as its publisher wrote it, plain and HTML alike. */
+const CREDIT =
+  "a source's credit, in its publisher's wording, plain and HTML alike";
+const STORED =
+  "a built-in's name or hint, which the seed and the migration write to rows";
+const CODE_ERROR = "an import failure code, matched with ===";
+const LAMBDA = "matched against the pre-signup Lambda's English message";
+const DETAIL =
+  "developer detail: the API logs it (`malformed`), no client shows it";
+
+/**
+ * Text that reads as words and is not words a user reads, per file that holds
+ * it: an operator the place filter stores, a land tenure class as the map data
+ * spells it, RopeWiki's name for a region, the producer a PDF names, a noun in
+ * a developer's error or detail, a vegetation formation, a source's credit, a
+ * built-in's stored name, an import failure code. A literal equal to an entry
+ * in its own file is never counted or converted; the same words in another
+ * file are. `i18nCoverage.test.ts` ("lists only literals that exist, in the file that holds them") fails on
+ * an entry its file does not hold.
+ */
+export const DATA_LITERALS: Readonly<
+  Record<string, Readonly<Record<string, string>>>
+> = {
+  "shared/src/apiErrors.ts": {
+    "API error …: … …": DETAIL,
+    "Logjam is not taking new accounts this month": LAMBDA,
+  },
+  "shared/src/demSources.ts": {
+    "Terrain data: Terrain Tiles (Mapzen / Tilezen), via AWS Open Data.":
+      CREDIT,
+    'Terrain data: <a href="https://registry.opendata.aws/terrain-tiles">Terrain Tiles</a> (Mapzen / Tilezen).':
+      CREDIT,
+  },
+  "shared/src/geoPdfBaseLayers.ts": {
+    "© Department of Customer Service": CREDIT,
+    "Base map © State of New South Wales (Spatial Services, a business unit of the Department of Customer Service NSW). For current information go to spatial.nsw.gov.au.":
+      CREDIT,
+    '&copy; State of New South Wales (Spatial Services, a business unit of the Department of Customer Service NSW). For current information go to <a href="https://spatial.nsw.gov.au">spatial.nsw.gov.au</a>.':
+      CREDIT,
+    "Base map © OpenStreetMap contributors (Protomaps build)": CREDIT,
+    "Base map © OpenStreetMap contributors": CREDIT,
+    "Base map © OpenTopoMap (CC-BY-SA), © OpenStreetMap contributors, SRTM":
+      CREDIT,
+    "Base map © CyclOSM, © OpenStreetMap contributors": CREDIT,
+    "Imagery © State of New South Wales (Spatial Services, a business unit of the Department of Customer Service NSW). For current information go to spatial.nsw.gov.au.":
+      CREDIT,
+    "Elevation derived from LiDAR via ELVIS (elevation.fsdf.org.au) © State of NSW (Spatial Services) / Commonwealth of Australia (Geoscience Australia), CC BY 4.0. See dataset metadata for the specific custodian.":
+      CREDIT,
+    "Vegetation © State Government of NSW and NSW Department of Climate Change, Energy, the Environment and Water 2020 — State Vegetation Type Map (CC BY 4.0). …":
+      CREDIT,
+    "Features © OpenStreetMap contributors": CREDIT,
+  },
+  "shared/src/geoPdfImport/parseGeoref.ts": {
+    "Logjam GeoPDF Generator":
+      "the producer Logjam writes into a PDF and recognises on import",
+  },
+  "shared/src/licences.ts": {
+    "gauge feed": "a noun in the error a region's declaration throws",
+    "place registry": "a noun in the error a region's declaration throws",
+  },
+  "shared/src/placeFilterOptions.ts": {
+    "Less than": "a stored operator of a number filter",
+    "More than": "a stored operator of a number filter",
+  },
+  "shared/src/placeRegistry.ts": {
+    "© OpenStreetMap contributors": CREDIT,
+  },
+  "shared/src/placeTypes.ts": {
+    "V grade": STORED,
+    "Vertical technical difficulty, on the French rating system.": STORED,
+    "A grade": STORED,
+    "Aquatic difficulty of the water sections, on the French rating system.":
+      STORED,
+    Commitment: STORED,
+    "How hard the canyon is to escape or retreat from once committed, on the French rating system.":
+      STORED,
+    Quality: STORED,
+    "Your own verdict. 1 is unremarkable, 5 is exceptional.": STORED,
+    Hours: STORED,
+    "How long it takes an average group, car to car.": STORED,
+    Pitches: STORED,
+    "How many abseils.": STORED,
+    "Longest pitch": STORED,
+    "The longest single abseil, measured along the rope.": STORED,
+    Capacity: STORED,
+    "Is a cave?": STORED,
+    "Has a water source?": STORED,
+    "ACA technical": STORED,
+    "Technical difficulty of the descent, on the American Canyoneering Association rating system.":
+      STORED,
+    "ACA water": STORED,
+    "Difficulty of the water, from little or no water (A) to the most powerful (C4), on the American Canyoneering Association rating system.":
+      STORED,
+    "ACA time": STORED,
+    "How long the canyon takes, in Roman numerals, on the American Canyoneering Association rating system.":
+      STORED,
+    "ACA risk": STORED,
+    "How dangerous the canyon is beyond its technical difficulty, on the American Canyoneering Association rating system.":
+      STORED,
+  },
+  "shared/src/regions.ts": {
+    OzUltimate: "a source's name, which the API stores in a place's sources",
+    "Elevation: derived from the NSW 5 m Digital Elevation Model, © State of New South Wales (Spatial Services), extracted October 2026. CC BY 3.0 AU.":
+      CREDIT,
+    'Elevation: derived from the NSW 5 m Digital Elevation Model, © State of New South Wales (<a href="https://www.spatial.nsw.gov.au">Spatial Services</a>), extracted October 2026. <a href="https://creativecommons.org/licenses/by/3.0/au/">CC BY 3.0 AU</a>.':
+      CREDIT,
+    "National Park": "a tenure class as the land map data spells it",
+    "State Forest": "a tenure class as the land map data spells it",
+    "Indigenous Owned": "a tenure class as the land map data spells it",
+    "Unresolved Tenure": "a tenure class as the land map data spells it",
+    "Land: NSW Land Tenure, December 2024 v2 © State of New South Wales (Department of Primary Industries and Regional Development), CC BY 4.0":
+      CREDIT,
+    'Land: <a href="https://data.nsw.gov.au/data/dataset/nsw-land-tenure">NSW Land Tenure</a>, December 2024 v2 &copy; State of New South Wales (Department of Primary Industries and Regional Development), <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>':
+      CREDIT,
+    "Fire history © State Government of NSW and NSW Department of Climate Change, Energy, the Environment and Water 2010 — NPWS Fire History - Wildfires and Prescribed Burns (CC BY 4.0)":
+      CREDIT,
+    'Fire history &copy; State Government of NSW and NSW Department of Climate Change, Energy, the Environment and Water 2010 — <a href="https://datasets.seed.nsw.gov.au/dataset/fire-history-wildfires-and-prescribed-burns-1e8b6">NPWS Fire History - Wildfires and Prescribed Burns</a> (<a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>)':
+      CREDIT,
+    "Mobile coverage: ACCC Mobile Infrastructure Report data release © Commonwealth of Australia (ACCC), CC BY 2.5 AU; coastline © ABS, CC BY 4.0":
+      CREDIT,
+    'Mobile coverage: <a href="https://data.gov.au/data/dataset/accc-mobile-infrastructure-report-data-release">ACCC Mobile Infrastructure Report data release</a> &copy; Commonwealth of Australia (ACCC), <a href="https://creativecommons.org/licenses/by/2.5/au/">CC BY 2.5 AU</a>; coastline &copy; <a href="https://www.abs.gov.au/statistics/standards/australian-statistical-geography-standard-asgs-edition-3">ABS</a>, <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>':
+      CREDIT,
+    "New South Wales": "RopeWiki's name for the region",
+  },
+  "shared/src/topoSettings.ts": {
+    "Not classified": FORMATION,
+    "Wet Sclerophyll Forests (Grassy sub-formation)": FORMATION,
+    "Wet Sclerophyll Forests (Shrubby sub-formation)": FORMATION,
+    "Dry Sclerophyll Forests (Shrub/grass sub-formation)": FORMATION,
+    "Dry Sclerophyll Forests (Shrubby sub-formation)": FORMATION,
+    "Grassy Woodlands": FORMATION,
+    "Forested Wetlands": FORMATION,
+    "Freshwater Wetlands": FORMATION,
+    "Saline Wetlands": FORMATION,
+    "Semi-arid Woodlands (Grassy sub-formation)": FORMATION,
+    "Semi-arid Woodlands (Shrubby sub-formation)": FORMATION,
+    "Arid Shrublands (Acacia sub-formation)": FORMATION,
+    "Arid Shrublands (Chenopod sub-formation)": FORMATION,
+    "Alpine Complex": FORMATION,
+    "root must be an object": DETAIL,
+    "labelScale must be …..…": DETAIL,
+    "hillshade must be an object": DETAIL,
+    "hillshade.enabled must be boolean": DETAIL,
+    "hillshade.colour must be #RRGGBBAA": DETAIL,
+    "hillshade.azimuth must be 0..360": DETAIL,
+    "hillshade.altitude must be 0..90": DETAIL,
+    "hillshade.zFactor must be 0.1..10": DETAIL,
+    "hillshade.multidirectional must be boolean": DETAIL,
+    "slope must be an object": DETAIL,
+    "slope.enabled must be boolean": DETAIL,
+    "slope.bands must be array": DETAIL,
+    "slope.bands max length is …": DETAIL,
+    "vegetation must be an object": DETAIL,
+    "vegetation.enabled must be boolean": DETAIL,
+    "vegetation.minRatio must be 0..1": DETAIL,
+    "vegetation.maxRatio must be 0..1": DETAIL,
+    "vegetation.minRatio must be < maxRatio": DETAIL,
+    "vegetation.sparseColour must be #RRGGBBAA": DETAIL,
+    "vegetation.denseColour must be #RRGGBBAA": DETAIL,
+    "vegetation.alphaMin must be 0..255": DETAIL,
+    "vegetation.alphaMax must be 0..255": DETAIL,
+    "vegetation.weightsEnabled must be boolean": DETAIL,
+    "vegetation.formationWeights must be an object": DETAIL,
+    "contours must be an object": DETAIL,
+    "contours.enabled must be boolean": DETAIL,
+    "contours.zoomBands must be array of length 3": DETAIL,
+    "features must be an object": DETAIL,
+    "features.enabled must be boolean": DETAIL,
+    "contours.majorColour must be #RRGGBBAA": DETAIL,
+    "contours.minorColour must be #RRGGBBAA": DETAIL,
+    "contours.majorWidthM must be 0..200": DETAIL,
+    "contours.minorWidthM must be 0..200": DETAIL,
+    "features.… must be an object": DETAIL,
+    "features.….enabled must be boolean": DETAIL,
+    "features.….colour must be #RRGGBBAA": DETAIL,
+    "features.….widthZ18 must be 0..100": DETAIL,
+  },
+  "shared/src/tripPlans.ts": {
+    "a field value": DETAIL,
+  },
+  "shared/src/vectorImport.ts": {
+    "File could not be parsed": CODE_ERROR,
+    "File contains invalid coordinates": CODE_ERROR,
+    "No mappable features found in the file": CODE_ERROR,
+    "File has too many points to import": CODE_ERROR,
+    "File is too large to import": CODE_ERROR,
+    "Unsupported file type — use GPX, KML, or GeoJSON": CODE_ERROR,
+  },
+  "frontend/src/geoPdf/pdf.ts": {
+    "Logjam GeoPDF Generator":
+      "the producer Logjam writes into a PDF and recognises on import",
+  },
+  "frontend/src/ui/AttributeFilter.tsx": {
+    "Less than": "a stored operator of a number filter",
+  },
+  "mobile/src/ui/AttributeFilter.tsx": {
+    "Less than": "a stored operator of a number filter",
+  },
 };
 
 export type BareLiteral = {
@@ -222,6 +440,10 @@ const LABEL = /^\p{Lu}\p{Ll}+$/u;
  * an import, a type, a comparison, a log, `console`, an error's message, SQL,
  * a property's name, a styling or wiring attribute.
  *
+ * `repoPath` is the file's path from the repo root: the literals
+ * `DATA_LITERALS` lists for that file are left out. `keepData` reports them too,
+ * which `i18nCoverage.test.ts` asks for to find an entry its file does not hold.
+ *
  * `words` also reports a capitalised single word in those other positions
  * (`why: "word"`). The ratchet does not count them (a word there is as often an
  * id as a label), so only the codemod asks.
@@ -230,15 +452,24 @@ export function bareCopyIn(
   tsModule: unknown,
   fileName: string,
   source: string,
-  options: { words?: boolean } = {},
+  options: { words?: boolean; keepData?: boolean; repoPath?: string } = {},
 ): BareLiteral[] {
   const ts = tsModule as typeof TypeScript;
   const sf = loadFile(ts, fileName, source);
   const found: BareLiteral[] = [];
   const plurals = pluralNames(ts, sf);
+  const data = options.repoPath ? DATA_LITERALS[options.repoPath] : undefined;
+  const isData = (text: string) =>
+    !!data && Object.prototype.hasOwnProperty.call(data, text);
   const add = (node: TypeScript.Node, text: string, copy: boolean) => {
-    if (!/\p{L}/u.test(text) || SQL.test(text) || HEX.test(text)) return;
-    const prose = PROSE.test(text) && !CODE.test(text);
+    if (
+      !/\p{L}/u.test(text) ||
+      SQL.test(text) ||
+      HEX.test(text) ||
+      (!options.keepData && isData(text))
+    )
+      return;
+    const prose = PROSE.test(text) && !CODE.test(text) && !isMarkup(text);
     const word = !!options.words && LABEL.test(text);
     if (!copy && !prose && !word) return;
     found.push({
@@ -259,7 +490,9 @@ export function bareCopyIn(
       (joined.split(HOLE).join(" ").match(WORDS_IN) ?? []).length < 2 ||
       SQL.test(written) ||
       !PROSE.test(words) ||
-      CODE.test(words)
+      CODE.test(words) ||
+      isMarkup(written) ||
+      (!options.keepData && isData(written))
     )
       return;
     found.push({
@@ -296,12 +529,14 @@ export function bareCopyIn(
   const visit = (node: TypeScript.Node, copy: boolean): void => {
     const into = (child: TypeScript.Node, c = copy) => visit(child, c);
     const all = (c = copy) => ts.forEachChild(node, (child) => visit(child, c));
-    // `"a" + b` and `"a" ${b}`: text built in place.
+    // `"a" + b`, `"a" ${b}` and `b || "a"`: text built or defaulted in place.
     const isText = (arg: TypeScript.Node): boolean =>
       ts.isStringLiteralLike(arg) ||
       ts.isTemplateExpression(arg) ||
       (ts.isBinaryExpression(arg) &&
-        arg.operatorToken.kind === ts.SyntaxKind.PlusToken &&
+        (arg.operatorToken.kind === ts.SyntaxKind.PlusToken ||
+          arg.operatorToken.kind === ts.SyntaxKind.BarBarToken ||
+          arg.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken) &&
         (isText(arg.left) || isText(arg.right)));
     // An argument that is text is code here; any other (a callback) is read.
     const codeArguments = (
@@ -587,7 +822,9 @@ export function scanSources(
     if (`${pkg}/src/${path}` in EXEMPT_FILES || CATALOGUE_FILE.test(path))
       continue;
     const dir = directoryOf(path);
-    for (const bare of bareCopyIn(tsModule, path, source)) {
+    for (const bare of bareCopyIn(tsModule, path, source, {
+      repoPath: `${pkg}/src/${path}`,
+    })) {
       scan.bare.push({ ...bare, file: path, dir });
       scan.counts[dir] = (scan.counts[dir] ?? 0) + 1;
     }

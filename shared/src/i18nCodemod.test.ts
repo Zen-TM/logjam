@@ -45,6 +45,16 @@ describe("extractMessages: what it rewrites", () => {
     );
   });
 
+  // Mutation: in `importEdit`, start the new import at `first.getStart()`.
+  it("puts a new import above the comment that documents the first statement", () => {
+    const out = rewritten(
+      "// A header.\n\n/** The page. */\nexport const a = <p>Hello world</p>;",
+    );
+    expect(out).toBe(
+      `// A header.\n\n${IMPORT}\n/** The page. */\nexport const a = <p>{t\`Hello world\`}</p>;`,
+    );
+  });
+
   // Mutation: in `jsxText`, set `text = line` and delete the two `replace` lines that trim it.
   it.each([
     ["lines join with one space", "<p>\n    Save   your\n    work\n  </p>"],

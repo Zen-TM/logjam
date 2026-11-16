@@ -11,6 +11,7 @@
 // Asked only when the user presses for it: nothing here polls.
 
 import type { LicenceId } from "./licences.js";
+import { t } from "./i18n.js";
 
 export const OPEN_METEO_FORECAST_URL = "https://api.open-meteo.com/v1/forecast";
 export const OPEN_METEO_CREDIT_URL = "https://open-meteo.com/";
@@ -37,11 +38,11 @@ const HOUR_MS = 3_600_000;
  * Guard: `weather.test.ts` ("asks for a chosen model by id").
  */
 export const WEATHER_MODELS = [
-  { id: "best_match", label: "Best match" },
-  { id: "ecmwf_ifs", label: "ECMWF" },
-  { id: "icon_seamless", label: "ICON" },
-  { id: "gfs_seamless", label: "GFS" },
-  { id: "ukmo_seamless", label: "UK Met Office" },
+  { id: "best_match", label: t`Best match` },
+  { id: "ecmwf_ifs", label: t`ECMWF` },
+  { id: "icon_seamless", label: t`ICON` },
+  { id: "gfs_seamless", label: t`GFS` },
+  { id: "ukmo_seamless", label: t`UK Met Office` },
 ] as const;
 
 export type WeatherModelId = (typeof WEATHER_MODELS)[number]["id"];

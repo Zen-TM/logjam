@@ -103,7 +103,7 @@ export function withoutCanyonGradeRows(rows: AttributeRow[]): AttributeRow[] {
  * key is `grade`, never shares it.
  */
 export const CANYON_GRADE_ROW_KEY = "canyon-grade";
-export const CANYON_GRADE_ROW_LABEL = "Grade";
+export const CANYON_GRADE_ROW_LABEL = t`Grade`;
 const ACA_GRADE_ROW_KEY = "aca-grade";
 const ACA_GRADE_ROW_LABEL = t`ACA grade`;
 

@@ -25,6 +25,7 @@ import {
   type ScopedCustomFieldDef,
 } from "./tripLogFields.js";
 import { asFieldValues } from "./fieldValues.js";
+import { t } from "./i18n.js";
 
 // ── Inputs ─────────────────────────────────────────────────────────────
 
@@ -565,7 +566,7 @@ export function computeLogbookStats(input: StatsInput): LogbookStats {
       const type = placeTypes.find((entry) => entry.id === typeId);
       return {
         typeId,
-        name: type?.name ?? "Places",
+        name: type?.name ?? t`Places`,
         color: type?.color ?? "",
         stats: defsForType(placeDefs, typeId)
           .map((def) =>

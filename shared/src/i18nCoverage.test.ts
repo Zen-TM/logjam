@@ -7,6 +7,7 @@ import { enUS } from "./i18nCatalogues/en-US.js";
 import {
   bareCopyIn,
   ceilingFailures,
+  DATA_LITERALS,
   EXEMPT_FILES,
   I18N_ADR,
   messagesIn,
@@ -26,10 +27,7 @@ import {
 const SRC = dirname(fileURLToPath(import.meta.url));
 
 /** Bare literals a user may read, per directory under src. Lower an entry when its text moves; never raise one. */
-const CEILINGS: Record<string, number> = {
-  ".": 659,
-  geoPdfImport: 1,
-};
+const CEILINGS: Record<string, number> = {};
 
 function sources(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
@@ -132,6 +130,37 @@ describe("the en-US catalogue", () => {
   // without an entry for that message.
   it("has an entry for every message that holds an Australian spelling", () => {
     expect(missingEntries(enUS, keys, AUSTRALIAN_WORDS)).toEqual([]);
+  });
+});
+
+describe("the literals the scan leaves out", () => {
+  const held = new Set<string>();
+  beforeAll(() => {
+    const REPO = join(SRC, "../..");
+    for (const pkg of ["shared", "frontend", "mobile", "api"])
+      for (const path of sources(join(REPO, pkg, "src")))
+        for (const found of bareCopyIn(ts, path, readFileSync(path, "utf8"), {
+          keepData: true,
+        }))
+          held.add(
+            `${relative(REPO, path).split("\\").join("/")}\0${found.text}`,
+          );
+  }, 60_000);
+
+  // Mutation: add `"Open the file": "a test"` to the entries of
+  // `shared/src/regions.ts` in `DATA_LITERALS`, or move an entry to a file that
+  // does not hold it.
+  it("lists only literals that exist, in the file that holds them", () => {
+    expect(
+      Object.entries(DATA_LITERALS).flatMap(([file, texts]) =>
+        Object.keys(texts)
+          .filter((literal) => !held.has(`${file}\0${literal}`))
+          .map(
+            (literal) =>
+              `"${literal}" is in DATA_LITERALS (i18nSource.ts) under ${file}, which does not hold it: delete the entry or move it to its file (${I18N_ADR}).`,
+          ),
+      ),
+    ).toEqual([]);
   });
 });
 
