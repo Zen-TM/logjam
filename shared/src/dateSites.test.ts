@@ -45,6 +45,9 @@ describe("dates written in the device's locale", () => {
 
   // Mutation: write `toLocaleDateString(` in any source file but the allowed one.
   it("are written nowhere but where ALLOWED says", () => {
-    expect(using.sort()).toEqual(Object.keys(ALLOWED).sort());
+    expect(
+      using.sort(),
+      "Write a date with a function of shared/src/dateFormat.ts (formatDayMonthYear, formatLongMonthYear, …), never toLocaleDateString or a dateStyle: those follow the device's locale, not Logjam's language. The one allowed use is an en-CA date key, listed in ALLOWED.",
+    ).toEqual(Object.keys(ALLOWED).sort());
   });
 });

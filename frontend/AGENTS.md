@@ -20,9 +20,7 @@
   loads behind the gate. Guard: `src/consent.test.ts`.
 - **A date-only value** (stored UTC midnight) is read with `utcDay` or
   `dayOfKey` (`@logjam/shared`), never `localDay`: `vitest.config.ts` runs the
-  suite west of UTC, so one read as local shows the day before. Dates are
-  written by `shared/src/dateFormat.ts`, never `toLocaleDateString`; guard:
-  `shared/src/dateSites.test.ts`.
+  suite west of UTC, so one read as local shows the day before.
 - **Sign-out clears what the browser kept of a user's work.** The trip draft
   clears on the two explicit paths, `endSession` (`useAuth.ts`) and
   `RootErrorBoundary`'s sign-out, and records its writer's id: another user,

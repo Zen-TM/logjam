@@ -113,7 +113,7 @@ type CreateForm = NonNullable<TripDraftForm["creating"]>;
 const DRAFT_AUTOSAVE_DEBOUNCE_MS = 500;
 
 // The draft's savedAt is a true timestamp, so it formats in local time — the
-// `timeZone: "UTC"` rule covers date-only values (trip dates), not this. Inside
+// date-only rule (`utcDay` and `dayOfKey`, frontend/AGENTS.md) covers trip dates, not this. Inside
 // the 7-day expiry window a weekday + time is unambiguous and reads the way the
 // user remembers the trip ("Tuesday evening").
 function formatDraftSavedAt(iso: string): string {

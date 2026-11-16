@@ -3,21 +3,7 @@
 // `@logjam/shared`'s dateFormat.ts writes, and check the sites that draw one.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import {
-  dayOfKey,
-  formatDayLongMonth,
-  formatDayLongMonthYear,
-  formatDayMonth,
-  formatDayMonthYear,
-  formatFullDay,
-  formatLongMonthYear,
-  formatMonthYear,
-  formatNumericDay,
-  formatWeekdayDay,
-  formatWeekdayDayMonth,
-  formatWeekdayDayMonthYear,
-  formatWeekdayDayMonthYearComma,
-} from "@logjam/shared";
+import * as dates from "@logjam/shared";
 import { describe, expect, it } from "vitest";
 import { formatMonthLabel } from "./ui/monthGrid";
 import { syncAgeLabel } from "./ui/syncAge";
@@ -35,36 +21,32 @@ function inTimeZone<T>(timeZone: string, run: () => T): T {
   try {
     return run();
   } finally {
-    process.env.TZ = previous;
+    if (previous === undefined) delete process.env.TZ;
+    else process.env.TZ = previous;
   }
 }
 
-const FORMS = {
-  formatWeekdayDayMonthYear,
-  formatWeekdayDayMonthYearComma,
-  formatWeekdayDayMonth,
-  formatWeekdayDay,
-  formatDayMonthYear,
-  formatDayMonth,
-  formatMonthYear,
-  formatDayLongMonth,
-  formatDayLongMonthYear,
-  formatLongMonthYear,
-  formatFullDay,
-  formatNumericDay,
-};
+const formFor = (name: string) =>
+  (dates as unknown as Record<string, unknown>)[name] as
+    | ((day: ReturnType<typeof dates.dayOfKey>) => string)
+    | undefined;
 
 describe("the day forms in Logjam GPS", () => {
-  // Mutation: give `formatDayMonthYear` the pattern `<month> <day> <year>`, and the fixture reads wrong here and in Logjam Web.
+  // Mutation: give `formatDayMonthYear` the pattern `<month> <day> <year>`, and the fixture reads wrong here and in Logjam Web; or rename a form in `shared/src/dateFormat.ts` and its fixture row names a function that is gone.
   it("write what the fixture holds, as they do in Logjam Web", () => {
     expect(Object.keys(FIXTURE)).toHaveLength(2);
+    let checked = 0;
     for (const [key, forms] of Object.entries(FIXTURE)) {
       for (const [name, text] of Object.entries(forms)) {
-        expect(FORMS[name as keyof typeof FORMS](dayOfKey(key)), name).toBe(
-          text,
+        const form = formFor(name);
+        expect(form, `${name} is not a function of @logjam/shared`).toBeTypeOf(
+          "function",
         );
+        expect(form!(dates.dayOfKey(key)), name).toBe(text);
+        checked++;
       }
     }
+    expect(checked).toBeGreaterThanOrEqual(24);
   });
 
   // Mutation: write `formatMonthLabel` (ui/monthGrid.ts) with the short month for the long one.
