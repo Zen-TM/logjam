@@ -507,6 +507,7 @@ describe("the gauge panel's words", () => {
           ["2026-10-01"],
           "trip",
           Date.parse("2026-10-30T12:00:00Z"),
+          latest,
         ),
       ),
       MAP_OVERLAYS.copy,
