@@ -7,6 +7,7 @@ import {
   type SlopeBand,
   type SlopeBandsEdit,
   type TUser,
+  t,
 } from "@logjam/shared";
 
 import { useToast } from "./components/feedback/ToastProvider";
@@ -42,7 +43,9 @@ export function useSlopeBands(
       updateUserPreferences({ slopeBands: lastValid })
         .then(applyCurrentUser)
         .catch((err: unknown) =>
-          toast.error(messageFromError(err, "Couldn't save your slope bands.")),
+          toast.error(
+            messageFromError(err, t`Couldn't save your slope bands.`),
+          ),
         );
     }, SAVE_DELAY_MS);
     return () => clearTimeout(timer);

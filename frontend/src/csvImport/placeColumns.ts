@@ -1,3 +1,4 @@
+import { t } from "@logjam/shared";
 export type PlaceFieldRole =
   | "name"
   | "latitude"
@@ -210,21 +211,21 @@ export function detectPlaceColumns(
 }
 
 export const ROLE_LABELS: Record<string, string> = {
-  name: "Name",
-  latitude: "Latitude",
-  longitude: "Longitude",
+  name: t`Name`,
+  latitude: t`Latitude`,
+  longitude: t`Longitude`,
   altNames: "Alternative Names",
-  notes: "Notes",
-  numAbseils: "Pitches",
-  longestAbseil: "Longest Pitch (m)",
-  hours: "Hours",
+  notes: t`Notes`,
+  numAbseils: t`Pitches`,
+  longestAbseil: t`Longest Pitch (m)`,
+  hours: t`Hours`,
   vGrade: "V Grade",
-  aGrade: "A Grade",
-  commitment: "Commitment",
-  quality: "Quality",
-  sources: "Sources",
-  "new-attr": "New custom attribute",
-  discard: "Discard column",
+  aGrade: t`A Grade`,
+  commitment: t`Commitment`,
+  quality: t`Quality`,
+  sources: t`Sources`,
+  "new-attr": t`New custom attribute`,
+  discard: t`Discard column`,
 };
 
 /** STRUCTURAL roles — the ones every place has, whatever its type. */

@@ -10,6 +10,7 @@ import { createPortal } from "react-dom";
 import type { ConfirmCopy } from "@logjam/shared";
 import { Button, IconButton } from "./Button";
 import classes from "./Dialog.module.css";
+import { t } from "@logjam/shared";
 
 type DialogProps = {
   open: boolean;
@@ -186,10 +187,10 @@ function OpenDialog({
           </h2>
           <IconButton
             icon="close"
-            label="Close"
+            label={t`Close`}
             onClick={requestClose}
             disabled={!dismissible}
-            disabledReason="Wait for this to finish"
+            disabledReason={t`Wait for this to finish`}
           />
         </header>
         {toolbar && <div className={classes.toolbar}>{toolbar}</div>}
@@ -206,7 +207,7 @@ function OpenDialog({
           onClose={() => setConfirming(false)}
           footer={
             <>
-              <Button onClick={() => setConfirming(false)}>Cancel</Button>
+              <Button onClick={() => setConfirming(false)}>{t`Cancel`}</Button>
               <Button
                 {...(discard.tone === "destructive"
                   ? { variant: "destructive", icon: discard.icon ?? "delete" }
