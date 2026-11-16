@@ -36,7 +36,7 @@ const WRITE_LIST = !!process.env.PSEUDO_WRITE_LIST;
 const REWRITE =
   "PSEUDO_WRITE_LIST=1 npx playwright test --project=pseudo (in frontend/, the stack up)";
 
-/** The messages of the language row (`LANGUAGE_SETTING`, shared): its title, three names and hint. */
+/** Distinct messages the walk must meet in ⟦ ⟧: a walk that never left English meets none, and the list may be rewritten from it. */
 const WRAPPED_FLOOR = 5;
 
 const WIDTHS = [
@@ -255,9 +255,10 @@ class Walk {
 }
 
 // stubMaster builds the made-up archives when the map first asks for one, and
-// building them blocks this process for 10 to 40 s. By then the page is up and
-// its first `evaluate` is waiting on this process, so the screen is read as
-// 30 s of silence. Built here, the cost falls in a hook, ahead of the page.
+// building them blocks this process for seconds (10 to 40 on a loaded laptop).
+// By then the page is up and its first `evaluate` is waiting on this process,
+// so the screen is read as 30 s of silence. Built here, the cost falls in a
+// hook, ahead of the page.
 test.beforeAll(() => {
   test.setTimeout(180_000);
   statewideArchives();
@@ -291,9 +292,12 @@ test.beforeEach(async ({ page }) => {
 });
 
 // Mutation: write `LANGUAGE_SETTING.title` in shared/src/contracts/settings.ts
-// as "Language", without `t` (new text outside ⟦ ⟧, and one message under the
-// floor); or delete `import "./language"` from frontend/src/main.tsx (shared
-// loads in English: no message at all).
+// as "Language", without `t` (new text outside ⟦ ⟧: red on the list); or delete
+// `import "./language"` from frontend/src/main.tsx (shared loads in English, so
+// every message is new text outside ⟦ ⟧: red on the list too); or, rewriting the
+// list, set `en-AU` for the key in the `pseudo` project of playwright.config.ts
+// and for `language` in the `/users/me` stub in `beforeEach` (no message met:
+// red on the floor).
 test("every main screen reads in the pseudo-language, bar the listed text", async ({
   page,
 }, testInfo) => {
