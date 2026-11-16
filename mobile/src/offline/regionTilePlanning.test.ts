@@ -204,7 +204,11 @@ describe("regionClipSpecs", () => {
   it("gives an area outside every region the world's vector map, where it has one", () => {
     const sea = { west: 160, south: -30, east: 160.1, north: -29.9 };
     const specs = specsFor(sea, [NSW_REGION, ...SIM_REGIONS], SIM_WORLD);
-    expect(archives(specs)).toEqual([["protomaps", undefined]]);
+    // The world's heights clip is cut here too, ahead of the vector map.
+    expect(archives(specs)).toEqual([
+      ["simworld-heights", "simworld-heights"],
+      ["protomaps", undefined],
+    ]);
     expect(vectorPaths(specs)).toEqual([SIM_WORLD.vector!.archivePath]);
   });
 
