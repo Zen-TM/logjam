@@ -487,6 +487,7 @@ function App() {
   const mapLayerId = mapLayerFor(activeLayerId, {
     active: selectingGeoPdfExtent,
     layerId: geoPdfFramingLayer,
+    view: basemapView,
   });
 
   const [geoPdfPaperAspect, setGeoPdfPaperAspect] = useState(210 / 297);
@@ -1724,7 +1725,7 @@ function App() {
     setGeoPdfInitialScale(undefined);
     // No dialog has chosen yet: it will open on the layer it seeds from the
     // map's, so that is the one the frame is drawn on.
-    setGeoPdfFramingLayer(seedBaseLayer(activeLayerId));
+    setGeoPdfFramingLayer(seedBaseLayer(activeLayerId, bounds));
     setActivePanel(null);
     setSelectingGeoPdfExtent(true);
   };

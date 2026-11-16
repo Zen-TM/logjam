@@ -12,8 +12,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { TBbox } from "../map/Map";
 import BasemapGallery from "../map/BasemapGallery";
 import {
+  baseLayerHere,
   PRINTABLE_BASE_LAYERS,
+  printableBaseLayersFor,
   seedBaseLayer,
+  sheetBox,
   UNPRINTABLE_NOTE,
 } from "./geoPdfBaseLayer";
 import {
@@ -323,8 +326,22 @@ function GeoPdfDialog({
     useState<ExtentState>(DEFAULT_EXTENT_STATE);
 
   // Layers
-  const [selectedBaseLayer, setSelectedBaseLayer] = useState(() =>
-    seedBaseLayer(activeLayerId),
+  const [pickedBaseLayer, setSelectedBaseLayer] = useState(() =>
+    seedBaseLayer(activeLayerId, null),
+  );
+  // What the sheet is printed from follows the ground it covers (ADR 0049): the
+  // pick where it prints there, else that ground's default. The pick is kept.
+  const extentValid =
+    extentState.north > extentState.south &&
+    extentState.east > extentState.west &&
+    extentState.scale > 0;
+  const groundBox = useMemo(
+    () => sheetBox(extentValid ? extentState : null, mapCenter),
+    [extentValid, extentState, mapCenter],
+  );
+  const selectedBaseLayer = useMemo(
+    () => baseLayerHere(pickedBaseLayer, groundBox),
+    [pickedBaseLayer, groundBox],
   );
   const [selectedOverlays, setSelectedOverlays] =
     useState<Set<string>>(seedOverlays);
@@ -445,7 +462,7 @@ function GeoPdfDialog({
       return updated;
     });
     if (c.baseLayer)
-      setSelectedBaseLayer(seedBaseLayer(activeLayerId, c.baseLayer));
+      setSelectedBaseLayer(seedBaseLayer(activeLayerId, null, c.baseLayer));
     if (c.overlays) setSelectedOverlays(new Set(c.overlays));
     if (c.terrainPinned) setTerrainFollowsMap(false);
     if (c.compass !== undefined) setCompassEnabled(c.compass);
@@ -476,7 +493,7 @@ function GeoPdfDialog({
       if (!seededView) {
         setSeededView(true);
         setFormat("geopdf");
-        setSelectedBaseLayer(seedBaseLayer(activeLayerId));
+        setSelectedBaseLayer(seedBaseLayer(activeLayerId, null));
         setSelectedOverlays(seedOverlays());
         setTerrainFollowsMap(true);
         applyLastSettings();
@@ -623,11 +640,6 @@ function GeoPdfDialog({
       selectedBaseLayer,
     );
   }, [extentState, onSelectOnMap, selectedBaseLayer]);
-
-  const extentValid =
-    extentState.north > extentState.south &&
-    extentState.east > extentState.west &&
-    extentState.scale > 0;
 
   // The archives of the region the sheet is in; null until the area is set.
   const sheet = useMemo(
@@ -1386,7 +1398,7 @@ function GeoPdfDialog({
                   <span className={classes.baseLayerLabel}>Base layer</span>
                   <BasemapGallery
                     label="Base layer"
-                    layers={PRINTABLE_BASE_LAYERS}
+                    layers={printableBaseLayersFor(groundBox)}
                     activeLayerId={selectedBaseLayer}
                     onChange={(id) => {
                       setSelectedBaseLayer(id);
