@@ -18,11 +18,11 @@ import {
   MAP_POINT_NO_FIX_NOTE,
   WEATHER,
   mapPointFacts,
-  mapPointPosition,
   mapPointStepBack,
   mapPointVerbs,
   type MapPointCoord,
   type MapPointElevation,
+  type MapPointFact,
   type MapPointView,
 } from "@logjam/shared";
 
@@ -149,6 +149,20 @@ export function MapPointSheet({
 }
 
 /**
+ * A copyable fact's press: each fact says what it copies and what to say
+ * after. React Native's clipboard cannot refuse, so `failed` is Logjam Web's.
+ */
+const copyFact =
+  (
+    copy: NonNullable<MapPointFact["copy"]>,
+    onInfo: (message: string) => void,
+  ) =>
+  () => {
+    Clipboard.setString(copy.text);
+    onInfo(copy.copied);
+  };
+
+/**
  * The viewer's own position, as the receiver last gave it. Nothing to do with
  * it, so no verbs, no slope and no forecast: only the figures, and none of them
  * asks anyone anything but the terrain tiles the map already reads.
@@ -198,14 +212,7 @@ function FixDetail({
     value: fact.value,
     ...(fact.note ? { note: fact.note } : {}),
     ...(fact.span ? { span: true } : {}),
-    ...(fact.copyable
-      ? {
-          onCopy: () => {
-            Clipboard.setString(mapPointPosition(point));
-            onInfo(MAP_POINT.copy.coordinatesCopied);
-          },
-        }
-      : {}),
+    ...(fact.copy ? { onCopy: copyFact(fact.copy, onInfo) } : {}),
   }));
   return (
     <View style={styles.body}>
@@ -285,11 +292,6 @@ function PointDetail({
   );
   const showRow = showWeatherRow(weather);
 
-  const position = mapPointPosition(point);
-  const copyPosition = () => {
-    Clipboard.setString(position);
-    onInfo(MAP_POINT.copy.coordinatesCopied);
-  };
   const stats: Stat[] = mapPointFacts({
     point,
     elevation:
@@ -311,7 +313,7 @@ function PointDetail({
     value: fact.value,
     ...(fact.note ? { note: fact.note } : {}),
     ...(fact.span ? { span: true } : {}),
-    ...(fact.copyable ? { onCopy: copyPosition } : {}),
+    ...(fact.copy ? { onCopy: copyFact(fact.copy, onInfo) } : {}),
   }));
 
   if (view === "weather") return <WeatherView weather={weather} />;

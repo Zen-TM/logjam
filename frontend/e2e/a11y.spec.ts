@@ -1467,7 +1467,7 @@ test.describe("desktop", () => {
     await expect(panel.getByRole("button", { name: "Close" })).toHaveCount(0);
     await page.keyboard.press("Tab");
     await expect(
-      panel.getByRole("button", { name: /^Position: .*\. Copy$/ }),
+      panel.getByRole("button", { name: /^Coordinates: .*\. Copy$/ }),
     ).toBeFocused();
     await page.keyboard.press("Tab");
     await expect(panel.getByRole("button", { name: "Options" })).toBeFocused();

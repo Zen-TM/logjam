@@ -29,12 +29,17 @@ describe("the tap sheet", () => {
     expect(sheet.match(/mapPointVerbs\(/g)).toHaveLength(1);
   });
 
-  // Mutation: build a stat from `mapPointFacts` without wiring `copyable` to
-  // `onCopy`, and a coordinates figure stops copying where it is pressed.
-  it("copies every coordinates figure where it is pressed", () => {
+  // Mutation: build a stat from `mapPointFacts` without wiring a fact's
+  // `copy` to `onCopy`, and the coordinates and grid reference stop copying
+  // where they are pressed.
+  it("copies every copyable figure where it is pressed", () => {
     const sheet = read("MapPointSheet.tsx");
     expect(sheet.match(/mapPointFacts\(/g)).toHaveLength(2);
-    expect(sheet.match(/fact\.copyable/g)).toHaveLength(2);
+    expect(
+      sheet.match(
+        /fact\.copy \? \{ onCopy: copyFact\(fact\.copy, onInfo\) \}/g,
+      ),
+    ).toHaveLength(2);
   });
 
   // Mutation: give the sheet a plain `onClose={onClose}` again, and the back

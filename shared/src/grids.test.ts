@@ -9,6 +9,7 @@ import {
   gridZonesFor,
   mgaZone,
   parseGridReference,
+  sixFigureReference,
   toGrid,
   toGridAt,
   type GridId,
@@ -449,5 +450,47 @@ describe("typed grid references", () => {
     expect(utm.lat).toBeGreaterThan(50);
     const none = parseGridReference(text, { lat: 40, lon: -100 }, MADE_UP)!;
     expect(none.label).toBe("MGA 56 245000 6264000");
+  });
+});
+
+describe("six-figure references", () => {
+  /** The point at a grid position, so each case names its figures exactly. */
+  const at = (easting: number, northing: number, lon: number, lat: number) =>
+    fromGrid(easting, northing, gridZoneAt(lon, lat, MADE_UP));
+
+  // Mutation: round instead of cutting off, and 250899 reads as square 509,
+  // the one east of the point.
+  it("names the 100 m square the point is in, by its south-west corner", () => {
+    const { lat, lon } = at(250899, 6266450, 150.31, -33.71);
+    expect(sixFigureReference(lat, lon, MADE_UP)).toBe("MGA 56 508 664");
+  });
+
+  // Mutation: drop the `padStart`, and 300512 reads as "5", not "005".
+  it("keeps the leading zeros of each three figures", () => {
+    const { lat, lon } = at(300512, 6200040, 150.8, -34.3);
+    expect(sixFigureReference(lat, lon, MADE_UP)).toBe("MGA 56 005 000");
+  });
+
+  // Mutation: name every reference "MGA", or read the zone from NSW alone.
+  it("reads the grid of the ground at the point", () => {
+    const nz = at(1749046, 5427521, 174.8, -41.3);
+    expect(sixFigureReference(nz.lat, nz.lon, MADE_UP)).toBe("NZTM 490 275");
+    expect(sixFigureReference(-35.1, 147.4, MADE_UP)).toMatch(
+      /^MGA 55 \d{3} \d{3}$/,
+    );
+    expect(sixFigureReference(38.6, -110.7, MADE_UP)).toMatch(
+      /^UTM 12 \d{3} \d{3}$/,
+    );
+    expect(sixFigureReference(48.85, 2.35, MADE_UP)).toMatch(
+      /^UTM 31 \d{3} \d{3}$/,
+    );
+  });
+
+  // Mutation: drop the latitude check, and a point by the pole gets a UTM
+  // reference that UTM does not define.
+  it("gives none past UTM's latitudes", () => {
+    expect(sixFigureReference(85, 10, MADE_UP)).toBeNull();
+    expect(sixFigureReference(-81, 10, MADE_UP)).toBeNull();
+    expect(sixFigureReference(84, 10, MADE_UP)).not.toBeNull();
   });
 });

@@ -14,7 +14,9 @@
 // a DETAIL surface, which is what this is: the user asked about this exact
 // spot. Nothing here is logged, toasted or persisted; the point lives in the
 // map's state until the panel is dismissed.
+import { sixFigureReference } from "../grids.js";
 import { haversineMeters } from "../placeGeo.js";
+import type { Region } from "../regions.js";
 import { formatHeight } from "../units.js";
 import { gaugeAgo } from "./gauges.js";
 import {
@@ -33,6 +35,9 @@ export const MAP_POINT = {
   title: "This point",
   sections: [
     { key: "position" },
+    // In the grid of the ground at the point (grids.ts): what a guidebook
+    // gives, so a spot can be checked against one.
+    { key: "gridReference" },
     { key: "elevation" },
     // The fix itself, when the point IS the viewer's own position (a press on
     // the location arrow on Logjam GPS).
@@ -62,7 +67,8 @@ export const MAP_POINT = {
     { key: "coverage" },
   ],
   copy: {
-    position: "Position",
+    position: "Coordinates",
+    gridReference: "Grid reference",
     elevation: "Elevation",
     distance: "Distance",
     bearing: "Bearing",
@@ -90,6 +96,9 @@ export const MAP_POINT = {
     // offline, a change is still queued, or there is no account to sync to.
     markerSavedHere: "Saved on this phone",
     coordinatesCopied: "Coordinates copied.",
+    coordinatesCopyFailed: "Couldn't copy the coordinates.",
+    gridReferenceCopied: "Grid reference copied.",
+    gridReferenceCopyFailed: "Couldn't copy the grid reference.",
   },
 } as const satisfies ScreenContract;
 
@@ -256,6 +265,7 @@ export type MapPointElevation =
 export type MapPointFact = {
   key:
     | "position"
+    | "gridReference"
     | "elevation"
     | "accuracy"
     | "fixAge"
@@ -271,8 +281,11 @@ export type MapPointFact = {
   span?: true;
   /** Why there is no figure: the value is then "—" and this is its caption. */
   note?: string;
-  /** Pressing the figure copies it, on both clients. */
-  copyable?: true;
+  /**
+   * Pressing the figure copies `text`, on both clients, and says `copied`
+   * (or `failed`, where the platform's clipboard can refuse).
+   */
+  copy?: { text: string; copied: string; failed: string };
 };
 
 /** The position as shown and as copied: five places is under two metres. */
@@ -315,6 +328,8 @@ export function mapPointFacts(input: {
   coverage?: string | null;
   /** Given when the point IS the viewer's fix: how good and how old it is. */
   fix?: MapPointFix;
+  /** Which grid the ground uses; a test passes simulated regions. */
+  regions?: readonly Region[];
 }): MapPointFact[] {
   const { point, elevation, from, slopeDegrees, land, fire, coverage, fix } =
     input;
@@ -325,22 +340,43 @@ export function mapPointFacts(input: {
       label: copy.position,
       value: mapPointPosition(point),
       span: true,
-      copyable: true,
-    },
-    {
-      key: "elevation",
-      label: elevation.state === "receiver" ? copy.gpsAltitude : copy.elevation,
-      value:
-        elevation.state === "known" || elevation.state === "receiver"
-          ? formatHeight(elevation.metres)
-          : elevation.state === "checking"
-            ? copy.elevationChecking
-            : "—",
-      ...(elevation.state === "unavailable"
-        ? { note: copy.elevationNeedsConnection }
-        : {}),
+      copy: {
+        text: mapPointPosition(point),
+        copied: copy.coordinatesCopied,
+        failed: copy.coordinatesCopyFailed,
+      },
     },
   ];
+  const gridReference = sixFigureReference(
+    point.latitude,
+    point.longitude,
+    input.regions,
+  );
+  if (gridReference)
+    facts.push({
+      key: "gridReference",
+      label: copy.gridReference,
+      value: gridReference,
+      span: true,
+      copy: {
+        text: gridReference,
+        copied: copy.gridReferenceCopied,
+        failed: copy.gridReferenceCopyFailed,
+      },
+    });
+  facts.push({
+    key: "elevation",
+    label: elevation.state === "receiver" ? copy.gpsAltitude : copy.elevation,
+    value:
+      elevation.state === "known" || elevation.state === "receiver"
+        ? formatHeight(elevation.metres)
+        : elevation.state === "checking"
+          ? copy.elevationChecking
+          : "—",
+    ...(elevation.state === "unavailable"
+      ? { note: copy.elevationNeedsConnection }
+      : {}),
+  });
   if (fix)
     facts.push(
       {

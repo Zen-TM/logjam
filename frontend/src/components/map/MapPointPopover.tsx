@@ -5,7 +5,6 @@ import {
   MAP_POINT_NO_FIX_NOTE,
   WEATHER,
   mapPointFacts,
-  mapPointPosition,
   mapPointStepBack,
   mapPointVerbs,
   type MapPointView,
@@ -13,6 +12,7 @@ import {
   type Region,
   layerIn,
   type MapPointCoord,
+  type MapPointFact,
   type MapPointVerbId,
 } from "@logjam/shared";
 import { useElevationPoint } from "../../placeUtils";
@@ -137,11 +137,12 @@ export default function MapPointPopover({
   // for the cell's own DEM, which in canyon country can be far from the spot.
   const checkingHeight = loading;
 
-  const copyPosition = () => {
+  // Each copyable fact says what it copies and what to say after.
+  const copyFact = (copy: NonNullable<MapPointFact["copy"]>) => () => {
     void navigator.clipboard
-      .writeText(mapPointPosition(point))
-      .then(() => toast.done(MAP_POINT.copy.coordinatesCopied))
-      .catch(() => toast.error("Couldn't copy the coordinates."));
+      .writeText(copy.text)
+      .then(() => toast.done(copy.copied))
+      .catch(() => toast.error(copy.failed));
   };
   const stats: Stat[] = mapPointFacts({
     point,
@@ -161,7 +162,7 @@ export default function MapPointPopover({
     value: fact.value,
     ...(fact.note ? { note: fact.note } : {}),
     ...(fact.span ? { span: true } : {}),
-    ...(fact.copyable ? { onCopy: copyPosition } : {}),
+    ...(fact.copy ? { onCopy: copyFact(fact.copy) } : {}),
   }));
 
   const close = () => {

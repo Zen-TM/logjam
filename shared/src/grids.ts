@@ -196,6 +196,27 @@ export function toGridAt(
 }
 
 /**
+ * A point as a guidebook gives it: the grid and zone, then the 100 m figures
+ * of the easting and the northing ("MGA 56 508 664", "NZTM 490 275"). The
+ * figures are cut off, not rounded, as a map is read: the reference names the
+ * 100 m square the point is in by its south-west corner, and rounding would
+ * name the square next door about half the time. Null past UTM's latitudes,
+ * where no grid here answers. Guard: grids.test.ts ("six-figure references").
+ */
+export function sixFigureReference(
+  lat: number,
+  lon: number,
+  regions: readonly Region[] = REGIONS,
+): string | null {
+  if (!(lat >= -80 && lat <= 84)) return null;
+  const { easting, northing, zone } = toGridAt(lat, lon, regions);
+  if (!Number.isFinite(easting) || !Number.isFinite(northing)) return null;
+  const figures = (metres: number) =>
+    String(Math.floor(metres / 100) % 1000).padStart(3, "0");
+  return `${zone.name} ${figures(easting)} ${figures(northing)}`;
+}
+
+/**
  * Latitude and longitude of a point in `zone`. The longitude is in [-180, 180]
  * whatever world copy the zone was chosen for; a caller working in another
  * copy shifts it, as `mapGrid` does.

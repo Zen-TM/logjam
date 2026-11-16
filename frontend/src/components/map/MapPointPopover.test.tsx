@@ -309,7 +309,8 @@ describe("the point popover's panel", () => {
       .getAllByRole("button", { hidden: true })
       .map((button) => button.getAttribute("aria-label") ?? button.textContent);
     expect(names).toEqual([
-      expect.stringMatching(/^Position: .*\. Copy$/),
+      expect.stringMatching(/^Coordinates: .*\. Copy$/),
+      expect.stringMatching(/^Grid reference: .*\. Copy$/),
       MAP_POINT.copy.options,
     ]);
   });
@@ -380,21 +381,43 @@ describe("the point popover's panel", () => {
     expect(onClose).toHaveBeenCalled();
   });
 
-  // Mutation: copy from a separate button, or stop wiring `onCopy` to the
-  // fact that is `copyable`.
+  // Mutation: copy from a separate button, or stop wiring `onCopy` to a
+  // fact's `copy`.
   it("copies the coordinates when they are pressed", async () => {
     const writeText = vi.fn(async () => {});
     vi.stubGlobal("navigator", { ...navigator, clipboard: { writeText } });
     mount();
     fireEvent.click(
       screen.getByRole("button", {
-        name: /^Position: .*\. Copy$/,
+        name: /^Coordinates: .*\. Copy$/,
         hidden: true,
       }),
     );
     await act(async () => {});
     expect(writeText).toHaveBeenCalledWith("-33.71234, 150.31188");
     expect(toast.done).toHaveBeenCalledWith(MAP_POINT.copy.coordinatesCopied);
+  });
+
+  // Mutation: copy the coordinates from every copyable fact, as the popover
+  // did when Position was the only one, and the grid reference's press copies
+  // a latitude and longitude.
+  it("copies the grid reference, under the position, when it is pressed", async () => {
+    const writeText = vi.fn(async () => {});
+    vi.stubGlobal("navigator", { ...navigator, clipboard: { writeText } });
+    mount();
+    const labels = screen
+      .getAllByRole("term", { hidden: true })
+      .map((term) => term.textContent);
+    expect(labels.slice(0, 2)).toEqual(["Coordinates", "Grid reference"]);
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Grid reference: MGA 56 508 664. Copy",
+        hidden: true,
+      }),
+    );
+    await act(async () => {});
+    expect(writeText).toHaveBeenCalledWith("MGA 56 508 664");
+    expect(toast.done).toHaveBeenCalledWith(MAP_POINT.copy.gridReferenceCopied);
   });
 });
 
