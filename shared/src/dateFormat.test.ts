@@ -10,7 +10,8 @@ import * as dateFormat from "./dateFormat.js";
 import { dayOfKey, localDay, utcDay } from "./dateFormat.js";
 import { inTimeZone } from "./timeZone.testHelper.js";
 
-// en-US is empty in source; this is the order the reorder test needs.
+// A stand-in catalogue, so this file tests the mechanism and not US English
+// (`usEnglish.test.ts` holds every form in the US order).
 vi.mock("./i18nCatalogues/en-US.js", () => ({
   enUS: {
     "<day> <month> <year>": "<month> <day>, <year>",

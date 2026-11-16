@@ -103,7 +103,10 @@ and not in `frontend/e2e/pseudo-unwrapped.json` fails
 `frontend/e2e/pseudo.spec.ts`, and so does an entry of that list that no screen
 shows any more; so does a label wider than its control that is not in
 `frontend/e2e/pseudo-overflows.json` (which depends on the machine's fonts, so
-its entries that fit are no failure). No test yet
+its entries that fit are no failure). Started in US English, Logjam Web
+reads its spellings, words and day order (`frontend/e2e/us-english.spec.ts`;
+`shared/src/usEnglish.test.ts` holds the same as unit tests) (updated 2026-11-16).
+No test yet
 holds that every call site uses it, since existing literals are not converted,
 or that the API's resolver is installed from `AsyncLocalStorage` for every
 path that writes text; a later change adds it. Each client's entry file sets
@@ -132,7 +135,10 @@ form builder's locked-visibility sentence, which the clients read, so that no
   `shared/src/i18nCoverage.test.ts` fails on it. (updated 2026-11-14) A language change
   reloads Logjam Web and Logjam GPS. There are no translator tools: a
   translation platform would need a script that exports the catalogue.
-- **Neutral:** `en-US` is empty until existing literals are moved into the catalogue. With one
+- **Neutral:** `en-US` holds the spellings, words and day orders that differ from the
+  source (updated 2026-11-16); a message that holds a listed Australian word has an
+  entry or is named in `LEFT_AS_WRITTEN` with its reason (`shared/src/i18nCoverage.test.ts`,
+  "has an entry for every message that holds an Australian spelling"). With one
   region in prod no language setting shows. A message in the topo worker, the
   sign-up code mail and the static pages stays English.
 
