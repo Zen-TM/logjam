@@ -720,7 +720,7 @@ export function attributionLines(
   ctx.font = `${mmToPx(1.8, dpi)}px ${MAP_FONT}`;
   const baseAttrib =
     BASEMAP_CATALOG.find((entry) => entry.id === input.baseLayer)
-      ?.attribution ?? "Base map data";
+      ?.attribution ?? t`Map data`;
   const maxLineWidth = widthPx * 0.55;
   const wrap = (text: string): string[] => {
     const words = text.split(" ");

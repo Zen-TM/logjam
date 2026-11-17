@@ -9,11 +9,11 @@ export type DateFormat =
 
 export const DATE_FORMAT_LABELS: Record<DateFormat, string> = {
   "YYYY-MM-DD": t`YYYY-MM-DD / ISO 8601 (e.g. 2023-06-15)`,
-  "DD/MM/YYYY": "DD/MM/YYYY (e.g. 15/06/2023)",
+  "DD/MM/YYYY": t`DD/MM/YYYY (e.g. 15/06/2023)`,
   "MM/DD/YYYY": t`MM/DD/YYYY, month first (e.g. 06/15/2023)`,
-  "DD-MM-YYYY": "DD-MM-YYYY (e.g. 15-06-2023)",
-  "DD/MM/YY": "DD/MM/YY (e.g. 15/06/23)",
-  "DD-MM-YY": "DD-MM-YY (e.g. 15-06-23)",
+  "DD-MM-YYYY": t`DD-MM-YYYY (e.g. 15-06-2023)`,
+  "DD/MM/YY": t`DD/MM/YY (e.g. 15/06/23)`,
+  "DD-MM-YY": t`DD-MM-YY (e.g. 15-06-23)`,
 };
 
 function twoDigitYear(yy: number): number {

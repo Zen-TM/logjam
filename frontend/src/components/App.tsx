@@ -148,7 +148,6 @@ import {
   carriersOf,
   type TerrainSwitchKey,
   MAP_OVERLAY_DEFAULTS,
-  MAP_TERRAIN,
   canyonOffersFor,
   opensPreview,
   PLAN_ADD_VERBS,
@@ -179,6 +178,10 @@ import { useToastOnce } from "./feedback/useToastOnce";
 import { useBasemapFallback } from "./map/useBasemapFallback";
 import { messageFromError } from "../errors/messageFromError";
 import { triggerDownload } from "../download";
+import {
+  TERRAIN_UNAVAILABLE_MESSAGE,
+  VEGETATION_UNAVAILABLE_MESSAGE,
+} from "./terrainUnavailable";
 
 function App() {
   const toast = useToast();
@@ -638,16 +641,12 @@ function App() {
       // the page's life.
       const terrainKey = terrainKeyOf(entryId);
       if (terrainKey) {
-        toast.error(
-          `${MAP_TERRAIN.copy[terrainKey]} couldn't be loaded — its map file is missing.`,
-        );
+        toast.error(TERRAIN_UNAVAILABLE_MESSAGE[terrainKey]);
         return;
       }
       if (!topoUnavailableToastShownRef.current) {
         topoUnavailableToastShownRef.current = true;
-        toast.error(
-          `${MAP_TERRAIN.copy.vegetation} couldn't be loaded for some sharpened areas — their map files are missing.`,
-        );
+        toast.error(VEGETATION_UNAVAILABLE_MESSAGE);
       }
     },
     [toast],
@@ -695,7 +694,7 @@ function App() {
   // Reflect the active panel in the document title (WCAG 2.4.2 Page Titled).
   useEffect(() => {
     document.title = activePanel
-      ? `${PANEL_TITLES[activePanel]} — Logjam Web`
+      ? t`${PANEL_TITLES[activePanel]} — Logjam Web`
       : t`Logjam Web`;
   }, [activePanel]);
 
@@ -1258,7 +1257,7 @@ function App() {
         })
         .catch((err) => {
           console.error(err);
-          toast.error(messageFromError(err, "Couldn't load topo job."));
+          toast.error(messageFromError(err, t`Couldn't load sharpen job.`));
         });
     }
   }, [loadsUserData, toast]);
