@@ -89,10 +89,10 @@ import {
   preparePlaceRows,
   prepareTripRows,
   skippedRowsNote,
+  splitSkippedRows,
   tripRowDecision,
   type PreparedPlaceRow,
   type PreparedTripRow,
-  type SkippedTripRow,
 } from "../../csvImport/prepareRows";
 import { messageFromError } from "../../errors/messageFromError";
 import { useToast } from "../feedback/ToastProvider";
@@ -348,12 +348,10 @@ function UnifiedImportDialog({
   );
   // Per-row coercion warnings collected while preparing trip rows,
   // plus per-row "couldn't be read — skipped" entries.
-  const [tripSkipped, setTripSkipped] = useState<SkippedTripRow[]>([]);
-  // Per-row/per-field coercion notices: a non-empty cell that can't parse into
-  // its numeric field is left unset and reported (mirrors the place path's
-  // numeric coercion warnings) — a lenient coerce would silently store "5.5"
-  // as 5 or "abc" as null.
   const [tripWarnings, setTripWarnings] = useState<string[]>([]);
+  // Source rows dropped entirely (unreadable date) before reaching the server
+  // — reported in the outcome summary alongside `imported`.
+  const [tripDroppedRows, setTripDroppedRows] = useState<number>(0);
   const [reviewState, setReviewState] = useState<ReviewState>({
     decisions: {},
     createForms: {},
@@ -454,7 +452,7 @@ function UnifiedImportDialog({
     setPlaceDroppedRows(0);
     setPreparedTripRows([]);
     setTripWarnings([]);
-    setTripSkipped([]);
+    setTripDroppedRows(0);
     setReviewState({
       decisions: {},
       createForms: {},
@@ -716,7 +714,7 @@ function UnifiedImportDialog({
   }
 
   function buildTripRows() {
-    if (!tripFile) return { rows: [], skipped: [], warnings: [] };
+    if (!tripFile) return { rows: [], warnings: [], droppedRows: 0 };
     return prepareTripRows({
       headers: tripFile.headers,
       rows: tripFile.rows,
@@ -732,8 +730,8 @@ function UnifiedImportDialog({
   // initial map step (logbook-only or logbook-first) and after the place stage
   // of a combined import, where `candidates` are the freshly imported places.
   function startTripStage(candidates: MatchCandidate[]): boolean {
-    const { rows, skipped, warnings: tripRowWarnings } = buildTripRows();
-    setTripSkipped(skipped);
+    const { rows, warnings: tripRowWarnings, droppedRows } = buildTripRows();
+    setTripDroppedRows(droppedRows);
     if (rows.length === 0) {
       setError(NO_TRIP_ROWS_ERROR);
       return false;
@@ -1257,7 +1255,7 @@ function UnifiedImportDialog({
         noPlace,
         linked,
         discarded,
-        droppedRows: tripSkipped.length,
+        droppedRows: tripDroppedRows,
         errors: [
           ...errors,
           ...result.errors.map(
@@ -1807,11 +1805,9 @@ function UnifiedImportDialog({
           "# places merged into existing entries",
         );
       }
-      const skippedRows =
-        outcome.kind === "place"
-          ? []
-          : tripSkipped.map((s) => `${s.rowIndex + 2}: ${s.reason}`);
-      const leftEmpty = outcome.warnings;
+      const { skipped: skippedRows, leftEmpty } = splitSkippedRows(
+        outcome.warnings,
+      );
       const warnings = leftEmpty.length > 0 ? leftEmpty : undefined;
       // ImportResultSummary hides the Undo button when every headline count is
       // zero, so only what the import changed decides it.
@@ -1849,7 +1845,8 @@ function UnifiedImportDialog({
             "# trips ready to import.",
           );
     const skippedNote = skippedRowsNote(
-      activeKind === "place" ? [] : tripSkipped,
+      splitSkippedRows(activeKind === "place" ? placeWarnings : tripWarnings)
+        .skipped,
     );
     const preview = [ready, skippedNote].filter(Boolean).join(" ");
 

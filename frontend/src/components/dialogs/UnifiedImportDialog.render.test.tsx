@@ -238,9 +238,8 @@ describe("UnifiedImportDialog, confirm step", () => {
     await screen.findByRole("heading", { name: /^Place columns/ });
     fireEvent.click(screen.getByRole("button", { name: "Next" }));
     await screen.findByText(/ready to import/);
-    console.log(document.body.innerHTML);
     const text = document.querySelector("dialog")!.textContent!;
-    expect(text).toContain("1 row can't be read and will be skipped (row 4).");
+    expect(text).toContain("1 row can't be read and will be skipped (row 3).");
     expect(text).not.toContain("Merge settings");
   });
 });

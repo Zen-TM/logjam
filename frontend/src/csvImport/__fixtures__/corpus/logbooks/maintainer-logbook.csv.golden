@@ -98,15 +98,10 @@
       "customFields": {}
     }
   ],
-  "skipped": [
-    {
-      "rowIndex": 2,
-      "reason": "date \"not sure of the exact date\" couldn't be read"
-    }
-  ],
   "warnings": [
-    "Row 4: date \"not sure of the exact date\" couldn't be read"
+    "Row 4: date \"not sure of the exact date\" couldn't be read — skipped"
   ],
+  "droppedRows": 1,
   "matches": [
     {
       "name": "Grand",
