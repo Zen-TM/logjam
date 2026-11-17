@@ -15,6 +15,7 @@ import {
   downloadableBasemaps,
   formatGroundStep,
   pointBox,
+  t,
   vectorIn,
   type LonLatBox,
   type Region,
@@ -271,18 +272,26 @@ export function defaultFrameInsets(size: {
  */
 export { tileMetersPerPixel as metresPerPixel } from "./scaleBar";
 
-const DETAIL_NAMES: Record<number, string> = {
-  12: "Overview",
-  13: "Coarse",
-  14: "Medium",
-  15: "Detailed",
-  16: "Fine",
-  17: "Very fine",
-  18: "Finest",
-};
-
 /** A detail level named by the ground it resolves: "Fine, 2 m". */
 export function detailLabel(zoom: number, latitudeDeg: number): string {
   const metres = tileMetersPerPixel(latitudeDeg, zoom);
-  return `${DETAIL_NAMES[zoom] ?? "Detail"}, ${formatGroundStep(metres)}`;
+  const step = formatGroundStep(metres);
+  switch (zoom) {
+    case 12:
+      return t`Overview, ${step}`;
+    case 13:
+      return t`Coarse, ${step}`;
+    case 14:
+      return t`Medium, ${step}`;
+    case 15:
+      return t`Detailed, ${step}`;
+    case 16:
+      return t`Fine, ${step}`;
+    case 17:
+      return t`Very fine, ${step}`;
+    case 18:
+      return t`Finest, ${step}`;
+    default:
+      return t`Detail, ${step}`;
+  }
 }

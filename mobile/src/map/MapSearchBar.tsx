@@ -459,7 +459,7 @@ export function MapSearchBar({
             {coordinate ? (
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel={`${coordinate.label}, ${COORDINATE_RESULT_KIND}`}
+                accessibilityLabel={t`${coordinate.label}, ${COORDINATE_RESULT_KIND}`}
                 style={({ pressed }) => [
                   styles.result,
                   pressed && styles.resultPressed,
@@ -480,7 +480,7 @@ export function MapSearchBar({
                     <Pressable
                       key={item.key}
                       accessibilityRole="button"
-                      accessibilityLabel={`${item.title}, ${item.kindLabel}`}
+                      accessibilityLabel={t`${item.title}, ${item.kindLabel}`}
                       style={({ pressed }) => [
                         styles.result,
                         styles.savedResult,
@@ -509,7 +509,7 @@ export function MapSearchBar({
                     <Pressable
                       key={`${place.lat},${place.lon},${place.name}`}
                       accessibilityRole="button"
-                      accessibilityLabel={`${place.name}, ${what}`}
+                      accessibilityLabel={t`${place.name}, ${what}`}
                       style={({ pressed }) => [
                         styles.result,
                         pressed && styles.resultPressed,

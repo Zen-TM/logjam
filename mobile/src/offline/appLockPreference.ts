@@ -120,7 +120,7 @@ async function confirmWithDeviceAuth(): Promise<AuthOutcome> {
     if (level === LocalAuthentication.SecurityLevel.NONE)
       return { status: "ok" };
     const result = await LocalAuthentication.authenticateAsync({
-      promptMessage: "Turn off the app lock",
+      promptMessage: t`Turn off the Logjam GPS lock`,
     });
     if (result.success) return { status: "ok" };
     if (result.error === "not_enrolled" || result.error === "not_available") {

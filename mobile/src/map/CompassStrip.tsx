@@ -101,7 +101,11 @@ export function CompassStrip({
       style={[styles.frame, { width, height: stripHeight(fontScale) }]}
       pointerEvents="none"
       accessibilityRole="image"
-      accessibilityLabel={`Facing ${compassPointFor(shown)}, ${rounded} degrees ${reference}`}
+      accessibilityLabel={
+        reference === "true"
+          ? t`Facing ${compassPointFor(shown)}, ${rounded} degrees true`
+          : t`Facing ${compassPointFor(shown)}, ${rounded} degrees magnetic`
+      }
     >
       <View style={styles.tape}>
         {ticks.map((tick) => (

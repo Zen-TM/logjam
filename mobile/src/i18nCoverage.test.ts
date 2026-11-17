@@ -31,10 +31,10 @@ const CEILINGS: Record<string, number> = {
   geopdf: 2,
   imports: 3,
   logs: 14,
-  map: 36,
+  map: 4,
   media: 4,
   notifications: 4,
-  offline: 35,
+  offline: 1,
   places: 0,
   plans: 6,
   saved: 0,
@@ -42,7 +42,7 @@ const CEILINGS: Record<string, number> = {
   "screens/settings": 2,
   sharing: 1,
   sync: 11,
-  tracks: 9,
+  tracks: 3,
   ui: 7,
 };
 
