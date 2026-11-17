@@ -360,8 +360,8 @@ function sheetTitle(sheet: SheetMode): string {
   }
   if (sheet.kind === "fields") {
     return sheet.entity === "tripLog"
-      ? t`Trip attributes`
-      : t`Place attributes`;
+      ? copy.tripAttributes
+      : copy.placeAttributes;
   }
   return sheet.editing
     ? sheet.editing.label
