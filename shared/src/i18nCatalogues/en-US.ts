@@ -35,6 +35,7 @@ export const enUS: Catalogue = {
     "Woodland grays with a hint of green, and fog-softened neutrals.",
   "Can you set up and do an abseil on your own?":
     "Can you set up and do a rappel on your own?",
+  "Can't be cancelled at this step": "Can't be canceled at this step",
   "Colour terrain based on how steep it is.":
     "Color terrain based on how steep it is.",
   Colour: "Color",
@@ -87,11 +88,14 @@ export const enUS: Catalogue = {
     "Check the box to agree to the updated terms.",
   "Ties share a rank: two people level on most are both first.":
     "Ties share a rank: two people tied on most are both first.",
+  "Use mobile data?": "Use cellular data?",
   "What comes out is drawn from the government's survey, and it may be wrong or out of date. Don't rely on it in place of your own navigation, judgement or rescue planning.":
     "What comes out is drawn from the government's survey, and it may be wrong or out of date. Don't rely on it in place of your own navigation, judgment or rescue planning.",
   "Who can drive, who needs a lift, and from where.":
     "Who can drive, who needs a ride, and from where.",
   "You cancelled this.": "You canceled this.",
+  "You're not on Wi-Fi. Download over mobile data?":
+    "You're not on Wi-Fi. Download over cellular data?",
   "Your canyoning trips and offline maps.":
     "Your canyoneering trips and offline maps.",
   "Your private map and trips for canyoning in {0}.":

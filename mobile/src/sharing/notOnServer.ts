@@ -1,4 +1,4 @@
-import { ApiError } from "@logjam/shared";
+import { ApiError, t } from "@logjam/shared";
 import { unavailableReasonText } from "../auth/capabilities";
 
 /**
@@ -15,5 +15,5 @@ export function shareGrantNotFound(
   if (!(err instanceof ApiError) || err.status !== 404) return null;
   return stillHeld
     ? { message: `${unavailableReasonText("needs-upload")}.`, syncFixes: true }
-    : { message: "This was deleted.", syncFixes: false };
+    : { message: t`This was deleted.`, syncFixes: false };
 }

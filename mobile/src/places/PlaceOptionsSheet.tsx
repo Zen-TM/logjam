@@ -32,6 +32,7 @@ import {
   type TExportFormat,
   copyAndRemoveOutcomeMessage,
   copyOutcomeMessage,
+  t,
 } from "@logjam/shared";
 
 import { spacing, makeStyles, useTheme } from "../theme";
@@ -197,7 +198,7 @@ export function PlaceOptionsSheet({
           } catch (err) {
             // Our own copy, never the error's: it may carry the name.
             console.error(err);
-            onError("Couldn't save a copy of this place.");
+            onError(t`Couldn't save a copy of this place.`);
           }
           // A plain copy leaves nothing locally to update, so the pull is what
           // brings the new row in. The bundled verb does its own pull mid-way.
@@ -242,7 +243,7 @@ export function PlaceOptionsSheet({
         }
         // Our own copy, never the error's: it may carry the name.
         console.error(err);
-        onError("Couldn't save that file.");
+        onError(t`Couldn't save that file.`);
       });
   };
 
@@ -256,7 +257,7 @@ export function PlaceOptionsSheet({
       !(await confirm({
         confirmTitle: copy.title,
         confirmBody: copy.body,
-        confirmLabel: "Remove",
+        confirmLabel: t`Remove`,
         // Not destructive: alice keeps her place, its notes and its photos.
         tone: "filled",
       }))
@@ -264,13 +265,13 @@ export function PlaceOptionsSheet({
       return;
     removeSharedPlace(place.id)
       .then(() => {
-        onInfo("Removed.");
+        onInfo(t`Removed.`);
         onGone?.();
       })
       .catch((err: unknown) => {
         // Our own copy, never the error's: it may carry the name.
         console.error(err);
-        onError("Couldn't remove this shared place.");
+        onError(t`Couldn't remove this shared place.`);
       });
   };
 
@@ -293,7 +294,7 @@ export function PlaceOptionsSheet({
       .catch((err: unknown) => {
         // Our own copy, never the error's: it may carry the name.
         console.error(err);
-        onError("Couldn't delete this place.");
+        onError(t`Couldn't delete this place.`);
       });
   };
 
@@ -335,7 +336,7 @@ export function PlaceOptionsSheet({
         sharing
           ? share.title
           : exporting
-            ? "Export place"
+            ? t`Export place`
             : copyMode
               ? copy.title
               : place.name

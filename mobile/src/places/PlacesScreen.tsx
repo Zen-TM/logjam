@@ -15,7 +15,7 @@
 // PRIVACY: rows carry names, grades, tallies — never coordinates or any derived
 // location detail (shared/DESIGN.md §13). Nothing here is logged, and the failure paths
 // print our own copy rather than an error string that might embed a place name.
-import { gradeSystemOfView, numericFieldValue } from "@logjam/shared";
+import { gradeSystemOfView, numericFieldValue, t } from "@logjam/shared";
 import {
   Fragment,
   memo,
@@ -152,7 +152,7 @@ type Countable = MirrorPlace & {
 };
 
 /** The page's name: the full hero's eyebrow and the compact row's title. */
-const PAGE_NAME = "Places";
+const PAGE_NAME = t`Places`;
 
 /** The grade system "Easiest first" sorts by: that of the ground the map was
  *  last looking at, else of the account's opening view. */
@@ -439,7 +439,7 @@ export function PlacesScreen({
     }
     clearSelection();
     if (failures === 0) info(placeDeleteDone(count));
-    else fail(`${failures} of ${count} couldn't be deleted.`);
+    else fail(t`${failures} of ${count} couldn't be deleted.`);
   }, [selectedItems, clearSelection, fail, info]);
 
   // Every selectable place is one this user OWNS (`isDeletable` above), so a
@@ -567,19 +567,19 @@ export function PlacesScreen({
   const heroSegments: MeterSegment[] = useMemo(
     () => [
       {
-        label: "Visited",
+        label: t`Visited`,
         value: totals.done,
         hue: placeHue.done,
         display: String(totals.done),
       },
       {
-        label: "Not visited",
+        label: t`Not visited`,
         value: totals.todo,
         hue: placeHue.todo,
         display: String(totals.todo),
       },
       {
-        label: "Shared",
+        label: t`Shared`,
         value: totals.shared,
         hue: placeHue.shared,
         display: String(totals.shared),
@@ -836,7 +836,7 @@ export function PlacesScreen({
             refreshing={syncStatus.state === "syncing"}
             onRefresh={() => {
               if (!online) {
-                info("Offline — changes sync when you're back.");
+                info(t`Offline — changes sync when you're back.`);
                 return;
               }
               query.refresh();
@@ -917,7 +917,7 @@ export function PlacesScreen({
             : () => setSheet(null)
         }
         title={
-          sheet === "typeAttributes" ? typeAttributes.title : "New place type"
+          sheet === "typeAttributes" ? typeAttributes.title : t`New place type`
         }
         onBack={sheet === "typeAttributes" ? typeAttributes.onBack : undefined}
         footer={
@@ -1069,7 +1069,7 @@ const PlaceRow = memo(function PlaceRow({
           ) : (
             <IconButton
               icon="overflow"
-              accessibilityLabel={`Actions for ${place.name}`}
+              accessibilityLabel={t`Actions for ${place.name}`}
               onPress={() => onMenu(place)}
             />
           )}

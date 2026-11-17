@@ -39,6 +39,7 @@ import {
   SETTINGS_LIST,
   stepAfterPlaceTypeSave,
   type PlaceTypeIconKey,
+  t,
 } from "@logjam/shared";
 
 import { radius, spacing, makeStyles, useTheme, muted } from "../theme";
@@ -223,7 +224,7 @@ export function usePlaceTypeForm({
         onAdded(added);
         return;
       }
-      onSaved(added ? "Type added." : "Type updated.");
+      onSaved(added ? t`Type added.` : t`Type updated.`);
       onDone();
     } catch (err) {
       console.error(err);
@@ -232,7 +233,7 @@ export function usePlaceTypeForm({
       // footer's banner, not a toast. A local write, so this is a broken
       // database rather than a missing connection — do not offer a network
       // explanation for something reconnecting cannot fix.
-      setFormError("Couldn't save that type on this phone.");
+      setFormError(t`Couldn't save that type on this phone.`);
     } finally {
       setSaving(false);
     }
@@ -246,14 +247,14 @@ export function usePlaceTypeForm({
       if (!yes) return;
       deletePlaceTypeLocal(editing.id)
         .then(() => {
-          onSaved("Type deleted.");
+          onSaved(t`Type deleted.`);
           onDone();
         })
         .catch((err: unknown) => {
           console.error(err);
           // Same reasoning as `save`'s catch: the sheet is still up,
           // so this is the banner, not a toast under it.
-          setFormError("Couldn't delete that type.");
+          setFormError(t`Couldn't delete that type.`);
         });
     });
   }, [editing, onDone, onSaved]);
@@ -261,7 +262,7 @@ export function usePlaceTypeForm({
   const body = (
     <FormStack>
       <TextField
-        label="Name"
+        label={t`Name`}
         value={draft.name}
         onChangeText={(next) => {
           setDraft((current) => ({ ...current, name: next }));
@@ -278,7 +279,7 @@ export function usePlaceTypeForm({
           two different icon sets, and a marker colour carries a WCAG guarantee
           that can only be asserted over a closed set (`scripts/wcag-contrast.mjs`).
           A hex picker would not fail that check, it would delete it. */}
-      <Field label="Icon">
+      <Field label={t`Icon`}>
         <View style={styles.grid} onLayout={onGridLayout}>
           {/* Nothing until the row has been measured — one frame, and the
             alternative is every cell flashing at its intrinsic size first. */}
@@ -312,16 +313,16 @@ export function usePlaceTypeForm({
       </Field>
 
       <ColourField
-        label="Colour"
+        label={t`Colour`}
         palette={PLACE_TYPE_COLORS}
         value={draft.color}
         nameOf={placeTypeColorName}
         onChange={(color) => setDraft((current) => ({ ...current, color }))}
       />
 
-      <Text style={styles.hint}>
-        A ring around a pin means the place was shared with you by a friend.
-      </Text>
+      <Text
+        style={styles.hint}
+      >{t`A ring around a pin means the place was shared with you by a friend.`}</Text>
 
       {editing && inUse > 0 ? (
         <Text style={styles.hint}>{placeTypeInUseNote(inUse)}</Text>
@@ -343,7 +344,7 @@ export function usePlaceTypeForm({
           Save, same as every other form (shared/DESIGN.md §11). */}
       {formError ? <ErrorBanner message={formError} /> : null}
       <Button
-        label={editing ? "Save" : "Add type"}
+        label={editing ? t`Save` : t`Add type`}
         icon="done"
         loading={saving}
         onPress={() => void save()}
