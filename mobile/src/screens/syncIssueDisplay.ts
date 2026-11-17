@@ -24,12 +24,11 @@ import type { ParkedOp, ShelfEntry } from "../sync/syncIssues";
 import { relativeTime } from "./syncHealth";
 
 /**
- * The kinds, in the user's words. Lower case because every string here is a
- * SENTENCE about the user's thing ("Couldn't upload …", "Your notes on a
- * place") rather than a label — the capitalised `Attachment`/`Place` labels
- * this replaces only ever appeared in the old `Place “X” — update` row title.
- * Media is "photo or file" because that is what the user attached; "attachment"
- * is our word for the row that carries it.
+ * Field names in the user's words. The shelf stores the PROTOCOL field name,
+ * which is a column to us and nothing at all to the reader — "Place · vGrade"
+ * was the whole of a row's title. Anything not listed falls back to the raw
+ * name rather than being hidden: an unlabelled field is a copy gap, not a
+ * feature.
  */
 const FIELD_LABEL: Record<string, string> = {
   name: t`name`,
