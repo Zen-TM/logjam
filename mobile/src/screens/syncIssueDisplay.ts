@@ -488,6 +488,13 @@ export function discardExplanation(op: ParkedOp): string {
  * sheet says it (`shelfExplanation`). The verb is past tense, so it needs no
  * agreement with a plural field label.
  */
+/**
+ * A conflict's headline: another device changed the same thing the user did.
+ * Short on purpose: the row shows two lines, and the thing's name, which says
+ * which one, must survive at the largest text size. Neutral on who "won"; the
+ * sheet says it (`shelfExplanation`). The verb is past tense, so it needs no
+ * agreement with a plural field label.
+ */
 function shelfTitleWithoutName(capitalLabel: string, entity: string): string {
   switch (entity) {
     case "place":
@@ -546,6 +553,11 @@ export function shelfExplanation(entry: ShelfEntry): string {
   return t`Your version was saved. It replaced a different one that another device wrote.`;
 }
 
+/**
+ * Why the earlier version can't be put back. Shown INSTEAD of the verb, never under a
+ * dimmed one: both reasons mean the write would park as a fresh stuck op, and a
+ * recovery action that manufactures a new sync issue is worse than none.
+ */
 /**
  * Why the earlier version can't be put back. Shown INSTEAD of the verb, never under a
  * dimmed one: both reasons mean the write would park as a fresh stuck op, and a
