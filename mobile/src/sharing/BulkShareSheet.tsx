@@ -99,7 +99,7 @@ export function BulkShareSheet<C extends BulkShareCandidate>({
     target: visible ? { kind: "bulk", plan } : null,
     // Unused by the bulk branch — a selection has no one name — but the panel
     // needs the prop for its title fallback when there is no target at all.
-    itemLabel: "these items",
+    itemLabel: t`these items`,
     online,
     enabled: visible,
     active: visible,

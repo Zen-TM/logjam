@@ -234,7 +234,7 @@ export function PlaceOptionsSheet({
     )
       .then((filename) => {
         // Null = the user backed out of the folder picker, not a failure.
-        if (filename) onInfo(`Saved ${filename}.`);
+        if (filename) onInfo(t`Saved ${filename}.`);
       })
       .catch((err: unknown) => {
         if (err instanceof ExportUnsupportedError) {

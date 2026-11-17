@@ -66,6 +66,7 @@ import {
   type ToastAction,
   formatDayMonth,
   localDay,
+  plural,
   t,
 } from "@logjam/shared";
 
@@ -247,10 +248,6 @@ function topoLayerLabel(logicalKey: string): string {
   return TOPO_LAYERS.find((meta) => meta.name === layer)?.label ?? layer;
 }
 
-function countOf(count: number, noun: string): string {
-  return `${count} ${noun}${count === 1 ? "" : "s"}`;
-}
-
 // --- Category model -------------------------------------------------------
 // One entry per asset kind: the filter rail, the capacity meter and every
 // row's glyph/hue all read from here, so a new asset kind is one addition.
@@ -284,7 +281,7 @@ const CATEGORY_META: Record<
     plural: t`Sharpened areas`,
     icon: "lidar",
   },
-  geoPdf: { label: t`GeoPDF`, plural: "GeoPDFs", icon: "geoPdf" },
+  geoPdf: { label: t`GeoPDF`, plural: t`GeoPDFs`, icon: "geoPdf" },
   // The three kinds of line are `WAY_KIND_WORDS`, shared with Logjam Web's Ways
   // page. Route stays a category of its own beside import: a route is editable
   // in place and an import is an opaque file, and a list that mixed them would
@@ -307,13 +304,71 @@ const CATEGORY_ORDER: Category[] = [
   "import",
 ];
 
-/** The name search's field label and its "nothing matches" copy — derived
- *  from `CATEGORY_META`'s plural rather than seven hand-written strings,
- *  "All" being the one case with no entry to derive from. */
-function searchNoun(filter: Category | "all"): string {
+/** The name search's field label and its "nothing matches" copy. */
+function searchCopy(filter: Category | "all"): {
+  label: string;
+  noMatch: string;
+} {
+  switch (filter) {
+    case "all":
+      return {
+        label: t`Search everything`,
+        noMatch: t`Nothing matches that`,
+      };
+    case "region":
+      return {
+        label: t`Search offline maps`,
+        noMatch: t`No offline maps match that`,
+      };
+    case "overlay":
+      return {
+        label: t`Search sharpened areas`,
+        noMatch: t`No sharpened areas match that`,
+      };
+    case "geoPdf":
+      return {
+        label: t`Search GeoPDFs`,
+        noMatch: t`No GeoPDFs match that`,
+      };
+    case "track":
+      return {
+        label: t`Search tracks`,
+        noMatch: t`No tracks match that`,
+      };
+    case "route":
+      return {
+        label: t`Search routes`,
+        noMatch: t`No routes match that`,
+      };
+    case "import":
+      return {
+        label: t`Search imports`,
+        noMatch: t`No imports match that`,
+      };
+  }
+}
+
+function savedFilterTitle(filter: Category | "all"): string {
   return filter === "all"
-    ? "everything"
-    : CATEGORY_META[filter].plural.toLowerCase();
+    ? t`Saved`
+    : t`Saved · ${CATEGORY_META[filter].plural}`;
+}
+
+function renameTitle(category: Category): string {
+  switch (category) {
+    case "region":
+      return t`Rename offline map`;
+    case "overlay":
+      return t`Rename sharpened area`;
+    case "geoPdf":
+      return t`Rename GeoPDF`;
+    case "route":
+      return t`Rename route`;
+    case "import":
+      return t`Rename import`;
+    case "track":
+      return t`Rename track`;
+  }
 }
 
 /** A single on-device asset, flattened so one renderer covers every kind. */
@@ -364,7 +419,7 @@ type SavedItem = {
   /** A saved area downloaded again over itself. `busy` while a run of this
    *  card is in the queue; `savedOn` is when its files were saved. */
   update?: {
-    savedLine: string;
+    savedLabel: string;
     busy: boolean;
     run: () => Promise<string | null>;
     /** The card's run, while one is going or has stopped short. */
@@ -878,7 +933,7 @@ export function SavedScreen({
               ),
           );
         }
-        info("Topo saved for offline use.");
+        info(t`LiDAR map saved for offline use.`);
         refreshFreeSpace();
       } catch (err) {
         console.error(err);
@@ -1005,9 +1060,11 @@ export function SavedScreen({
       if (downloadGroups.some((run) => run.groupId === group.key)) continue;
       const first = group.members[0];
       const title = group.label ?? t`Offline map`;
-      const savedLine = `${formatDay(dates.savedAt)}${
-        dates.updatedAt ? ` · updated ${formatDay(dates.updatedAt)}` : ""
-      }`;
+      const savedDay = formatDay(dates.savedAt);
+      const updatedDay = dates.updatedAt ? formatDay(dates.updatedAt) : null;
+      const savedLabel = updatedDay
+        ? t`Saved ${savedDay} · updated ${updatedDay}`
+        : t`Saved ${savedDay}`;
       // The DEM saved with the run is a member (its bytes and its deletion
       // belong to this card) but it is not a MAP: it is never drawn, never
       // switched to, and counting it would tell the user they saved three maps
@@ -1024,7 +1081,20 @@ export function SavedScreen({
           ? updateProgressLine(
               updatingCards.get(group.key) as RegionDownloadGroup,
             )
-          : `${countOf(group.members.length, "layer")} · saved ${savedLine}`,
+          : updatedDay
+            ? plural(
+                group.members.length,
+                "# layer · saved {0} · updated {1}",
+                "# layers · saved {0} · updated {1}",
+                savedDay,
+                updatedDay,
+              )
+            : plural(
+                group.members.length,
+                "# layer · saved {0}",
+                "# layers · saved {0}",
+                savedDay,
+              ),
         sizeBytes: group.sizeBytes,
         locatable: group.bbox != null,
         // Which basemap to switch the map to on "Show on map" — the first of
@@ -1038,7 +1108,7 @@ export function SavedScreen({
             : renameArtifact(first.id, name),
         update: canUpdateRegion(group.members)
           ? {
-              savedLine,
+              savedLabel,
               busy: isGroupBusy(regionJobs, group.key),
               running: updatingCards.get(group.key),
               run: () =>
@@ -1056,7 +1126,11 @@ export function SavedScreen({
         delete: {
           confirmTitle: t`Delete ${title}?`,
           synced: false,
-          confirmBody: `The map data for this area (${countOf(group.members.length, "layer")}) is removed from the device.`,
+          confirmBody: plural(
+            group.members.length,
+            "The map data for this area (# layer) is removed from the device.",
+            "The map data for this area (# layers) is removed from the device.",
+          ),
           run: async () => {
             for (const artifact of group.members) {
               await deleteDownloadedArtifact(artifact.id);
@@ -1073,11 +1147,15 @@ export function SavedScreen({
       );
       const title =
         group.label ?? job?.name ?? t`LiDAR map ${group.key.slice(0, 8)}`;
+      const removeConfirm = removeShareConfirm({
+        kindLabel: t`LiDAR map`,
+        itemName: group.label ?? job?.name ?? t`This LiDAR map`,
+      });
       rows.push({
         key: savedOverlayKey(group.key),
         category: "overlay",
         title,
-        subtitle: countOf(group.members.length, "layer"),
+        subtitle: plural(group.members.length, "# layer", "# layers"),
         sizeBytes: group.sizeBytes,
         pill: { label: t`Offline`, tone: "accent" },
         // Withheld only when we KNOW it is not ours (`syncRole === "shared"` —
@@ -1096,16 +1174,12 @@ export function SavedScreen({
               // longer be granted leaves a card that cannot be re-downloaded
               // and cannot say why.
               removeShare: {
-                confirmTitle: removeShareConfirm({
-                  kindLabel: "LiDAR map",
-                  itemName: group.label ?? job?.name ?? "This LiDAR map",
-                }).title,
-                confirmBody: `${
-                  removeShareConfirm({
-                    kindLabel: "LiDAR map",
-                    itemName: group.label ?? job?.name ?? "This LiDAR map",
-                  }).body
-                } The ${countOf(group.members.length, "layer")} downloaded here are deleted too.`,
+                confirmTitle: removeConfirm.title,
+                confirmBody: `${removeConfirm.body} ${plural(
+                  group.members.length,
+                  "The # layer downloaded here is deleted too.",
+                  "The # layers downloaded here are deleted too.",
+                )}`,
                 run: async () => {
                   await removeSharedEntity("topoJob", group.key);
                   for (const artifact of group.members) {
@@ -1140,7 +1214,11 @@ export function SavedScreen({
         delete: {
           confirmTitle: t`Delete ${title}?`,
           synced: false,
-          confirmBody: `Its ${countOf(group.members.length, "layer")} are removed from the device. You can download them again later.`,
+          confirmBody: plural(
+            group.members.length,
+            "Its # layer is removed from the device. You can download it again later.",
+            "Its # layers are removed from the device. You can download them again later.",
+          ),
           run: async () => {
             for (const artifact of group.members) {
               await deleteDownloadedArtifact(artifact.id);
@@ -1228,11 +1306,20 @@ export function SavedScreen({
         // Where it came from, in the row rather than behind a tap: who sent
         // you a file is a browsing-time fact, and burying it in the overflow
         // sheet means you only learn it while trying to do something else.
-        subtitle: `${imported.featureCount} feature${imported.featureCount === 1 ? "" : "s"} · ${
-          imported.sentBy
-            ? `from ${imported.sentBy} · ${formatDay(imported.createdAt)}`
-            : `imported ${formatDay(imported.createdAt)}`
-        }`,
+        subtitle: imported.sentBy
+          ? plural(
+              imported.featureCount,
+              "# feature · from {0} · {1}",
+              "# features · from {0} · {1}",
+              imported.sentBy,
+              formatDay(imported.createdAt),
+            )
+          : plural(
+              imported.featureCount,
+              "# feature · imported {0}",
+              "# features · imported {0}",
+              formatDay(imported.createdAt),
+            ),
         sizeBytes: imported.sizeBytes,
         // NOT the "Shared" pill. On a route that word means live, revocable
         // and read-only; a received copy is this user's own file, editable and
@@ -1484,7 +1571,7 @@ export function SavedScreen({
       onDeviceBytes: selectedBytes,
     });
     const ok = await confirm({
-      confirmTitle: `Delete ${countOf(targets.length, "item")}?`,
+      confirmTitle: plural(targets.length, "Delete # item?", "Delete # items?"),
       confirmBody: body,
       confirmLabel: t`Delete`,
       tone: "destructive",
@@ -1508,8 +1595,11 @@ export function SavedScreen({
     }
     clearSelection();
     refreshFreeSpace();
-    if (failures === 0) info(`Deleted ${countOf(targets.length, "item")}.`);
-    else fail(t`${failures} of ${targets.length} couldn't be deleted.`);
+    if (failures === 0) {
+      info(plural(targets.length, "Deleted # item.", "Deleted # items."));
+    } else {
+      fail(t`${failures} of ${targets.length} couldn't be deleted.`);
+    }
   };
 
   const deleteItem = useCallback(
@@ -1679,7 +1769,9 @@ export function SavedScreen({
     active: menuMode === "share" || menuMode === "sendCopy",
     onSent: (count: number) => {
       closeItemSheet();
-      info(`Sent a copy to ${countOf(count, "friend")}.`);
+      info(
+        plural(count, "Sent a copy to # friend.", "Sent a copy to # friends."),
+      );
     },
   });
 
@@ -1718,15 +1810,12 @@ export function SavedScreen({
               valueSuffix={
                 freeBytes != null
                   ? t`used · ${formatBytes(freeBytes)} free`
-                  : "used"
+                  : t`used`
               }
               // The pinned row names the filter even when it is compact (an Inbox
               // tap lands on Routes).
               title={(() => {
-                const name =
-                  filter === "all"
-                    ? t`Saved`
-                    : `Saved · ${CATEGORY_META[filter].plural}`;
+                const name = savedFilterTitle(filter);
                 return compact
                   ? compactHeroTitle(name, activeCategoryCount)
                   : name;
@@ -1743,9 +1832,20 @@ export function SavedScreen({
             >
               {selecting ? (
                 <SelectionBar
-                  countLabel={`${countOf(selectedItems.length, "item")} selected${
-                    selectedBytes > 0 ? ` · ${formatBytes(selectedBytes)}` : ""
-                  }`}
+                  countLabel={
+                    selectedBytes > 0
+                      ? plural(
+                          selectedItems.length,
+                          "# item selected · {0}",
+                          "# items selected · {0}",
+                          formatBytes(selectedBytes),
+                        )
+                      : plural(
+                          selectedItems.length,
+                          "# item selected",
+                          "# items selected",
+                        )
+                  }
                   // "Everything" means everything a selection can act on — a shared
                   // route or waypoint is skipped rather than picked and then refused.
                   showSelectAll={selectedItems.length < selectableItems.length}
@@ -1800,7 +1900,7 @@ export function SavedScreen({
               // running into it just looks clipped.
               <View style={styles.searchField}>
                 <SearchField
-                  label={`Search ${searchNoun(filter)}`}
+                  label={searchCopy(filter).label}
                   value={searchQuery}
                   onChangeText={setSearchQuery}
                   // Narrowing the list mid-selection could scroll a selected row
@@ -1853,7 +1953,7 @@ export function SavedScreen({
               // What the run is going to cost, as soon as planning knows —
               // a GeoPDF import is minutes of rendering.
               importRun.estimate
-                ? `about ${formatMinutes(importRun.estimate.seconds)}`
+                ? t`about ${formatMinutes(importRun.estimate.seconds)}`
                 : null,
             ]
               .filter(Boolean)
@@ -1908,7 +2008,11 @@ export function SavedScreen({
                     />
                     <IconButton
                       icon="overflow"
-                      accessibilityLabel={`Layers in ${group.label || "this download"}`}
+                      accessibilityLabel={
+                        group.label
+                          ? t`Layers in ${group.label}`
+                          : t`Layers in this download`
+                      }
                       onPress={() => setDownloadSheetId(group.groupId)}
                     />
                   </View>
@@ -2165,7 +2269,7 @@ export function SavedScreen({
                   // under; the layer count does not.
                   subtitle={
                     lidarReady
-                      ? countOf(job.missing.length, "layer")
+                      ? plural(job.missing.length, "# layer", "# layers")
                       : t`Connect to download`
                   }
                   icon="lidar"
@@ -2300,7 +2404,7 @@ export function SavedScreen({
           menuItem == null
             ? ""
             : menuMode === "rename"
-              ? `Rename ${CATEGORY_META[menuItem.category].label.toLowerCase()}`
+              ? renameTitle(menuItem.category)
               : menuMode === "sendCopy" || menuMode === "share"
                 ? sharePanel.title
                 : menuItem.title
@@ -2416,7 +2520,7 @@ export function SavedScreen({
                   subtitle={
                     menuItem.update.busy
                       ? t`Updating…`
-                      : `Saved ${menuItem.update.savedLine}`
+                      : menuItem.update.savedLabel
                   }
                   disabled={menuItem.update.busy}
                   onPress={() => {
@@ -2663,7 +2767,7 @@ function EmptyPanel({
   };
   const { title, hint } = searching
     ? {
-        title: `No ${searchNoun(filter)} match that`,
+        title: searchCopy(filter).noMatch,
         hint: t`Try a different search.`,
       }
     : copy[filter];

@@ -27,6 +27,7 @@ import {
   COPY_MEDIA_SETTING,
   copyAndRemoveConfirm,
   copyConfirm,
+  plural,
   t,
 } from "@logjam/shared";
 
@@ -138,13 +139,15 @@ export function useCopyPanel({
 
   const one = targets.length === 1;
   const itemName = one ? targets[0].title : "";
-  const kindLabel = one ? targets[0].entityType : "item";
+  const kindLabel = one ? targets[0].entityType : t`item`;
 
   const confirm =
     mode === "copyAndRemove"
       ? copyAndRemoveConfirm({
           kindLabel,
-          itemName: one ? itemName : `${targets.length} items`,
+          itemName: one
+            ? itemName
+            : plural(targets.length, "# item", "# items"),
           ownerName: friendName,
           // The count only counts as "left behind" while the switch is off.
           mediaLeftBehind: withMedia ? 0 : media.count,
@@ -166,11 +169,12 @@ export function useCopyPanel({
             icon="photo"
             // The same words as the Privacy and security setting this choice defaults from.
             title={COPY_MEDIA_SETTING.label}
-            description={`${
-              media.count === 1
-                ? "1 photo or file"
-                : `${media.count} photos and files`
-            }, ${formatBytes(media.bytes)}`}
+            description={plural(
+              media.count,
+              "# photo or file, {0}",
+              "# photos and files, {0}",
+              formatBytes(media.bytes),
+            )}
             checked={withMedia}
             onChange={toggleMedia}
             disabled={busy}

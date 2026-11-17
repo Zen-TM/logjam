@@ -22,7 +22,6 @@ import {
   View,
 } from "react-native";
 import {
-  ATTRIBUTE_NOUN,
   contractSectionsFor,
   isReservedFieldKey,
   PLACE_PAGE,
@@ -839,10 +838,10 @@ export function PlaceDetailScreen({
               return (
                 <Text style={styles.muted}>
                   {(placesQuery.data ?? []).length <= 1
-                    ? "This is the only place you have."
+                    ? t`This is the only place you have.`
                     : candidates.length === 0
-                      ? "Every other place is already linked to this one."
-                      : "No place matches that."}
+                      ? t`Every other place is already linked to this one.`
+                      : t`No place matches that.`}
                 </Text>
               );
             }
@@ -936,7 +935,7 @@ export function PlaceDetailScreen({
           {foreignIsBuiltIn ? null : (
             <Row
               icon="add"
-              title={`Create a new ${ATTRIBUTE_NOUN.one} for this place type`}
+              title={t`Create a new attribute for this place type`}
               // No explanation line: the three titles say what they do, and a
               // sentence under each turned a three-item menu into a wall. The
               // slot is kept for the one thing the user cannot see — no
