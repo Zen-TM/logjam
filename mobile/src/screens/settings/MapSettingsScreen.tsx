@@ -125,15 +125,19 @@ const NORTH_REFERENCE_HINTS: Partial<Record<NorthReference, string>> = {
  * can find out whether the app thinks their compass is healthy.
  */
 function compassHint(): string {
-  return `Compass: ${lastCompassDiagnostics()}`;
+  return t`Compass: ${lastCompassDiagnostics()}`;
 }
 
 function declinationHint(): string {
   const degrees = Math.abs(currentDeclinationDeg()).toFixed(1);
-  const side = currentDeclinationDeg() >= 0 ? "east" : "west";
+  const east = currentDeclinationDeg() >= 0;
   return isDeclinationLearned()
-    ? `Magnetic north is ${degrees}° ${side} of true north here.`
-    : `Assuming ${degrees}° ${side} for NSW — no GPS fix yet to measure it.`;
+    ? east
+      ? t`Magnetic north is ${degrees}° east of true north here.`
+      : t`Magnetic north is ${degrees}° west of true north here.`
+    : east
+      ? t`Assuming ${degrees}° east for NSW — no GPS fix yet to measure it.`
+      : t`Assuming ${degrees}° west for NSW — no GPS fix yet to measure it.`;
 }
 
 const KEEP_AWAKE_LABELS: Record<KeepAwakeMode, string> = {
@@ -166,7 +170,7 @@ const FIX_RATE_HINTS: Record<FixRate, string> = {
 };
 
 function accuracyLabel(limit: AccuracyLimitM): string {
-  return limit === 0 ? "Keep all" : formatHeight(limit);
+  return limit === 0 ? t`Keep all` : formatHeight(limit);
 }
 
 export function MapSettingsScreen() {
@@ -483,25 +487,28 @@ function sensorLoggingSubtitle(
   enabled: boolean,
 ): string {
   const channels = [
-    caps.gyroscope && caps.accelerometer ? "Motion" : null,
-    caps.barometer ? "pressure" : null,
-    caps.stepCounter ? "steps" : null,
-    "satellites",
-    "GPS positions",
+    caps.gyroscope && caps.accelerometer ? t`Motion` : null,
+    caps.barometer ? t`pressure` : null,
+    caps.stepCounter ? t`steps` : null,
+    t`satellites`,
+    t`GPS positions`,
   ].filter(Boolean) as string[];
   // Cost first, and in the same breath as what it buys: the row is four lines
   // and the sentence a user needs before flipping it is the price, not the
   // reassurance. The privacy line stays because it is the second question
   // everyone asks of a thing called "raw sensors": the file holds positions
   // now, so what it can truthfully say is where the file goes.
-  const cost = caps.imuFifoEvents > 0 ? "a few percent" : "some";
   // Disk is stated because it is the larger of the two costs and the one that
   // can take the recording down with it if it runs out.
-  const what = `${channels.join(", ")} to a file on this phone — costs ${cost} of battery and about ${SENSOR_LOG_MB_PER_HOUR} MB an hour.`;
+  const what =
+    caps.imuFifoEvents > 0
+      ? t`${channels.join(", ")} to a file on this phone — costs a few percent of battery and about ${SENSOR_LOG_MB_PER_HOUR} MB an hour.`
+      : t`${channels.join(", ")} to a file on this phone — costs some of battery and about ${SENSOR_LOG_MB_PER_HOUR} MB an hour.`;
   if (!enabled) return what;
   const status = sensorLogStatus();
-  if (status == null || !status.logging)
-    return `${what} On from the next recording.`;
-  const mb = (status.bytes / 1_000_000).toFixed(1);
-  return `${what} Logging now — ${mb} MB.`;
+  const tail =
+    status == null || !status.logging
+      ? t`On from the next recording.`
+      : t`Logging now — ${(status.bytes / 1_000_000).toFixed(1)} MB.`;
+  return `${what} ${tail}`;
 }

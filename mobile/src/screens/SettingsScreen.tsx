@@ -24,7 +24,6 @@
 import { Fragment, useCallback, useState, type ReactNode } from "react";
 import { Text } from "react-native";
 import {
-  ATTRIBUTE_NOUN,
   contractSectionKeys,
   isSystemFieldDef,
   listedAttributeDefs,
@@ -359,11 +358,16 @@ function sheetTitle(sheet: SheetMode): string {
   if (sheet.kind === "placeTypeForm") {
     return sheet.editing ? sheet.editing.name : t`New place type`;
   }
-  const noun = sheet.entity === "tripLog" ? "Trip" : "Place";
-  if (sheet.kind === "fields") return `${noun} ${ATTRIBUTE_NOUN.many}`;
+  if (sheet.kind === "fields") {
+    return sheet.entity === "tripLog"
+      ? t`Trip attributes`
+      : t`Place attributes`;
+  }
   return sheet.editing
     ? sheet.editing.label
-    : `New ${noun.toLowerCase()} ${ATTRIBUTE_NOUN.one}`;
+    : sheet.entity === "tripLog"
+      ? t`New trip attribute`
+      : t`New place attribute`;
 }
 
 /** Only the user's OWN attributes are counted: a built-in is not theirs. */

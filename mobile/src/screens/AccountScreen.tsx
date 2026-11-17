@@ -35,6 +35,7 @@ import {
   type SectionKeysOn,
   formatDayMonth,
   localDay,
+  rich,
   t,
 } from "@logjam/shared";
 
@@ -48,6 +49,7 @@ import { getSession } from "../auth/oidcSession";
 import { capabilityRowProps, changeEmailRowProps } from "../auth/capabilities";
 import { CLIENT_VERSION_LABEL, config } from "../config";
 import { LegalLinks } from "./LegalLinks";
+import { Rich } from "../ui/rich";
 import { formatBytes } from "../format";
 import { useConnectivity } from "../map/connectivity";
 import { countLocalEntities, type LocalEntityCounts } from "../sync/syncDb";
@@ -131,7 +133,7 @@ function GuestAccountScreen({
       <Hero title={t`No account`} onBack={onBack} backLabel={backLabel}>
         <Text style={styles.email}>
           {summary
-            ? `${summary} on this phone`
+            ? t`${summary} on this phone`
             : t`Everything you record stays on this phone`}
         </Text>
       </Hero>
@@ -292,9 +294,12 @@ function LinkedAccountScreen({
           legend={false}
         />
         <Text style={styles.meterLabel}>
-          {formatBytes(user.storageUsedBytes)} of{" "}
-          {formatBytes(user.storageQuotaBytes)}
-          <Text style={styles.meterHint}> · {copy.storageHint}</Text>
+          <Rich
+            parts={rich`${formatBytes(user.storageUsedBytes)} of ${formatBytes(user.storageQuotaBytes)}<hint> · ${copy.storageHint}</hint>`}
+            tags={{
+              hint: (text) => <Text style={styles.meterHint}>{text}</Text>,
+            }}
+          />
         </Text>
       </>
     ),
@@ -314,14 +319,21 @@ function LinkedAccountScreen({
           legend={false}
         />
         <Text style={styles.meterLabel}>
-          {formatCreditsOf(
-            user.monthlyComputeUsage,
-            user.monthlyComputeCredits,
-          )}
           {creditsResetLabel ? (
-            <Text style={styles.meterHint}> · resets {creditsResetLabel}</Text>
-          ) : null}
-          <Text style={styles.meterHint}> · {copy.creditsHint}</Text>
+            <Rich
+              parts={rich`${formatCreditsOf(user.monthlyComputeUsage, user.monthlyComputeCredits)}<hint> · resets ${creditsResetLabel} · ${copy.creditsHint}</hint>`}
+              tags={{
+                hint: (text) => <Text style={styles.meterHint}>{text}</Text>,
+              }}
+            />
+          ) : (
+            <Rich
+              parts={rich`${formatCreditsOf(user.monthlyComputeUsage, user.monthlyComputeCredits)}<hint> · ${copy.creditsHint}</hint>`}
+              tags={{
+                hint: (text) => <Text style={styles.meterHint}>{text}</Text>,
+              }}
+            />
+          )}
         </Text>
       </>
     ),

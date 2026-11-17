@@ -282,9 +282,7 @@ export function PrivacySettingsScreen() {
 
         <SectionHeader title={t`What's on this phone`} />
         <Text style={styles.note}>
-          {"Your places, trips, notes, photos and maps are stored on this device, " +
-            "outside your phone's cloud backup. The app lock protects them if " +
-            "someone else uses your phone."}
+          {t`Your places, trips, notes, photos and maps are stored on this device, outside your phone's cloud backup. The app lock protects them if someone else uses your phone.`}
         </Text>
       </ScreenScroll>
 
