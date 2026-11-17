@@ -241,6 +241,18 @@ const STORAGE_ERROR =
   "a message of the storage PUT, matched with includes to tell a dropped link, never shown";
 const CSV_HEADER =
   "an English column header matched against the user's own file, not shown";
+const IMPORT_NOTE =
+  "a RopeWiki import's note on a row it skipped, returned in `errors`, which Logjam Web counts and never shows";
+const STOP_REASON =
+  "the reason an ECS task is stopped with, read in the AWS console";
+const SENDER = "the User-Agent the API sends RopeWiki, which reads it";
+const ROPEWIKI_COLUMN =
+  "a column header of RopeWiki's published CSV, matched against its own spelling";
+const DEV_NOTE = "a note on a field, read by developers";
+const CLI_REFUSAL =
+  "what the announce script refuses a file for, logged for the maintainer who runs it";
+const ENV_MESSAGE =
+  "what a malformed environment value fails start-up with, read by the operator";
 
 /**
  * Text that reads as words and is not words a user reads, per file that holds
@@ -532,6 +544,46 @@ export const DATA_LITERALS: Readonly<
   },
   "mobile/src/ui/AttributeFilter.tsx": {
     "Less than": "a stored operator of a number filter",
+  },
+  "api/src/lib/customFieldDefs.ts": { "custom field": DETAIL },
+  "api/src/lib/env.ts": { "must be a bare semver like 1.2.3": ENV_MESSAGE },
+  "api/src/lib/topoJobReaper.ts": { "Reaped by topo job reaper": STOP_REASON },
+  "api/src/middleware/auth.ts": {
+    "Missing or invalid authorization header": DETAIL,
+    "Invalid or expired token": DETAIL,
+    "Invalid token type": DETAIL,
+    "Token is missing required identity claims": DETAIL,
+  },
+  "api/src/routes/media.ts": {
+    "replaces must name your own uploaded track on this place": DETAIL,
+  },
+  "api/src/routes/ropewiki.ts": {
+    "ropeWikiId … not found in current RopeWiki data": IMPORT_NOTE,
+    "Target place … not owned by user": IMPORT_NOTE,
+    "Target place … already linked to a RopeWiki page": IMPORT_NOTE,
+  },
+  "api/src/routes/topoJobs.ts": {
+    "the owner's internal id; syncRole is the whole answer a recipient needs":
+      DEV_NOTE,
+    "raw bucket keys, and a key can name a place": DEV_NOTE,
+    "Job deleted by user": STOP_REASON,
+  },
+  "api/src/scripts/announce.ts": {
+    "the file must start with a `# ` title": CLI_REFUSAL,
+    "the message has no body": CLI_REFUSAL,
+    "Markdown in the title": CLI_REFUSAL,
+  },
+  "api/src/services/ropewiki.ts": {
+    "Logjam/1.0 (canyoning logbook; https://logjam.earth; noreply@notifications.logjam.earth)":
+      SENDER,
+    "number of rappels": ROPEWIKI_COLUMN,
+    "longest rappel": ROPEWIKI_COLUMN,
+    "max time": ROPEWIKI_COLUMN,
+    "min time": ROPEWIKI_COLUMN,
+    'Row …: invalid PAGEID "…"': IMPORT_NOTE,
+    "Row …: duplicate PAGEID …, first row kept": IMPORT_NOTE,
+    "Row …: missing name": IMPORT_NOTE,
+    'Row … (…): could not parse coordinates "…"': IMPORT_NOTE,
   },
 };
 
@@ -887,12 +939,6 @@ export function ratchetReads(name: string, isDirectory: boolean): boolean {
     : /\.tsx?$/.test(name) && !/\.(test|d)\./.test(name);
 }
 
-/** The folder a source file sits in, relative to the package's `src`: the key of a ceiling. `.` for a file at the root. */
-export function directoryOf(relativePath: string): string {
-  const slash = relativePath.lastIndexOf("/");
-  return slash < 0 ? "." : relativePath.slice(0, slash);
-}
-
 /** The advice every bare-text failure ends with, up to the rows that say where the text is. */
 const WRITE_THROUGH_T = `Write the text through t, plural, rich or say (${I18N_ADR}). A change that converts a whole directory runs \`node scripts/i18n-extract.mjs <directory>\` (after \`make shared\`), then \`node scripts/i18n-identity-check.mjs <base>\`. Where they are:`;
 
@@ -904,41 +950,6 @@ function whereTheyAre(
   for (const hit of hits)
     lines.set(hit.file, [...(lines.get(hit.file) ?? []), hit.line]);
   return [...lines].map(([file, at]) => `  ${file}: ${at.join(", ")}`);
-}
-
-/**
- * What a ratchet ceiling map says is wrong with `counts` (bare literals per
- * directory): a count above its ceiling is new copy outside the catalogue; one
- * below is a ceiling left higher than the code needs, which would let new copy
- * in. An empty list means the map is exactly the code's. A directory above its
- * ceiling lists where its literals are (`found`), a file to a line, so the new
- * one can be found.
- */
-export function ceilingFailures(
-  counts: Readonly<Record<string, number>>,
-  ceilings: Readonly<Record<string, number>>,
-  found: readonly { file: string; line: number; dir: string }[] = [],
-): string[] {
-  const failures: string[] = [];
-  for (const dir of new Set([
-    ...Object.keys(counts),
-    ...Object.keys(ceilings),
-  ])) {
-    const count = counts[dir] ?? 0;
-    const ceiling = ceilings[dir] ?? 0;
-    if (count > ceiling) {
-      failures.push(
-        [
-          `${dir}: ${count} bare literals, ceiling ${ceiling}, and never raise it. ${WRITE_THROUGH_T}`,
-          ...whereTheyAre(found.filter((hit) => hit.dir === dir)),
-        ].join("\n"),
-      );
-    } else if (count < ceiling)
-      failures.push(
-        `${dir}: ${count} bare literals, ceiling ${ceiling}. Lower the ceiling to ${count}${count === 0 ? " (delete the entry)" : ""}.`,
-      );
-  }
-  return failures.sort();
 }
 
 /**
@@ -961,10 +972,8 @@ export function bareCopyFailures(
 export type SourceScan = {
   /** Every message in the package, each with its file (relative to `src`). */
   messages: (SourceMessage & { file: string })[];
-  /** Every bare literal outside `EXEMPT_FILES`, with its file and directory. */
-  bare: (BareLiteral & { file: string; dir: string })[];
-  /** Bare literals per directory: what a ceiling map is held to. */
-  counts: Record<string, number>;
+  /** Every bare literal outside `EXEMPT_FILES`, with its file. */
+  bare: (BareLiteral & { file: string })[];
   /** Every message function imported under another name, with its file. */
   imports: { file: string; line: number; problem: string }[];
 };
@@ -975,9 +984,9 @@ export function scanSources(
   pkg: string,
   files: readonly { path: string; source: string }[],
 ): SourceScan {
-  const scan: SourceScan = { messages: [], bare: [], counts: {}, imports: [] };
+  const scan: SourceScan = { messages: [], bare: [], imports: [] };
   for (const { path: given, source } of files) {
-    // One separator, so a path from any platform keys the same ceiling.
+    // One separator, so a path from any platform reads the same.
     const path = given.replace(/\\/g, "/");
     for (const message of messagesIn(tsModule, path, source))
       scan.messages.push({ ...message, file: path });
@@ -985,12 +994,10 @@ export function scanSources(
       scan.imports.push({ ...found, file: path });
     if (`${pkg}/src/${path}` in EXEMPT_FILES || CATALOGUE_FILE.test(path))
       continue;
-    const dir = directoryOf(path);
     for (const bare of bareCopyIn(tsModule, path, source, {
       repoPath: `${pkg}/src/${path}`,
     })) {
-      scan.bare.push({ ...bare, file: path, dir });
-      scan.counts[dir] = (scan.counts[dir] ?? 0) + 1;
+      scan.bare.push({ ...bare, file: path });
     }
   }
   return scan;

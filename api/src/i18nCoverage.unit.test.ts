@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import ts from "typescript";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
-  ceilingFailures,
+  bareCopyFailures,
   I18N_ADR,
   ratchetReads,
   scanSources,
@@ -12,21 +12,11 @@ import {
 
 // User-facing text goes through `t`, `plural`, `rich` or `say`
 // (docs/decisions/0050-user-facing-text-goes-through-one-catalogue-function.md).
-// Text written the old way is counted per directory and may only fall: new
-// copy in the API goes through the catalogue, and a directory that moves its
-// text lowers its number in the same change. The scanner is `i18nSource.ts` in
-// @logjam/shared; what it must and must not flag is held in its own test.
+// Any other text in the API is a failure here; what is code or developer text
+// is listed in `DATA_LITERALS` with its reason. The scanner is `i18nSource.ts`
+// in @logjam/shared; what it must and must not flag is held in its own test.
 
 const SRC = dirname(fileURLToPath(import.meta.url));
-
-/** Bare literals a user may read, per directory under src. Lower an entry when its text moves; never raise one. */
-const CEILINGS: Record<string, number> = {
-  lib: 3,
-  middleware: 4,
-  routes: 7,
-  scripts: 3,
-  services: 9,
-};
 
 function sources(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
@@ -81,8 +71,8 @@ describe("the API i18n coverage", () => {
   });
 
   // Mutation: add `export const zz = "Open the file";` to any source file, or
-  // raise or lower a ceiling, or move a directory's text into `t` without lowering it.
-  it("writes no new text outside the catalogue, and every ceiling is the count", () => {
-    expect(ceilingFailures(scan.counts, CEILINGS, scan.bare)).toEqual([]);
+  // `res.status(400).json({ error: "Name the place" });` to any route.
+  it("writes no text outside the catalogue", () => {
+    expect(bareCopyFailures(scan.bare)).toEqual([]);
   });
 });
