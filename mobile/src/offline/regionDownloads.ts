@@ -24,7 +24,6 @@ import {
   fetchExtractRequest,
   planExtract,
   saveClipArchive,
-  t,
   type ExtractPlan,
   type RegionBbox,
 } from "@logjam/shared";
