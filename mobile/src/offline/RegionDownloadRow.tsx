@@ -35,7 +35,7 @@ export function RegionDownloadRow({ job }: { job: RegionJob }) {
     if (state.kind === "ready") {
       return state.gaps > 0
         ? `Saved · ${state.gaps} tiles unavailable`
-        : "Saved";
+        : t`Saved`;
     }
     if (state.kind === "failed") {
       switch (state.code) {
