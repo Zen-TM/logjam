@@ -298,7 +298,7 @@ export function requestSync(): Promise<void> {
       // event triggers, so a flaky link recovers without user action.
       setStatus({
         state: "error",
-        errorMessage: "Couldn't sync. Will retry.",
+        errorMessage: t`Couldn't sync. Will try again.`,
         errorKind: "unreachable",
       });
       scheduleBackoffRetry();
@@ -346,7 +346,7 @@ function scheduleBackoffRetry(): void {
     // trap: a metered-disallowed connection would decline, the ladder would end
     // with nothing to restart it (`subscribeReconnect` is edge-triggered on
     // reachability, and cellular→Wi-Fi is not that edge), and the status line
-    // would sit on "Couldn't sync. Will retry." forever.
+    // would sit on "Couldn't sync. Will try again." forever.
     void requestSync();
   }, delay);
 }

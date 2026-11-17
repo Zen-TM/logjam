@@ -18,6 +18,7 @@ import {
   type GaugeUnits,
   type ProfileSeries,
   type SectionKeysOn,
+  t,
 } from "@logjam/shared";
 
 import { makeStyles, muted, spacing } from "../theme";
@@ -89,7 +90,11 @@ export const GAUGE_SECTIONS: Record<
                   : formatGaugeFlow(v, units)
               }
               formatX={(x) => DAY_FORMAT.format(x + shifted.start)}
-              hint={`${GAUGES.copy[charted]}. Press or drag for readings.`}
+              hint={
+                charted === "level"
+                  ? t`Level. Press or drag for readings.`
+                  : t`Flow. Press or drag for readings.`
+              }
               accessibilityLabel={`${GAUGES.copy[charted]}, ${GAUGES.copy.graph.toLowerCase()}`}
             />
           );

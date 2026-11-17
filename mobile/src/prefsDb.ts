@@ -23,7 +23,9 @@ type Db = SQLiteModule.SQLiteDatabase;
 
 // `undefined` = not tried yet, `null` = unavailable (see openDatabase).
 let database: Db | null | undefined;
-let lastWriteError: string | null = null;
+/** Why the last write failed. */
+export type PrefWriteError = "unavailable" | "not_stored";
+let lastWriteError: PrefWriteError | null = null;
 
 function openDatabase(): Db | null {
   if (database !== undefined) return database;
@@ -69,7 +71,7 @@ export function readPref(key: string): string | null {
 export function writePref(key: string, value: string): boolean {
   const db = openDatabase();
   if (!db) {
-    lastWriteError = "This phone's preference store isn't available.";
+    lastWriteError = "unavailable";
     return false;
   }
   try {
@@ -82,12 +84,16 @@ export function writePref(key: string, value: string): boolean {
     return true;
   } catch (err) {
     console.error(err);
-    lastWriteError = "This phone wouldn't store that preference.";
+    lastWriteError = "not_stored";
     return false;
   }
 }
 
-/** Message for the last failed write, for the surface that requested it. */
-export function lastPrefWriteError(): string | null {
+/**
+ * Why the last write failed, as a code the surface that requested it words.
+ * A code because this file cannot import `t`: it loads before the language is
+ * known (language.ts).
+ */
+export function lastPrefWriteError(): PrefWriteError | null {
   return lastWriteError;
 }

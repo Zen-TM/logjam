@@ -28,7 +28,7 @@ const CEILINGS: Record<string, number> = {
   "components/dialogs/topoSettings": 0,
   "components/feedback": 0,
   "components/gauges": 0,
-  "components/map": 1,
+  "components/map": 0,
   "components/media": 0,
   "components/plans": 0,
   "components/routes": 0,

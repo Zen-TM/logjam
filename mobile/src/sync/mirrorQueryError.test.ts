@@ -19,7 +19,7 @@ describe("mirrorQueryError", () => {
         true,
         status({
           state: "error",
-          errorMessage: "Couldn't sync. Will retry.",
+          errorMessage: "Couldn't sync. Will try again.",
           errorKind: "unreachable",
         }),
       ),
