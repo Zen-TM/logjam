@@ -550,7 +550,11 @@ export function RegionDownloadScreen({
           setNaming({ groupId, name: defaultName });
         } catch (err) {
           if (!(err instanceof NotEnoughSpaceError)) throw err;
-          notifyError(`Not enough space. ${err.message} Or pick fewer maps.`);
+          notifyError(
+            [t`Not enough space.`, err.message, t`Or pick fewer maps.`].join(
+              " ",
+            ),
+          );
         } finally {
           setBusy(false);
         }

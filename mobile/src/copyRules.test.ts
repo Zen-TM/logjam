@@ -46,7 +46,7 @@ const ALLOWED: { file: string; text: string; reason: string }[] = [
     reason: "the service, in our words for a failed request",
   },
   {
-    file: "offline/RegionDownloadRow.tsx",
+    file: "offline/regionJobStatus.ts",
     text: "Logjam couldn't prepare this map",
     reason: "the service clips the map, not this phone",
   },

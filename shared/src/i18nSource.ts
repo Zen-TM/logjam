@@ -418,6 +418,10 @@ export const DATA_LITERALS: Readonly<
   "frontend/src/ui/AttributeFilter.tsx": {
     "Less than": "a stored operator of a number filter",
   },
+  "mobile/src/map/BasemapThumb.tsx": {
+    "Preview tiles: © OpenStreetMap contributors, OpenTopoMap and CyclOSM (CC BY-SA); © State of New South Wales (Spatial Services).":
+      CREDIT,
+  },
   "mobile/src/ui/AttributeFilter.tsx": {
     "Less than": "a stored operator of a number filter",
   },

@@ -31,6 +31,7 @@
 import { OfflineManager } from "@maplibre/maplibre-react-native";
 import * as FileSystem from "expo-file-system/legacy";
 
+import { t } from "@logjam/shared";
 import { invalidateCurrentUser } from "../api/apiFetch";
 import { stopGeoPdfImportRun } from "../geopdf/importRunner";
 import { forgetSlopeBandsEdit } from "../map/slopeBandsPreference";
@@ -111,7 +112,7 @@ export async function wipeAllLocalData(): Promise<WipeResult> {
     // of the departing account's region landing after the lapse would outlive it.
     stoppedInTime(stopPlaceRegistryForWipe()),
   ]);
-  if (stopped.some((ok) => !ok)) failed.push("an active download");
+  if (stopped.some((ok) => !ok)) failed.push(t`an active download`);
 
   // The place registry refresh is held since its stop above: it resumes however
   // this ends, or one step that throws would leave it held until the next wipe.
@@ -155,7 +156,7 @@ export async function wipeAllLocalData(): Promise<WipeResult> {
       await OfflineManager.resetDatabase();
     } catch (err) {
       console.error(err);
-      failed.push("map tile cache");
+      failed.push(t`map data cache`);
     }
 
     // Mirror + outbox + conflict shelf + notifications cache + sync bookkeeping.
@@ -163,7 +164,7 @@ export async function wipeAllLocalData(): Promise<WipeResult> {
       await wipeAllSyncData();
     } catch (err) {
       console.error(err);
-      failed.push("synced data");
+      failed.push(t`synced data`);
     }
 
     try {
@@ -180,7 +181,7 @@ export async function wipeAllLocalData(): Promise<WipeResult> {
       notifyRegistryChanged();
     } catch (err) {
       console.error(err);
-      failed.push("offline maps and tracks");
+      failed.push(t`offline maps and tracks`);
     }
 
     // The place registries of the regions the departing account chose or saved a
@@ -193,7 +194,7 @@ export async function wipeAllLocalData(): Promise<WipeResult> {
       await lapsePlaceRegistries();
     } catch (err) {
       console.error(err);
-      failed.push("place names");
+      failed.push(t`place names`);
     }
 
     // Files last: the registry rows that point at them are already gone, so a
@@ -203,7 +204,7 @@ export async function wipeAllLocalData(): Promise<WipeResult> {
         await FileSystem.deleteAsync(dir, { idempotent: true });
       } catch (err) {
         console.error(err);
-        failed.push("downloaded files");
+        failed.push(t`downloaded files`);
       }
     }
 
@@ -232,7 +233,7 @@ export async function wipeAllLocalData(): Promise<WipeResult> {
       }
     } catch (err) {
       console.error(err);
-      failed.push("cached files");
+      failed.push(t`cached files`);
     }
 
     return { failed };

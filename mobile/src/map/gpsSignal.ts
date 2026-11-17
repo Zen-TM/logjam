@@ -92,10 +92,10 @@ export function fixQuality(fix: FixLiveness | null, nowMs: number): FixQuality {
  */
 export function fixAgeLabel(ageMs: number): string {
   const seconds = Math.max(0, Math.round(ageMs / 1000));
-  if (seconds < 60) return `${seconds} s ago`;
+  if (seconds < 60) return t`${seconds} s ago`;
   const minutes = Math.floor(seconds / 60);
   if (minutes < 60) return t`${minutes} min ago`;
-  return `${Math.floor(minutes / 60)} h ago`;
+  return t`${Math.floor(minutes / 60)} h ago`;
 }
 
 /**
