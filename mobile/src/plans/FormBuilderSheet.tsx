@@ -19,7 +19,6 @@ import {
   messageFromError,
   parseTripPlanFormCreate,
   plural,
-  pluralCount,
   tripPlanAdoptTheirs,
   tripPlanAtMost,
   tripPlanBlankForm,
@@ -362,7 +361,11 @@ export function FormBuilderSheet({
                       icon="copy"
                       hue={assetHue.plan}
                       title={other.title}
-                      subtitle={pluralCount(other.questions.length, "question")}
+                      subtitle={plural(
+                        other.questions.length,
+                        "# question",
+                        "# questions",
+                      )}
                       onPress={() => start(valuesOf(other))}
                     />
                   ))}
