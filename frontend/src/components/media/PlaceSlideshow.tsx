@@ -49,7 +49,11 @@ export default function PlaceSlideshow({
         <button
           className={classes.slide}
           onClick={() => setLightbox(current)}
-          aria-label={`${isVideo ? "Play video" : "View"} ${current.filename}`}
+          aria-label={
+            isVideo
+              ? t`Play video ${current.filename}`
+              : t`View ${current.filename}`
+          }
         >
           {slideSrc && !slideFailed ? (
             <img

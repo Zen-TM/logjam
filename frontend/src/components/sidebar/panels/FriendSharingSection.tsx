@@ -49,7 +49,6 @@ import {
   type SectionKeysOn,
   removeAllConfirm,
   removeOutcomeMessage,
-  SHARE_KIND_LABEL,
   shareCardItem,
   shareSelectionCountLabel,
   unshareAllConfirm,
@@ -461,7 +460,7 @@ function FriendSharingSection({
                       </Button>
                     ) : card.removable ? (
                       <RemoveSharedButton
-                        kindLabel={SHARE_KIND_LABEL[card.row.entityType]}
+                        entityType={card.row.entityType}
                         itemName={card.title}
                         ownerName={friend.username}
                         disabledReason={busy ? t`Working…` : undefined}

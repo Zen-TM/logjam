@@ -56,12 +56,12 @@ export function placeImportTemplateCsv(
   const isCanyon = typeId === SYSTEM_PLACE_TYPE_IDS.canyon;
   const headers = [...STRUCTURAL_HEADERS, ...defs.map((def) => def.label)];
   const example = [
-    `Example ${typeName}`,
+    t`Example ${typeName}`,
     "-33.700000",
     "150.300000",
     t`Alt Name 1; Alt Name 2`,
     // The notes cell carries the comma the quoting rule exists for.
-    `Sample notes about the ${typeName.toLowerCase()}`,
+    t`Sample notes about the ${typeName.toLowerCase()}`,
     ...defs.map(exampleValue),
   ];
   // Provide canyon example values for standard grades and stats.

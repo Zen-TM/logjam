@@ -68,7 +68,7 @@ describe("numericFieldError", () => {
     expect(numericFieldError("5", { integer: true })).toBeNull();
   });
   it("flags negatives on a non-negative field", () => {
-    expect(numericFieldError("-5", { min: 0 })).toBe("Cannot be negative");
+    expect(numericFieldError("-5", { min: 0 })).toBe("Can't be negative");
     expect(numericFieldError("-5.5", { integer: true, min: 0 })).toBe(
       "Whole numbers only",
     );

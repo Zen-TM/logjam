@@ -130,7 +130,7 @@ export function AttributeFilter({
     return (
       <FilterField
         label={def.label}
-        summary={text ? `Contains “${text}”` : t`Any`}
+        summary={text ? t`Contains “${text}”` : t`Any`}
         active={text !== ""}
         onClear={clear}
       >

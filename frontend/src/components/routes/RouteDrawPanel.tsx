@@ -150,7 +150,7 @@ export function RouteDrawPanel({
         <DraftPeek
           note={
             anchorCount === 0
-              ? "Click the map to place the first point."
+              ? t`Click the map to place the first point.`
               : mapMeasurePointsLabel(anchorCount)
           }
           distance={stats[0].value}

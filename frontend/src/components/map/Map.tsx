@@ -834,7 +834,6 @@ function Map({
   // copy in the map-pick banners. Pointer capability, not
   // viewport width: a touch laptop at desktop width still gets "Tap".
   const isTouchInput = useMediaQuery("(pointer: coarse)");
-  const pickVerb = isTouchInput ? "Tap" : "Click";
   const prevTopoKeyRef = useRef<string>("");
 
   const slopeBandsRef = useRef(slopeBands);
@@ -3836,7 +3835,11 @@ function Map({
       {pickingCoords && (
         <>
           <div className={classes.pickBanner}>
-            <Notice>{pickVerb} the map to select a location</Notice>
+            <Notice>
+              {isTouchInput
+                ? t`Tap the map to select a location`
+                : t`Click the map to select a location`}
+            </Notice>
           </div>
           <div className={classes.geoPdfConfirmBar}>
             <Button onClick={onCancelPickCoords}>{t`Cancel`}</Button>
@@ -3846,8 +3849,9 @@ function Map({
       {selectingBbox && (
         <div className={classes.pickBanner}>
           <Notice>
-            {pickVerb} to set a corner, then {pickVerb.toLowerCase()} again to
-            define the area
+            {isTouchInput
+              ? t`Tap to set a corner, then tap again to define the area`
+              : t`Click to set a corner, then click again to define the area`}
           </Notice>
         </div>
       )}
