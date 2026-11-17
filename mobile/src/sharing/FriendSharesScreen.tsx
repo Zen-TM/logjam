@@ -57,7 +57,7 @@ import {
   friendShareVerb,
   messageFromError,
   removeRowSubtitle,
-  SHARE_KIND_LABEL,
+  type BulkShareItemType,
   type FriendShareCard,
   type FriendShareDirection,
   type FriendShareRow,
@@ -65,6 +65,7 @@ import {
   type IconIdea,
   type SectionKeysOn,
   friendSeesUnit,
+  SHARE_KIND_LABEL,
   t,
 } from "@logjam/shared";
 
@@ -742,6 +743,10 @@ function ShareCardMenu({
   const styles = useStyles();
 
   const kind = SHARE_KIND_LABEL[card.row.entityType];
+
+  const removeRowSubtitle = (args: { kindLabel: string; friendName: string }) =>
+    t`Remove your access to this ${args.kindLabel} ${args.friendName} shared with you.`;
+
   // Dimmed with the reason, never hidden: sharing is the one thing on this
   // screen that needs the network, so it is the row a user would go looking
   // for and not find (DESIGN.md, `useShareRowProps`'s rule).
@@ -763,7 +768,9 @@ function ShareCardMenu({
           hue={theme.warning}
           title={friendShareVerb("unshare").label}
           subtitle={
-            online ? `${username} stops seeing this ${kind}.` : undefined
+            online
+              ? stopsSeeingSubtitle(card.row.entityType, username)
+              : undefined
           }
           {...(online ? live : offline)}
           onPress={() => onUnshare(card)}
@@ -838,6 +845,20 @@ function ShareCardMenu({
       ) : null}
     </View>
   );
+}
+
+function stopsSeeingSubtitle(
+  entityType: BulkShareItemType,
+  username: string,
+): string {
+  switch (entityType) {
+    case "place":
+      return t`${username} stops seeing this place.`;
+    case "route":
+      return t`${username} stops seeing this route.`;
+    case "topoJob":
+      return t`${username} stops seeing this topo.`;
+  }
 }
 
 const useStyles = makeStyles((theme, textRole) => ({
