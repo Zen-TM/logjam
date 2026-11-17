@@ -4882,7 +4882,7 @@ export function MapScreen({
       // say so (shared/DESIGN.md §11).
       note:
         showPlaceRoutes && routesStatus && routesStatus.unavailable > 0
-          ? `${routesStatus.unavailable} not downloaded yet`
+          ? t`${routesStatus.unavailable} not downloaded yet`
           : undefined,
     },
     {
@@ -5084,13 +5084,13 @@ export function MapScreen({
   const noticeText: string | null = (() => {
     if (connectivity === "online") {
       return basemapResolved.every((r) => r.status !== "ok")
-        ? "This basemap is unavailable."
+        ? t`This map is unavailable.`
         : null;
     }
     if (coverageHere.current) return null;
     return coverageHere.others.length > 0
-      ? "No saved map here for this basemap — switch to one you saved."
-      : "No saved map here.";
+      ? t`No saved map here for this map — switch to one you saved.`
+      : t`No saved map here.`;
   })();
 
   const geoPdfNoticeText = misalignedGeoPdfNotice(
@@ -6124,7 +6124,7 @@ export function MapScreen({
         <Text style={styles.attributionText}>
           {attributionText.length > 0
             ? attributionText
-            : "No attribution reported for the active basemap."}
+            : t`No attribution reported for the active map.`}
         </Text>
         {/* The layer picker ships a sample tile of every basemap, including the
             ones that aren't currently drawn — their licences permit that with

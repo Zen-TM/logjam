@@ -28,6 +28,7 @@
 // active basemap's own attribution. Do not add a source here whose terms don't
 // allow keeping a copy of its tiles.
 import { Image, View } from "react-native";
+import { t } from "@logjam/shared";
 
 import { Icon } from "../ui";
 import {
@@ -84,8 +85,7 @@ const THUMBS: Partial<Record<BasemapId, { drawable: string; asset: number }>> =
   };
 
 /** Credit for the bundled previews, shown in the attribution sheet. */
-export const BASEMAP_THUMB_CREDIT =
-  "Preview tiles: © OpenStreetMap contributors, OpenTopoMap and CyclOSM (CC BY-SA); © State of New South Wales (Spatial Services).";
+export const BASEMAP_THUMB_CREDIT = t`Preview images: © OpenStreetMap contributors, OpenTopoMap and CyclOSM (CC BY-SA); © State of New South Wales (Spatial Services).`;
 
 export function BasemapThumb({
   basemapId,

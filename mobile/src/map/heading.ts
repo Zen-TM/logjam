@@ -75,7 +75,7 @@
 // battery: see `publishHeading`.
 import { useSyncExternalStore } from "react";
 
-import { metersPerPixel } from "@logjam/shared";
+import { metersPerPixel, t } from "@logjam/shared";
 
 /**
  * The animation cadence: how often the displayed bearing is advanced, published
@@ -1067,6 +1067,23 @@ export function magneticInterference(window: FieldWindow): boolean {
   );
 }
 
+function accuracyStatus(accuracy: number | null): string {
+  switch (accuracy) {
+    case null:
+      return t`accuracy unknown`;
+    case 0:
+      return t`accuracy unreliable`;
+    case 1:
+      return t`accuracy low`;
+    case 2:
+      return t`accuracy medium`;
+    case 3:
+      return t`accuracy high`;
+    default:
+      return t`accuracy ${accuracy}`;
+  }
+}
+
 /**
  * The compass's own state, in the plainest words that are still true, for the
  * diagnostics line in Settings → Map.
@@ -1082,13 +1099,10 @@ export function compassDiagnostics(
   const strength = fieldStrength(window);
   const field =
     strength == null
-      ? "field not read"
-      : `field ${strength.toFixed(0)} µT (± ${(fieldSpread(window) / 2).toFixed(0)}, expect ~${NSW_FIELD_STRENGTH_UT})`;
-  const status =
-    accuracy == null
-      ? "accuracy unknown"
-      : `accuracy ${["unreliable", "low", "medium", "high"][accuracy] ?? accuracy}`;
-  return `${status}, ${field}.`;
+      ? t`field not read`
+      : t`field ${strength.toFixed(0)} µT (± ${(fieldSpread(window) / 2).toFixed(0)}, expect ~${NSW_FIELD_STRENGTH_UT})`;
+  const status = accuracyStatus(accuracy);
+  return t`${status}, ${field}.`;
 }
 
 /**

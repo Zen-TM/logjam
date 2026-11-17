@@ -113,7 +113,7 @@ export const SpeedElevationChip = memo(function SpeedElevationChip({
   // fix is stale, "about" when it is a tower's guess (gpsSignal.ts). It takes
   // the label's place (over the figure, so "about" reads into it) because the
   // name plus the age does not fit a column at a large system font.
-  const note = figures.age ?? (figures.quality === "coarse" ? "about" : null);
+  const note = figures.age ?? (figures.quality === "coarse" ? t`about` : null);
   const grey = figures.quality === "stale";
   const { width, stacked } = readoutChipLayout(fontScale, textScale, maxWidth);
 
@@ -148,7 +148,15 @@ export const SpeedElevationChip = memo(function SpeedElevationChip({
         <Text
           numberOfLines={1}
           style={[styles.value, grey && styles.grey]}
-          accessibilityLabel={`Elevation ${elevation}${note ? `, ${note}` : ""}${readout?.fromTerrain ? ", from terrain data" : ""}`}
+          accessibilityLabel={
+            note
+              ? readout?.fromTerrain
+                ? t`Elevation ${elevation}, ${note}, from terrain data`
+                : t`Elevation ${elevation}, ${note}`
+              : readout?.fromTerrain
+                ? t`Elevation ${elevation}, from terrain data`
+                : t`Elevation ${elevation}`
+          }
         >
           {elevation}
         </Text>

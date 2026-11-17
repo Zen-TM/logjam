@@ -118,7 +118,8 @@ export function SlopeBandsEditor() {
           <BoundaryRow
             key={idx}
             lead={`${band.fromDeg}° to`}
-            label={`Band ${idx + 1} upper angle in degrees`}
+            label={t`Band ${idx + 1} upper angle in degrees`}
+            removeLabel={t`Remove band ${idx + 1}`}
             value={band.toDeg}
             range={slopeBoundaryRange(bands, idx)}
             colour={band.colour}
@@ -144,6 +145,7 @@ export function SlopeBandsEditor() {
 function BoundaryRow({
   lead,
   label,
+  removeLabel,
   value,
   range,
   colour,
@@ -153,6 +155,8 @@ function BoundaryRow({
 }: {
   lead: string;
   label: string;
+  /** Names the remove button; needed with `onRemove`. */
+  removeLabel?: string;
   value: number;
   range: { min: number; max: number };
   /** The band's own colour; absent on the transparency threshold. */
@@ -207,10 +211,10 @@ function BoundaryRow({
           ]}
         />
         <View style={styles.actions}>
-          {onRemove ? (
+          {onRemove && removeLabel ? (
             <IconButton
               icon="delete"
-              accessibilityLabel={`Remove ${label.replace(" upper angle in degrees", "")}`}
+              accessibilityLabel={removeLabel}
               onPress={onRemove}
             />
           ) : null}

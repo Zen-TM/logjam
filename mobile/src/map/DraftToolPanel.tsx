@@ -139,7 +139,7 @@ export function DraftToolPanel({
           {anchorCount === 0
             ? tool === "measure"
               ? MAP_MEASURE_START_NOTE.gps
-              : "Tap the map to start"
+              : t`Tap the map to start`
             : mapMeasurePointsLabel(anchorCount)}
         </Text>
         <View style={styles.spacer} />

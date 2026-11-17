@@ -223,7 +223,7 @@ export function MapSearchBar({
     expanded && trimmed.length >= PLACE_SEARCH_MIN_QUERY_LENGTH;
   const devicePlaces = useMemo(
     () =>
-      source === t`device` && index && placeQuery
+      source === "device" && index && placeQuery
         ? searchPlaces(index, trimmed, MAX_PLACE_RESULTS)
         : [],
     [source, index, placeQuery, trimmed],
@@ -236,7 +236,7 @@ export function MapSearchBar({
     return askPlacesOnline(trimmed, registryRegion, setPlaceAnswer);
   }, [source, registryRegion, placeQuery, trimmed]);
   const places =
-    source === t`device`
+    source === "device"
       ? index || !placeQuery
         ? devicePlaces
         : registry.loadFailed

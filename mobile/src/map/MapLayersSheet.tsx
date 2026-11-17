@@ -68,6 +68,7 @@ import {
   type OverlayTerrainKey,
   type SectionKeysOn,
   type TerrainSwitchKey,
+  plural,
   t,
 } from "@logjam/shared";
 
@@ -647,14 +648,18 @@ function LayerRow({ entry }: { entry: LayerToggleEntry }) {
           title={entry.title}
           subtitle={entry.note}
           onPress={() => setExpanded((current) => !current)}
-          accessibilityLabel={`${entry.title} — ${expanded ? "hide" : "show"} the list`}
+          accessibilityLabel={
+            expanded
+              ? t`${entry.title} — hide the list`
+              : t`${entry.title} — show the list`
+          }
           right={
             <View style={styles.trailing}>
               <Text style={styles.count}>{entry.count}</Text>
               <Toggle
                 checked={entry.value}
                 onChange={entry.onChange}
-                accessibilityLabel={`Show ${entry.title}`}
+                accessibilityLabel={t`Show ${entry.title}`}
               />
               <Icon
                 idea={expanded ? "collapse" : "expand"}
@@ -894,15 +899,11 @@ function OfflineTab({
       <Row
         icon="device"
         hue={assetHue.region}
-        title={
-          savedRegions.length === 1
-            ? "1 offline map"
-            : `${savedRegions.length} offline maps`
-        }
+        title={plural(savedRegions.length, "# offline map", "# offline maps")}
         subtitle={
           savedRegions.length === 0
-            ? "Save an offline map to use maps with no signal"
-            : `${(savedBytes / 1024 / 1024).toFixed(0)} MB · rename or delete in Saved`
+            ? t`Save an offline map to use maps with no signal`
+            : t`${(savedBytes / 1024 / 1024).toFixed(0)} MB · rename or delete in Saved`
         }
         // Lands on Saved's Regions filter, not its everything-list: a pointer
         // that makes the user find the thing again is not a pointer.

@@ -31,7 +31,7 @@ const CEILINGS: Record<string, number> = {
   geopdf: 2,
   imports: 3,
   logs: 14,
-  map: 36,
+  map: 4,
   media: 4,
   notifications: 4,
   offline: 35,

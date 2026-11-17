@@ -330,7 +330,7 @@ export function PickPointScreen({
           <Pressable
             key={id}
             accessibilityRole="button"
-            accessibilityLabel={`Use ${BASEMAP_CATALOG.find((entry) => entry.id === id)?.name ?? "this map"}`}
+            accessibilityLabel={t`Use ${BASEMAP_CATALOG.find((entry) => entry.id === id)?.name ?? t`this map`}`}
             accessibilityState={{ selected: id === basemapId }}
             style={[styles.thumb, id === basemapId && styles.thumbActive]}
             onPress={() => setBasemapId(id)}
@@ -347,9 +347,7 @@ export function PickPointScreen({
         pointerEvents="none"
       >
         <Text style={styles.hintText}>
-          {picked
-            ? t`Tap again to move the point`
-            : `Tap where the ${subject} is`}
+          {picked ? t`Tap again to move the point` : t`Tap where the place is`}
         </Text>
       </View>
 
