@@ -31,6 +31,7 @@ describe("Saved's compact title", () => {
       "utf8",
     );
     expect(saved).toContain("t`Saved · ${CATEGORY_META[filter].plural}`");
+    expect(saved).toContain("const name = savedFilterTitle(filter);");
   });
 });
 

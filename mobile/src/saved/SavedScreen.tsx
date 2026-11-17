@@ -1216,7 +1216,7 @@ export function SavedScreen({
           synced: false,
           confirmBody: plural(
             group.members.length,
-            "Its # layer is removed from the device. You can download them again later.",
+            "Its # layer is removed from the device. You can download it again later.",
             "Its # layers are removed from the device. You can download them again later.",
           ),
           run: async () => {
