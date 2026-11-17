@@ -189,39 +189,22 @@ const TERRAIN_UNAVAILABLE_MESSAGE: Record<TerrainLayerKey, string> = {
   hillshade: t`Hillshade couldn't be loaded — its map file is missing.`,
 };
 
-// Use a single helper for the document title to keep it tied to the panel title.
-function getDocumentTitle(panelId: PanelId): string {
-  switch (panelId) {
-    case "places":
-      return t`${PANEL_TITLES.places} — Logjam Web`;
-    case "logs":
-      return t`${PANEL_TITLES.logs} — Logjam Web`;
-    case "ways":
-      return t`${PANEL_TITLES.ways} — Logjam Web`;
-    case "plans":
-      return t`${PANEL_TITLES.plans} — Logjam Web`;
-    case "friends":
-      return t`${PANEL_TITLES.friends} — Logjam Web`;
-    case "inbox":
-      return t`${PANEL_TITLES.inbox} — Logjam Web`;
-    case "account":
-      return t`${PANEL_TITLES.account} — Logjam Web`;
-    case "settings":
-      return t`${PANEL_TITLES.settings} — Logjam Web`;
-    case "place-detail":
-      return t`${PANEL_TITLES["place-detail"]} — Logjam Web`;
-    case "trip-detail":
-      return t`${PANEL_TITLES["trip-detail"]} — Logjam Web`;
-    case "way-detail":
-      return t`${PANEL_TITLES["way-detail"]} — Logjam Web`;
-    case "plan-detail":
-      return t`${PANEL_TITLES["plan-detail"]} — Logjam Web`;
-    case "way-draw":
-      return t`${PANEL_TITLES["way-draw"]} — Logjam Web`;
-    case "measure":
-      return t`${PANEL_TITLES.measure} — Logjam Web`;
-  }
-}
+const DOCUMENT_TITLES: Record<PanelId, string> = {
+  places: t`Places — Logjam Web`,
+  logs: t`Trips — Logjam Web`,
+  ways: t`Ways — Logjam Web`,
+  plans: t`Plans — Logjam Web`,
+  friends: t`Friends — Logjam Web`,
+  inbox: t`Inbox — Logjam Web`,
+  account: t`Account — Logjam Web`,
+  settings: t`Settings — Logjam Web`,
+  "place-detail": t`Place — Logjam Web`,
+  "trip-detail": t`Trip — Logjam Web`,
+  "way-detail": t`Way — Logjam Web`,
+  "plan-detail": t`Plan — Logjam Web`,
+  "way-draw": t`Draw a route — Logjam Web`,
+  measure: t`Measure distance — Logjam Web`,
+};
 
 function App() {
   const toast = useToast();
@@ -735,9 +718,7 @@ function App() {
 
   // Reflect the active panel in the document title (WCAG 2.4.2 Page Titled).
   useEffect(() => {
-    document.title = activePanel
-      ? getDocumentTitle(activePanel)
-      : t`Logjam Web`;
+    document.title = activePanel ? DOCUMENT_TITLES[activePanel] : t`Logjam Web`;
   }, [activePanel]);
 
   // Leaving a detail page via the NavRail drops what it was showing.
