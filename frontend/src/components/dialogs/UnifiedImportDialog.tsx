@@ -1852,6 +1852,19 @@ function UnifiedImportDialog({
       activeKind === "place" ? [] : tripSkipped,
     );
     const preview = [ready, skippedNote].filter(Boolean).join(" ");
+    const resultPreview = outcome
+      ? outcome.kind === "place"
+        ? plural(
+            outcome.created + outcome.merged,
+            "# place ready to import.",
+            "# places ready to import.",
+          )
+        : plural(
+            outcome.imported + outcome.updated,
+            "# trip ready to import.",
+            "# trips ready to import.",
+          )
+      : undefined;
 
     // Merge settings only mean something when a row folds into a place.
     const willMerge =
@@ -1868,7 +1881,7 @@ function UnifiedImportDialog({
 
     return (
       <div className={classes.step}>
-        <p className={classes.lede}>{preview}</p>
+        <p className={classes.lede}>{resultPreview ?? preview}</p>
 
         {activeKind === "place" && willMerge && (
           <Row

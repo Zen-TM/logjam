@@ -21,15 +21,15 @@ describe("dropped rows", () => {
   it("says which rows the confirm step will skip", () => {
     expect(
       skippedRowsNote([
-        { rowIndex: 2, reason: "latitude 'x' couldn't be read" },
+        { rowIndex: 0, reason: "latitude 'x' couldn't be read" },
       ]),
-    ).toBe("1 row can't be read and will be skipped (row 4).");
+    ).toBe("1 row can't be read and will be skipped (row 2).");
     expect(
       skippedRowsNote([
-        { rowIndex: 2, reason: "latitude 'x' couldn't be read" },
-        { rowIndex: 7, reason: "date" },
+        { rowIndex: 0, reason: "latitude 'x' couldn't be read" },
+        { rowIndex: 5, reason: "date" },
       ]),
-    ).toBe("2 rows can't be read and will be skipped (rows 4, 9).");
+    ).toBe("2 rows can't be read and will be skipped (rows 2, 7).");
     expect(skippedRowsNote([])).toBe("");
   });
 });
