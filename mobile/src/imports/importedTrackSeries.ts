@@ -18,7 +18,6 @@ import {
   toElevationLine,
   type ImportedFeature,
   type TrackDetail,
-  t,
 } from "@logjam/shared";
 
 /**
@@ -37,7 +36,7 @@ export const MAX_STATS_POSITIONS = 200_000;
 
 export class TooManyPointsError extends Error {
   constructor() {
-    super(t`This file has too many points to summarise.`);
+    super("This file has too many points to summarise.");
   }
 }
 

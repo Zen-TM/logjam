@@ -92,8 +92,6 @@ export const enUS: Catalogue = {
     "Steepness in degrees from flat. An easy walk is under 10°, a steep scramble around 30°, and a cliff 45° or more. Ground flatter than the first band has no color.",
   "The sharpened area is deleted from your account, and friends you shared it with lose it too. Map files already made from it stay until they expire; one still waiting to start is cancelled.":
     "The sharpened area is deleted from your account, and friends you shared it with lose it too. Map files already made from it stay until they expire; one still waiting to start is canceled.",
-  "This file has too many points to summarise.":
-    "This file has too many points to summarize.",
   "This version ({0}) is no longer supported. You can update now over mobile data, or on Wi-Fi later.":
     "This version ({0}) is no longer supported. You can update now over cellular data, or on Wi-Fi later.",
   "This download will use your mobile data.":

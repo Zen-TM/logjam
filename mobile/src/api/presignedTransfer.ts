@@ -22,7 +22,6 @@
 // PRIVACY: nothing here logs the URL or the file path — a presigned URL is a
 // bearer credential and an S3 error body echoes the object key.
 import * as FileSystem from "expo-file-system/legacy";
-import { t } from "@logjam/shared";
 
 /** Long enough for a slow handshake on a bad link, short enough to give up. */
 export const TRANSFER_START_TIMEOUT_MS = 30_000;
@@ -95,7 +94,7 @@ export async function uploadToPresignedUrl(
     task.uploadAsync(),
     task,
     () => moved,
-    t`Upload timed out — try again.`,
+    "Upload timed out — try again.",
   );
 }
 
@@ -126,7 +125,7 @@ export async function downloadFromPresignedUrl(
       task.downloadAsync(),
       task,
       () => moved,
-      t`Download timed out — try again.`,
+      "Download timed out — try again.",
     );
   } finally {
     signal?.removeEventListener("abort", cancel);
