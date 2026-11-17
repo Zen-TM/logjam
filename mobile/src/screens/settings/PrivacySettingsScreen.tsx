@@ -29,6 +29,7 @@ import {
   LEADERBOARD_SETTING,
   messageFromError,
   SETTINGS,
+  t,
 } from "@logjam/shared";
 
 import { apiFetch } from "../../api/apiFetch";
@@ -82,7 +83,9 @@ export function PrivacySettingsScreen() {
     const outcome = await setAppLockEnabled(next);
     if (outcome.status === "changed") {
       setAppLockEnabledState(outcome.enabled);
-      notify(outcome.enabled ? "App lock on." : "App lock off for this phone.");
+      notify(
+        outcome.enabled ? t`App lock on.` : t`App lock off for this phone.`,
+      );
       return;
     }
     // Cancelled or unreachable: the switch springs back, which is the truth.
@@ -96,13 +99,13 @@ export function PrivacySettingsScreen() {
   const toggleCrashReports = useCallback(() => {
     const next = !crashReports;
     if (!setCrashReportsEnabled(next)) {
-      notify("This phone wouldn't store that setting.", "error");
+      notify(t`This phone wouldn't store that setting.`, "error");
       return;
     }
     setCrashReportsState(next);
     // The hint has room for the promise, not the timing: Sentry starts once,
     // at launch (initSentry.ts).
-    notify("Applies the next time Logjam GPS opens.");
+    notify(t`Applies the next time Logjam GPS opens.`);
   }, [crashReports, notify]);
 
   // Off by default — see galleryPreference.ts for why that default is a
@@ -113,14 +116,14 @@ export function PrivacySettingsScreen() {
   const toggleSaveToGallery = useCallback(() => {
     const next = !saveToGallery;
     if (!setSaveCapturesToGallery(next)) {
-      notify("This phone wouldn't store that setting.", "error");
+      notify(t`This phone wouldn't store that setting.`, "error");
       return;
     }
     setSaveToGalleryState(next);
     // Where the copies go, said once as the switch turns on; the hint keeps
     // the part that matters every time it is read.
     if (next)
-      notify("Copies go to your camera roll, where other apps can see them.");
+      notify(t`Copies go to your camera roll, where other apps can see them.`);
   }, [saveToGallery, notify]);
 
   // ── The one account-scoped row (see the header) ──────────────────────────
@@ -129,7 +132,7 @@ export function PrivacySettingsScreen() {
   const online = useConnectivity() === "online";
   const userQuery = useApiQuery(
     fetchCurrentUser,
-    "Couldn't load your settings.",
+    t`Couldn't load your settings.`,
     !isGuest,
   );
   // Re-seeded on the VALUE, as on Offline and storage, so a change made on
@@ -200,32 +203,32 @@ export function PrivacySettingsScreen() {
     serverPrefs.status === "unavailable"
       ? unavailableReasonText(serverPrefs.reason)
       : userQuery.error
-        ? "Couldn't reach your account"
+        ? t`Couldn't reach your account`
         : undefined;
 
   return (
     <>
       <ScreenScroll>
-        <SectionHeader title="This phone" />
+        <SectionHeader title={t`This phone`} />
         <PreferenceRow
           icon="private"
-          title="App lock"
+          title={t`App lock`}
           // No trailing pill beside the switch: the switch is already the
           // trailing element, and a pill next to it would force this
           // sentence to ellipsise.
-          subtitle="Fingerprint or PIN to open."
+          subtitle={t`Fingerprint or PIN to open.`}
           value={appLockEnabled}
           ready
           onToggle={() => void toggleAppLock()}
         />
         <PreferenceRow
           icon="warning"
-          title="Send crash reports"
+          title={t`Send crash reports`}
           // Names what is scrubbed, because "anonymous" alone is a claim the
           // user has no way to check and this app's whole premise is that
           // place locations don't leave it (scrubEvent.ts does the work,
           // guard: `mobile/src/sentry/scrubEvent.test.ts`).
-          subtitle="No place names or coordinates."
+          subtitle={t`No place names or coordinates.`}
           value={crashReports}
           ready
           onToggle={toggleCrashReports}
@@ -235,14 +238,14 @@ export function PrivacySettingsScreen() {
             it is the one control on this page that sends a copy of your data
             OUT of Logjam, which is why it lives on the privacy page at all and
             why it must not read as a third security setting. */}
-        <SectionHeader title="Photos and videos" />
+        <SectionHeader title={t`Photos and videos`} />
         <PreferenceRow
           icon="photo"
-          title="Save to gallery"
+          title={t`Save to gallery`}
           // The consequence, which a switch label can't say: the copy leaves
           // Logjam's storage for one other apps read. Where it goes is the
           // toast on turning it on.
-          subtitle="Other apps can see the copies."
+          subtitle={t`Other apps can see the copies.`}
           value={saveToGallery}
           ready
           onToggle={toggleSaveToGallery}
@@ -277,7 +280,7 @@ export function PrivacySettingsScreen() {
           onToggle={toggleLeaderboard}
         />
 
-        <SectionHeader title="What's on this phone" />
+        <SectionHeader title={t`What's on this phone`} />
         <Text style={styles.note}>
           {"Your places, trips, notes, photos and maps are stored on this device, " +
             "outside your phone's cloud backup. The app lock protects them if " +

@@ -75,6 +75,7 @@ import {
   simplifyToFit,
   type RoutePoint,
   wayVerbLabel,
+  t,
 } from "@logjam/shared";
 import { removeSharedEntity } from "../sharing/removeShare";
 import { exportStoredFile, exportTrack } from "../fileExport";
@@ -118,7 +119,7 @@ export function deleteLabel(
   removal: { synced: boolean },
   memberCount = 1,
 ): string {
-  if (removal.synced) return "Delete";
+  if (removal.synced) return t`Delete`;
   return memberCount > 1 ? "Delete all from device" : "Delete from device";
 }
 
@@ -302,9 +303,9 @@ export function geoPdfActions(geoPdf: GeoPdfImport): AssetActions {
         }
       : {}),
     delete: {
-      confirmTitle: `Delete ${geoPdf.label}?`,
+      confirmTitle: t`Delete ${geoPdf.label}?`,
       synced: false,
-      confirmBody: "The imported map is removed from the device.",
+      confirmBody: t`The imported map is removed from the device.`,
       run: () => deleteGeoPdfImport(geoPdf.id),
     },
   };
@@ -341,7 +342,7 @@ export function vectorImportActions(imported: VectorImport): AssetActions {
     imported.sourcePath && sourceFormat && sourceFormat !== "geojson"
       ? [
           {
-            title: `Export original (${sourceFormat.toUpperCase()})`,
+            title: t`Export original (${sourceFormat.toUpperCase()})`,
             run: () =>
               exportStoredFile(
                 imported.sourcePath!,
@@ -367,7 +368,7 @@ export function vectorImportActions(imported: VectorImport): AssetActions {
       ...(geoJsonSource(imported, sourceFormat)
         ? [
             {
-              title: "Export as GeoJSON",
+              title: t`Export as GeoJSON`,
               run: () =>
                 exportStoredFile(
                   geoJsonSource(imported, sourceFormat)!,
@@ -397,12 +398,11 @@ export function vectorImportActions(imported: VectorImport): AssetActions {
     attachToPlace: (placeId: string, replaces?: string) =>
       linkStandaloneMediaLocal(imported.id, placeId, replaces),
     delete: {
-      confirmTitle: `Delete ${imported.name}?`,
+      confirmTitle: t`Delete ${imported.name}?`,
       // Imports sync across devices, so deletion removes the file from the
       // account and therefore from every device.
       synced: true,
-      confirmBody:
-        "This deletes the file from your account, so it goes from Logjam Web and your other devices too.",
+      confirmBody: t`This deletes the file from your account, so it goes from Logjam Web and your other devices too.`,
       run: () => deleteVectorImport(imported.id),
     },
   };
@@ -439,10 +439,9 @@ export function remoteTrackActions(
           }),
         }),
     delete: {
-      confirmTitle: `Delete ${mediaDisplayName(file)}?`,
+      confirmTitle: t`Delete ${mediaDisplayName(file)}?`,
       synced: true,
-      confirmBody:
-        "This deletes it from your account, so it goes from Logjam Web and the phone that recorded it too.",
+      confirmBody: t`This deletes it from your account, so it goes from Logjam Web and the phone that recorded it too.`,
       run: () => deleteMediaLocal(file),
     },
   };
@@ -508,10 +507,9 @@ export function routeActions(
           rename: (name: string) => updateRouteLocal(route.id, { name }),
           editableRouteId: route.id,
           delete: {
-            confirmTitle: `Delete ${route.name}?`,
+            confirmTitle: t`Delete ${route.name}?`,
             synced: true,
-            confirmBody:
-              "The route is removed from every device on your account. This can't be undone.",
+            confirmBody: t`The route is removed from every device on your account. This can't be undone.`,
             run: () => deleteRouteLocal(route.id),
           },
           share: { entityType: "route", entityId: route.id },
@@ -607,13 +605,12 @@ export function trackActions(
         }
       : {}),
     delete: {
-      confirmTitle: `Delete ${track.name}?`,
+      confirmTitle: t`Delete ${track.name}?`,
       synced: true,
       // A finished recording is backed up to the account as a file; leaving
       // the backup behind would put the same trip straight back in this list as a
       // recorded-elsewhere row, which reads as the delete having failed.
-      confirmBody:
-        "The recorded points and the backup in your account are both deleted. This can't be undone.",
+      confirmBody: t`The recorded points and the backup in your account are both deleted. This can't be undone.`,
       run: () => deleteRecordedTrack(track),
     },
   };

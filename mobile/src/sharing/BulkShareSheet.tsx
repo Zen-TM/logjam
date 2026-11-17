@@ -26,6 +26,7 @@ import {
   type BulkShareCandidate,
   type BulkShareOutcome,
 } from "./bulkShareTargets";
+import { t } from "@logjam/shared";
 
 /**
  * The selection bar's share verb, for the bar's `extra` slot.
@@ -53,7 +54,7 @@ export function BulkShareButton({
   return (
     <IconButton
       icon="shareFriend"
-      accessibilityLabel="Share the selected items"
+      accessibilityLabel={t`Share the selected items`}
       color={disabled ? theme.textMuted : theme.accent}
       onPress={onPress}
     />

@@ -25,7 +25,7 @@
 // error, not the name.
 import * as Crypto from "expo-crypto";
 
-import { messageFromError } from "@logjam/shared";
+import { messageFromError, t } from "@logjam/shared";
 
 import { bulkShare } from "../api/shares";
 import { sendFileCopy } from "../api/fileSends";
@@ -109,7 +109,7 @@ export async function runBulkShare({
       ineligible = result.ineligible;
     } catch (err) {
       console.error(err);
-      shareError = messageFromError(err, "Couldn't share those items.");
+      shareError = messageFromError(err, t`Couldn't share those items.`);
     }
   }
 

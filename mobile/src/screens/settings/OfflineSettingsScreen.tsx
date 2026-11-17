@@ -49,6 +49,7 @@ import {
 import { Hint, PreferenceRow } from "./settingsKit";
 import { spacing } from "../../theme";
 import { PLACE_REGISTRY_DOWNLOAD_ESTIMATE } from "../../offline/placeRegistry";
+import { t } from "@logjam/shared";
 
 /**
  * `needs` names the auto-download switch a row is meaningless without: a data
@@ -64,20 +65,20 @@ const METERED_ROWS: {
 }[] = [
   {
     job: "topoDownload",
-    title: "LiDAR map auto-downloads",
-    subtitle: "Tens of megabytes each.",
+    title: t`LiDAR map auto-downloads`,
+    subtitle: t`Tens of megabytes each.`,
     needs: "topo",
   },
   // No `needs`: there is no switch for it, only the file the first region brings.
   {
     job: "placeNames",
-    title: "Place names for search",
-    subtitle: `${PLACE_REGISTRY_DOWNLOAD_ESTIMATE} a month.`,
+    title: t`Place names for search`,
+    subtitle: t`${PLACE_REGISTRY_DOWNLOAD_ESTIMATE} a month.`,
   },
   {
     job: "sync",
-    title: "Syncing trips and places",
-    subtitle: "Usually a few kilobytes.",
+    title: t`Syncing trips and places`,
+    subtitle: t`Usually a few kilobytes.`,
   },
   // Media PUTs (up to 30 MB an image, 500 MB a video) have their own allowance
   // distinct from the sync allowance above (which is sized for a few kilobytes
@@ -85,8 +86,8 @@ const METERED_ROWS: {
   // switch — it happens whenever the user attaches something.
   {
     job: "mediaUpload",
-    title: "Uploading photos and videos",
-    subtitle: "Up to 500 MB per video.",
+    title: t`Uploading photos and videos`,
+    subtitle: t`Up to 500 MB per video.`,
   },
 ];
 
@@ -101,7 +102,7 @@ export function OfflineSettingsScreen({
   }, []);
   const stored = useCallback(
     (ok: boolean) => {
-      if (!ok) notify("This phone wouldn't store that setting.");
+      if (!ok) notify(t`This phone wouldn't store that setting.`);
       return ok;
     },
     [notify],
@@ -128,13 +129,13 @@ export function OfflineSettingsScreen({
   return (
     <>
       <ScreenScroll>
-        <SectionHeader title="Fetch automatically" />
+        <SectionHeader title={t`Fetch automatically`} />
         <PreferenceRow
-          title="Sharpened areas"
+          title={t`Sharpened areas`}
           subtitle={
             needsAccount("autoTopo")
               ? accountText
-              : "When finished on Logjam Web."
+              : t`When finished on Logjam Web.`
           }
           value={topoAutoDownload}
           ready={!needsAccount("autoTopo")}
@@ -145,7 +146,7 @@ export function OfflineSettingsScreen({
           }}
         />
 
-        <SectionHeader title="Allow on mobile data" />
+        <SectionHeader title={t`Allow on mobile data`} />
         {METERED_ROWS.map((row) => {
           const blocked = needsAccount(row.job);
           const off = row.needs === "topo" && !topoAutoDownload;
@@ -157,7 +158,7 @@ export function OfflineSettingsScreen({
                 blocked
                   ? accountText
                   : off
-                    ? "Auto-download is off"
+                    ? t`Auto-download is off`
                     : row.subtitle
               }
               value={metered[row.job]}
@@ -171,11 +172,11 @@ export function OfflineSettingsScreen({
           );
         })}
 
-        <SectionHeader title="On this phone" />
+        <SectionHeader title={t`On this phone`} />
         <Row
           icon="device"
-          title="Maps, imports and tracks"
-          subtitle="Managed on the Saved tab"
+          title={t`Maps, imports and tracks`}
+          subtitle={t`Managed on the Saved tab`}
           onPress={onOpenSaved}
         />
         {/* The sync boundary, stated once, where someone goes LOOKING for it.
@@ -190,8 +191,8 @@ export function OfflineSettingsScreen({
           <Hint
             text={
               accountState === "guest"
-                ? "Places, routes, imports and recordings are only on this phone until you link an account."
-                : "Places, routes, imports and recordings are backed up to your account. Maps you downloaded stay on this device."
+                ? t`Places, routes, imports and recordings are only on this phone until you link an account.`
+                : t`Places, routes, imports and recordings are backed up to your account. Maps you downloaded stay on this device.`
             }
           />
         </View>

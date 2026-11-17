@@ -16,6 +16,7 @@ import {
   SIGN_IN_COPY,
   USERNAME_HINT,
   type Region,
+  t,
 } from "@logjam/shared";
 
 import type { AccountState } from "../auth/capabilities";
@@ -122,16 +123,16 @@ export function ConsentGate({
       ]}
     >
       <Text style={styles.title}>
-        {newAccount ? "Welcome to Logjam" : "Terms & privacy"}
+        {newAccount ? t`Welcome to Logjam` : t`Terms & privacy`}
       </Text>
       <Text style={styles.body}>
         {newAccount
-          ? "Choose your public display name and review the terms to finish creating your account."
-          : `Logjam's Terms of Use and Privacy Policy have changed (last updated ${consentVersion}). Review them and confirm your agreement to keep using Logjam.`}
+          ? t`Choose your public display name and review the terms to finish creating your account.`
+          : t`Logjam's Terms of Use and Privacy Policy have changed (last updated ${consentVersion}). Review them and confirm your agreement to keep using Logjam.`}
       </Text>
       {newAccount ? (
         <TextField
-          label="Username"
+          label={t`Username`}
           value={username}
           onChangeText={(text) => {
             setUsername(text);
@@ -169,8 +170,12 @@ export function ConsentGate({
           onRetry={banner.retry ? agree : undefined}
         />
       ) : null}
-      <Button label="Agree and continue" onPress={agree} loading={submitting} />
-      <Button label="Sign out" variant="ghost" onPress={() => onSignOut()} />
+      <Button
+        label={t`Agree and continue`}
+        onPress={agree}
+        loading={submitting}
+      />
+      <Button label={t`Sign out`} variant="ghost" onPress={() => onSignOut()} />
     </ScrollView>
   );
 }

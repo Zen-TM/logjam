@@ -26,6 +26,7 @@ import {
   routeSlotDisplaceConfirm as sharedDisplaceConfirm,
   type ConfirmCopy,
   type WaySource,
+  t,
 } from "@logjam/shared";
 import type { MirrorMedia } from "../sync/mirrorStore";
 
@@ -48,8 +49,7 @@ export function waySourceWrites(source: WaySource): "route" | "media" {
  * The sentence a recorded track says BEFORE the fact, because what it does is
  * not what its verb sounds like. The import's is shared with Logjam Web.
  */
-export const TRACK_TO_ROUTE_PROMISE =
-  "A route is created from the recording and linked to the place. The recording itself is left alone.";
+export const TRACK_TO_ROUTE_PROMISE = t`A route is created from the recording and linked to the place. The recording itself is left alone.`;
 
 export type RouteSlotOccupant =
   | { kind: "route"; id: string; name: string }
