@@ -74,7 +74,7 @@ export function numericFieldError(
   }
   const { min, max } = constraints;
   if (min != null && value < min) {
-    if (min === 0) return "Cannot be negative";
+    if (min === 0) return t`Can't be negative`;
     return max != null
       ? t`Must be between ${min} and ${max}`
       : t`Must be at least ${min}`;

@@ -84,7 +84,11 @@ export default function MediaGallery({
                   type="button"
                   className={classes.tileButton}
                   onClick={() => setLightbox(m)}
-                  aria-label={`${isVideo ? "Play video" : "View"} ${m.filename}`}
+                  aria-label={
+                    isVideo
+                      ? t`Play video ${m.filename}`
+                      : t`View ${m.filename}`
+                  }
                 >
                   {m.thumbnailUrl && !failedThumbIds.has(m.id) ? (
                     <img

@@ -1,6 +1,6 @@
 // "Get this out of my account" for something a friend shared WITH you — the
 // one control behind it on every web surface that lists shared things: places,
-// waypoints, routes and LiDAR topos.
+// routes and sharpened areas.
 //
 // It is NOT a delete and must never be styled or worded as one (shared/src/sharing.test.ts). The owner keeps
 // their row; this drops the caller's own share (`DELETE .../me`, which both
@@ -17,10 +17,39 @@ import ConfirmDialog from "../dialogs/ConfirmDialog";
 import { useToast } from "../feedback/ToastProvider";
 import { messageFromError } from "../../errors/messageFromError";
 import { Button, Icon } from "../../ui";
-import { removeShareConfirm, t } from "@logjam/shared";
+import {
+  removeShareConfirm,
+  SHARE_KIND_LABEL,
+  t,
+  type BulkShareItemType,
+} from "@logjam/shared";
+
+// Switches on the entity type with no default: a new shareable kind fails the
+// typecheck here until it has its words.
+function removeFailedMessage(entityType: BulkShareItemType): string {
+  switch (entityType) {
+    case "place":
+      return t`Couldn't remove that place.`;
+    case "route":
+      return t`Couldn't remove that route.`;
+    case "topoJob":
+      return t`Couldn't remove that sharpened area.`;
+  }
+}
+
+function removeButtonTitle(entityType: BulkShareItemType): string {
+  switch (entityType) {
+    case "place":
+      return t`Remove this shared place`;
+    case "route":
+      return t`Remove this shared route`;
+    case "topoJob":
+      return t`Remove this shared sharpened area`;
+  }
+}
 
 export default function RemoveSharedButton({
-  kindLabel,
+  entityType,
   itemName,
   ownerName,
   className,
@@ -30,8 +59,8 @@ export default function RemoveSharedButton({
   remove,
   onRemoved,
 }: {
-  /** Lower-case kind as it reads mid-sentence: "place", "waypoint", "topo". */
-  kindLabel: string;
+  /** What is shared: it words the button, the confirm and the failure. */
+  entityType: BulkShareItemType;
   itemName: string;
   /** The owner's username where the surface knows it; the copy softens if not. */
   ownerName?: string | null;
@@ -49,7 +78,11 @@ export default function RemoveSharedButton({
   const toast = useToast();
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
-  const confirm = removeShareConfirm({ kindLabel, itemName, ownerName });
+  const confirm = removeShareConfirm({
+    kindLabel: SHARE_KIND_LABEL[entityType],
+    itemName,
+    ownerName,
+  });
 
   async function handleConfirm() {
     setBusy(true);
@@ -60,13 +93,13 @@ export default function RemoveSharedButton({
       onRemoved();
     } catch (err) {
       console.error(err);
-      toast.error(messageFromError(err, `Couldn't remove that ${kindLabel}.`));
+      toast.error(messageFromError(err, removeFailedMessage(entityType)));
     } finally {
       setBusy(false);
     }
   }
 
-  const label = title ?? `Remove this shared ${kindLabel}`;
+  const label = title ?? removeButtonTitle(entityType);
   const off = busy ? t`Removing…` : disabledReason;
 
   return (
@@ -85,7 +118,7 @@ export default function RemoveSharedButton({
         >
           {children ?? (
             <>
-              <Icon idea="hide" size={14} /> Remove
+              <Icon idea="hide" size={14} /> {t`Remove`}
             </>
           )}
         </button>

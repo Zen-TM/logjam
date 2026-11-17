@@ -1,5 +1,6 @@
 import { Checkbox } from "../ui";
-import { t } from "@logjam/shared";
+import { Rich } from "../ui/rich";
+import { rich } from "@logjam/shared";
 
 function DocLink({ href, children }: { href: string; children: string }) {
   return (
@@ -20,23 +21,17 @@ function TermsTick({
   checked: boolean;
   onChange: (next: boolean) => void;
 }) {
+  const tags = {
+    tos: (text: string) => <DocLink href="/tos.html">{text}</DocLink>,
+    privacy: (text: string) => <DocLink href="/privacy.html">{text}</DocLink>,
+  };
+  const parts = updated
+    ? rich`I agree to the updated <tos>Terms</tos> and acknowledge the <privacy>Privacy Policy</privacy>.`
+    : rich`I agree to the <tos>Terms of Use</tos> and acknowledge the <privacy>Privacy Policy</privacy>.`;
   return (
     <Checkbox
       labelHasLinks
-      label={
-        <>
-          I agree to the{" "}
-          {updated ? (
-            <>
-              updated <DocLink href="/tos.html">{t`Terms`}</DocLink>
-            </>
-          ) : (
-            <DocLink href="/tos.html">{t`Terms of Use`}</DocLink>
-          )}{" "}
-          and acknowledge the{" "}
-          <DocLink href="/privacy.html">{t`Privacy Policy`}</DocLink>.
-        </>
-      }
+      label={<Rich parts={parts} tags={tags} />}
       checked={checked}
       onChange={onChange}
     />

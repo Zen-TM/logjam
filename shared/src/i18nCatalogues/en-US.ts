@@ -60,6 +60,8 @@ export const enUS: Catalogue = {
     "How much canyoneering and rappelling people have done.",
   "Invite cancelled.": "Invite canceled.",
   "Land tenure": "Land ownership",
+  "Land tenure couldn't be loaded — its map file is missing.":
+    "Land ownership couldn't be loaded — its map file is missing.",
   "Last burnt": "Last burned",
   "Mapped by NSW National Parks and Wildlife Service: a fire it didn't map, often on private land, has no colour.":
     "Mapped by NSW National Parks and Wildlife Service: a fire it didn't map, often on private land, has no color.",
@@ -82,6 +84,7 @@ export const enUS: Catalogue = {
   "Scrub density for bushbashing": "Scrub density for bushwhacking",
   "Scrub density for bushbashing: denser reads darker. Orange stripes mark ground burnt since the survey, so the scrub there may have changed.":
     "Scrub density for bushwhacking: denser reads darker. Orange stripes mark ground burned since the survey, so the scrub there may have changed.",
+  "Show land tenure": "Show land ownership",
   "Sign-in didn't return an account identity, so it was cancelled. Try again.":
     "Sign-in didn't return an account identity, so it was canceled. Try again.",
   "Search for a place to centre the map":
