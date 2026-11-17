@@ -383,6 +383,35 @@ describe("bareCopyIn", () => {
     expect(bare('const a = { label: () => "Save" };')).toEqual(["Save"]);
   });
 
+  // Mutation: delete the `isErrorSuper` line of `bareCopyIn`'s call branch, or
+  // the `CONSOLE` line above it, or the `ConditionalExpression` case of `isErrorText`
+  // (or let `isText` take a ternary, which turns the `.set(` control red).
+  // Each control is the same sentence in a position that is read, so a rule
+  // that stopped matching cannot pass by finding nothing.
+  it.each([
+    [
+      "super in a class that extends an Error",
+      'class TimeoutError extends Error { constructor() { super("Timed out asking the provider"); } }',
+      'class Timeout extends Base { constructor() { super("Timed out asking the provider"); } }',
+    ],
+    [
+      "a nested fallback in console",
+      'console.error(messageFromError(err, "Could not save the file"));',
+      'report(messageFromError(err, "Could not save the file"));',
+    ],
+    [
+      "a ternary of two messages in an Error",
+      'reject(new Error(stalled ? "Upload stalled" : "Upload cancelled"));',
+      'toasts.set(id, stalled ? "Upload stalled" : "Upload cancelled");',
+    ],
+  ])(
+    "leaves %s alone, and reads the same text elsewhere",
+    (_name, code, control) => {
+      expect(bare(code)).toEqual([]);
+      expect(bare(control).length).toBeGreaterThan(0);
+    },
+  );
+
   // Mutation: have `codeArguments` read no argument (delete its `into(arg, false)`).
   it("flags a string passed to a callback inside a log call", () => {
     expect(bare('logger.info(() => { notify("Saved the place"); });')).toEqual([

@@ -21,23 +21,23 @@ const SRC = dirname(fileURLToPath(import.meta.url));
 
 /** Bare literals a user may read, per directory under src. Lower an entry when its text moves; never raise one. */
 const CEILINGS: Record<string, number> = {
-  ".": 2,
+  ".": 0,
   components: 0,
   "components/common": 0,
   "components/dialogs": 0,
   "components/dialogs/topoSettings": 0,
   "components/feedback": 0,
   "components/gauges": 0,
-  "components/map": 2,
+  "components/map": 1,
   "components/media": 0,
-  "components/plans": 3,
+  "components/plans": 0,
   "components/routes": 0,
   "components/sidebar": 0,
-  "components/sidebar/panels": 8,
-  csvImport: 36,
-  geoPdf: 1,
-  "geoPdf/draw": 1,
-  ui: 1,
+  "components/sidebar/panels": 0,
+  csvImport: 0,
+  geoPdf: 0,
+  "geoPdf/draw": 0,
+  ui: 0,
 };
 
 function sources(dir: string): string[] {
