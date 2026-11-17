@@ -78,3 +78,4 @@ export { Toast, ToastHost, type ToastMessage } from "./Toast";
 export { TAB_BAR_TOP_PAD, useTabBarHeight } from "./tabBar";
 export { backLabelOf } from "./backLabel";
 export { Rich } from "./rich";
+export { useNow } from "./useNow";
