@@ -26,6 +26,7 @@ import {
   SLOPE_SCALE_COLOURS,
   type SlopeBand,
   type SlopeBandsEdit,
+  t,
 } from "@logjam/shared";
 
 import { radius, spacing, makeStyles, useTheme } from "../theme";
@@ -37,8 +38,7 @@ import {
   useSlopeBandsSendFailed,
 } from "./slopeBandsPreference";
 
-const SEND_FAILED =
-  "Saved on this phone, but it didn't reach your account. Logjam Web will not show it yet.";
+const SEND_FAILED = t`Saved on this phone, but it didn't reach your account. Logjam Web will not show it yet.`;
 
 /** The bands as the editor holds them: what is typed, valid or not. */
 function useSlopeBandsEdit() {
@@ -76,7 +76,7 @@ export function SlopeBandsEditor() {
 
       <ColourField
         icon="colour"
-        label="Shallowest colour"
+        label={t`Shallowest colour`}
         palette={SLOPE_SCALE_COLOURS}
         value={scale.start.slice(0, 7)}
         onChange={(rgb) => setBands(setSlopeScaleColour(bands, "start", rgb))}
@@ -84,7 +84,7 @@ export function SlopeBandsEditor() {
       {hasSlopeScaleEnd(bands) ? (
         <ColourField
           icon="colour"
-          label="Steepest colour"
+          label={t`Steepest colour`}
           palette={SLOPE_SCALE_COLOURS}
           value={scale.end.slice(0, 7)}
           onChange={(rgb) => setBands(setSlopeScaleColour(bands, "end", rgb))}
@@ -93,7 +93,7 @@ export function SlopeBandsEditor() {
       <Button
         compact
         variant="outlineAccent"
-        label="Reset colours"
+        label={t`Reset colours`}
         onPress={() =>
           setBands(
             setSlopeScale(
@@ -107,8 +107,8 @@ export function SlopeBandsEditor() {
 
       <View style={styles.table}>
         <BoundaryRow
-          lead="Transparent below"
-          label="Transparency threshold in degrees"
+          lead={t`Transparent below`}
+          label={t`Transparency threshold in degrees`}
           value={bands[0].fromDeg}
           range={slopeBoundaryRange(bands, "threshold")}
           onCommit={(deg) => setBands(setSlopeThreshold(bands, deg))}
@@ -118,7 +118,7 @@ export function SlopeBandsEditor() {
           <BoundaryRow
             key={idx}
             lead={`${band.fromDeg}° to`}
-            label={`Band ${idx + 1} upper angle in degrees`}
+            label={t`Band ${idx + 1} upper angle in degrees`}
             value={band.toDeg}
             range={slopeBoundaryRange(bands, idx)}
             colour={band.colour}
@@ -216,9 +216,9 @@ function BoundaryRow({
           ) : null}
           <IconButton
             icon="add"
-            accessibilityLabel="Add a band here"
+            accessibilityLabel={t`Add a band here`}
             disabled={!onAdd}
-            disabledReason="No room for another band here"
+            disabledReason={t`No room for another band here`}
             onPress={onAdd ?? (() => undefined)}
           />
         </View>

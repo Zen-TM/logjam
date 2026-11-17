@@ -173,9 +173,9 @@ export function archiveLabel(archiveId: string): string | null {
     case "heights":
       return t`Elevation data, ${clip.archive.name}`;
     case "contours":
-      return "Contours";
+      return t`Contours`;
     case "slope":
-      return "Slope";
+      return t`Slope`;
     case "land":
       return MAP_TERRAIN.copy.land;
     case "fire":

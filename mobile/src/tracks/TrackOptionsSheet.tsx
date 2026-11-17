@@ -22,6 +22,7 @@ import {
   wayVerbLabel,
   type TrackPass,
   ELEVATION_TRACK_MAX_SAMPLES,
+  t,
 } from "@logjam/shared";
 
 import { spacing, makeStyles, useTheme, useHues, muted } from "../theme";
@@ -189,7 +190,7 @@ export function TrackOptionsSheet({
       // the user concluding Logjam GPS lost their recording.
       const { name, pointCount } = await actions.createRouteFrom(placeId);
       onInfo(
-        `Saved “${name}” — ${pointCount} points — as ${placeName}'s route.`,
+        t`Saved “${name}” — ${pointCount} points — as ${placeName}'s route.`,
       );
     },
     onDone: () => {
@@ -223,7 +224,7 @@ export function TrackOptionsSheet({
           return;
         }
         console.error(err);
-        onError("Couldn't save that file.");
+        onError(t`Couldn't save that file.`);
       },
     );
   };
@@ -249,11 +250,11 @@ export function TrackOptionsSheet({
       // seen as numbers.
       title={
         renaming
-          ? "Rename track"
+          ? t`Rename track`
           : sending
             ? share.title
             : attaching
-              ? "Link to a place"
+              ? t`Link to a place`
               : track.name
       }
       onBack={leaveSubMode ?? undefined}
@@ -284,7 +285,7 @@ export function TrackOptionsSheet({
                 .then(() => close())
                 .catch((err: unknown) => {
                   console.error(err);
-                  onError(messageFromError(err, "Couldn't rename that."));
+                  onError(messageFromError(err, t`Couldn't rename that.`));
                 })
                 .finally(() => setBusy(false));
             }}
@@ -314,7 +315,7 @@ export function TrackOptionsSheet({
           {/* The one row the two surfaces differ by, and it leads the list. */}
           {onShowOnMap && actions.locatable ? (
             <Row
-              title="Show on map"
+              title={t`Show on map`}
               icon="map"
               hue={assetHue.track}
               disabled={busy}
@@ -347,22 +348,24 @@ export function TrackOptionsSheet({
             icon="colour"
             hue={assetHue.track}
             disabled={busy}
-            label="Colour"
+            label={t`Colour`}
             palette={TRACK_COLORS}
             value={track.color}
             nameOf={trackColorName}
             onChange={(swatch) => {
               actions.setColor?.(swatch).catch((err: unknown) => {
                 console.error(err);
-                onError(messageFromError(err, "Couldn't update track colour."));
+                onError(
+                  messageFromError(err, t`Couldn't update track colour.`),
+                );
               });
             }}
           />
           {/* What this track IS, one tap in — a tapped line opens the verbs
               now, and the numbers are behind this row (DESIGN.md). */}
           <Row
-            title="View stats"
-            subtitle="Distance, climb, pace and profiles"
+            title={t`View stats`}
+            subtitle={t`Distance, climb, pace and profiles`}
             icon="stats"
             hue={assetHue.track}
             disabled={busy}
@@ -371,7 +374,7 @@ export function TrackOptionsSheet({
           {/* The one verb that changes what the phone is DOING rather than
               what it is showing. */}
           <Row
-            title="Continue recording"
+            title={t`Continue recording`}
             icon="play"
             hue={assetHue.track}
             disabled={busy}
@@ -382,7 +385,7 @@ export function TrackOptionsSheet({
           />
           {actions.createRouteFrom ? (
             <Row
-              title="Create route from this"
+              title={t`Create route from this`}
               icon="draw"
               hue={assetHue.route}
               disabled={busy}
@@ -392,11 +395,14 @@ export function TrackOptionsSheet({
                   // RDP always throws points away; saying how many survived is
                   // what stops the user concluding Logjam GPS lost their track.
                   ({ name, pointCount }) =>
-                    onInfo(`Saved “${name}” — ${pointCount} points.`),
+                    onInfo(t`Saved “${name}” — ${pointCount} points.`),
                   (err: unknown) => {
                     console.error(err);
                     onError(
-                      messageFromError(err, "Couldn't make a route from that."),
+                      messageFromError(
+                        err,
+                        t`Couldn't make a route from that.`,
+                      ),
                     );
                   },
                 );
@@ -408,8 +414,8 @@ export function TrackOptionsSheet({
               picker says before the fact (routeSlot.ts's promise). */}
           {actions.createRouteFrom ? (
             <Row
-              title="Link to a place"
-              subtitle="As that place's route"
+              title={t`Link to a place`}
+              subtitle={t`As that place's route`}
               icon="link"
               hue={assetHue.route}
               disabled={busy}
@@ -431,7 +437,7 @@ export function TrackOptionsSheet({
               revocable one; these two must never read alike. */}
           {actions.sendCopy ? (
             <Row
-              title="Send a copy"
+              title={t`Send a copy`}
               icon="send"
               hue={theme.neutral}
               {...shareRowProps}
@@ -440,14 +446,14 @@ export function TrackOptionsSheet({
             />
           ) : null}
           <Row
-            title="Rename"
+            title={t`Rename`}
             icon="edit"
             hue={theme.neutral}
             disabled={busy}
             onPress={() => setRenaming(true)}
           />
           <Row
-            title="Delete track"
+            title={t`Delete track`}
             icon="delete"
             hue={theme.warning}
             disabled={busy}
@@ -459,14 +465,14 @@ export function TrackOptionsSheet({
                 !(await confirm({
                   confirmTitle: removal.confirmTitle,
                   confirmBody: removal.confirmBody,
-                  confirmLabel: "Delete",
+                  confirmLabel: t`Delete`,
                   tone: "destructive",
                 }))
               )
                 return;
               removal.run().catch((err: unknown) => {
                 console.error(err);
-                onError("Couldn't delete that track.");
+                onError(t`Couldn't delete that track.`);
               });
             }}
           />

@@ -49,6 +49,7 @@ import {
   regionInView,
   type RegionBbox,
   formatGroundStep,
+  t,
 } from "@logjam/shared";
 
 import { config } from "../config";
@@ -143,9 +144,9 @@ function uuid(): string {
 function regionLabelFor(basemapId: string): string {
   // The DEM is not a map in the catalog and is not one to the user either —
   // it is what keeps elevation profiles and point heights working out there.
-  if (basemapId === DEM_SOURCE_ID) return "Elevation data";
+  if (basemapId === DEM_SOURCE_ID) return t`Elevation data`;
   const name = BASEMAP_CATALOG.find((entry) => entry.id === basemapId)?.name;
-  return archiveLabel(basemapId) ?? name ?? "Map";
+  return archiveLabel(basemapId) ?? name ?? t`Map`;
 }
 
 /**
@@ -407,7 +408,7 @@ export function RegionDownloadScreen({
       .status === "available";
   const overlays = useApiQuery(
     getCompletedOverlays,
-    "Couldn't load your sharpened areas.",
+    t`Couldn't load your sharpened areas.`,
     loadsAreas,
   );
   const areasState = areasForSave(loadsAreas, overlays);
@@ -460,16 +461,16 @@ export function RegionDownloadScreen({
   const overCap = caps != null && !caps.ok;
   // Why Save is off, for the press that asks: each cause as it reads on screen.
   const noArea = bbox == null || caps == null;
-  const TOO_LARGE = "Too large — reduce the area, detail or maps";
+  const TOO_LARGE = t`Too large — reduce the area, detail or maps`;
   const noSaveReason = busy
-    ? "Saving…"
+    ? t`Saving…`
     : noArea
-      ? "Waiting for the map"
+      ? t`Waiting for the map`
       : overCap
         ? TOO_LARGE
         : gate.warning === "failed"
-          ? "Couldn't check your sharpened areas"
-          : "Checking your sharpened areas…";
+          ? t`Couldn't check your sharpened areas`
+          : t`Checking your sharpened areas…`;
 
   const startDownloads = useCallback(
     (
@@ -523,7 +524,7 @@ export function RegionDownloadScreen({
           // Offline by the same reading that enabled Save (`gate`).
           if (gate.noConnection) {
             notifyError(
-              "Saving maps needs a connection. Try again when you have one.",
+              t`Saving maps needs a connection. Try again when you have one.`,
             );
             return;
           }
@@ -596,7 +597,7 @@ export function RegionDownloadScreen({
       <Hero
         onBack={onBack}
         backLabel={backLabel}
-        title="Save an offline map"
+        title={t`Save an offline map`}
         wrapValue
         // TWO stats, equal weight, one line — the two things the decision is
         // actually made on. Showing additional stats would overflow the
@@ -675,9 +676,10 @@ export function RegionDownloadScreen({
             waits for (`areasForSave`). */}
         {overCap ? (
           <View style={styles.mapWarning} pointerEvents="none">
-            <Notice icon="warning" tone="warning">
-              Too large — reduce the area or detail, or pick fewer maps.
-            </Notice>
+            <Notice
+              icon="warning"
+              tone="warning"
+            >{t`Too large — reduce the area or detail, or pick fewer maps.`}</Notice>
           </View>
         ) : gate.warning === "failed" ? (
           // `box-none`: "Try again" takes a press, and the strip around it
@@ -689,20 +691,20 @@ export function RegionDownloadScreen({
               action={
                 <View style={styles.warningActions}>
                   <Button
-                    label="Try again"
+                    label={t`Try again`}
                     variant="outlineAccent"
                     onPress={overlays.refetch}
                   />
                   <Button
-                    label="Save without sharpened areas"
+                    label={t`Save without sharpened areas`}
                     variant="outlineAccent"
                     onPress={() => handleSave(false)}
                     disabled={bbox == null || caps?.ok !== true || busy}
                     disabledReason={
                       busy
-                        ? "Saving…"
+                        ? t`Saving…`
                         : noArea
-                          ? "Waiting for the map"
+                          ? t`Waiting for the map`
                           : TOO_LARGE
                     }
                   />
@@ -714,11 +716,11 @@ export function RegionDownloadScreen({
           </View>
         ) : gate.warning === "loading" ? (
           <View style={styles.mapWarning} pointerEvents="none">
-            <Notice>Checking for your sharpened areas…</Notice>
+            <Notice>{t`Checking for your sharpened areas…`}</Notice>
           </View>
         ) : null}
         <View style={styles.mapHint} pointerEvents="none">
-          <Notice>Move the map · drag edges to resize</Notice>
+          <Notice>{t`Move the map · drag edges to resize`}</Notice>
         </View>
       </View>
 
@@ -757,7 +759,7 @@ export function RegionDownloadScreen({
 
         <View style={styles.panelBody}>
           <Field
-            label="Detail"
+            label={t`Detail`}
             aside={
               <Text style={styles.detailCaption}>
                 {/* Metres-per-pixel describes a RASTER pyramid: fixed images at
@@ -765,8 +767,8 @@ export function RegionDownloadScreen({
                   at any zoom, and the detail level only caps how much of the
                   archive comes with you. */}
                 {vectorOnly
-                  ? "Detailed map only · sharp at any zoom"
-                  : `Sharp to about ${formatGroundStep(metresPerPixel(centreLat, deepestZoom))} on the ground`}
+                  ? t`Detailed map only · sharp at any zoom`
+                  : t`Sharp to about ${formatGroundStep(metresPerPixel(centreLat, deepestZoom))} on the ground`}
               </Text>
             }
           >
@@ -785,7 +787,7 @@ export function RegionDownloadScreen({
             here: the download outlives this screen, and a screen whose whole
             job is to be left is the wrong place to report from. */}
           <Button
-            label="Save this area"
+            label={t`Save this area`}
             icon="saveOffline"
             onPress={() => handleSave(true)}
             disabled={!canDownload || busy}
@@ -805,12 +807,12 @@ export function RegionDownloadScreen({
           leaving.current = false;
           onStarted();
         }}
-        title="Name this area"
-        footer={<Button label="Done" icon="done" onPress={closeNaming} />}
+        title={t`Name this area`}
+        footer={<Button label={t`Done`} icon="done" onPress={closeNaming} />}
       >
         <View style={styles.namingBody}>
           <TextField
-            label="Name"
+            label={t`Name`}
             inputRef={nameInputRef}
             value={naming?.name ?? ""}
             onChangeText={(text) =>
@@ -822,10 +824,9 @@ export function RegionDownloadScreen({
             returnKeyType="done"
             onSubmitEditing={closeNaming}
           />
-          <Text style={styles.namingNote}>
-            Downloads keep going after you leave Logjam GPS. Watch them in
-            Saved.
-          </Text>
+          <Text
+            style={styles.namingNote}
+          >{t`Downloads keep going after you leave Logjam GPS. Watch them in Saved.`}</Text>
         </View>
       </BottomSheet>
 

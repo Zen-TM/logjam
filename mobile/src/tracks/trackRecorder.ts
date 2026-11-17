@@ -28,6 +28,7 @@ import {
   rejectTrackFix,
   type CandidateFix,
   type RecordedTrackPoint,
+  t,
 } from "@logjam/shared";
 
 import { randomId } from "../imports/vectorImports";
@@ -75,8 +76,8 @@ function locationOptions(): Location.LocationTaskOptions {
     showsBackgroundLocationIndicator: true,
     activityType: Location.ActivityType.Fitness,
     foregroundService: {
-      notificationTitle: "Recording track",
-      notificationBody: "Logjam GPS is recording. Open it to pause or finish.",
+      notificationTitle: t`Recording track`,
+      notificationBody: t`Logjam GPS is recording. Open it to pause or finish.`,
       killServiceOnDestroy: false,
     },
   };

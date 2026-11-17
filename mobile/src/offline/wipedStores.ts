@@ -19,6 +19,8 @@
 // can read it in a plain test process. It does not change what the wipe
 // deletes.
 
+import { t } from "@logjam/shared";
+
 /** A kind of device-only data the sign-out confirmation can name. */
 export const LOSSES = [
   "unsynced",
@@ -40,7 +42,7 @@ export type StoreFate = { loses: readonly Loss[] } | { keeps: string };
  */
 export const SYNC_LOCAL_TABLE_FATE: Record<string, StoreFate> = {
   sync_state: {
-    keeps: "A sync cursor and a schema version: nothing the user made.",
+    keeps: t`A sync cursor and a schema version: nothing the user made.`,
   },
   outbox: { loses: ["unsynced"] },
   conflict_shelf: { loses: ["unresolved"] },
@@ -59,8 +61,7 @@ export const SYNC_LOCAL_TABLE_FATE: Record<string, StoreFate> = {
 export const OFFLINE_TABLE_FATE = {
   map_artifact: { loses: ["regions", "topos", "geoPdfs"] },
   import_view_state: {
-    keeps:
-      "Whether an import is drawn and where its bytes are: the file itself is a synced row.",
+    keeps: t`Whether an import is drawn and where its bytes are: the file itself is a synced row.`,
   },
   geo_pdf_import: { loses: ["geoPdfs"] },
   track_point: { loses: ["recordings"] },
@@ -96,20 +97,19 @@ export const WIPED_DIR_FATE: Record<string, StoreFate> = {
     // the upload, which is an outbox op.
     loses: ["recordings", "unsynced"],
   },
-  SCRATCH_DIR: { keeps: "Working files, deleted after use." },
+  SCRATCH_DIR: { keeps: t`Working files, deleted after use.` },
   SENSOR_LOG_DIR: {
-    keeps:
-      "Research logs from a developer toggle that is off by default, with no coordinates in them.",
+    keeps: t`Research logs from a developer toggle that is off by default, with no coordinates in them.`,
   },
   WEATHER_DIR: {
-    keeps: "Forecasts, fetched again with one press.",
+    keeps: t`Forecasts, fetched again with one press.`,
   },
-  GAUGES_DIR: { keeps: "Public gauge readings, fetched again online." },
-  TILEJSON_DIR: { keeps: "Map files, written again when the map opens." },
+  GAUGES_DIR: { keeps: t`Public gauge readings, fetched again online.` },
+  TILEJSON_DIR: { keeps: t`Map files, written again when the map opens.` },
   SHARPENED_AREAS_DIR: {
-    keeps: "The account's list of sharpened areas, fetched again online.",
+    keeps: t`The account's list of sharpened areas, fetched again online.`,
   },
   PLAN_DIR: {
-    keeps: "A plan's files, downloaded again from the plan with one press.",
+    keeps: t`A plan's files, downloaded again from the plan with one press.`,
   },
 };

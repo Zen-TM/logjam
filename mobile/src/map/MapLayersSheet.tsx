@@ -68,6 +68,7 @@ import {
   type OverlayTerrainKey,
   type SectionKeysOn,
   type TerrainSwitchKey,
+  t,
 } from "@logjam/shared";
 
 import { type LayersOpen } from "./layersOpen";
@@ -438,7 +439,7 @@ function BasemapTab({
                 serverDown
                   ? BASEMAP_UNAVAILABLE_LABEL
                   : offline
-                    ? "Needs a connection"
+                    ? t`Needs a connection`
                     : undefined
               }
               disabled={unavailable}
@@ -653,7 +654,7 @@ function LayerRow({ entry }: { entry: LayerToggleEntry }) {
               <Toggle
                 checked={entry.value}
                 onChange={entry.onChange}
-                accessibilityLabel={`Show ${entry.title}`}
+                accessibilityLabel={t`Show ${entry.title}`}
               />
               <Icon
                 idea={expanded ? "collapse" : "expand"}
@@ -874,22 +875,22 @@ function OfflineTab({
       <Row
         icon="saveOffline"
         hue={assetHue.region}
-        title="Save an offline map"
-        subtitle={online ? "Pick an area and the maps" : "Needs a connection"}
+        title={t`Save an offline map`}
+        subtitle={online ? t`Pick an area and the maps` : t`Needs a connection`}
         disabled={!online}
         onPress={onSaveArea}
       />
       <SwitchRow
         icon="offline"
         hue={assetHue.region}
-        title="Use only saved maps"
-        description="Even when you have signal"
+        title={t`Use only saved maps`}
+        description={t`Even when you have signal`}
         descriptionNumberOfLines={2}
         checked={offlineOnly}
         onChange={onOfflineOnlyChange}
       />
 
-      <SectionHeader title="On this phone" />
+      <SectionHeader title={t`On this phone`} />
       <Row
         icon="device"
         hue={assetHue.region}

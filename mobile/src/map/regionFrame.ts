@@ -19,6 +19,7 @@ import {
   type LonLatBox,
   type Region,
   type RegionBbox,
+  t,
 } from "@logjam/shared";
 
 export type FrameInsets = {
@@ -272,17 +273,17 @@ export function defaultFrameInsets(size: {
 export { tileMetersPerPixel as metresPerPixel } from "./scaleBar";
 
 const DETAIL_NAMES: Record<number, string> = {
-  12: "Overview",
-  13: "Coarse",
-  14: "Medium",
-  15: "Detailed",
-  16: "Fine",
-  17: "Very fine",
-  18: "Finest",
+  12: t`Overview`,
+  13: t`Coarse`,
+  14: t`Medium`,
+  15: t`Detailed`,
+  16: t`Fine`,
+  17: t`Very fine`,
+  18: t`Finest`,
 };
 
 /** A detail level named by the ground it resolves: "Fine, 2 m". */
 export function detailLabel(zoom: number, latitudeDeg: number): string {
   const metres = tileMetersPerPixel(latitudeDeg, zoom);
-  return `${DETAIL_NAMES[zoom] ?? "Detail"}, ${formatGroundStep(metres)}`;
+  return `${DETAIL_NAMES[zoom] ?? t`Detail`}, ${formatGroundStep(metres)}`;
 }

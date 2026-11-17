@@ -44,7 +44,7 @@ import {
   type MapRef,
 } from "@maplibre/maplibre-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { pointBox, regionInView, type RegionBbox } from "@logjam/shared";
+import { pointBox, regionInView, type RegionBbox, t } from "@logjam/shared";
 
 import { config } from "../config";
 import { spacing, makeStyles } from "../theme";
@@ -323,23 +323,27 @@ export function PickAreaScreen({
         style={[styles.hint, { top: insets.top + spacing(2) }]}
         pointerEvents="none"
       >
-        <Notice>Move the map, drag the edges to frame an area</Notice>
+        <Notice>{t`Move the map, drag the edges to frame an area`}</Notice>
       </View>
 
       {/* NO `insets.bottom`: this screen is pushed inside a tab stack, so the
           tab bar below it has already taken the gesture inset. */}
       <View style={styles.actions}>
         <View style={styles.action}>
-          <Button label="Cancel" variant="outlineAccent" onPress={onCancel} />
+          <Button
+            label={t`Cancel`}
+            variant="outlineAccent"
+            onPress={onCancel}
+          />
         </View>
         <View style={styles.action}>
           <Button
-            label="Use this area"
+            label={t`Use this area`}
             icon="done"
             // Null only until the map has reported its first bounds — a second
             // or two on launch, not a state the user can get stuck in.
             disabled={area == null}
-            disabledReason="Waiting for the map"
+            disabledReason={t`Waiting for the map`}
             onPress={() => area && onConfirm(area)}
           />
         </View>

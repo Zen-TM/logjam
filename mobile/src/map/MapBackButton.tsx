@@ -2,6 +2,7 @@ import { View } from "react-native";
 
 import { IconButton } from "../ui";
 import { makeStyles, spacing, useTheme } from "../theme";
+import { t } from "@logjam/shared";
 
 /** Width taken by the back button, so a hint beside it can start after it. */
 export const MAP_BACK_SPACE = spacing(2) + 40 + spacing(1);
@@ -25,7 +26,7 @@ export function MapBackButton({
     <View style={[styles.wrap, { top }]}>
       <IconButton
         icon="back"
-        accessibilityLabel="Back"
+        accessibilityLabel={t`Back`}
         color={theme.text}
         onPress={onPress}
       />
