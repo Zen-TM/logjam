@@ -35,6 +35,7 @@ export const enUS: Catalogue = {
     "Woodland grays with a hint of green, and fog-softened neutrals.",
   "Can you set up and do an abseil on your own?":
     "Can you set up and do a rappel on your own?",
+  "Can't be cancelled at this step": "Can't be canceled at this step",
   "Colour terrain based on how steep it is.":
     "Color terrain based on how steep it is.",
   Colour: "Color",
@@ -105,6 +106,8 @@ export const enUS: Catalogue = {
   "Who can drive, who needs a lift, and from where.":
     "Who can drive, who needs a ride, and from where.",
   "You cancelled this.": "You canceled this.",
+  "You're not on Wi-Fi. Download over mobile data?":
+    "You're not on Wi-Fi. Download over cellular data?",
   "Your canyoning trips and offline maps.":
     "Your canyoneering trips and offline maps.",
   "Your private map and trips for canyoning in {0}.":

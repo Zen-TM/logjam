@@ -5,6 +5,7 @@
 // Flow sources. Same split, and the same reason, as `map/elevationSources.ts`.
 import type { CapabilityStatus } from "../auth/capabilities";
 import { unavailableReasonText } from "../auth/capabilities";
+import { t } from "@logjam/shared";
 
 /** Just the fields the subtitle depends on, so tests need no hook. */
 export type ShareRowState = {
@@ -23,8 +24,8 @@ export function shareRowSubtitle(state: ShareRowState): string | undefined {
   if (state.shareStatus.status === "unavailable") {
     return unavailableReasonText(state.shareStatus.reason);
   }
-  if (state.loadFailed) return "Can't reach your account right now";
-  if (state.recipients === null) return "Loading…";
-  if (state.recipients.length === 0) return "Not shared with anyone yet";
+  if (state.loadFailed) return t`Can't reach your account right now`;
+  if (state.recipients === null) return t`Loading…`;
+  if (state.recipients.length === 0) return t`Not shared with anyone yet`;
   return undefined;
 }

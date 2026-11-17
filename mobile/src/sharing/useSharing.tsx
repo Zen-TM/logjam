@@ -25,7 +25,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator } from "react-native";
 
-import { messageFromError } from "@logjam/shared";
+import { messageFromError, t } from "@logjam/shared";
 
 import { useAccountState } from "../auth/AccountStateContext";
 import { shareCapabilityStatus } from "../auth/capabilities";
@@ -146,7 +146,7 @@ export function useSharing({
         );
         setSyncFixes(missing?.syncFixes ?? false);
         setActionError(
-          missing?.message ?? messageFromError(err, "Couldn't share that."),
+          missing?.message ?? messageFromError(err, t`Couldn't share that.`),
         );
         return false;
       } finally {
@@ -159,9 +159,9 @@ export function useSharing({
   const confirmRevoke = useCallback(
     async (recipient: ShareRecipient) => {
       const ok = await confirm({
-        confirmTitle: `Stop sharing with ${recipient.sharedWith.username}?`,
+        confirmTitle: t`Stop sharing with ${recipient.sharedWith.username}?`,
         confirmBody: revokeBody(recipient.sharedWith.username),
-        confirmLabel: "Stop sharing",
+        confirmLabel: t`Stop sharing`,
         tone: "destructive",
       });
       if (!ok) return;
@@ -171,7 +171,7 @@ export function useSharing({
         .then(() => load())
         .catch((err: unknown) => {
           console.error(err);
-          setActionError(messageFromError(err, "Couldn't stop sharing that."));
+          setActionError(messageFromError(err, t`Couldn't stop sharing that.`));
         })
         .finally(() => setBusyId(null));
     },
@@ -226,7 +226,7 @@ export function RecipientRows({
               <IconButton
                 icon="close"
                 color={theme.warning}
-                accessibilityLabel={`Stop sharing with ${recipient.sharedWith.username}`}
+                accessibilityLabel={t`Stop sharing with ${recipient.sharedWith.username}`}
                 onPress={() => sharing.confirmRevoke(recipient)}
               />
             )
@@ -258,7 +258,7 @@ export function SharingError({ sharing }: { sharing: Sharing }) {
             : () => void syncNow()
           : undefined
       }
-      retryLabel={syncing ? "Syncing…" : "Sync now"}
+      retryLabel={syncing ? t`Syncing…` : t`Sync now`}
     />
   ) : null;
 }
