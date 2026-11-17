@@ -32,12 +32,14 @@ function sources(dir: string): string[] {
 // beforeAll with a long timeout, as `copyRules.test.ts` does.
 let scan: ReturnType<typeof scanSources>;
 let fileCount = 0;
+let scanned: string[] = [];
 beforeAll(() => {
   const files = [...sources(SRC), APP].map((path) => ({
     path: path === APP ? "App.tsx" : relative(SRC, path),
     source: readFileSync(path, "utf8"),
   }));
   fileCount = files.length;
+  scanned = files.map((file) => file.path);
   scan = scanSources(ts, "mobile", files);
 }, 30_000);
 
@@ -45,6 +47,8 @@ describe("Logjam GPS i18n coverage", () => {
   // Mutation: change `sources`'s extension test to `/\.tsxx?$/`, so it finds no file.
   it("reads the source at all — a silent zero would pass forever", () => {
     expect(fileCount).toBeGreaterThan(300);
+    // Mutation: drop `APP` from the list in `beforeAll`.
+    expect(scanned).toContain("App.tsx");
     // The floor is on the total found: bare literals fall as text moves into
     // messages, so their sum stays put while the scan keeps working.
     expect(scan.bare.length + scan.messages.length).toBeGreaterThan(1000);

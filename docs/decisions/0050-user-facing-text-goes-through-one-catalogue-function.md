@@ -108,9 +108,9 @@ shows any more; so does a label wider than its control that is not in
 its entries that fit are no failure). Started in US English, Logjam Web
 reads its spellings, words and day order (`frontend/e2e/us-english.spec.ts`;
 `shared/src/usEnglish.test.ts` holds the same as unit tests) (updated 2026-11-16).
-No test yet
-holds that every call site uses it, since the API's literals are not all converted (updated 2026-11-18),
-or that the API's resolver is installed from `AsyncLocalStorage` for every
+The API has no test yet
+that every call site uses it, since its literals are not all converted (updated 2026-11-18),
+nor that the API's resolver is installed from `AsyncLocalStorage` for every
 path that writes text; a later change adds it. Each client's entry file sets
 the global before it imports `@logjam/shared`
 (`frontend/src/language.test.ts`, `frontend/src/mainLanguage.test.ts`,
