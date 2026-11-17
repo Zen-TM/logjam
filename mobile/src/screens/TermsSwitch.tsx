@@ -6,8 +6,7 @@ import {
   openLegalDocument,
 } from "../legalLinks";
 import { makeStyles, radius, spacing } from "../theme";
-import { Toggle } from "../ui";
-import { Rich } from "../ui";
+import { Rich, Toggle } from "../ui";
 import { rich, t } from "@logjam/shared";
 
 /**
