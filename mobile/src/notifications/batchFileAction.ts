@@ -90,8 +90,8 @@ export function batchFileActionMessage(outcome: BatchFileActionOutcome): {
     return {
       text:
         kind === "accept"
-          ? `Couldn't save ${countOf(total, "file")}.`
-          : `Couldn't decline ${total === 1 ? "that" : "those"}.`,
+          ? t`Couldn't save ${plural(total, "# file", "# files")}.`
+          : t`Couldn't decline ${total === 1 ? "that" : "those"}.`,
       tone: "error",
     };
   }
@@ -99,7 +99,11 @@ export function batchFileActionMessage(outcome: BatchFileActionOutcome): {
     return {
       text:
         kind === "accept"
-          ? `Saved ${done} of ${total} — ${countOf(failed, "file")} couldn't be saved. Try those again from the list.`
+          ? t`Saved ${done} of ${total} — ${plural(
+              failed,
+              "# file",
+              "# files",
+            )} couldn't be saved. Try those again from the list.`
           : t`Declined ${done} of ${total} — ${failed} couldn't be.`,
       tone: "error",
     };
@@ -107,8 +111,10 @@ export function batchFileActionMessage(outcome: BatchFileActionOutcome): {
   return {
     text:
       kind === "accept"
-        ? `Saved ${countOf(done, "file")} — find ${done === 1 ? "it" : "them"} in Saved.`
-        : `Declined ${countOf(done, "file")}.`,
+        ? t`Saved ${plural(done, "# file", "# files")} — find ${
+            done === 1 ? "it" : "them"
+          } in Saved.`
+        : t`Declined ${plural(done, "# file", "# files")}.`,
     tone: "done",
   };
 }
