@@ -21,6 +21,7 @@ import {
   getMapDimensions,
   RASTER_TEMPLATE_DEFAULTS,
   type GeoPdfConfig,
+  t,
 } from "@logjam/shared";
 import { PMTiles } from "pmtiles";
 import { prefetchGeoPdf, runGeoPdfRender } from "./client";
@@ -57,14 +58,14 @@ function config(
       scale * (map.h / 1000),
     ),
     elements: {
-      title: "Bench",
+      title: t`Bench`,
       compass: true,
       scaleText: true,
       scaleBar: true,
       gridLines: "latlon",
     },
     placeMarkers: [
-      { lat: centre.lat, lon: centre.lon, name: "Marker", color: "owned" },
+      { lat: centre.lat, lon: centre.lon, name: t`Marker`, color: "owned" },
     ],
     ...over,
   };

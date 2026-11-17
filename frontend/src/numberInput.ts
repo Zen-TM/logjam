@@ -5,6 +5,8 @@
 // sanitized string from onChange means an illegal keystroke is simply dropped
 // (the input value doesn't change), without onKeyDown handling (covers paste/IME).
 
+import { t } from "@logjam/shared";
+
 /** Allow an optional leading minus and digits only. */
 export function sanitizeIntegerInput(raw: string): string {
   if (raw === "") return "";
@@ -66,21 +68,21 @@ export function numericFieldError(
   const trimmed = raw.trim();
   if (trimmed === "" || trimmed === "-") return null;
   const value = Number(trimmed);
-  if (!Number.isFinite(value)) return "Enter a valid number";
+  if (!Number.isFinite(value)) return t`Enter a valid number`;
   if (constraints.integer && !Number.isInteger(value)) {
-    return "Whole numbers only";
+    return t`Whole numbers only`;
   }
   const { min, max } = constraints;
   if (min != null && value < min) {
     if (min === 0) return "Cannot be negative";
     return max != null
-      ? `Must be between ${min} and ${max}`
-      : `Must be at least ${min}`;
+      ? t`Must be between ${min} and ${max}`
+      : t`Must be at least ${min}`;
   }
   if (max != null && value > max) {
     return min != null
-      ? `Must be between ${min} and ${max}`
-      : `Must be at most ${max}`;
+      ? t`Must be between ${min} and ${max}`
+      : t`Must be at most ${max}`;
   }
   return null;
 }

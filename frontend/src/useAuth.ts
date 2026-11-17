@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { failureStaysOnForm, globalSignOut } from "@logjam/shared";
+import { failureStaysOnForm, globalSignOut, t } from "@logjam/shared";
 import { CURRENT_CONSENT_VERSION } from "./consent";
 import {
   apiFetch,
@@ -133,7 +133,7 @@ export function useAuth() {
         console.error(err);
         if (cancelled) return;
         // Not known signed out: whoever was here may still hold a session.
-        setError(messageFromError(err, "Couldn't sign in. Try again."));
+        setError(messageFromError(err, t`Couldn't sign in. Try again.`));
         sessionCheckFailed.current = true;
         setState("signIn");
         return;
@@ -194,7 +194,7 @@ export function useAuth() {
       void clearTileCache();
       setState((prev) => {
         if (prev !== "authenticated") return prev;
-        setError("Your session has expired. Sign in again.");
+        setError(t`Your session has expired. Sign in again.`);
         return "signIn";
       });
     });
@@ -209,7 +209,7 @@ export function useAuth() {
       await signInRedirect();
     } catch (err) {
       console.error(err);
-      setError(messageFromError(err, "Couldn't sign in. Try again."));
+      setError(messageFromError(err, t`Couldn't sign in. Try again.`));
     }
   }, []);
 

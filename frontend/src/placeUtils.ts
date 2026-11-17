@@ -27,6 +27,7 @@ import {
   tallyNotifications,
   type PlaceSearchRequest,
   type PlaceSearchResponse,
+  t,
 } from "@logjam/shared";
 import {
   settleReadOverrides,
@@ -441,7 +442,7 @@ export function usePlaceTracks(enabled: boolean) {
       .catch((err) => {
         console.error(err);
         if (!cancelled)
-          setError(messageFromError(err, "Couldn't load place tracks."));
+          setError(messageFromError(err, t`Couldn't load place tracks.`));
       })
       .finally(() => {
         if (!cancelled) setLoaded(true);
@@ -643,7 +644,7 @@ export function useElevationProfile(points: ProfiledLine | null) {
       .catch((err) => {
         console.error(err);
         if (current)
-          setError(messageFromError(err, "Couldn't load elevation."));
+          setError(messageFromError(err, t`Couldn't load elevation.`));
       })
       .finally(() => {
         if (current) setLoading(false);
@@ -676,7 +677,7 @@ export function useRoutes(enabled: boolean) {
       .catch((err) => {
         console.error(err);
         if (!cancelled)
-          setError(messageFromError(err, "Couldn't load routes."));
+          setError(messageFromError(err, t`Couldn't load routes.`));
       })
       .finally(() => {
         if (!cancelled) setLoaded(true);
@@ -728,7 +729,7 @@ export function usePlaces(enabled: boolean) {
       .catch((err) => {
         console.error(err);
         if (!cancelled)
-          setError(messageFromError(err, "Couldn't load places."));
+          setError(messageFromError(err, t`Couldn't load places.`));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -777,7 +778,7 @@ export function useSharedPlaces(enabled: boolean) {
       .catch((err) => {
         console.error(err);
         if (!cancelled)
-          setError(messageFromError(err, "Couldn't load shared places."));
+          setError(messageFromError(err, t`Couldn't load shared places.`));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -859,7 +860,7 @@ export function useCurrentUser(enabled: boolean) {
       .catch((err) => {
         console.error(err);
         if (!cancelled)
-          setError(messageFromError(err, "Couldn't load your account."));
+          setError(messageFromError(err, t`Couldn't load your account.`));
       });
     return () => {
       cancelled = true;
@@ -1361,7 +1362,8 @@ export function useTripLogs(enabled: boolean) {
       })
       .catch((err) => {
         console.error(err);
-        if (!cancelled) setError(messageFromError(err, "Couldn't load trips."));
+        if (!cancelled)
+          setError(messageFromError(err, t`Couldn't load trips.`));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -1564,7 +1566,7 @@ export function useStandaloneFiles(enabled: boolean) {
       .catch((err) => {
         console.error(err);
         if (!cancelled)
-          setError(messageFromError(err, "Couldn't load your files."));
+          setError(messageFromError(err, t`Couldn't load your files.`));
       })
       .finally(() => {
         if (!cancelled) setLoaded(true);
@@ -1672,7 +1674,7 @@ export function useStandaloneTracks(
       .catch((err) => {
         console.error(err);
         if (!cancelled)
-          setError(messageFromError(err, "Couldn't load your files."));
+          setError(messageFromError(err, t`Couldn't load your files.`));
       });
     return () => {
       cancelled = true;
@@ -1787,7 +1789,7 @@ export function useFriends(enabled: boolean) {
       .catch((err) => {
         console.error(err);
         if (!cancelled)
-          setError(messageFromError(err, "Couldn't load friends."));
+          setError(messageFromError(err, t`Couldn't load friends.`));
       });
     getFriendRequests()
       .then((data) => {
@@ -1796,7 +1798,7 @@ export function useFriends(enabled: boolean) {
       .catch((err) => {
         console.error(err);
         if (!cancelled)
-          setError(messageFromError(err, "Couldn't load friend requests."));
+          setError(messageFromError(err, t`Couldn't load friend requests.`));
       });
     return () => {
       cancelled = true;
@@ -2067,7 +2069,7 @@ export function useNotifications(enabled: boolean) {
       .catch((err) => {
         console.error(err);
         if (!cancelled)
-          setError(messageFromError(err, "Couldn't load notifications."));
+          setError(messageFromError(err, t`Couldn't load notifications.`));
       })
       .finally(() => {
         if (!cancelled) setLoaded(true);
@@ -2181,7 +2183,7 @@ export function useTopoExports(enabled: boolean, pollMs: number = 5000) {
       .catch((err) => {
         console.error(err);
         if (!cancelled)
-          setError(messageFromError(err, "Couldn't load your maps."));
+          setError(messageFromError(err, t`Couldn't load your maps.`));
       })
       .finally(() => {
         if (!cancelled) {

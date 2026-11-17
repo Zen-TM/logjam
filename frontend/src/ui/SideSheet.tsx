@@ -3,6 +3,7 @@ import { useIsMobile } from "../useIsMobile";
 import { IconButton } from "./Button";
 import { useEscape } from "./useEscape";
 import classes from "./SideSheet.module.css";
+import { t } from "@logjam/shared";
 
 /**
  * A non-modal sheet that opens BESIDE the page it belongs to — Places' filters,
@@ -63,7 +64,7 @@ export function SideSheet({
         >
           {title}
         </h2>
-        <IconButton icon="close" label="Close" onClick={onClose} />
+        <IconButton icon="close" label={t`Close`} onClick={onClose} />
       </header>
       <div className={classes.body}>{children}</div>
       {footer && <footer className={classes.foot}>{footer}</footer>}
