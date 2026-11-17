@@ -38,8 +38,12 @@
       }
     }
   ],
-  "warnings": [
-    "Row 4: latitude \"\" couldn't be read — skipped"
+  "warnings": [],
+  "skippedRows": [
+    {
+      "line": 4,
+      "reason": "latitude \"\" couldn't be read"
+    }
   ],
   "droppedRows": 1,
   "matches": [

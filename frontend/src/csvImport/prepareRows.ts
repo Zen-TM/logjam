@@ -22,6 +22,10 @@ import { toIsoDate, type DateFormat } from "./detectDateFormat";
 import { parseByRole, type MismatchKind } from "./placeValueParsers";
 import { describeDroppedPlaceRow, describeDroppedTripRow } from "./rowSkip";
 
+/** A source row the importer dropped: the file line and why, kept as data so
+ *  nothing reads it back out of a sentence. */
+export type SkippedRow = { line: number; reason: string };
+
 // Per-place-row prepared input, plus the raw file name string used as the
 // match key and stable provenance.
 export type PreparedPlaceRow = {
@@ -245,6 +249,7 @@ export function preparePlaceRows(
 ): {
   rows: PreparedPlaceRow[];
   warnings: string[];
+  skippedRows: SkippedRow[];
   droppedRows: number;
 } {
   // Raw source value for a row dropped on a missing/unreadable required field
@@ -257,6 +262,7 @@ export function preparePlaceRows(
   )?.[0];
   const out: PreparedPlaceRow[] = [];
   const warnings: string[] = [];
+  const skippedRows: SkippedRow[] = [];
   let droppedRows = 0;
   rows.forEach((row, rowIndex) => {
     const { input, warnings: rowWarnings } = buildPlaceInput(
@@ -275,14 +281,14 @@ export function preparePlaceRows(
     });
     if (dropReason) {
       droppedRows += 1;
-      warnings.push(t`Row ${line}: ${dropReason} — skipped`);
+      skippedRows.push({ line, reason: dropReason });
       return;
     }
     for (const warning of rowWarnings)
       warnings.push(t`Row ${line}: ${warning}`);
     out.push({ rowIndex, sourceName: input.name, input });
   });
-  return { rows: out, warnings, droppedRows };
+  return { rows: out, warnings, skippedRows, droppedRows };
 }
 
 // The notes cell, then each "append to notes" column as a "Header: value" line
@@ -315,6 +321,7 @@ export function prepareTripRows(args: {
 }): {
   rows: PreparedTripRow[];
   warnings: string[];
+  skippedRows: SkippedRow[];
   droppedRows: number;
 } {
   const {
@@ -333,7 +340,8 @@ export function prepareTripRows(args: {
   const appendCols = headers.filter(
     (h) => tripAssignments[h] === "appendNotes",
   );
-  if (!nameCol || !dateCol) return { rows: [], warnings: [], droppedRows: 0 };
+  if (!nameCol || !dateCol)
+    return { rows: [], warnings: [], skippedRows: [], droppedRows: 0 };
 
   // Custom-field columns: existing cf:<key> plus any new fields the user named.
   const cfCols: {
@@ -372,6 +380,7 @@ export function prepareTripRows(args: {
   // numeric coercion warnings) — a lenient coerce would silently store "5.5"
   // as 5 or "abc" as null.
   const warnings: string[] = [];
+  const skippedRows: SkippedRow[] = [];
   let droppedRows = 0;
   rows.forEach((row, rowIndex) => {
     const sourcePlaceName = (row[nameCol] ?? "").trim();
@@ -381,7 +390,7 @@ export function prepareTripRows(args: {
       droppedRows += 1;
       const line = lines?.[rowIndex] ?? rowIndex + 2;
       const dropReason = describeDroppedTripRow(null, rawDate);
-      warnings.push(t`Row ${line}: ${dropReason ?? ""} — skipped`);
+      skippedRows.push({ line, reason: dropReason ?? "" });
       return;
     }
     const customFields: Record<string, unknown> = {};
@@ -409,7 +418,7 @@ export function prepareTripRows(args: {
       customFields,
     });
   });
-  return { rows: out, warnings, droppedRows };
+  return { rows: out, warnings, skippedRows, droppedRows };
 }
 
 export const NO_PLACE_ROWS_ERROR = t`No valid place rows found (each needs a name, latitude and longitude).`;
@@ -440,36 +449,18 @@ export function tripRowDecision(result: MatchResult): "link" | "review" {
   return result.confidence === "auto" && result.best ? "link" : "review";
 }
 
-/** What a dropped row's line ends with, so the result can list those lines
- *  apart from the fields that were only left empty. */
-export const SKIPPED_ROW_SUFFIX = " — skipped";
-
-/** Splits the preparation warnings into dropped rows and left-empty fields. */
-export function splitSkippedRows(warnings: string[]): {
-  skipped: string[];
-  leftEmpty: string[];
-} {
-  const skipped = warnings.filter((w) => w.endsWith(SKIPPED_ROW_SUFFIX));
-  return {
-    skipped,
-    leftEmpty: warnings.filter((w) => !w.endsWith(SKIPPED_ROW_SUFFIX)),
-  };
+/** A dropped row as the result lists it: "Row 4: latitude "x" couldn't be
+ *  read — skipped". */
+export function skippedRowLine({ line, reason }: SkippedRow): string {
+  return t`Row ${line}: ${reason} — skipped`;
 }
 
 /** The confirm step's line about dropped rows: "1 row can't be read and will
  *  be skipped (row 4)." Empty when none were dropped. */
-export function skippedRowsNote(skipped: string[]): string {
+export function skippedRowsNote(skipped: SkippedRow[]): string {
   if (skipped.length === 0) return "";
-  const rows = skipped.map((w) => /^Row (\d+)/.exec(w)?.[1]).filter(Boolean);
-  if (rows.length === 0) {
-    return plural(
-      skipped.length,
-      "# row can't be read and will be skipped.",
-      "# rows can't be read and will be skipped.",
-    );
-  }
-  const rowList = rows.join(", ");
-  return rows.length === 1
+  const rowList = skipped.map((r) => r.line).join(", ");
+  return skipped.length === 1
     ? plural(
         skipped.length,
         "# row can't be read and will be skipped (row {0}).",
