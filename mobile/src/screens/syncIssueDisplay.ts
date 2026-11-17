@@ -130,7 +130,7 @@ function updateUnnamedTitle(entity: OutboxEntity): string {
     case "route":
       return t`Couldn't save your changes to a route`;
     case "customFieldDef":
-      return t`Couldn't save your changes to a attribute`;
+      return t`Couldn't save your changes to an attribute`;
     case "notification":
       return t`Couldn't save your changes to a notification`;
     case "media":
@@ -151,7 +151,7 @@ function deleteUnnamedTitle(entity: OutboxEntity): string {
     case "route":
       return t`Couldn't delete a route`;
     case "customFieldDef":
-      return t`Couldn't delete a attribute`;
+      return t`Couldn't delete an attribute`;
     case "notification":
       return t`Couldn't delete a notification`;
     case "media":
@@ -172,11 +172,13 @@ function syncUnnamedTitle(entity: OutboxEntity): string {
     case "route":
       return t`Couldn't sync a route`;
     case "customFieldDef":
-      return t`Couldn't sync a attribute`;
+      return t`Couldn't sync an attribute`;
     case "notification":
       return t`Couldn't sync a notification`;
     case "media":
       return t`Couldn't sync a photo or file`;
+    default:
+      return t`Couldn't sync a ${entity}`;
   }
 }
 
@@ -232,7 +234,7 @@ export type IssueAdvice = {
   hint?: string;
 };
 
-function deadRemoteLine(entity: string): string {
+function deadRemoteLine(entity: OutboxEntity): string {
   switch (entity) {
     case "place":
       return t`This place was deleted on another device while you were editing it.`;
@@ -472,20 +474,6 @@ export function discardExplanation(op: ParkedOp): string {
   return t`What you typed is deleted from this phone. It can't be got back.`;
 }
 
-/**
- * A conflict's headline: another device changed the same thing the user did.
- * Short on purpose: the row shows two lines, and the thing's name, which says
- * which one, must survive at the largest text size. Neutral on who "won"; the
- * sheet says it (`shelfExplanation`). The verb is past tense, so it needs no
- * agreement with a plural field label.
- */
-/**
- * A conflict's headline: another device changed the same thing the user did.
- * Short on purpose: the row shows two lines, and the thing's name, which says
- * which one, must survive at the largest text size. Neutral on who "won"; the
- * sheet says it (`shelfExplanation`). The verb is past tense, so it needs no
- * agreement with a plural field label.
- */
 function shelfTitleWithoutName(capitalLabel: string, entity: string): string {
   switch (entity) {
     case "place":
@@ -499,7 +487,7 @@ function shelfTitleWithoutName(capitalLabel: string, entity: string): string {
     case "route":
       return t`${capitalLabel} on a route changed on two devices`;
     case "customFieldDef":
-      return t`${capitalLabel} on a attribute changed on two devices`;
+      return t`${capitalLabel} on an attribute changed on two devices`;
     case "notification":
       return t`${capitalLabel} on a notification changed on two devices`;
     case "media":
@@ -509,6 +497,13 @@ function shelfTitleWithoutName(capitalLabel: string, entity: string): string {
   }
 }
 
+/**
+ * A conflict's headline: another device changed the same thing the user did.
+ * Short on purpose: the row shows two lines, and the thing's name, which says
+ * which one, must survive at the largest text size. Neutral on who "won"; the
+ * sheet says it (`shelfExplanation`). The verb is past tense, so it needs no
+ * agreement with a plural field label.
+ */
 export function shelfTitle(entry: ShelfEntry): string {
   const label = fieldLabel(entry.field);
   const capitalLabel = label.charAt(0).toUpperCase() + label.slice(1);
@@ -544,16 +539,6 @@ export function shelfExplanation(entry: ShelfEntry): string {
   return t`Your version was saved. It replaced a different one that another device wrote.`;
 }
 
-/**
- * Why the earlier version can't be put back. Shown INSTEAD of the verb, never under a
- * dimmed one: both reasons mean the write would park as a fresh stuck op, and a
- * recovery action that manufactures a new sync issue is worse than none.
- */
-/**
- * Why the earlier version can't be put back. Shown INSTEAD of the verb, never under a
- * dimmed one: both reasons mean the write would park as a fresh stuck op, and a
- * recovery action that manufactures a new sync issue is worse than none.
- */
 function restoreGoneReason(entity: string): string {
   switch (entity) {
     case "place":
@@ -577,6 +562,11 @@ function restoreGoneReason(entity: string): string {
   }
 }
 
+/**
+ * Why the earlier version can't be put back. Shown INSTEAD of the verb, never under a
+ * dimmed one: both reasons mean the write would park as a fresh stuck op, and a
+ * recovery action that manufactures a new sync issue is worse than none.
+ */
 export function restoreBlockReason(entry: ShelfEntry): string {
   switch (entry.restoreBlock) {
     case "gone":

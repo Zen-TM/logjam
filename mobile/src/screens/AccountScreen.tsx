@@ -49,7 +49,6 @@ import { getSession } from "../auth/oidcSession";
 import { capabilityRowProps, changeEmailRowProps } from "../auth/capabilities";
 import { CLIENT_VERSION_LABEL, config } from "../config";
 import { LegalLinks } from "./LegalLinks";
-import { Rich, useNow } from "../ui";
 import { formatBytes } from "../format";
 import { useConnectivity } from "../map/connectivity";
 import { countLocalEntities, type LocalEntityCounts } from "../sync/syncDb";
@@ -65,6 +64,7 @@ import {
   Hero,
   IconButton,
   LoadingState,
+  Rich,
   Row,
   ScreenScroll,
   SectionHeader,
