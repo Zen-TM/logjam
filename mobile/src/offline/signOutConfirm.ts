@@ -11,6 +11,7 @@ import {
   formatBytes,
   pluralCount,
   SIGN_OUT_EVERYWHERE_NOTE,
+  t,
 } from "@logjam/shared";
 
 import type { Loss } from "./wipedStores";
@@ -70,7 +71,7 @@ const LINES: { loss: Loss; text: (n: number, c: SignOutCounts) => string }[] = [
   },
   {
     loss: "routeDraft",
-    text: () => "A route you were drawing. It is lost for good.",
+    text: () => t`A route you were drawing. It is lost for good.`,
   },
   {
     loss: "regions",
@@ -99,11 +100,11 @@ export function signOutConfirm(
   );
   if (lines.length === 0 && !everywhere) return null;
   return {
-    title: everywhere ? "Sign out everywhere?" : "Sign out of Logjam GPS?",
+    title: everywhere ? t`Sign out everywhere?` : t`Sign out of Logjam GPS?`,
     everywhere,
-    intro: "This removes from this phone:",
+    intro: t`This removes from this phone:`,
     lines,
-    keeps: "Your synced places and trips stay in your account.",
+    keeps: t`Your synced places and trips stay in your account.`,
     canSyncFirst: online && counts.unsynced > 0,
   };
 }

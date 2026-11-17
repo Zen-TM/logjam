@@ -67,6 +67,7 @@ import {
   notificationPlaceId,
   notificationPlanTarget,
   notificationsTruncated,
+  plural,
   selectionCountLabel,
   tallyNotifications,
   type SectionKeysOn,
@@ -548,9 +549,11 @@ export function NotificationsScreen({
         await enqueueNotificationDelete(ids);
         onUnreadChanged?.();
         notify(
-          ids.length === 1
-            ? "Notification deleted."
-            : `Deleted ${ids.length} notifications.`,
+          plural(
+            ids.length,
+            "Notification deleted.",
+            "Deleted # notifications.",
+          ),
         );
       } catch (err) {
         console.error(err);
@@ -1059,7 +1062,11 @@ export function NotificationsScreen({
                 : INBOX.title
             }
             value={inboxHeroTitle(unreadCount, notifications.length)}
-            valueSuffix={`${tally.total} ${tally.total === 1 ? "notification" : "notifications"}`}
+            valueSuffix={plural(
+              tally.total,
+              "# notification",
+              "# notifications",
+            )}
             onBack={onBack}
             backLabel={backLabel}
             actions={
@@ -1209,7 +1216,9 @@ export function NotificationsScreen({
             title={inboxVerb("markAllRead").label}
             // Disabled, with its reason, when it could apply but not now (UX §5).
             disabled={unreadCount === 0}
-            subtitle={unreadCount === 0 ? "Nothing to mark as read" : undefined}
+            subtitle={
+              unreadCount === 0 ? t`Nothing to mark as read` : undefined
+            }
             onPress={() => {
               setActionsOpen(false);
               void markAll();
@@ -1224,7 +1233,7 @@ export function NotificationsScreen({
               !online
                 ? t`Needs a connection`
                 : readCount === 0
-                  ? "No read notifications"
+                  ? t`No read notifications`
                   : undefined
             }
             onPress={() => {
@@ -1498,7 +1507,7 @@ const BatchRow = memo(function BatchRow({
   const meta = notificationMeta(batch.representative, theme);
   const pending = batchPendingFileSends(batch);
   const subtitle = [
-    batch.unreadCount > 0 ? `${batch.unreadCount} unread` : null,
+    batch.unreadCount > 0 ? t`${batch.unreadCount} unread` : null,
     // Named, because a batch of files whose members are partly answered is
     // otherwise a row whose buttons act on a number the user cannot see.
     batch.group === "files" && pending.length !== batch.items.length

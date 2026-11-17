@@ -167,6 +167,9 @@ export const KIT_COMPONENTS = {
   Screen: gps("a page's scaffold; Logjam Web's panels have their own frame"),
   ScreenScroll: gps("a scrolling page's scaffold"),
   Toast: both,
+  Rich: gps(
+    "a rich-text element in the catalogue; Logjam Web draws it as a React component",
+  ),
 
   // — loading, empty and failed —
   EmptyState: both,

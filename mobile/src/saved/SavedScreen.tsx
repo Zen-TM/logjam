@@ -349,22 +349,9 @@ function searchCopy(filter: Category | "all"): {
 }
 
 function savedFilterTitle(filter: Category | "all"): string {
-  switch (filter) {
-    case "all":
-      return t`Saved`;
-    case "region":
-      return t`Saved · Offline maps`;
-    case "overlay":
-      return t`Saved · Sharpened areas`;
-    case "geoPdf":
-      return t`Saved · GeoPDFs`;
-    case "track":
-      return t`Saved · Tracks`;
-    case "route":
-      return t`Saved · Routes`;
-    case "import":
-      return t`Saved · Imports`;
-  }
+  return filter === "all"
+    ? t`Saved`
+    : t`Saved · ${CATEGORY_META[filter].plural}`;
 }
 
 function renameTitle(category: Category): string {

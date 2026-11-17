@@ -14,34 +14,15 @@ import {
   isTransientSyncError,
   lengthToInput,
   lengthUnitLabel,
+  plural,
   trimNumber,
   SYSTEM_FIELD_DEFS,
   t,
 } from "@logjam/shared";
 
 import type { ParkedOp, ShelfEntry } from "../sync/syncIssues";
+import type { OutboxEntity } from "../sync/outboxTables";
 import { relativeTime } from "./syncHealth";
-
-/**
- * The kinds, in the user's words. Lower case because every string here is a
- * SENTENCE about the user's thing ("Couldn't upload …", "Your notes on a
- * place") rather than a label — the capitalised `Attachment`/`Place` labels
- * this replaces only ever appeared in the old `Place “X” — update` row title.
- * Media is "photo or file" because that is what the user attached; "attachment"
- * is our word for the row that carries it.
- */
-const ENTITY_NOUN: Record<string, string> = {
-  place: "place",
-  placeType: "place type",
-  tripLog: "trip",
-  // A LINK has no name of its own, so it is only ever the fallback subject
-  // ("Couldn't delete a link between places") — which is exactly what it is.
-  placeLink: "link between places",
-  route: "route",
-  customFieldDef: "attribute",
-  notification: "notification",
-  media: "photo or file",
-};
 
 /**
  * Field names in the user's words. The shelf stores the PROTOCOL field name,
@@ -51,33 +32,33 @@ const ENTITY_NOUN: Record<string, string> = {
  * reason to withhold what the user typed.
  */
 const FIELD_LABEL: Record<string, string> = {
-  name: "name",
-  altNames: "other names",
-  notes: "notes",
-  gaugeId: "river gauge",
+  name: t`name`,
+  altNames: t`other names`,
+  notes: t`notes`,
+  gaugeId: t`river gauge`,
   // Keyed by FIELD KEY now, because the seven grades are field values rather
   // than columns — same words, one level in.
-  num_abseils: "abseil count",
-  longest_abseil: "longest abseil",
-  v_grade: "water grade",
-  a_grade: "difficulty grade",
-  commitment: "commitment grade",
-  aca_technical: "ACA technical grade",
-  aca_water: "ACA water grade",
-  aca_time: "ACA time grade",
-  aca_risk: "ACA risk rating",
-  quality: "star rating",
-  hours: "trip time",
-  date: "date",
-  displayName: "title",
-  types: "trip type",
-  customFields: "attributes",
-  placeIds: "linked places",
-  elevation: "elevation",
-  symbol: "symbol",
-  color: "colour",
-  latitude: "position",
-  longitude: "position",
+  num_abseils: t`abseil count`,
+  longest_abseil: t`longest abseil`,
+  v_grade: t`water grade`,
+  a_grade: t`difficulty grade`,
+  commitment: t`commitment grade`,
+  aca_technical: t`ACA technical grade`,
+  aca_water: t`ACA water grade`,
+  aca_time: t`ACA time grade`,
+  aca_risk: t`ACA risk rating`,
+  quality: t`star rating`,
+  hours: t`trip time`,
+  date: t`date`,
+  displayName: t`title`,
+  types: t`trip type`,
+  customFields: t`attributes`,
+  placeIds: t`linked places`,
+  elevation: t`elevation`,
+  symbol: t`symbol`,
+  color: t`colour`,
+  latitude: t`position`,
+  longitude: t`position`,
 };
 
 /**
@@ -94,8 +75,119 @@ export function fieldLabel(field: string): string {
   return FIELD_LABEL[field] ?? field;
 }
 
-function entityNoun(entity: string): string {
-  return ENTITY_NOUN[entity] ?? entity;
+function addNamedTitle(entity: OutboxEntity, name: string): string {
+  switch (entity) {
+    case "place":
+      return t`Couldn't add place “${name}”`;
+    case "placeType":
+      return t`Couldn't add place type “${name}”`;
+    case "tripLog":
+      return t`Couldn't add trip “${name}”`;
+    case "placeLink":
+      return t`Couldn't add link between places “${name}”`;
+    case "route":
+      return t`Couldn't add route “${name}”`;
+    case "customFieldDef":
+      return t`Couldn't add attribute “${name}”`;
+    case "notification":
+      return t`Couldn't add notification “${name}”`;
+    case "media":
+      return t`Couldn't add photo or file “${name}”`;
+    default:
+      return t`Couldn't add ${entity} “${name}”`;
+  }
+}
+
+function addUnnamedTitle(entity: OutboxEntity): string {
+  switch (entity) {
+    case "place":
+      return t`Couldn't add a new place`;
+    case "placeType":
+      return t`Couldn't add a new place type`;
+    case "tripLog":
+      return t`Couldn't add a new trip`;
+    case "placeLink":
+      return t`Couldn't add a new link between places`;
+    case "route":
+      return t`Couldn't add a new route`;
+    case "customFieldDef":
+      return t`Couldn't add a new attribute`;
+    case "notification":
+      return t`Couldn't add a new notification`;
+    case "media":
+      return t`Couldn't add a new photo or file`;
+    default:
+      return t`Couldn't add a new ${entity}`;
+  }
+}
+
+function updateUnnamedTitle(entity: OutboxEntity): string {
+  switch (entity) {
+    case "place":
+      return t`Couldn't save your changes to a place`;
+    case "placeType":
+      return t`Couldn't save your changes to a place type`;
+    case "tripLog":
+      return t`Couldn't save your changes to a trip`;
+    case "placeLink":
+      return t`Couldn't save your changes to a link between places`;
+    case "route":
+      return t`Couldn't save your changes to a route`;
+    case "customFieldDef":
+      return t`Couldn't save your changes to an attribute`;
+    case "notification":
+      return t`Couldn't save your changes to a notification`;
+    case "media":
+      return t`Couldn't save your changes to a photo or file`;
+    default:
+      return t`Couldn't save your changes to a ${entity}`;
+  }
+}
+
+function deleteUnnamedTitle(entity: OutboxEntity): string {
+  switch (entity) {
+    case "place":
+      return t`Couldn't delete a place`;
+    case "placeType":
+      return t`Couldn't delete a place type`;
+    case "tripLog":
+      return t`Couldn't delete a trip`;
+    case "placeLink":
+      return t`Couldn't delete a link between places`;
+    case "route":
+      return t`Couldn't delete a route`;
+    case "customFieldDef":
+      return t`Couldn't delete an attribute`;
+    case "notification":
+      return t`Couldn't delete a notification`;
+    case "media":
+      return t`Couldn't delete a photo or file`;
+    default:
+      return t`Couldn't delete a ${entity}`;
+  }
+}
+
+function syncUnnamedTitle(entity: OutboxEntity): string {
+  switch (entity) {
+    case "place":
+      return t`Couldn't sync a place`;
+    case "placeType":
+      return t`Couldn't sync a place type`;
+    case "tripLog":
+      return t`Couldn't sync a trip`;
+    case "placeLink":
+      return t`Couldn't sync a link between places`;
+    case "route":
+      return t`Couldn't sync a route`;
+    case "customFieldDef":
+      return t`Couldn't sync an attribute`;
+    case "notification":
+      return t`Couldn't sync a notification`;
+    case "media":
+      return t`Couldn't sync a photo or file`;
+    default:
+      return t`Couldn't sync a ${entity}`;
+  }
 }
 
 /** What to call the thing this op is about. Resolved when the op is loaded —
@@ -110,26 +202,32 @@ function opName(op: ParkedOp): string | null {
  */
 export function opTitle(op: ParkedOp): string {
   const name = opName(op);
-  const subject = name ? `“${name}”` : `a ${entityNoun(op.entity)}`;
   if (op.entity === "media") {
-    return op.op === "delete"
-      ? `Couldn't remove ${subject}`
-      : `Couldn't upload ${subject}`;
+    if (op.op === "delete") {
+      return name
+        ? t`Couldn't remove “${name}”`
+        : t`Couldn't remove a photo or file`;
+    }
+    return name
+      ? t`Couldn't upload “${name}”`
+      : t`Couldn't upload a photo or file`;
   }
   switch (op.op) {
     case "create":
-      return name
-        ? `Couldn't add ${entityNoun(op.entity)} ${subject}`
-        : `Couldn't add a new ${entityNoun(op.entity)}`;
+      return name ? addNamedTitle(op.entity, name) : addUnnamedTitle(op.entity);
     case "update":
-      return `Couldn't save your changes to ${subject}`;
+      return name
+        ? t`Couldn't save your changes to “${name}”`
+        : updateUnnamedTitle(op.entity);
     case "delete":
-      return `Couldn't delete ${subject}`;
+      return name
+        ? t`Couldn't delete “${name}”`
+        : deleteUnnamedTitle(op.entity);
     case "markRead":
     case "markUnread":
       return t`Couldn't update a notification`;
     default:
-      return `Couldn't sync ${subject}`;
+      return name ? t`Couldn't sync “${name}”` : syncUnnamedTitle(op.entity);
   }
 }
 
@@ -144,10 +242,33 @@ export type IssueAdvice = {
   hint?: string;
 };
 
+function deadRemoteLine(entity: OutboxEntity): string {
+  switch (entity) {
+    case "place":
+      return t`This place was deleted on another device while you were editing it.`;
+    case "placeType":
+      return t`This place type was deleted on another device while you were editing it.`;
+    case "tripLog":
+      return t`This trip was deleted on another device while you were editing it.`;
+    case "placeLink":
+      return t`This link between places was deleted on another device while you were editing it.`;
+    case "route":
+      return t`This route was deleted on another device while you were editing it.`;
+    case "customFieldDef":
+      return t`This attribute was deleted on another device while you were editing it.`;
+    case "notification":
+      return t`This notification was deleted on another device while you were editing it.`;
+    case "media":
+      return t`This photo or file was deleted on another device while you were editing it.`;
+    default:
+      return t`This ${entity} was deleted on another device while you were editing it.`;
+  }
+}
+
 export function opAdvice(op: ParkedOp): IssueAdvice {
   if (op.state === "deadRemote") {
     return {
-      line: `This ${entityNoun(op.entity)} was deleted on another device while you were editing it.`,
+      line: deadRemoteLine(op.entity),
       canRetry: false,
     };
   }
@@ -174,9 +295,7 @@ export function opAdvice(op: ParkedOp): IssueAdvice {
     return {
       line: t`Your account kept turning this down for a day.`,
       canRetry: true,
-      hint:
-        "Nothing is wrong with the change itself, and Logjam GPS has stopped " +
-        "trying on its own. It stays here until you try again.",
+      hint: t`Nothing is wrong with the change itself, and Logjam GPS has stopped trying on its own. It stays here until you try again.`,
     };
   }
   // The server wrote this sentence for the user (shared/DESIGN.md §11): it is
@@ -322,7 +441,7 @@ function fieldValueText(field: string, value: unknown): string {
     // A lettered grade is stored as its rank: "C2" reads 5 to nobody.
     const word = fieldValueLabel(field, value);
     if (word !== undefined) return word;
-    if (field === "hours") return `${value} ${value === 1 ? "hour" : "hours"}`;
+    if (field === "hours") return plural(value, "# hour", "# hours");
     if (isLengthField(field))
       return `${trimNumber(lengthToInput(value))} ${lengthUnitLabel()}`;
     if (field === "quality") return `${value}/5`;
@@ -363,6 +482,29 @@ export function discardExplanation(op: ParkedOp): string {
   return t`What you typed is deleted from this phone. It can't be got back.`;
 }
 
+function shelfTitleWithoutName(capitalLabel: string, entity: string): string {
+  switch (entity) {
+    case "place":
+      return t`${capitalLabel} on a place changed on two devices`;
+    case "placeType":
+      return t`${capitalLabel} on a place type changed on two devices`;
+    case "tripLog":
+      return t`${capitalLabel} on a trip changed on two devices`;
+    case "placeLink":
+      return t`${capitalLabel} on a link between places changed on two devices`;
+    case "route":
+      return t`${capitalLabel} on a route changed on two devices`;
+    case "customFieldDef":
+      return t`${capitalLabel} on an attribute changed on two devices`;
+    case "notification":
+      return t`${capitalLabel} on a notification changed on two devices`;
+    case "media":
+      return t`${capitalLabel} on a photo or file changed on two devices`;
+    default:
+      return t`${capitalLabel} on a ${entity} changed on two devices`;
+  }
+}
+
 /**
  * A conflict's headline: another device changed the same thing the user did.
  * Short on purpose: the row shows two lines, and the thing's name, which says
@@ -372,17 +514,18 @@ export function discardExplanation(op: ParkedOp): string {
  */
 export function shelfTitle(entry: ShelfEntry): string {
   const label = fieldLabel(entry.field);
-  const subject = entry.entityName
-    ? `for “${entry.entityName}”`
-    : `on a ${entityNoun(entry.entity)}`;
-  return `${label.charAt(0).toUpperCase()}${label.slice(1)} ${subject} changed on two devices`;
+  const capitalLabel = label.charAt(0).toUpperCase() + label.slice(1);
+  if (entry.entityName) {
+    return t`${capitalLabel} for “${entry.entityName}” changed on two devices`;
+  }
+  return shelfTitleWithoutName(capitalLabel, entry.entity);
 }
 
 /** The supporting line: what the user's text replaced, and how long ago. */
 export function shelfSubtitle(entry: ShelfEntry, now: number): string {
   const when = relativeTime(entry.at, now);
   if (entry.serverValue === null) return t`Yours was saved · ${when}`;
-  return `Replaced: ${readableValue(entry.field, entry.serverValue)} · ${when}`;
+  return t`Replaced: ${readableValue(entry.field, entry.serverValue)} · ${when}`;
 }
 
 /**
@@ -404,6 +547,29 @@ export function shelfExplanation(entry: ShelfEntry): string {
   return t`Your version was saved. It replaced a different one that another device wrote.`;
 }
 
+function restoreGoneReason(entity: string): string {
+  switch (entity) {
+    case "place":
+      return t`The place this belonged to has been deleted, so there's nothing to restore it into.`;
+    case "placeType":
+      return t`The place type this belonged to has been deleted, so there's nothing to restore it into.`;
+    case "tripLog":
+      return t`The trip this belonged to has been deleted, so there's nothing to restore it into.`;
+    case "placeLink":
+      return t`The link between places this belonged to has been deleted, so there's nothing to restore it into.`;
+    case "route":
+      return t`The route this belonged to has been deleted, so there's nothing to restore it into.`;
+    case "customFieldDef":
+      return t`The attribute this belonged to has been deleted, so there's nothing to restore it into.`;
+    case "notification":
+      return t`The notification this belonged to has been deleted, so there's nothing to restore it into.`;
+    case "media":
+      return t`The photo or file this belonged to has been deleted, so there's nothing to restore it into.`;
+    default:
+      return t`The ${entity} this belonged to has been deleted, so there's nothing to restore it into.`;
+  }
+}
+
 /**
  * Why the earlier version can't be put back. Shown INSTEAD of the verb, never under a
  * dimmed one: both reasons mean the write would park as a fresh stuck op, and a
@@ -414,7 +580,7 @@ export function restoreBlockReason(entry: ShelfEntry): string {
     case "gone":
       // Names the KIND, because the shelf row records it and "the thing this
       // belonged to" is the sentence you write when you have not looked.
-      return `The ${entityNoun(entry.entity)} this belonged to has been deleted, so there's nothing to restore it into.`;
+      return restoreGoneReason(entry.entity);
     case "unsupported":
       return t`This one can't be restored automatically — make the change again yourself.`;
     case "nothing":
@@ -442,15 +608,11 @@ export function restoreSubtitle(): string {
  */
 export function restoreConfirmBody(count: number, replacing?: string): string {
   if (count === 1) {
-    const quoted = replacing
-      ? ` It replaces “${truncate(replacing)}”, which is then gone.`
-      : "";
-    return `The earlier version goes back into your account, on every device you're signed in on.${quoted}`;
+    return replacing
+      ? t`The earlier version goes back into your account, on every device you're signed in on. It replaces “${truncate(replacing)}”, which is then gone.`
+      : t`The earlier version goes back into your account, on every device you're signed in on.`;
   }
-  return (
-    `Those ${count} earlier versions go back into your account, on every device ` +
-    "you're signed in on. What each one replaces is gone."
-  );
+  return t`Those ${count} earlier versions go back into your account, on every device you're signed in on. What each one replaces is gone.`;
 }
 
 /**
@@ -525,23 +687,29 @@ export function bulkDiscardBody({
   const clauses: string[] = [];
   if (editCount > 0) {
     clauses.push(
-      editCount === 1
-        ? "One change is dropped and what you typed is deleted"
-        : `${editCount} changes are dropped and what you typed is deleted`,
+      plural(
+        editCount,
+        "One change is dropped and what you typed is deleted",
+        "# changes are dropped and what you typed is deleted",
+      ),
     );
   }
   if (uploadCount > 0) {
     clauses.push(
-      uploadCount === 1
-        ? "One waiting upload is deleted from this phone, original untouched"
-        : `${uploadCount} waiting uploads are deleted from this phone, originals untouched`,
+      plural(
+        uploadCount,
+        "One waiting upload is deleted from this phone, original untouched",
+        "# waiting uploads are deleted from this phone, originals untouched",
+      ),
     );
   }
   if (lostCount > 0) {
     clauses.push(
-      lostCount === 1
-        ? "One earlier version is deleted — it is the only copy left. Yours stays"
-        : `${lostCount} earlier versions are deleted — they are the only copies left. Yours stay`,
+      plural(
+        lostCount,
+        "One earlier version is deleted — it is the only copy left. Yours stays",
+        "# earlier versions are deleted — they are the only copies left. Yours stay",
+      ),
     );
   }
   if (clauses.length === 0) return t`Nothing is selected.`;
@@ -556,7 +724,7 @@ export function bulkDiscardBody({
  *
  * The line SHEDS the total when both verbs are live, and that is measured, not
  * stylistic: with two extras the bar holds five controls, and
- * "2 selected · 1 retry · 1 restore" truncated to "2 selected · 1 retry · …" on
+ * "2 selected · 1 to try again · 1 restore" truncated to "2 selected · 1 to try again · …" on
  * small screens — losing the one tally the user could not otherwise work out. The
  * total is legible from the ticks; what each button will touch is not.
  */
@@ -572,8 +740,10 @@ export function selectionCountLabel({
   restoreCount: number;
 }): string {
   const verbs: string[] = [];
-  if (retryCount > 0) verbs.push(`${retryCount} retry`);
-  if (restoreCount > 0) verbs.push(`${restoreCount} restore`);
+  if (retryCount > 0)
+    verbs.push(plural(retryCount, "# to try again", "# to try again"));
+  if (restoreCount > 0)
+    verbs.push(plural(restoreCount, "# restore", "# restore"));
   if (verbs.length === 2) return verbs.join(" · ");
-  return [`${selected} selected`, ...verbs].join(" · ");
+  return [t`${selected} selected`, ...verbs].join(" · ");
 }

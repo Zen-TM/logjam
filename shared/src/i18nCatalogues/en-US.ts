@@ -41,6 +41,7 @@ export const enUS: Catalogue = {
   Colour: "Color",
   "Coloured by steepness": "Colored by steepness",
   "Couldn't change the colour.": "Couldn't change the color.",
+  "Couldn't update track colour.": "Couldn't update track color.",
   "Band {0} colour, taken from the scale":
     "Band {0} color, taken from the scale",
   "Degrees from flat. An easy walk is under 10°, a steep scramble around 30°, and a cliff 45° or more. Each band starts where the one below it ends, so its neighbour follows what you set here.":
@@ -66,21 +67,30 @@ export const enUS: Catalogue = {
   "Modelled rain, past {0} days": "Modeled rain, past {0} days",
   "Need a lift": "Need a ride",
   "No colour": "No color",
+  "No GPS signal — the grey arrow is where you last had one.":
+    "No GPS signal — the gray arrow is where you last had one.",
   "No mobile reception": "No cell reception",
   Ochre: "Ocher",
   "Pale smooth bark and grey-green leaves, for reading in full sun.":
     "Pale smooth bark and gray-green leaves, for reading in full sun.",
   "Reset colours": "Reset colors",
+  "Route colour": "Route color",
   "Scale end colour (the steepest band)": "Scale end color (the steepest band)",
   "Scale start colour (the shallowest band)":
     "Scale start color (the shallowest band)",
   "Scrub density for bushbashing": "Scrub density for bushwhacking",
   "Scrub density for bushbashing: denser reads darker. Orange stripes mark ground burnt since the survey, so the scrub there may have changed.":
     "Scrub density for bushwhacking: denser reads darker. Orange stripes mark ground burned since the survey, so the scrub there may have changed.",
+  "Search for a place to centre the map":
+    "Search for a place to center the map",
+  "Shallowest colour": "Shallowest color",
+  "Steepest colour": "Steepest color",
   "Steepness in degrees from flat. An easy walk is under 10°, a steep scramble around 30°, and a cliff 45° or more. Ground flatter than the first band has no colour.":
     "Steepness in degrees from flat. An easy walk is under 10°, a steep scramble around 30°, and a cliff 45° or more. Ground flatter than the first band has no color.",
   "The sharpened area is deleted from your account, and friends you shared it with lose it too. Map files already made from it stay until they expire; one still waiting to start is cancelled.":
     "The sharpened area is deleted from your account, and friends you shared it with lose it too. Map files already made from it stay until they expire; one still waiting to start is canceled.",
+  "This download will use your mobile data.":
+    "This download will use your cellular data.",
   "Tick list": "Checklist",
   "Tick only what you don't have.": "Check only what you don't have.",
   "Tick something to add.": "Check something to add.",
@@ -89,6 +99,8 @@ export const enUS: Catalogue = {
   "Ties share a rank: two people level on most are both first.":
     "Ties share a rank: two people tied on most are both first.",
   "Use mobile data?": "Use cellular data?",
+  "Weak GPS signal — your position could be out by hundreds of metres.":
+    "Weak GPS signal — your position could be out by hundreds of meters.",
   "What comes out is drawn from the government's survey, and it may be wrong or out of date. Don't rely on it in place of your own navigation, judgement or rescue planning.":
     "What comes out is drawn from the government's survey, and it may be wrong or out of date. Don't rely on it in place of your own navigation, judgment or rescue planning.",
   "Who can drive, who needs a lift, and from where.":
@@ -105,4 +117,7 @@ export const enUS: Catalogue = {
   "mobile reception": "cell reception",
   "no mobile reception": "no cell reception",
   "{0} abseils": "{0} rappels",
+  "abseil count": "rappel count",
+  "longest abseil": "longest rappel",
+  colour: "color",
 };

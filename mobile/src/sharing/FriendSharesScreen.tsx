@@ -856,7 +856,7 @@ function stopsSeeingSubtitle(
     case "route":
       return t`${username} stops seeing this route.`;
     case "topoJob":
-      return t`${username} stops seeing this topo.`;
+      return t`${username} stops seeing this sharpened area.`;
   }
 }
 

@@ -26,7 +26,7 @@ import {
 } from "react-native";
 
 import { FAB_ICON, FAB_SIZE, CHROME_GAP } from "./mapChrome";
-import { mapTools, type MapToolIdOn } from "@logjam/shared";
+import { mapTools, type MapToolIdOn, t } from "@logjam/shared";
 
 import { makeStyles, spacing, useTheme } from "../theme";
 import { Icon, useReducedMotion } from "../ui";
@@ -59,7 +59,7 @@ export function MapToolGroup({
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={open ? "Hide map tools" : "Map tools"}
+      accessibilityLabel={open ? t`Hide map tools` : t`Map tools`}
       accessibilityState={{ expanded: open }}
       style={[
         styles.controlButton,

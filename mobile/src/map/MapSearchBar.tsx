@@ -67,6 +67,7 @@ import {
   type GeocodeResult,
   type LonLatBox,
   MAP_SEARCH_PLACEHOLDER,
+  t,
 } from "@logjam/shared";
 
 import {
@@ -396,7 +397,7 @@ export function MapSearchBar({
             }}
             placeholder={MAP_SEARCH_PLACEHOLDER}
             placeholderTextColor={theme.textMuted}
-            accessibilityLabel="Search for a place to centre the map"
+            accessibilityLabel={t`Search for a place to centre the map`}
             autoCorrect={false}
             returnKeyType="search"
             onSubmitEditing={ask}
@@ -404,7 +405,7 @@ export function MapSearchBar({
           />
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={query ? "Clear search" : "Close search"}
+            accessibilityLabel={query ? t`Clear search` : t`Close search`}
             hitSlop={hitSlop}
             onPress={() => {
               onSearchPin(searchPinAfter("clear"));
@@ -420,7 +421,7 @@ export function MapSearchBar({
         {!expanded ? (
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Search for a place"
+            accessibilityLabel={t`Search for a place`}
             style={StyleSheet.absoluteFill}
             onPress={() => setExpanded(true)}
           />
@@ -538,16 +539,17 @@ export function MapSearchBar({
                           hitSlop={hitSlop}
                           onPress={row.retry}
                         >
-                          <Text style={styles.retry}>Try again</Text>
+                          <Text style={styles.retry}>{t`Try again`}</Text>
                         </Pressable>
                       ) : null}
                     </View>
                   );
                 case "loading":
                   return (
-                    <Text key="loading" style={styles.status}>
-                      Loading place names…
-                    </Text>
+                    <Text
+                      key="loading"
+                      style={styles.status}
+                    >{t`Loading place names…`}</Text>
                   );
                 case "credit":
                   return (
