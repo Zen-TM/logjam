@@ -5,6 +5,7 @@ import { navFigures } from "../map/navFigures";
 import { makeStyles, spacing, radius, useTheme } from "../theme";
 import { Icon } from "./Icon";
 import { IconButton } from "./IconButton";
+import { t } from "@logjam/shared";
 
 /** Coarse on purpose: an age in whole seconds needs no more. */
 const AGE_TICK_MS = 5000;
@@ -62,13 +63,13 @@ export function NavReadout({
   const f = navFigures(distanceM, bearingDeg, quality, fixAtMs, now);
   const figure = [styles.figure, f.grey && styles.grey];
   const second = !f.known
-    ? `${name} · waiting for GPS…`
+    ? t`${name} · waiting for GPS…`
     : f.age
       ? `${name} · ${f.age}`
       : name;
   // What a screen reader says for the figures: the age and "about" included.
   const spoken = !f.known
-    ? "waiting for GPS"
+    ? t`waiting for GPS`
     : `${f.about ? "about " : ""}${f.distance}${f.unit}, ${f.bearing}${f.age ? `, ${f.age}` : ""}`;
 
   return (
@@ -91,7 +92,7 @@ export function NavReadout({
         <IconButton
           icon="close"
           size={16}
-          accessibilityLabel="Stop navigating"
+          accessibilityLabel={t`Stop navigating`}
           onPress={onStop}
         />
       </View>

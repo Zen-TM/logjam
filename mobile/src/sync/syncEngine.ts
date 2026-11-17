@@ -7,6 +7,7 @@ import {
   ApiError,
   computeBackoffMs,
   SYNC_GIVE_UP_AFTER_MS,
+  t,
 } from "@logjam/shared";
 
 import { isNoResponse } from "../api/noResponse";
@@ -270,7 +271,7 @@ export function requestSync(): Promise<void> {
         ).catch(() => {});
         setStatus({
           state: "error",
-          errorMessage: "This phone couldn't apply an update.",
+          errorMessage: t`This phone couldn't apply an update.`,
           errorKind: "applyFailed",
         });
         return;
@@ -287,7 +288,7 @@ export function requestSync(): Promise<void> {
         console.error(`sync: server has no ${err.method} ${err.path}`);
         setStatus({
           state: "error",
-          errorMessage: "This server doesn't support sync yet.",
+          errorMessage: t`This server doesn't support sync yet.`,
           errorKind: "unsupported",
         });
         return;

@@ -20,6 +20,7 @@ import {
   type MediaMetadata,
   type MediaOrigin,
   type TrackClimb,
+  t,
 } from "@logjam/shared";
 
 import { apiFetch } from "../api/apiFetch";
@@ -668,7 +669,7 @@ export async function runMediaCreateOp(
       "UPDATE outbox SET state = 'blocked', error_json = ? WHERE seq = ?",
       JSON.stringify({
         code: 0,
-        message: "This file is no longer on this phone. Discard this upload.",
+        message: t`This file is no longer on this phone. Discard this upload.`,
       }),
       row.seq,
     );
@@ -942,7 +943,8 @@ export async function runMediaDeleteOp(
 function messageForBlock(status: number): string {
   if (status === 507)
     return "Not enough storage space. Free some space and retry.";
-  if (status === 409) return "This place already has a track. Remove it first.";
+  if (status === 409)
+    return t`This place already has a track. Remove it first.`;
   return "The server rejected this upload.";
 }
 

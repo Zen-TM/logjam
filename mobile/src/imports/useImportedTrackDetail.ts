@@ -6,7 +6,7 @@
 // changes after it lands, so unlike a live recording there is nothing to
 // subscribe to; it reads once per open.
 import { useEffect, useState } from "react";
-import { messageFromError, type TrackDetail } from "@logjam/shared";
+import { messageFromError, type TrackDetail, t } from "@logjam/shared";
 
 import type { VectorImport } from "./importsDb";
 import { readImportedTrackDetail } from "./importedTrackSeries";
@@ -61,7 +61,7 @@ export function useImportedTrackDetail(
           imported,
           detail: null,
           line: NO_LINE,
-          error: messageFromError(err, "Couldn't read that file."),
+          error: messageFromError(err, t`Couldn't read that file.`),
         });
       });
     return () => {

@@ -22,7 +22,9 @@ describe("ways out", () => {
       new URL("./BottomSheet.tsx", import.meta.url),
       "utf8",
     );
-    expect(sheet).toMatch(/icon="close"[\s\S]{0,80}accessibilityLabel="Close"/);
+    expect(sheet).toMatch(
+      /icon="close"[\s\S]{0,80}accessibilityLabel=(?:"Close"|\{t`Close`\})/,
+    );
   });
 
   // Red when a new `<Modal` appears: each one must be reviewed for a ×, then

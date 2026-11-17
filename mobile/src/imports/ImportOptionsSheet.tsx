@@ -21,6 +21,7 @@ import {
   messageFromError,
   TRACK_COLORS,
   trackColorName,
+  t,
 } from "@logjam/shared";
 
 import { spacing, useTheme, useHues } from "../theme";
@@ -163,7 +164,7 @@ export function ImportOptionsSheet({
           return;
         }
         console.error(err);
-        onError("Couldn't save that file.");
+        onError(t`Couldn't save that file.`);
       },
     );
   };
@@ -188,11 +189,11 @@ export function ImportOptionsSheet({
       // seen as numbers.
       title={
         renaming
-          ? "Rename import"
+          ? t`Rename import`
           : sending
             ? share.title
             : attaching
-              ? "Link to a place"
+              ? t`Link to a place`
               : imported.name
       }
       onBack={leaveSubMode ?? undefined}
@@ -218,7 +219,7 @@ export function ImportOptionsSheet({
                 .then(() => close())
                 .catch((err: unknown) => {
                   console.error(err);
-                  onError(messageFromError(err, "Couldn't rename that."));
+                  onError(messageFromError(err, t`Couldn't rename that.`));
                 })
                 .finally(() => setBusy(false));
             }}
@@ -235,7 +236,7 @@ export function ImportOptionsSheet({
             demProfile={demProfile}
             demLoading={demLoading}
             emptyMessage={
-              error ?? "This file has no track, so there are no stats to show."
+              error ?? t`This file has no track, so there are no stats to show.`
             }
           />
         </View>
@@ -246,14 +247,16 @@ export function ImportOptionsSheet({
               icon="colour"
               hue={assetHue.import}
               disabled={busy}
-              label="Colour"
+              label={t`Colour`}
               palette={TRACK_COLORS}
               value={imported.color}
               nameOf={trackColorName}
               onChange={(swatch) => {
                 actions.setColor?.(swatch).catch((err: unknown) => {
                   console.error(err);
-                  onError(messageFromError(err, "Couldn't update the colour."));
+                  onError(
+                    messageFromError(err, t`Couldn't update the colour.`),
+                  );
                 });
               }}
             />
@@ -261,7 +264,7 @@ export function ImportOptionsSheet({
           {/* The one row the two surfaces differ by, and it leads the list. */}
           {onShowOnMap && actions.locatable ? (
             <Row
-              title="Show on map"
+              title={t`Show on map`}
               icon="map"
               hue={assetHue.import}
               disabled={busy}
@@ -277,8 +280,8 @@ export function ImportOptionsSheet({
             />
           ) : null}
           <Row
-            title="View stats"
-            subtitle="Distance, climb, pace and profiles"
+            title={t`View stats`}
+            subtitle={t`Distance, climb, pace and profiles`}
             icon="stats"
             hue={assetHue.import}
             disabled={busy}
@@ -289,8 +292,8 @@ export function ImportOptionsSheet({
               nothing legal to upload (assetActions.ts withholds the verb). */}
           {actions.attachToPlace ? (
             <Row
-              title="Link to a place"
-              subtitle="As that place's route"
+              title={t`Link to a place`}
+              subtitle={t`As that place's route`}
               icon="link"
               hue={assetHue.route}
               disabled={busy}
@@ -312,7 +315,7 @@ export function ImportOptionsSheet({
               is no taking it back. The two verbs must never read alike. */}
           {actions.sendCopy ? (
             <Row
-              title="Send a copy"
+              title={t`Send a copy`}
               icon="send"
               hue={theme.neutral}
               {...shareRowProps}
@@ -322,7 +325,7 @@ export function ImportOptionsSheet({
           ) : null}
           {actions.rename ? (
             <Row
-              title="Rename"
+              title={t`Rename`}
               icon="edit"
               hue={theme.neutral}
               disabled={busy}
@@ -345,14 +348,14 @@ export function ImportOptionsSheet({
                     !(await confirm({
                       confirmTitle: removal.confirmTitle,
                       confirmBody: removal.confirmBody,
-                      confirmLabel: "Delete",
+                      confirmLabel: t`Delete`,
                       tone: "destructive",
                     }))
                   )
                     return;
                   removal.run().catch((err: unknown) => {
                     console.error(err);
-                    onError("Couldn't delete that import.");
+                    onError(t`Couldn't delete that import.`);
                   });
                 })();
               }}

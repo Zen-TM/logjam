@@ -17,6 +17,7 @@ import {
   type OutboxEntry,
   type SyncPushOpResult,
   type SyncPushResponse,
+  t,
 } from "@logjam/shared";
 
 import { apiFetch } from "../api/apiFetch";
@@ -465,8 +466,7 @@ async function flushMediaOps(): Promise<boolean> {
           "UPDATE outbox SET state = 'blocked', error_json = ? WHERE seq = ?",
           JSON.stringify({
             code: transient ? status : 0,
-            message:
-              "This upload keeps failing on this phone. Try again or discard it.",
+            message: t`This upload keeps failing on this phone. Try again or discard it.`,
           }),
           row.seq,
         );

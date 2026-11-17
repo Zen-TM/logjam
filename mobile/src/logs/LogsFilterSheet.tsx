@@ -9,6 +9,7 @@ import {
   type ScopedCustomFieldDef,
   type SectionKeysOn,
   type TripSortKey,
+  t,
 } from "@logjam/shared";
 
 import { spacing } from "../theme";
@@ -206,14 +207,14 @@ export function LogsFilterSheet(props: Props) {
           <View style={styles.actions}>
             <View style={styles.action}>
               <Button
-                label="Cancel"
+                label={t`Cancel`}
                 variant="ghost"
                 onPress={() => setBound(null)}
               />
             </View>
             <View style={styles.action}>
               <Button
-                label="Clear this bound"
+                label={t`Clear this bound`}
                 variant="outlineAccent"
                 onPress={() => {
                   setDateBound(bound, null);

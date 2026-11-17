@@ -34,6 +34,7 @@ import {
   passwordSignIn,
   resendSignUpCode,
   signUp,
+  t,
 } from "@logjam/shared";
 
 import { config } from "../config";
@@ -52,7 +53,7 @@ const SESSION_KEY = "logjam_oidc_session";
 
 export class SessionTimeoutError extends Error {
   constructor() {
-    super("Timed out asking the sign-in provider");
+    super(t`Timed out asking the sign-in provider`);
     this.name = "SessionTimeoutError";
   }
 }

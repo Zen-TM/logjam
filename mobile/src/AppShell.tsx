@@ -41,6 +41,7 @@ import {
   language,
   needsReconsent,
   SETTINGS,
+  t,
   TRIP_PLANS_LIST,
   type IconIdea,
 } from "@logjam/shared";
@@ -1040,7 +1041,7 @@ export function AppShell({
   useDisplayUnits();
   const userQuery = useApiQuery(
     fetchCurrentUser,
-    "Couldn't load your account.",
+    t`Couldn't load your account.`,
     !isGuest,
   );
   const [consented, setConsented] = useState(false);

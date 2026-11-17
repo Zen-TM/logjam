@@ -54,6 +54,7 @@ import {
   type LogbookRange,
   type LogbookStats,
   type SectionKeysOn,
+  t,
 } from "@logjam/shared";
 
 import { useFieldDefs } from "../customFields/useFieldDefs";
@@ -361,9 +362,9 @@ function PlacesVisited({ stats }: { stats: LogbookStats }) {
           <View key={entry.typeId} style={styles.meterRow}>
             <View style={styles.meterLabels}>
               <Text style={styles.meterName}>{entry.name}</Text>
-              <Text style={styles.meterValue}>
-                {entry.logged} of {entry.total}
-              </Text>
+              <Text
+                style={styles.meterValue}
+              >{t`${entry.logged} of ${entry.total}`}</Text>
             </View>
             <Meter
               segments={[

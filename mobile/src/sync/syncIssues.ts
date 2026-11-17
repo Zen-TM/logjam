@@ -13,6 +13,7 @@ import {
   collectDirtyFields,
   type SyncPushEntity,
   type SyncPushOp,
+  t,
 } from "@logjam/shared";
 
 import { getMirrorPlace, getMirrorTrip } from "./mirrorStore";
@@ -653,7 +654,8 @@ export async function recreateFromDeadRemote(
         return null;
       }
       const newId = await createPlaceLocal({
-        name: typeof merged.name === "string" ? merged.name : "Recovered place",
+        name:
+          typeof merged.name === "string" ? merged.name : t`Recovered place`,
         latitude,
         longitude,
         altNames: Array.isArray(merged.altNames)

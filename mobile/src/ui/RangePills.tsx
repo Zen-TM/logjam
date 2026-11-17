@@ -8,6 +8,7 @@ import {
   isFullRange,
   nextRange,
   type NumberRange,
+  t,
 } from "@logjam/shared";
 
 /**
@@ -56,7 +57,7 @@ export function RangePills({
             <IconButton
               icon="close"
               size={14}
-              accessibilityLabel={`Clear the ${label} filter`}
+              accessibilityLabel={t`Clear the ${label} filter`}
               onPress={() => onChange(null)}
             />
           ) : null}
