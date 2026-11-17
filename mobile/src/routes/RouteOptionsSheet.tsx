@@ -25,6 +25,7 @@ import {
   copyAndRemoveOutcomeMessage,
   copyOutcomeMessage,
   wayVerbLabel,
+  t,
 } from "@logjam/shared";
 
 import { spacing, useTheme, useHues } from "../theme";
@@ -189,7 +190,7 @@ export function RouteOptionsSheet({
           } catch (err) {
             // Our own copy, never the error's: it may carry the name.
             console.error(err);
-            onError("Couldn't save a copy of this route.");
+            onError(t`Couldn't save a copy of this route.`);
           }
           void requestSync().catch((syncErr: unknown) =>
             console.error(syncErr),
@@ -212,11 +213,11 @@ export function RouteOptionsSheet({
     ignoreRouteId: route?.id ?? null,
     onUnlink: () =>
       updateRouteLocal(route!.id, { placeId: null }).then(() =>
-        onInfo("Route unlinked."),
+        onInfo(t`Route unlinked.`),
       ),
     attach: (placeId, placeName) =>
       updateRouteLocal(route!.id, { placeId }).then(() =>
-        onInfo(`Route linked to ${placeName}.`),
+        onInfo(t`Route linked to ${placeName}.`),
       ),
     onDone: () => {
       setLinking(false);
@@ -254,7 +255,7 @@ export function RouteOptionsSheet({
           return;
         }
         console.error(err);
-        onError("Couldn't save that file.");
+        onError(t`Couldn't save that file.`);
       })
       .finally(() => setBusy(false));
   };
@@ -265,17 +266,17 @@ export function RouteOptionsSheet({
     close();
     const ok = await confirm({
       ...removal,
-      confirmLabel: "Remove",
+      confirmLabel: t`Remove`,
       // Not `destructive`: the owner keeps the route.
       tone: "filled",
     });
     if (!ok) return;
     removal
       .run()
-      .then(() => onInfo("Removed."))
+      .then(() => onInfo(t`Removed.`))
       .catch((err: unknown) => {
         console.error(err);
-        onError(messageFromError(err, "Couldn't remove that route."));
+        onError(messageFromError(err, t`Couldn't remove that route.`));
       });
   };
 
@@ -284,15 +285,15 @@ export function RouteOptionsSheet({
     if (!removal) return;
     close();
     const ok = await confirm({
-      confirmTitle: `Delete ${route.name}?`,
+      confirmTitle: t`Delete ${route.name}?`,
       confirmBody: removal.confirmBody,
-      confirmLabel: "Delete",
+      confirmLabel: t`Delete`,
       tone: "destructive",
     });
     if (!ok) return;
     removal.run().catch((err: unknown) => {
       console.error(err);
-      onError("Couldn't delete that route.");
+      onError(t`Couldn't delete that route.`);
     });
   };
 
@@ -320,11 +321,11 @@ export function RouteOptionsSheet({
         sharing
           ? share.title
           : renaming
-            ? "Rename route"
+            ? t`Rename route`
             : linking
               ? route.placeId
-                ? "Change linked place"
-                : "Link to a place"
+                ? t`Change linked place`
+                : t`Link to a place`
               : copyMode
                 ? copy.title
                 : route.name
@@ -356,7 +357,7 @@ export function RouteOptionsSheet({
                 .then(() => close())
                 .catch((err: unknown) => {
                   console.error(err);
-                  onError(messageFromError(err, "Couldn't rename that."));
+                  onError(messageFromError(err, t`Couldn't rename that.`));
                 })
                 .finally(() => setBusy(false));
             }}
@@ -369,7 +370,7 @@ export function RouteOptionsSheet({
           {/* The one row the two surfaces differ by, and it leads the list. */}
           {onShowOnMap && actions.locatable ? (
             <Row
-              title="Show on map"
+              title={t`Show on map`}
               icon="map"
               hue={assetHue.route}
               disabled={busy}
@@ -384,7 +385,7 @@ export function RouteOptionsSheet({
             />
           ) : null}
           <Row
-            title="View stats"
+            title={t`View stats`}
             icon="stats"
             hue={assetHue.route}
             disabled={busy}
@@ -406,7 +407,9 @@ export function RouteOptionsSheet({
             <Row
               // No subtitle: the sheet it opens says the same thing, and saying
               // it twice makes the row taller for no new information.
-              title={route.placeId ? "Change linked place" : "Link to a place"}
+              title={
+                route.placeId ? t`Change linked place` : t`Link to a place`
+              }
               icon="link"
               hue={assetHue.route}
               disabled={busy}
@@ -511,8 +514,8 @@ export function RouteOptionsSheet({
             ? viaPlaces.map((place) => (
                 <Row
                   key={place.id}
-                  title={`Open ${place.name}`}
-                  subtitle="This route came with that shared place — remove it there."
+                  title={t`Open ${place.name}`}
+                  subtitle={t`This route came with that shared place — remove it there.`}
                   icon="place"
                   hue={placeHue.shared}
                   disabled={busy}

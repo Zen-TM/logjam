@@ -23,6 +23,7 @@ import {
   PAIRED_STAT_LABELS,
   pairedStatLayout,
   routeLengthM,
+  t,
 } from "@logjam/shared";
 
 import { spacing, makeStyles, muted } from "../theme";
@@ -69,9 +70,9 @@ export function RouteStatsBody({
       />
 
       {profile?.minM != null && profile.maxM != null ? (
-        <Text style={styles.band}>
-          {formatHeightRange(profile.minM, profile.maxM)} above sea level
-        </Text>
+        <Text
+          style={styles.band}
+        >{t`${formatHeightRange(profile.minM, profile.maxM)} above sea level`}</Text>
       ) : null}
 
       {profile ? (
@@ -79,20 +80,20 @@ export function RouteStatsBody({
           {/* The chart's own axes named, as on a track's stats — an unlabelled
               height profile is read as a height-over-TIME by anyone who has
               not been told otherwise. */}
-          <Text style={styles.chartLabel}>Elevation vs distance</Text>
+          <Text style={styles.chartLabel}>{t`Elevation vs distance`}</Text>
           <ProfileChart
             series={elevationSeries(profile)}
             formatValue={formatHeight}
             formatX={formatDistanceM}
-            hint="Press or drag for heights."
-            accessibilityLabel="Elevation profile"
+            hint={t`Press or drag for heights.`}
+            accessibilityLabel={t`Elevation profile`}
           />
         </>
       ) : (
         <Text style={styles.pending}>
           {loading
             ? MAP_MEASURE.copy.readingTerrain
-            : "Elevation needs a connection; distance always shows."}
+            : t`Elevation needs a connection; distance always shows.`}
         </Text>
       )}
     </View>

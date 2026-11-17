@@ -114,6 +114,7 @@ import {
   type SharpenedArea,
   type SearchPin,
   searchPinAfter,
+  t,
 } from "@logjam/shared";
 import {
   isPlanPin,
@@ -599,9 +600,9 @@ const LOCATE_ICON: Record<FollowMode, IconIdea> = {
 };
 
 const LOCATE_LABEL: Record<FollowMode, string> = {
-  off: "Show where I am",
-  follow: "Following — tap to face your direction",
-  "course-up": "Facing your direction — tap to stop",
+  off: t`Show where I am`,
+  follow: t`Following — tap to face your direction`,
+  "course-up": t`Facing your direction — tap to stop`,
 };
 
 const OFFLINE_MASK_LAYER = "offline-mask-fill";
@@ -1522,7 +1523,7 @@ export function MapScreen({
     connectivity !== "online" || isGuest || pendingSyncCount > 0;
   const overlays = useApiQuery(
     getCompletedOverlays,
-    "Couldn't load your sharpened areas.",
+    t`Couldn't load your sharpened areas.`,
     !isGuest,
   );
   // The sharpened areas the user can see: the Terrain group reads each one's
@@ -2208,7 +2209,7 @@ export function MapScreen({
           const filled = await fillRouteSlot({
             placeName:
               places.data?.find((place) => place.id === draftPlaceId)?.name ??
-              "This place",
+              t`This place`,
             source: "draw",
             occupant: routeSlotOccupant(
               draftPlaceId,
@@ -2252,7 +2253,7 @@ export function MapScreen({
         }
       } catch (err) {
         console.error(err);
-        notify("Couldn't save that route.", "error");
+        notify(t`Couldn't save that route.`, "error");
       } finally {
         setSavingRoute(false);
       }
@@ -2777,7 +2778,7 @@ export function MapScreen({
     if (live.length === 0) return null;
     const total = live.reduce((sum, group) => sum + group.jobs.length, 0);
     const ready = live.reduce((sum, group) => sum + group.ready, 0);
-    return `Downloading maps · ${Math.min(ready + 1, total)} of ${total}`;
+    return t`Downloading maps · ${Math.min(ready + 1, total)} of ${total}`;
   }, [regionJobs]);
   const activeTrack =
     tracks.find(
@@ -2988,15 +2989,15 @@ export function MapScreen({
           // A marker dropped with Places switched off would be drawn nowhere,
           // and the toast would be its only handle.
           setShowPlaces(true);
-          notify(`Marker ${markerCount + 1} dropped.`, "done", {
-            label: "Name it",
+          notify(t`Marker ${markerCount + 1} dropped.`, "done", {
+            label: t`Name it`,
             onPress: () => setNamingPlaceId(id),
           });
         })
         .catch((err: unknown) => {
           // A drop that fails silently leaves no marker and no reason.
           console.error(err);
-          notify("Couldn't drop a marker here.", "error");
+          notify(t`Couldn't drop a marker here.`, "error");
         });
     },
     [places.data, notify],
@@ -3021,7 +3022,7 @@ export function MapScreen({
         const kind = classifyIncomingBytes(head);
         if (kind === null) {
           notify(
-            "Can't open this file. Logjam GPS can import GeoPDF, GPX, KML/KMZ and GeoJSON files.",
+            t`Can't open this file. Logjam GPS can import GeoPDF, GPX, KML/KMZ and GeoJSON files.`,
             "error",
           );
           return;
@@ -3031,7 +3032,7 @@ export function MapScreen({
           // import: a progress card, a toast on the outcome, and Logjam GPS
           // usable throughout with progress reporting.
           const outcome = await runGeoPdfImport(
-            "Shared map",
+            t`Shared map`,
             (onProgress, token) =>
               importGeoPdfFile("Shared map", url, onProgress, token),
           );
@@ -3047,7 +3048,7 @@ export function MapScreen({
         const code = (err as { code?: string }).code;
         notify(
           (code && GEOPDF_ERRORS[code]) ??
-            messageFromError(err, "Couldn't import that file."),
+            messageFromError(err, t`Couldn't import that file.`),
           "error",
         );
       }
@@ -3903,8 +3904,8 @@ export function MapScreen({
       lastGpsToastAt.current = now;
       notify(
         gpsQuality === "coarse"
-          ? "Weak GPS signal — your position could be out by hundreds of metres."
-          : "No GPS signal — the grey arrow is where you last had one.",
+          ? t`Weak GPS signal — your position could be out by hundreds of metres.`
+          : t`No GPS signal — the grey arrow is where you last had one.`,
         "done",
         undefined,
         true,
@@ -4401,7 +4402,7 @@ export function MapScreen({
     (point: { latitude: number; longitude: number }) => {
       setNavTarget({
         id: `map-point-${Date.now()}`,
-        name: "Tapped point",
+        name: t`Tapped point`,
         lon: point.longitude,
         lat: point.latitude,
         createdAt: new Date().toISOString(),
@@ -4572,14 +4573,14 @@ export function MapScreen({
       // A pulsing marker is not a discoverable button. Said once, at the only
       // moment it is useful, rather than left as chrome for the whole trip.
       notify(
-        "Recording — tap the record button for stats.",
+        t`Recording — tap the record button for stats.`,
         "done",
         undefined,
         true,
       );
     } catch (err) {
       console.error(err);
-      notify("Couldn't start recording.", "error");
+      notify(t`Couldn't start recording.`, "error");
     }
   }, [dotWanted, handleLocateMe, notify]);
 
@@ -4597,13 +4598,13 @@ export function MapScreen({
       try {
         await continueTrackRecording(track);
         if (!dotWanted) handleLocateMe();
-        notify(`Recording again — “${track.name}” continues.`, "done");
+        notify(t`Recording again — “${track.name}” continues.`, "done");
       } catch (err) {
         console.error(err);
         // The one failure worth naming: another recording is already running,
         // and the fix is the user's to make.
         notify(
-          messageFromError(err, "Couldn't continue that recording."),
+          messageFromError(err, t`Couldn't continue that recording.`),
           "error",
         );
       }
@@ -4713,7 +4714,7 @@ export function MapScreen({
         icon: "place" as const,
         hue: OWNED_PLACE_COLOR,
         title: place.name,
-        kindLabel: "Place",
+        kindLabel: t`Place`,
         alternates: place.altNames,
         resolveBbox: async () =>
           bboxOfPoints([{ lon: place.longitude, lat: place.latitude }]),
@@ -4723,7 +4724,7 @@ export function MapScreen({
         icon: "friends" as const,
         hue: SHARED_PLACE_COLOR,
         title: place.name,
-        kindLabel: "Shared place",
+        kindLabel: t`Shared place`,
         alternates: place.altNames,
         resolveBbox: async () =>
           bboxOfPoints([{ lon: place.longitude, lat: place.latitude }]),
@@ -4733,7 +4734,7 @@ export function MapScreen({
         icon: "track" as const,
         hue: assetHue.track,
         title: track.name,
-        kindLabel: "Track",
+        kindLabel: t`Track`,
         resolveBbox: trackActions(track).resolveBbox,
       })),
       ...(routes.data ?? []).map((route) => ({
@@ -4741,7 +4742,7 @@ export function MapScreen({
         icon: "route" as const,
         hue: assetHue.route,
         title: route.name,
-        kindLabel: "Route",
+        kindLabel: t`Route`,
         resolveBbox: routeActions(route).resolveBbox,
       })),
       ...imports.map((imported) => ({
@@ -4749,7 +4750,7 @@ export function MapScreen({
         icon: "importedFile" as const,
         hue: assetHue.import,
         title: imported.name,
-        kindLabel: "Imported file",
+        kindLabel: t`Imported file`,
         resolveBbox: vectorImportActions(imported).resolveBbox,
       })),
     ],
@@ -4945,13 +4946,13 @@ export function MapScreen({
       <MapBanner
         key="filter"
         icon="filter"
-        label={`${mapFilter.visibleIds?.length ?? 0} of ${mapFilter.totalCount} places`}
-        fullText={`Showing ${mapFilter.visibleIds?.length ?? 0} of ${mapFilter.totalCount} places`}
-        dismissLabel="Show all places again"
+        label={t`${mapFilter.visibleIds?.length ?? 0} of ${mapFilter.totalCount} places`}
+        fullText={t`Showing ${mapFilter.visibleIds?.length ?? 0} of ${mapFilter.totalCount} places`}
+        dismissLabel={t`Show all places again`}
         onDismiss={() => setPlaceMapFilterEnabled(false)}
         onPress={() =>
           notify(
-            `Showing ${mapFilter.visibleIds?.length ?? 0} of ${mapFilter.totalCount} places`,
+            t`Showing ${mapFilter.visibleIds?.length ?? 0} of ${mapFilter.totalCount} places`,
             "done",
             undefined,
             true,
@@ -5744,7 +5745,7 @@ export function MapScreen({
               <View
                 accessible
                 accessibilityRole="button"
-                accessibilityLabel="Remove this point"
+                accessibilityLabel={t`Remove this point`}
                 style={styles.anchorDelete}
               >
                 <Icon idea="delete" size={20} color={theme.onFill} />
@@ -5846,10 +5847,10 @@ export function MapScreen({
             without being asked. Everything else about a running recording is a
             tap away; this is the exception. */}
         {activeTrack && recordingWriteFailing ? (
-          <Notice icon="warning" tone="critical">
-            Points aren&apos;t being saved — finish the recording and check free
-            space.
-          </Notice>
+          <Notice
+            icon="warning"
+            tone="critical"
+          >{t`Points aren't being saved — finish the recording and check free space.`}</Notice>
         ) : null}
 
         {/* Where you are going, as a pair of figures. Second to the one notice
@@ -5936,11 +5937,11 @@ export function MapScreen({
             pretending, and the user is the one who asked us to. */}
 
         {offlineOnly ? (
-          <Notice icon="offline">Using only saved maps</Notice>
+          <Notice icon="offline">{t`Using only saved maps`}</Notice>
         ) : null}
 
         {connectivity === "offline" ? (
-          <Notice icon="offline">Offline</Notice>
+          <Notice icon="offline">{t`Offline`}</Notice>
         ) : null}
 
         {noticeText ? <Notice icon="offline">{noticeText}</Notice> : null}
@@ -5961,13 +5962,15 @@ export function MapScreen({
             is why this sits with the map's own notices rather than next to any
             one of them. Clears itself on the next probe that reads clean. */}
         {headingWanted && fieldInterference ? (
-          <Notice icon="warning" tone="warning">
-            Magnetic interference — move the phone away from metal
-          </Notice>
+          <Notice
+            icon="warning"
+            tone="warning"
+          >{t`Magnetic interference — move the phone away from metal`}</Notice>
         ) : headingWanted && compassCalibration.warning ? (
-          <Notice icon="warning" tone="warning">
-            Compass needs calibrating — wave the phone in a figure 8
-          </Notice>
+          <Notice
+            icon="warning"
+            tone="warning"
+          >{t`Compass needs calibrating — wave the phone in a figure 8`}</Notice>
         ) : null}
 
         {/* Error surfaces: background failures, non-blocking. */}
@@ -6014,7 +6017,7 @@ export function MapScreen({
         </View>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Choose layers"
+          accessibilityLabel={t`Choose layers`}
           style={styles.controlButton}
           onPress={() => layersOpen.set(true)}
         >
@@ -6046,7 +6049,7 @@ export function MapScreen({
           : recordButton}
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Map data attribution"
+          accessibilityLabel={t`Map data attribution`}
           style={styles.miniButton}
           hitSlop={slopTo(MINI_FAB_SIZE)}
           onPress={() => setAttributionOpen(true)}
@@ -6100,7 +6103,7 @@ export function MapScreen({
       <BottomSheet
         visible={namingRoute}
         onClose={() => setNamingRoute(false)}
-        title="Name this route"
+        title={t`Name this route`}
       >
         <RouteNameForm
           initialName={
@@ -6116,7 +6119,7 @@ export function MapScreen({
       <BottomSheet
         visible={attributionOpen}
         onClose={() => setAttributionOpen(false)}
-        title="Map data"
+        title={t`Map data`}
       >
         <Text style={styles.attributionText}>
           {attributionText.length > 0
@@ -6408,7 +6411,7 @@ function RouteNameForm({
   return (
     <View style={styles.nameForm}>
       <TextField
-        label="Route name"
+        label={t`Route name`}
         value={draft}
         onChangeText={(text) => {
           setDraft(text);
@@ -6419,17 +6422,17 @@ function RouteNameForm({
         onSubmitEditing={commit}
         error={
           tooLong
-            ? `Names can be at most ${ROUTE_NAME_MAX_LENGTH} characters.`
+            ? t`Names can be at most ${ROUTE_NAME_MAX_LENGTH} characters.`
             : showEmptyError && !trimmed
-              ? "A route needs a name."
+              ? t`A route needs a name.`
               : undefined
         }
       />
       <Button
-        label={saving ? "Saving…" : "Save"}
+        label={saving ? t`Saving…` : t`Save`}
         icon="done"
         disabled={saving}
-        disabledReason="Saving…"
+        disabledReason={t`Saving…`}
         onPress={commit}
       />
     </View>

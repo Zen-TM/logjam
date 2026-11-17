@@ -13,7 +13,7 @@
 // subtle: without it, the panels would swallow every touch outside the
 // selection, leaving the map draggable only through the bright rectangle and
 // making the screen appear half frozen.
-import { MAP_INK } from "@logjam/shared";
+import { MAP_INK, t } from "@logjam/shared";
 import { useEffect, useMemo, useRef } from "react";
 import { PanResponder, PixelRatio, StyleSheet, View } from "react-native";
 
@@ -189,7 +189,7 @@ export function SelectionFrame({
       <View
         {...responders.top.panHandlers}
         accessibilityRole="adjustable"
-        accessibilityLabel="Drag to move the top edge of the area"
+        accessibilityLabel={t`Drag to move the top edge of the area`}
         style={[
           styles.handleH,
           {
@@ -203,7 +203,7 @@ export function SelectionFrame({
       <View
         {...responders.bottom.panHandlers}
         accessibilityRole="adjustable"
-        accessibilityLabel="Drag to move the bottom edge of the area"
+        accessibilityLabel={t`Drag to move the bottom edge of the area`}
         style={[
           styles.handleH,
           {
@@ -217,7 +217,7 @@ export function SelectionFrame({
       <View
         {...responders.left.panHandlers}
         accessibilityRole="adjustable"
-        accessibilityLabel="Drag to move the left edge of the area"
+        accessibilityLabel={t`Drag to move the left edge of the area`}
         style={[
           styles.handleV,
           {
@@ -231,7 +231,7 @@ export function SelectionFrame({
       <View
         {...responders.right.panHandlers}
         accessibilityRole="adjustable"
-        accessibilityLabel="Drag to move the right edge of the area"
+        accessibilityLabel={t`Drag to move the right edge of the area`}
         style={[
           styles.handleV,
           {

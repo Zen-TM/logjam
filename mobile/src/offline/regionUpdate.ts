@@ -15,6 +15,7 @@ import {
   saveClipArchive,
   vectorArchiveAt,
   type RegionBbox,
+  t,
 } from "@logjam/shared";
 
 import type { MapArtifact } from "../map/sourceResolver";
@@ -117,7 +118,7 @@ export async function startRegionUpdate(
   if (!specs) return null;
   const state = await NetInfo.fetch();
   if (state.isConnected === false) {
-    return "Updating a map needs a connection. Try again when you have one.";
+    return t`Updating a map needs a connection. Try again when you have one.`;
   }
   const allowCellular = await askAllowCellular();
   if (allowCellular === null) return null;
