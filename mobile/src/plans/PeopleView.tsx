@@ -24,11 +24,11 @@ import {
   tripPlanRemovedMessage,
   tripPlanRoleWord,
   PLAN_ROLE_OF_VERB,
-  TRIP_PLAN_JOIN,
   TRIP_PLAN_PAGE,
   type PlanPersonActionId,
   type TripPlanMemberView,
   type TripPlanView,
+  plural,
   t,
 } from "@logjam/shared";
 
@@ -124,7 +124,13 @@ export function PeopleView({
       (await confirm(
         {
           confirmTitle: t`Delete ${member.user.username}'s files too?`,
-          confirmBody: `Their files (${files.count} ${files.count === 1 ? "file" : "files"}, ${formatBytes(files.bytes)}) otherwise count against your storage. ${member.user.username} is removed either way.`,
+          confirmBody: plural(
+            files.count,
+            "Their files (# file, {0}) otherwise count against your storage. {1} is removed either way.",
+            "Their files (# files, {0}) otherwise count against your storage. {1} is removed either way.",
+            formatBytes(files.bytes),
+            member.user.username,
+          ),
           confirmLabel: t`Delete files`,
           tone: "destructive",
         },
@@ -294,7 +300,7 @@ export function PeopleView({
             !online
               ? OFFLINE
               : member.invitedBy
-                ? `${TRIP_PLAN_JOIN.copy.invitedBy} ${member.invitedBy.username}`
+                ? t`Invited by ${member.invitedBy.username}`
                 : undefined
           }
           right={

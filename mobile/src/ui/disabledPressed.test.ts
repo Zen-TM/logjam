@@ -20,7 +20,7 @@ describe("a disabled control stays pressable", () => {
   // IconButton: TalkBack may then refuse the double-tap that shows the reason.
   it("is unavailable by its hint, not by its accessibility state", () => {
     for (const name of ["Button.tsx", "IconButton.tsx"]) {
-      expect(source(name)).toContain("`Unavailable. ${disabledReason}`");
+      expect(source(name)).toContain("[t`Unavailable.`, disabledReason]");
       expect(source(name)).not.toMatch(
         /accessibilityState=\{\{ disabled(: disabled| \})/,
       );

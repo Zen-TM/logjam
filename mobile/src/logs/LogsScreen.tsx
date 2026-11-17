@@ -54,6 +54,7 @@ import {
   type SectionKeysOn,
   type TripSortKey,
   tripTitle,
+  plural,
   t,
 } from "@logjam/shared";
 
@@ -471,9 +472,12 @@ export function LogsScreen({
               <>
                 <ActivitySpark
                   buckets={spark}
-                  caption={`${recentCount} in the last 12 months · ${placeCount} ${
-                    placeCount === 1 ? "place" : "places"
-                  }`}
+                  caption={plural(
+                    placeCount,
+                    "{0} in the last 12 months · # place",
+                    "{0} in the last 12 months · # places",
+                    recentCount,
+                  )}
                 />
 
                 {/* State of the world, once, where it can be read at a glance.
@@ -701,7 +705,9 @@ const TripRow = memo(function TripRow({
       titleNumberOfLines={2}
       subtitle={[
         formatTripDate(trip.date),
-        trip.places.length > 1 ? `${trip.places.length} places` : null,
+        trip.places.length > 1
+          ? plural(trip.places.length, "# place", "# places")
+          : null,
       ]
         .filter(Boolean)
         .join(" · ")}

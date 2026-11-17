@@ -87,6 +87,8 @@ export const enUS: Catalogue = {
   "Show land tenure": "Show land ownership",
   "Sign-in didn't return an account identity, so it was cancelled. Try again.":
     "Sign-in didn't return an account identity, so it was canceled. Try again.",
+  "Couldn't clear the previous account's {0} from this phone, so sign-in was cancelled.":
+    "Couldn't clear the previous account's {0} from this phone, so sign-in was canceled.",
   "Search for a place to centre the map":
     "Search for a place to center the map",
   "Shallowest colour": "Shallowest color",

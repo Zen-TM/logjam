@@ -19,7 +19,9 @@ describe("Hero compact", () => {
   });
   // Mutation: drop the accessibilityLabel, and the icon-only back has no name.
   it("keeps the back button's accessible name", () => {
-    expect(branch).toContain("accessibilityLabel={`Back to ${backLabel}`}");
+    expect(branch).toContain(
+      'accessibilityLabel={t`Back to ${backLabel ?? ""}`}',
+    );
   });
 });
 

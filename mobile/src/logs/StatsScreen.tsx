@@ -38,7 +38,7 @@ import {
   fieldStatDisplay,
   logbookActivityLabel,
   logbookRanges,
-  pluralCount,
+  plural,
   STATS,
   statsCadence,
   statsEmptyActivityBody,
@@ -446,7 +446,11 @@ function OnFoot({
         })}
       />
       <Text style={styles.caption}>
-        {`from ${pluralCount(inRange.length, "recording")} on this phone — recordings aren't linked to trips, so these are the same days seen another way`}
+        {plural(
+          inRange.length,
+          "from # recording on this phone — recordings aren't linked to trips, so these are the same days seen another way",
+          "from # recordings on this phone — recordings aren't linked to trips, so these are the same days seen another way",
+        )}
       </Text>
     </View>
   );

@@ -21,7 +21,7 @@
 // Its own RN-free module, like every other decision in this directory, so the
 // message logic has a test.
 import type { TNotification } from "../api/types";
-import { t } from "@logjam/shared";
+import { plural, t } from "@logjam/shared";
 
 export type BatchFileActionKind = "accept" | "decline";
 
@@ -90,8 +90,10 @@ export function batchFileActionMessage(outcome: BatchFileActionOutcome): {
     return {
       text:
         kind === "accept"
-          ? t`Couldn't save ${plural(total, "# file", "# files")}.`
-          : t`Couldn't decline ${total === 1 ? "that" : "those"}.`,
+          ? plural(total, "Couldn't save # file.", "Couldn't save # files.")
+          : total === 1
+            ? t`Couldn't decline that.`
+            : t`Couldn't decline those.`,
       tone: "error",
     };
   }
@@ -99,11 +101,13 @@ export function batchFileActionMessage(outcome: BatchFileActionOutcome): {
     return {
       text:
         kind === "accept"
-          ? t`Saved ${done} of ${total} — ${plural(
+          ? plural(
               failed,
-              "# file",
-              "# files",
-            )} couldn't be saved. Try those again from the list.`
+              "Saved {0} of {1} — # file couldn't be saved. Try those again from the list.",
+              "Saved {0} of {1} — # files couldn't be saved. Try those again from the list.",
+              done,
+              total,
+            )
           : t`Declined ${done} of ${total} — ${failed} couldn't be.`,
       tone: "error",
     };
@@ -111,14 +115,12 @@ export function batchFileActionMessage(outcome: BatchFileActionOutcome): {
   return {
     text:
       kind === "accept"
-        ? t`Saved ${plural(done, "# file", "# files")} — find ${
-            done === 1 ? "it" : "them"
-          } in Saved.`
-        : t`Declined ${plural(done, "# file", "# files")}.`,
+        ? plural(
+            done,
+            "Saved # file — find it in Saved.",
+            "Saved # files — find them in Saved.",
+          )
+        : plural(done, "Declined # file.", "Declined # files."),
     tone: "done",
   };
-}
-
-function countOf(count: number, noun: string): string {
-  return `${count} ${noun}${count === 1 ? "" : "s"}`;
 }

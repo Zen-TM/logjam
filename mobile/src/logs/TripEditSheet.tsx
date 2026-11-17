@@ -28,6 +28,7 @@ import {
   type TripPlanTripLogPrefill,
   type ScopedCustomFieldDef,
   displayUnits,
+  plural,
   t,
 } from "@logjam/shared";
 
@@ -582,11 +583,11 @@ export function TripEditSheet({
       : mode === "places"
         ? t`Places on this trip`
         : mode === "fields"
-          ? `Your trip ${ATTRIBUTE_NOUN.many}`
+          ? t`Your trip attributes`
           : mode === "fieldForm"
             ? editingField
               ? editingField.label
-              : `New trip ${ATTRIBUTE_NOUN.one}`
+              : t`New trip attribute`
             : editing
               ? TRIP_FORM.copy.editTitle
               : TRIP_FORM.copy.addTitle;
@@ -613,9 +614,7 @@ export function TripEditSheet({
         <Row
           icon="place"
           title={derivedTitle ?? TRIP_FORM.copy.noPlaces}
-          subtitle={
-            selected.length === 1 ? "1 place" : `${selected.length} places`
-          }
+          subtitle={plural(selected.length, "# place", "# places")}
           titleNumberOfLines={2}
           chevron
           onPress={() => setMode("places")}
@@ -704,11 +703,11 @@ export function TripEditSheet({
               door is open with no account and no signal, for everyone. */}
         <Row
           icon="tag"
-          title={`Your trip ${ATTRIBUTE_NOUN.many}`}
+          title={t`Your trip attributes`}
           subtitle={
             customFieldDefs.length === 0
-              ? "Add your own — water level, party size, anything"
-              : `${customFieldDefs.length} ${customFieldDefs.length === 1 ? ATTRIBUTE_NOUN.one : ATTRIBUTE_NOUN.many}`
+              ? t`Add your own — water level, party size, anything`
+              : plural(customFieldDefs.length, "# attribute", "# attributes")
           }
           chevron
           onPress={() => setMode("fields")}
@@ -987,8 +986,8 @@ function PlacePicker({
       {matches.length === 0 ? (
         <Text style={styles.hint}>
           {places.length === 0
-            ? "No places saved on this device yet. You can log the trip now and link a place later."
-            : "Nothing matches that name."}
+            ? t`No places saved on this device yet. You can log the trip now and link a place later.`
+            : t`Nothing matches that name.`}
         </Text>
       ) : (
         matches.map((place) => (

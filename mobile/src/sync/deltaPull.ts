@@ -25,6 +25,7 @@ import {
   type DeltaEntityKey,
   type SyncDeltaResponse,
   type SyncPushOp,
+  t,
 } from "@logjam/shared";
 import * as FileSystem from "expo-file-system/legacy";
 
@@ -223,7 +224,7 @@ export async function runDeltaPull(
       if ((DELTA_ENTITY_ORDER as readonly string[]).includes(key)) continue;
       if (Array.isArray(rows) && rows.length > 0) {
         skipped.push(
-          `${key}: ${rows.length} row(s) this app version cannot apply`,
+          t`${key}: ${rows.length} row(s) this app version can't apply`,
         );
       }
     }

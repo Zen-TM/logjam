@@ -1,3 +1,4 @@
+import { t } from "@logjam/shared";
 import { ActivityIndicator, Pressable, Text } from "react-native";
 
 import {
@@ -72,7 +73,9 @@ export function Button({
       // Not `disabled` in the state: TalkBack may then refuse the double-tap
       // that asks why, so the hint says it is unavailable instead.
       accessibilityHint={
-        disabled ? `Unavailable. ${disabledReason}` : undefined
+        disabled
+          ? [t`Unavailable.`, disabledReason].filter(Boolean).join(" ")
+          : undefined
       }
       accessibilityState={{ disabled: loading, busy: loading }}
       onPress={
