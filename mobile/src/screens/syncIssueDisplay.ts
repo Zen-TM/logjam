@@ -724,7 +724,7 @@ export function bulkDiscardBody({
  *
  * The line SHEDS the total when both verbs are live, and that is measured, not
  * stylistic: with two extras the bar holds five controls, and
- * "2 selected · 1 retry · 1 restore" truncated to "2 selected · 1 retry · …" on
+ * "2 selected · 1 to try again · 1 restore" truncated to "2 selected · 1 to try again · …" on
  * small screens — losing the one tally the user could not otherwise work out. The
  * total is legible from the ticks; what each button will touch is not.
  */
@@ -740,8 +740,10 @@ export function selectionCountLabel({
   restoreCount: number;
 }): string {
   const verbs: string[] = [];
-  if (retryCount > 0) verbs.push(t`${retryCount} retry`);
-  if (restoreCount > 0) verbs.push(t`${restoreCount} restore`);
+  if (retryCount > 0)
+    verbs.push(plural(retryCount, "# to try again", "# to try again"));
+  if (restoreCount > 0)
+    verbs.push(plural(restoreCount, "# restore", "# restore"));
   if (verbs.length === 2) return verbs.join(" · ");
   return [t`${selected} selected`, ...verbs].join(" · ");
 }
