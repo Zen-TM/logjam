@@ -458,7 +458,7 @@ export function splitSkippedRows(warnings: string[]): {
 }
 
 /** The confirm step's line about dropped rows: "1 row can't be read and will
- *  be skipped (row 3)." Empty when none were dropped. */
+ *  be skipped (row 4)." Empty when none were dropped. */
 export function skippedRowsNote(skipped: SkippedTripRow[]): string {
   if (skipped.length === 0) return "";
   const rows = skipped.map((s) => s.rowIndex + 2);
