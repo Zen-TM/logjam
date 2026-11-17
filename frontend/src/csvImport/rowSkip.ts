@@ -1,3 +1,5 @@
+import { t } from "@logjam/shared";
+
 // Formats the reason a source CSV row is dropped before import (missing
 // required field, unreadable value). Pure and separate from
 // UnifiedImportDialog.tsx so the drop conditions are unit-testable without
@@ -12,11 +14,11 @@ export function describeDroppedPlaceRow(args: {
   rawLatitude: string;
   rawLongitude: string;
 }): string | null {
-  if (!args.name) return "name is missing";
+  if (!args.name) return t`name is missing`;
   if (isNaN(args.latitude))
-    return `latitude "${args.rawLatitude}" couldn't be read`;
+    return t`latitude "${args.rawLatitude}" couldn't be read`;
   if (isNaN(args.longitude))
-    return `longitude "${args.rawLongitude}" couldn't be read`;
+    return t`longitude "${args.rawLongitude}" couldn't be read`;
   return null;
 }
 
@@ -25,5 +27,5 @@ export function describeDroppedTripRow(
   rawDate: string,
 ): string | null {
   if (isoDate) return null;
-  return `date "${rawDate.trim()}" couldn't be read`;
+  return t`date "${rawDate.trim()}" couldn't be read`;
 }

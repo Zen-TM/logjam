@@ -7,6 +7,7 @@ import {
   LIDAR_JOB_COPY,
   lidarJobSharePromise,
   removeShareConfirm,
+  plural,
   t,
   type SharePromiseKind,
   type SharpenUnavailable,
@@ -204,9 +205,7 @@ export default function SharpenedAreasView({
           <span className={classes.title}>{t`Sharpened areas`}</span>
           {loaded && (
             <span className={classes.subtitle}>
-              {completedTopoJobs.length === 1
-                ? "1 area"
-                : `${completedTopoJobs.length} areas`}
+              {plural(completedTopoJobs.length, "# area", "# areas")}
             </span>
           )}
         </div>

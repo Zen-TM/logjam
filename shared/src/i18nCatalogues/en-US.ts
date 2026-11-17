@@ -56,6 +56,8 @@ export const enUS: Catalogue = {
     "How much canyoneering and rappelling people have done.",
   "Invite cancelled.": "Invite canceled.",
   "Land tenure": "Land ownership",
+  "Land tenure couldn't be loaded — its map file is missing.":
+    "Land ownership couldn't be loaded — its map file is missing.",
   "Last burnt": "Last burned",
   "Mapped by NSW National Parks and Wildlife Service: a fire it didn't map, often on private land, has no colour.":
     "Mapped by NSW National Parks and Wildlife Service: a fire it didn't map, often on private land, has no color.",
@@ -75,6 +77,7 @@ export const enUS: Catalogue = {
   "Scrub density for bushbashing": "Scrub density for bushwhacking",
   "Scrub density for bushbashing: denser reads darker. Orange stripes mark ground burnt since the survey, so the scrub there may have changed.":
     "Scrub density for bushwhacking: denser reads darker. Orange stripes mark ground burned since the survey, so the scrub there may have changed.",
+  "Show land tenure": "Show land ownership",
   "Steepness in degrees from flat. An easy walk is under 10°, a steep scramble around 30°, and a cliff 45° or more. Ground flatter than the first band has no colour.":
     "Steepness in degrees from flat. An easy walk is under 10°, a steep scramble around 30°, and a cliff 45° or more. Ground flatter than the first band has no color.",
   "The sharpened area is deleted from your account, and friends you shared it with lose it too. Map files already made from it stay until they expire; one still waiting to start is cancelled.":

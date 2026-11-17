@@ -26,6 +26,7 @@ import {
   type SectionKeysOn,
   type SlopeBand,
   type TerrainSwitchKey,
+  plural,
   t,
 } from "@logjam/shared";
 import type { CompletedTopoJob } from "../../topoLayerTypes";
@@ -57,17 +58,24 @@ const tabOf = (view: View): View =>
 const copy = MAP_LAYERS.copy;
 const terrainCopy = MAP_TERRAIN.copy;
 
-const countOf = (count: number, noun: string) =>
-  `${count} ${noun}${count === 1 ? "" : "s"}`;
+const SHOW_TERRAIN_LABEL: Record<"contours" | "slope" | "hillshade", string> = {
+  contours: t`Show contours`,
+  slope: t`Show slope`,
+  hillshade: t`Show hillshade`,
+};
 
-/**
- * What is drawn on the map, in a popover over it — not a page, because it is a
- * question about the map. Three tabs (Map, Terrain, Overlays); a row with more
- * inside it than a switch (the slope bands) opens a sub-view in place.
- */
-/** "Show river gauges", but "Show MGA grid" or "Show NZTM grid": an acronym keeps its capitals. */
-function showLabel(title: string) {
-  return `Show ${/^[A-Z]{2}/.test(title) ? title : title[0].toLowerCase() + title.slice(1)}`;
+const SHOW_OVERLAY_TERRAIN_LABEL: Record<"land" | "fire" | "coverage", string> =
+  {
+    land: t`Show land tenure`,
+    fire: t`Show fire history`,
+    coverage: t`Show coverage`,
+  };
+
+function showOverlayLegendLabel(title: string): string {
+  if (title === t`Land tenure`) return t`Show land tenure`;
+  if (title === t`Fire history`) return t`Show fire history`;
+  if (title === t`Coverage`) return t`Show coverage`;
+  return t`Show ${title}`;
 }
 
 export default function LayersPopover({
@@ -331,7 +339,8 @@ export default function LayersPopover({
                     icon="place"
                     hue={PLACE_TYPE_COLORS[0]}
                     title={copy.places}
-                    subtitle={countOf(placeCount, "place")}
+                    subtitle={plural(placeCount, "# place", "# places")}
+                    toggleLabel={t`Show places`}
                     checked={showPlaces}
                     onToggle={setShowPlaces}
                   />
@@ -347,8 +356,9 @@ export default function LayersPopover({
                     subtitle={
                       wayCount == null
                         ? t`Every line you have`
-                        : countOf(wayCount, "way")
+                        : plural(wayCount, "# way", "# ways")
                     }
+                    toggleLabel={t`Show ways`}
                     checked={showWays}
                     onToggle={setShowWays}
                   />
@@ -356,10 +366,12 @@ export default function LayersPopover({
                     .filter(isOverlayTerrainKey)
                     .map((key) => {
                       const legend = legends[key];
+                      const toggleLabel = SHOW_OVERLAY_TERRAIN_LABEL[key];
                       return legend ? (
                         <OverlayLegendRow
                           key={key}
                           legend={legend}
+                          toggleLabel={toggleLabel}
                           checked={terrainLayers[key]}
                           onToggle={(on) => onTerrainLayerChange(key, on)}
                           {...(key === "coverage"
@@ -384,6 +396,7 @@ export default function LayersPopover({
                           hue="var(--color-neutral)"
                           title={terrainCopy[key]}
                           subtitle={terrainCopy.notHere}
+                          toggleLabel={toggleLabel}
                           checked={false}
                           disabled
                           onToggle={() => {}}
@@ -395,17 +408,32 @@ export default function LayersPopover({
                     hue="var(--color-accent)"
                     title={MAP_OVERLAYS.copy.gauges}
                     subtitle={gaugesHere ? undefined : terrainCopy.notHere}
+                    toggleLabel={t`Show river gauges`}
                     checked={showGauges && gaugesHere}
                     disabled={!gaugesHere}
                     onToggle={setShowGauges}
                   />
-                  <OverlayRow
-                    icon="mgaGrid"
-                    hue="var(--color-neutral)"
-                    title={gridOverlayTitle(mapBounds && boxCentre(mapBounds))}
-                    checked={showMgaGrid}
-                    onToggle={setShowMgaGrid}
-                  />
+                  {(() => {
+                    const gridTitle = gridOverlayTitle(
+                      mapBounds && boxCentre(mapBounds),
+                    );
+                    const gridToggleLabel =
+                      gridTitle === t`MGA grid`
+                        ? t`Show MGA grid`
+                        : gridTitle === t`NZTM grid`
+                          ? t`Show NZTM grid`
+                          : t`Show UTM grid`;
+                    return (
+                      <OverlayRow
+                        icon="mgaGrid"
+                        hue="var(--color-neutral)"
+                        title={gridTitle}
+                        toggleLabel={gridToggleLabel}
+                        checked={showMgaGrid}
+                        onToggle={setShowMgaGrid}
+                      />
+                    );
+                  })()}
                   {/* The list ends with the way to add to it: the same
                       import the Ways list offers. */}
                   <Row
@@ -488,7 +516,9 @@ export function TerrainPane({
               // the basemap or region that can.
               checked={layers[key] && !off}
               onChange={(on) => onChange(key, on)}
-              label={showLabel(title)}
+              label={
+                SHOW_TERRAIN_LABEL[key as "contours" | "slope" | "hillshade"]
+              }
               disabled={off}
             />
           </>
@@ -639,11 +669,13 @@ function SlopeBandsView({
  */
 export function OverlayLegendRow({
   legend,
+  toggleLabel,
   checked,
   onToggle,
   choice,
 }: {
   legend: OverlayLegend;
+  toggleLabel?: string;
   checked: boolean;
   onToggle: (next: boolean) => void;
   /** The value of `legend.choice`, for an overlay that has one: null until
@@ -681,6 +713,7 @@ export function OverlayLegendRow({
           hue={legend.hue}
           title={legend.title}
           subtitle={overlayChoiceLabel(legend, choice?.value ?? undefined)}
+          toggleLabel={toggleLabel ?? showOverlayLegendLabel(legend.title)}
           checked={checked}
           onToggle={onToggle}
           help={{ label: legend.about, onClick: openLegend }}
@@ -727,6 +760,7 @@ function OverlayRow({
   hue,
   title,
   subtitle,
+  toggleLabel,
   checked,
   onToggle,
   onOpen,
@@ -739,6 +773,7 @@ function OverlayRow({
   hue: string;
   title: string;
   subtitle?: string;
+  toggleLabel: string;
   checked: boolean;
   onToggle: (next: boolean) => void;
   onOpen?: () => void;
@@ -774,7 +809,7 @@ function OverlayRow({
           <Toggle
             checked={checked}
             onChange={onToggle}
-            label={showLabel(title)}
+            label={toggleLabel}
             disabled={disabled}
           />
         </>

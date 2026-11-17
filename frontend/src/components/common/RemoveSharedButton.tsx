@@ -19,6 +19,36 @@ import { messageFromError } from "../../errors/messageFromError";
 import { Button, Icon } from "../../ui";
 import { removeShareConfirm, t } from "@logjam/shared";
 
+function removeFailedMessage(kindLabel: string): string {
+  switch (kindLabel) {
+    case "place":
+      return t`Couldn't remove that place.`;
+    case "route":
+      return t`Couldn't remove that route.`;
+    case "topo":
+      return t`Couldn't remove that LiDAR map.`;
+    case "sharpened area":
+      return t`Couldn't remove that sharpened area.`;
+    default:
+      return t`Couldn't remove that.`;
+  }
+}
+
+function removeButtonTitle(kindLabel: string): string {
+  switch (kindLabel) {
+    case "place":
+      return t`Remove this shared place`;
+    case "route":
+      return t`Remove this shared route`;
+    case "topo":
+      return t`Remove this shared LiDAR map`;
+    case "sharpened area":
+      return t`Remove this shared sharpened area`;
+    default:
+      return t`Remove this shared item`;
+  }
+}
+
 export default function RemoveSharedButton({
   kindLabel,
   itemName,
@@ -60,13 +90,13 @@ export default function RemoveSharedButton({
       onRemoved();
     } catch (err) {
       console.error(err);
-      toast.error(messageFromError(err, `Couldn't remove that ${kindLabel}.`));
+      toast.error(messageFromError(err, removeFailedMessage(kindLabel)));
     } finally {
       setBusy(false);
     }
   }
 
-  const label = title ?? `Remove this shared ${kindLabel}`;
+  const label = title ?? removeButtonTitle(kindLabel);
   const off = busy ? t`Removing…` : disabledReason;
 
   return (
@@ -85,7 +115,7 @@ export default function RemoveSharedButton({
         >
           {children ?? (
             <>
-              <Icon idea="hide" size={14} /> Remove
+              <Icon idea="hide" size={14} /> {t`Remove`}
             </>
           )}
         </button>
