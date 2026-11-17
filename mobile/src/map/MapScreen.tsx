@@ -3034,7 +3034,7 @@ export function MapScreen({
           const outcome = await runGeoPdfImport(
             t`Shared map`,
             (onProgress, token) =>
-              importGeoPdfFile(t`Shared map`, url, onProgress, token),
+              importGeoPdfFile("Shared map", url, onProgress, token),
           );
           if (outcome?.status === "imported" && outcome.record.bbox) {
             fitCameraToBbox(outcome.record.bbox);

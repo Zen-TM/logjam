@@ -118,7 +118,7 @@ export function SlopeBandsEditor() {
           <BoundaryRow
             key={idx}
             lead={`${band.fromDeg}° to`}
-            label={t`Band ${idx + 1} upper angle in degrees`}
+            label={`Band ${idx + 1} upper angle in degrees`}
             value={band.toDeg}
             range={slopeBoundaryRange(bands, idx)}
             colour={band.colour}

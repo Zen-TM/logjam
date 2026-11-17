@@ -50,7 +50,7 @@ export function RegionDownloadRow({ job }: { job: RegionJob }) {
           // The detail is the message from the exception that ended the run,
           // scrubbed (see failureDetail).
           return state.detail
-            ? t`Download didn't finish: ${state.detail}`
+            ? `Download didn't finish: ${state.detail}`
             : t`Download didn't finish. Try again.`;
       }
     }

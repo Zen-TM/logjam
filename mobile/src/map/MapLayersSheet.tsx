@@ -654,7 +654,7 @@ function LayerRow({ entry }: { entry: LayerToggleEntry }) {
               <Toggle
                 checked={entry.value}
                 onChange={entry.onChange}
-                accessibilityLabel={t`Show ${entry.title}`}
+                accessibilityLabel={`Show ${entry.title}`}
               />
               <Icon
                 idea={expanded ? "collapse" : "expand"}

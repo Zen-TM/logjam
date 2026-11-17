@@ -11,8 +11,6 @@
 // the case that needs telling apart, and "Offline map 2" does that where
 // "16 Aug 2026" does not.
 
-import { t } from "@logjam/shared";
-
 /**
  * First "Offline map N" not already in use, counting from 1.
  *
@@ -26,7 +24,7 @@ export function nextRegionName(
 ): string {
   const taken = new Set(existingLabels);
   for (let n = 1; ; n += 1) {
-    const name = t`Offline map ${n}`;
+    const name = `Offline map ${n}`;
     if (!taken.has(name)) return name;
   }
 }
