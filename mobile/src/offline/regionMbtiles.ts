@@ -23,6 +23,7 @@ import {
   xyzToTmsRow,
   type DownloadableTileSourceId,
   type RegionBbox,
+  t,
 } from "@logjam/shared";
 
 import type { MapArtifact } from "../map/sourceResolver";
@@ -402,7 +403,7 @@ export async function listUnfinishedRegions(
       const [west, south, east, north] = bounds.split(",").map(Number);
       unfinished.push({
         id,
-        label: (await readRegionMetadata(db, "name")) ?? "Offline map",
+        label: (await readRegionMetadata(db, "name")) ?? t`Offline map`,
         groupId: (await readRegionMetadata(db, "logjam:group")) ?? undefined,
         groupLabel:
           (await readRegionMetadata(db, "logjam:groupLabel")) ?? undefined,

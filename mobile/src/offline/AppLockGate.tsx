@@ -24,6 +24,7 @@ import {
   onAppLockPreferenceChanged,
 } from "./appLockPreference";
 import { spacing, makeStyles, muted } from "../theme";
+import { t } from "@logjam/shared";
 
 // The system auth sheet runs in its own activity: launching and dismissing it
 // fires background/active AppState churn on the host activity. Any relock
@@ -114,7 +115,7 @@ export function AppLockGate({ children }: { children: React.ReactNode }) {
         return;
       }
       const result = await LocalAuthentication.authenticateAsync({
-        promptMessage: "Unlock Logjam GPS",
+        promptMessage: t`Unlock Logjam GPS`,
       });
       if (result.success) {
         lastUnlockAt.current = Date.now();
@@ -174,13 +175,13 @@ export function AppLockGate({ children }: { children: React.ReactNode }) {
 
   return (
     <SafeAreaView style={styles.container}>
-      <Text style={styles.title}>Locked</Text>
+      <Text style={styles.title}>{t`Locked`}</Text>
       {authFailed ? (
-        <Text style={styles.line}>
-          Authentication didn&apos;t complete — try again.
-        </Text>
+        <Text
+          style={styles.line}
+        >{t`Authentication didn't complete — try again.`}</Text>
       ) : null}
-      <Button label="Unlock" onPress={prompt} />
+      <Button label={t`Unlock`} onPress={prompt} />
     </SafeAreaView>
   );
 }

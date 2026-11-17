@@ -1,3 +1,5 @@
+import { t } from "@logjam/shared";
+
 // "There is an unsaved route on the map right now."
 //
 // Module state rather than context because the two parties are far apart and
@@ -20,8 +22,7 @@ export function isRouteEditing(): boolean {
 
 /** Said in one place because it is said from two: the tab bar and a tapped
  *  notification are both ways off the map. */
-export const FINISH_ROUTE_FIRST =
-  "Finish your route first. Save it, or delete the draft, before leaving the map.";
+export const FINISH_ROUTE_FIRST = t`Finish your route first. Save it, or delete the draft, before leaving the map.`;
 
 const blockedListeners = new Set<() => void>();
 

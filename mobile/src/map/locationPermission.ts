@@ -4,6 +4,7 @@
 import * as Location from "expo-location";
 
 import { alertPermissionDenied } from "../permissionAlert";
+import { t } from "@logjam/shared";
 
 /** True when granted. Denials are said out loud (never fail silently): a
  *  toast, or `onMessage` where a modal would cover one. */
@@ -19,10 +20,9 @@ export async function ensureForegroundLocationPermission(
   // Android silently auto-denies after one refusal (canAskAgain=false) —
   // the only path back is app settings.
   alertPermissionDenied({
-    title: "Location permission needed",
-    askAgainMessage: "Allow location access to show your position on the map.",
-    settingsMessage:
-      "Location is off. Turn it on for Logjam GPS in system settings.",
+    title: t`Location permission needed`,
+    askAgainMessage: t`Allow location access to show your position on the map.`,
+    settingsMessage: t`Location is off. Turn it on for Logjam GPS in system settings.`,
     canAskAgain,
     onMessage,
   });
