@@ -4,7 +4,9 @@ import {
   isOverlayTerrainKey,
   MAP_LAYERS,
   boxCentre,
+  gridNamedAt,
   gridOverlayTitle,
+  type GridId,
   MAP_OVERLAYS,
   MAP_TERRAIN,
   overlayAwaitsChoice,
@@ -71,13 +73,17 @@ const SHOW_OVERLAY_TERRAIN_LABEL: Record<"land" | "fire" | "coverage", string> =
     coverage: t`Show coverage`,
   };
 
-function showOverlayLegendLabel(title: string): string {
-  if (title === t`Land tenure`) return t`Show land tenure`;
-  if (title === t`Fire history`) return t`Show fire history`;
-  if (title === t`Coverage`) return t`Show coverage`;
-  return t`Show ${title}`;
-}
+const SHOW_GRID_LABEL: Record<GridId, string> = {
+  mga2020: t`Show MGA grid`,
+  nztm2000: t`Show NZTM grid`,
+  utm: t`Show UTM grid`,
+};
 
+/**
+ * What is drawn on the map, in a popover over it — not a page, because it is a
+ * question about the map. Three tabs (Map, Terrain, Overlays); a row with more
+ * inside it than a switch (the slope bands) opens a sub-view in place.
+ */
 export default function LayersPopover({
   open,
   onClose,
@@ -413,27 +419,18 @@ export default function LayersPopover({
                     disabled={!gaugesHere}
                     onToggle={setShowGauges}
                   />
-                  {(() => {
-                    const gridTitle = gridOverlayTitle(
-                      mapBounds && boxCentre(mapBounds),
-                    );
-                    const gridToggleLabel =
-                      gridTitle === t`MGA grid`
-                        ? t`Show MGA grid`
-                        : gridTitle === t`NZTM grid`
-                          ? t`Show NZTM grid`
-                          : t`Show UTM grid`;
-                    return (
-                      <OverlayRow
-                        icon="mgaGrid"
-                        hue="var(--color-neutral)"
-                        title={gridTitle}
-                        toggleLabel={gridToggleLabel}
-                        checked={showMgaGrid}
-                        onToggle={setShowMgaGrid}
-                      />
-                    );
-                  })()}
+                  <OverlayRow
+                    icon="mgaGrid"
+                    hue="var(--color-neutral)"
+                    title={gridOverlayTitle(mapBounds && boxCentre(mapBounds))}
+                    toggleLabel={
+                      SHOW_GRID_LABEL[
+                        gridNamedAt(mapBounds && boxCentre(mapBounds))
+                      ]
+                    }
+                    checked={showMgaGrid}
+                    onToggle={setShowMgaGrid}
+                  />
                   {/* The list ends with the way to add to it: the same
                       import the Ways list offers. */}
                   <Row
@@ -675,7 +672,7 @@ export function OverlayLegendRow({
   choice,
 }: {
   legend: OverlayLegend;
-  toggleLabel?: string;
+  toggleLabel: string;
   checked: boolean;
   onToggle: (next: boolean) => void;
   /** The value of `legend.choice`, for an overlay that has one: null until
@@ -713,7 +710,7 @@ export function OverlayLegendRow({
           hue={legend.hue}
           title={legend.title}
           subtitle={overlayChoiceLabel(legend, choice?.value ?? undefined)}
-          toggleLabel={toggleLabel ?? showOverlayLegendLabel(legend.title)}
+          toggleLabel={toggleLabel}
           checked={checked}
           onToggle={onToggle}
           help={{ label: legend.about, onClick: openLegend }}

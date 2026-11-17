@@ -21,28 +21,17 @@ function TermsTick({
   checked: boolean;
   onChange: (next: boolean) => void;
 }) {
+  const tags = {
+    tos: (text: string) => <DocLink href="/tos.html">{text}</DocLink>,
+    privacy: (text: string) => <DocLink href="/privacy.html">{text}</DocLink>,
+  };
+  const parts = updated
+    ? rich`I agree to the updated <tos>Terms</tos> and acknowledge the <privacy>Privacy Policy</privacy>.`
+    : rich`I agree to the <tos>Terms of Use</tos> and acknowledge the <privacy>Privacy Policy</privacy>.`;
   return (
     <Checkbox
       labelHasLinks
-      label={
-        updated ? (
-          <Rich
-            parts={rich`I agree to the updated <tos>Terms</tos> and acknowledge the <privacy>Privacy Policy</privacy>.`}
-            tags={{
-              tos: (text) => <DocLink href="/tos.html">{text}</DocLink>,
-              privacy: (text) => <DocLink href="/privacy.html">{text}</DocLink>,
-            }}
-          />
-        ) : (
-          <Rich
-            parts={rich`I agree to the <tos>Terms of Use</tos> and acknowledge the <privacy>Privacy Policy</privacy>.`}
-            tags={{
-              tos: (text) => <DocLink href="/tos.html">{text}</DocLink>,
-              privacy: (text) => <DocLink href="/privacy.html">{text}</DocLink>,
-            }}
-          />
-        )
-      }
+      label={<Rich parts={parts} tags={tags} />}
       checked={checked}
       onChange={onChange}
     />

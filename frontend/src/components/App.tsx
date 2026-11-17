@@ -48,7 +48,7 @@ import type {
   ScopedCustomFieldDef,
   StandaloneFile,
 } from "@logjam/shared";
-import { type LogsView, type PanelId } from "./sidebar/panels";
+import { PANEL_TITLES, type LogsView, type PanelId } from "./sidebar/panels";
 import {
   usePlaces,
   usePlaceTracks,
@@ -146,7 +146,6 @@ import {
   normalizeTerrainLayers,
   normalizeCarrier,
   carriersOf,
-  type TerrainLayerKey,
   type TerrainSwitchKey,
   MAP_OVERLAY_DEFAULTS,
   canyonOffersFor,
@@ -179,32 +178,10 @@ import { useToastOnce } from "./feedback/useToastOnce";
 import { useBasemapFallback } from "./map/useBasemapFallback";
 import { messageFromError } from "../errors/messageFromError";
 import { triggerDownload } from "../download";
-
-const TERRAIN_UNAVAILABLE_MESSAGE: Record<TerrainLayerKey, string> = {
-  contours: t`Contours couldn't be loaded — its map file is missing.`,
-  land: t`Land tenure couldn't be loaded — its map file is missing.`,
-  coverage: t`Coverage couldn't be loaded — its map file is missing.`,
-  fire: t`Fire history couldn't be loaded — its map file is missing.`,
-  slope: t`Slope couldn't be loaded — its map file is missing.`,
-  hillshade: t`Hillshade couldn't be loaded — its map file is missing.`,
-};
-
-const DOCUMENT_TITLES: Record<PanelId, string> = {
-  places: t`Places — Logjam Web`,
-  logs: t`Trips — Logjam Web`,
-  ways: t`Ways — Logjam Web`,
-  plans: t`Plans — Logjam Web`,
-  friends: t`Friends — Logjam Web`,
-  inbox: t`Inbox — Logjam Web`,
-  account: t`Account — Logjam Web`,
-  settings: t`Settings — Logjam Web`,
-  "place-detail": t`Place — Logjam Web`,
-  "trip-detail": t`Trip — Logjam Web`,
-  "way-detail": t`Way — Logjam Web`,
-  "plan-detail": t`Plan — Logjam Web`,
-  "way-draw": t`Draw a route — Logjam Web`,
-  measure: t`Measure distance — Logjam Web`,
-};
+import {
+  TERRAIN_UNAVAILABLE_MESSAGE,
+  VEGETATION_UNAVAILABLE_MESSAGE,
+} from "./terrainUnavailable";
 
 function App() {
   const toast = useToast();
@@ -669,9 +646,7 @@ function App() {
       }
       if (!topoUnavailableToastShownRef.current) {
         topoUnavailableToastShownRef.current = true;
-        toast.error(
-          t`Vegetation couldn't be loaded for some sharpened areas — their map files are missing.`,
-        );
+        toast.error(VEGETATION_UNAVAILABLE_MESSAGE);
       }
     },
     [toast],
@@ -718,7 +693,9 @@ function App() {
 
   // Reflect the active panel in the document title (WCAG 2.4.2 Page Titled).
   useEffect(() => {
-    document.title = activePanel ? DOCUMENT_TITLES[activePanel] : t`Logjam Web`;
+    document.title = activePanel
+      ? t`${PANEL_TITLES[activePanel]} — Logjam Web`
+      : t`Logjam Web`;
   }, [activePanel]);
 
   // Leaving a detail page via the NavRail drops what it was showing.
@@ -1280,7 +1257,7 @@ function App() {
         })
         .catch((err) => {
           console.error(err);
-          toast.error(messageFromError(err, t`Couldn't load sharpened area.`));
+          toast.error(messageFromError(err, t`Couldn't load sharpen job.`));
         });
     }
   }, [loadsUserData, toast]);
