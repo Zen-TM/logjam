@@ -44,7 +44,7 @@ export function useRememberedCopyMedia(active: boolean): [boolean, () => void] {
       }).catch((err: unknown) => {
         // The copy still honours THIS sheet's answer (it is sent explicitly),
         // so a failed save costs the memory, not the action.
-        console.error(messageFromError(err, t`Couldn't save that preference.`));
+        console.error(messageFromError(err, "Couldn't save that preference."));
       });
       return next;
     });

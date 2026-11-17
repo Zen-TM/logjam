@@ -639,7 +639,7 @@ export function PlaceDetailScreen({
             onShowRoute={(item) => {
               resolveRouteAttachmentBbox({
                 mediaId: item.id,
-                filename: item.filename ?? t`Route`,
+                filename: item.filename ?? "Route",
                 localPath: item.localDisplayPath,
               })
                 .then(onFocusOnMap)

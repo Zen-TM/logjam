@@ -41,7 +41,7 @@ const CEILINGS: Record<string, number> = {
   saved: 38,
   screens: 339,
   "screens/settings": 103,
-  sharing: 21,
+  sharing: 22,
   sync: 13,
   tracks: 58,
   ui: 50,
