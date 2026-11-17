@@ -56,6 +56,7 @@ import {
   friendSharesNote,
   friendShareVerb,
   messageFromError,
+  removeRowSubtitle,
   type BulkShareItemType,
   type FriendShareCard,
   type FriendShareDirection,
@@ -742,9 +743,6 @@ function ShareCardMenu({
   const styles = useStyles();
 
   const kind = SHARE_KIND_LABEL[card.row.entityType];
-
-  const removeRowSubtitle = (args: { kindLabel: string; friendName: string }) =>
-    t`Remove your access to this ${args.kindLabel} ${args.friendName} shared with you.`;
 
   // Dimmed with the reason, never hidden: sharing is the one thing on this
   // screen that needs the network, so it is the row a user would go looking
