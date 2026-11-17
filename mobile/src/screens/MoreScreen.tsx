@@ -37,6 +37,7 @@ import {
   type NavId,
   type NavIdOn,
   type TripPlanSummary,
+  t,
 } from "@logjam/shared";
 
 import { fetchCurrentUser, useApiQuery } from "../api/queries";
@@ -85,7 +86,7 @@ const useToneStyle = makeThemed(
 
 // The row has the room to name the whole chooser; the hero's compact button
 // shares a line with "No account" and a longer label truncates it.
-const GUEST_SIGN_IN = "Sign in or create an account";
+const GUEST_SIGN_IN = t`Sign in or create an account`;
 
 /** The entries of More: every Logjam GPS destination that is not a tab. */
 type MoreId = Exclude<NavIdOn<"gps">, "places" | "logs" | "saved">;
@@ -119,7 +120,7 @@ export function MoreScreen({
   // no user record to fetch at all.
   const userQuery = useApiQuery(
     fetchCurrentUser,
-    "Couldn't load your account.",
+    t`Couldn't load your account.`,
     !isGuest,
   );
   const online = useConnectivity() === "online";
@@ -150,7 +151,7 @@ export function MoreScreen({
   const syncNow = useCallback(async () => {
     await requestSync();
     if (getSyncStatus().state !== "error")
-      setToast({ text: "Synced.", tone: "done", nonce: Date.now() });
+      setToast({ text: t`Synced.`, tone: "done", nonce: Date.now() });
   }, [setToast]);
   const user = userQuery.data;
   const syncNowStatus = capabilityStatus("syncNow", accountState, online);
@@ -211,10 +212,10 @@ export function MoreScreen({
       <Row
         icon={navIcon("syncIssues")}
         hue={issueCount > 0 ? theme.warning : undefined}
-        title="Account sync issues"
+        title={t`Account sync issues`}
         badge={issueCount}
         accessibilityLabel={labelWithBadge(
-          "Account sync issues",
+          t`Account sync issues`,
           issueCount,
           navBadgeNoun("syncIssues"),
         )}
@@ -239,9 +240,9 @@ export function MoreScreen({
         title={isGuest ? GUEST_SIGN_IN : navLabel("account")}
         subtitle={
           isGuest
-            ? "Back up and share what's on this phone"
+            ? t`Back up and share what's on this phone`
             : user
-              ? `${formatBytes(user.storageUsedBytes)} of ${formatBytes(user.storageQuotaBytes)} used`
+              ? t`${formatBytes(user.storageUsedBytes)} of ${formatBytes(user.storageQuotaBytes)} used`
               : undefined
         }
         onPress={onOpenAccount}
@@ -255,15 +256,17 @@ export function MoreScreen({
     // the rule and a sixth entry shouldn't push the sync answer off screen.
     <View style={styles.root}>
       <Hero
-        eyebrow={isGuest ? "Logjam GPS" : user ? "Signed in as" : "Logjam GPS"}
-        title={isGuest ? "No account" : (user?.username ?? "Your account")}
+        eyebrow={
+          isGuest ? t`Logjam GPS` : user ? t`Signed in as` : t`Logjam GPS`
+        }
+        title={isGuest ? t`No account` : (user?.username ?? t`Your account`)}
         actions={
           // "Sync now" is meaningless without an account, so the hero's one
           // action becomes the way to get one — the same affordance slot, the
           // offer instead of the operation.
           isGuest ? (
             <Button
-              label="Sign in"
+              label={t`Sign in`}
               icon="signIn"
               variant="outlineAccent"
               compact
@@ -273,7 +276,7 @@ export function MoreScreen({
             />
           ) : (
             <Button
-              label="Sync now"
+              label={t`Sync now`}
               icon="refresh"
               variant="outlineAccent"
               compact

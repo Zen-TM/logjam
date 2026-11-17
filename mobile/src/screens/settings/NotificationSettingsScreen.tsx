@@ -22,6 +22,7 @@ import {
   notificationGroupLead,
   NOTIFICATION_PREFERENCES,
   type NotificationPreferences,
+  t,
 } from "@logjam/shared";
 
 import { apiFetch } from "../../api/apiFetch";
@@ -48,7 +49,7 @@ export function NotificationSettingsScreen() {
   const { accountState } = useAccountState();
   const userQuery = useApiQuery(
     fetchCurrentUser,
-    "Couldn't load your settings.",
+    t`Couldn't load your settings.`,
     accountState !== "guest",
   );
   const online = useConnectivity() === "online";
@@ -99,7 +100,10 @@ export function NotificationSettingsScreen() {
         }).catch((err: unknown) => {
           console.error(err);
           setNotifications(current);
-          notify(messageFromError(err, "Couldn't save that setting."), "error");
+          notify(
+            messageFromError(err, t`Couldn't save that setting.`),
+            "error",
+          );
         });
         return next;
       });
@@ -135,7 +139,7 @@ export function NotificationSettingsScreen() {
     serverPrefs.status === "unavailable"
       ? unavailableReasonText(serverPrefs.reason)
       : userQuery.error
-        ? "Couldn't reach your account"
+        ? t`Couldn't reach your account`
         : undefined;
   const ready = blocked === undefined && notifications !== null;
 
@@ -175,21 +179,21 @@ export function NotificationSettingsScreen() {
           ),
         )}
 
-        <SectionHeader title="This phone" />
+        <SectionHeader title={t`This phone`} />
         {/* Not a switch: Android owns this one, so the row reports it and
             either asks (the one place in the app that does) or opens the place
             it can be changed. A toggle here would be a lie. */}
         <Row
           icon="phone"
-          title="Notifications from Logjam GPS"
+          title={t`Notifications from Logjam GPS`}
           subtitle={
             pushAllowed === null
               ? undefined
               : pushAllowed
-                ? "Allowed — tap to change in your phone's settings"
+                ? t`Allowed — tap to change in your phone's settings`
                 : canAskPush
-                  ? "Not allowed yet — tap to allow"
-                  : "Blocked in your phone's settings"
+                  ? t`Not allowed yet — tap to allow`
+                  : t`Blocked in your phone's settings`
           }
           onPress={() => {
             if (!pushAllowed && canAskPush) {

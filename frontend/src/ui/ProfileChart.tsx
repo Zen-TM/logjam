@@ -12,7 +12,7 @@
 // `speedSeries` in `@logjam/shared`): the chart only places them and hands
 // them back to `formatX` and `formatValue` to be read out.
 import { useEffect, useRef, useState } from "react";
-import { profileSpan, type ProfileSeries } from "@logjam/shared";
+import { profileSpan, type ProfileSeries, t } from "@logjam/shared";
 import classes from "./ProfileChart.module.css";
 
 /** Viewbox units. The SVG scales to its container; these only set the aspect. */
@@ -141,7 +141,7 @@ export function ProfileChart({
         viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
         preserveAspectRatio="none"
         role="img"
-        aria-label={`${label}: ${formatValue(min)} to ${formatValue(max)}`}
+        aria-label={t`${label}: ${formatValue(min)} to ${formatValue(max)}`}
         onPointerMove={handleMove}
         onPointerLeave={handleLeave}
       >
@@ -193,9 +193,9 @@ export function ProfileChart({
           {/* Value first, then where: "51 m at 3.7 km", "4.2 km/h at 2:41 pm".
               Two bare figures in axis order need the reader to know which axis
               is which, and a height and a distance are both metres. */}
-          <span className={classes.markerLabel}>
-            {formatValue(hovered.value)} at {formatX(hovered.at)}
-          </span>
+          <span
+            className={classes.markerLabel}
+          >{t`${formatValue(hovered.value)} at ${formatX(hovered.at)}`}</span>
         </div>
       )}
     </div>

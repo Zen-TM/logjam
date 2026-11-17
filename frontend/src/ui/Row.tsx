@@ -6,7 +6,7 @@ import {
   type HTMLAttributes,
   type ReactNode,
 } from "react";
-import { avatarInitials, friendAvatarHue } from "@logjam/shared";
+import { avatarInitials, friendAvatarHue, t } from "@logjam/shared";
 import classes from "./Row.module.css";
 import { Icon, type Glyph } from "./Icon";
 import { Tooltip } from "./Tooltip";
@@ -38,7 +38,7 @@ export function TileCheckbox({
       role="checkbox"
       aria-checked={checked}
       aria-label={label}
-      title="Select (shift-click for a range)"
+      title={t`Select (shift-click for a range)`}
       className={classes.pick}
       data-selecting={selecting}
       onClick={(event) => onToggle(event.shiftKey)}
@@ -136,9 +136,10 @@ export function RowList({
   const hintId = useId();
   return (
     <>
-      <span id={hintId} className="visually-hidden">
-        Arrow keys move between rows, Space selects, Shift+F10 opens actions.
-      </span>
+      <span
+        id={hintId}
+        className="visually-hidden"
+      >{t`Arrow keys move between rows, Space selects, Shift+F10 opens actions.`}</span>
       <div
         role="list"
         data-list=""

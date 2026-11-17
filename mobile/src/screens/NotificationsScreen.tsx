@@ -76,6 +76,7 @@ import {
   type NotificationInlineAction,
   type NotificationPlanTarget,
   loadStateOf,
+  t,
 } from "@logjam/shared";
 
 import { acceptFriendRequest, declineFriendRequest } from "../api/friends";
@@ -478,8 +479,8 @@ export function NotificationsScreen({
           messageFromError(
             err,
             read
-              ? "Couldn't mark that as read."
-              : "Couldn't mark that as unread.",
+              ? t`Couldn't mark that as read.`
+              : t`Couldn't mark that as unread.`,
           ),
           "error",
         );
@@ -553,7 +554,7 @@ export function NotificationsScreen({
         );
       } catch (err) {
         console.error(err);
-        notify(messageFromError(err, "Couldn't delete that."), "error");
+        notify(messageFromError(err, t`Couldn't delete that.`), "error");
       }
     },
     [notify, onUnreadChanged],
@@ -578,7 +579,7 @@ export function NotificationsScreen({
     const targets = selectedNotifications;
     const ok = await confirm({
       ...notificationDeleteConfirm(targets.length),
-      confirmLabel: "Delete",
+      confirmLabel: t`Delete`,
       tone: "destructive",
     });
     if (!ok) return;
@@ -595,7 +596,7 @@ export function NotificationsScreen({
       notify(INBOX.copy.markedAllRead, "done");
     } catch (err) {
       console.error(err);
-      notify(messageFromError(err, "Couldn't mark those as read."), "error");
+      notify(messageFromError(err, t`Couldn't mark those as read.`), "error");
     }
   }, [notifications, notify, onUnreadChanged]);
 
@@ -799,9 +800,9 @@ export function NotificationsScreen({
       if (kind !== "accept") {
         const who = batch.sender ?? "them";
         const ok = await confirm({
-          confirmTitle: `Decline ${pending.length} files?`,
-          confirmBody: `You won't get copies of any of them. If you want them, you'd have to ask ${who} to send them again.`,
-          confirmLabel: "Decline",
+          confirmTitle: t`Decline ${pending.length} files?`,
+          confirmBody: t`You won't get copies of any of them. If you want them, you'd have to ask ${who} to send them again.`,
+          confirmLabel: t`Decline`,
           tone: "destructive",
         });
         if (!ok) return;
@@ -1064,7 +1065,7 @@ export function NotificationsScreen({
             actions={
               <IconButton
                 icon="overflow"
-                accessibilityLabel="Inbox actions"
+                accessibilityLabel={t`Inbox actions`}
                 onPress={() => setActionsOpen(true)}
               />
             }
@@ -1200,7 +1201,7 @@ export function NotificationsScreen({
         visible={actionsOpen}
         onClose={() => setActionsOpen(false)}
         onClosed={openParked}
-        title="Inbox actions"
+        title={t`Inbox actions`}
       >
         <View style={styles.actionsBody}>
           <Row
@@ -1221,7 +1222,7 @@ export function NotificationsScreen({
             disabled={readCount === 0 || !online}
             subtitle={
               !online
-                ? "Needs a connection"
+                ? t`Needs a connection`
                 : readCount === 0
                   ? "No read notifications"
                   : undefined
@@ -1241,8 +1242,8 @@ export function NotificationsScreen({
 
 /** Why a row's buttons are dimmed, for the press that asks. */
 function actionsDisabledReason(online: boolean, selecting: boolean): string {
-  if (!online) return "Needs a connection";
-  return selecting ? "Finish picking first" : "Working…";
+  if (!online) return t`Needs a connection`;
+  return selecting ? t`Finish picking first` : t`Working…`;
 }
 
 function keyExtractor(item: TNotification): string {
@@ -1361,7 +1362,7 @@ const NotificationRow = memo(function NotificationRow({
           ) : (
             <IconButton
               icon="overflow"
-              accessibilityLabel="Notification actions"
+              accessibilityLabel={t`Notification actions`}
               onPress={() => onMenu(item)}
             />
           )}
@@ -1402,7 +1403,7 @@ const NotificationRow = memo(function NotificationRow({
             disabledReason={actionsDisabledReason(online, selecting)}
             reasonShown={!online}
             // The reason on the thing that is dimmed, not on the screen (DESIGN.md).
-            hint={!online ? "Needs a connection" : undefined}
+            hint={!online ? t`Needs a connection` : undefined}
           />
         ) : showInSaved || quietActions.length > 0 ? (
           <CardActions>
@@ -1436,7 +1437,7 @@ const NotificationRow = memo(function NotificationRow({
               label={notificationVerb("readMessage").label}
               variant="outlineAccent"
               disabled={selecting}
-              disabledReason="Finish picking first"
+              disabledReason={t`Finish picking first`}
               onPress={() => onPress(item)}
             />
           </CardActions>
@@ -1501,7 +1502,7 @@ const BatchRow = memo(function BatchRow({
     // Named, because a batch of files whose members are partly answered is
     // otherwise a row whose buttons act on a number the user cannot see.
     batch.group === "files" && pending.length !== batch.items.length
-      ? `${pending.length} still to answer`
+      ? t`${pending.length} still to answer`
       : null,
     formatTime(batch.representative.createdAt),
   ]
@@ -1556,8 +1557,8 @@ const BatchRow = memo(function BatchRow({
               <Button
                 label={
                   batchBusy?.kind === "accept"
-                    ? `Accepting ${batchBusy.progress.done + 1} of ${batchBusy.progress.total}`
-                    : `Accept all ${pending.length}`
+                    ? t`Accepting ${batchBusy.progress.done + 1} of ${batchBusy.progress.total}`
+                    : t`Accept all ${pending.length}`
                 }
                 disabled={actionsDisabled}
                 disabledReason={actionsDisabledReason(online, selecting)}
@@ -1566,7 +1567,7 @@ const BatchRow = memo(function BatchRow({
               />
               <Button
                 label={
-                  batchBusy?.kind === "decline" ? "Declining…" : "Decline all"
+                  batchBusy?.kind === "decline" ? t`Declining…` : t`Decline all`
                 }
                 variant="outlineAccent"
                 disabled={actionsDisabled}
@@ -1579,7 +1580,7 @@ const BatchRow = memo(function BatchRow({
                 the bytes and runs the import — so the row says so rather than
                 spinning silently for a minute on trail signal. */}
             {!online ? (
-              <Text style={styles.actionHint}>Needs a connection</Text>
+              <Text style={styles.actionHint}>{t`Needs a connection`}</Text>
             ) : null}
           </>
         ) : null

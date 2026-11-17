@@ -1,5 +1,6 @@
 import { Icon } from "./Icon";
 import classes from "./Stats.module.css";
+import { t } from "@logjam/shared";
 
 export type SparkBucket = {
   /** The axis label under the bar: a month's initial, a year's last digits. */
@@ -104,7 +105,7 @@ export function StatGrid({ stats }: { stats: readonly Stat[] }) {
                 type="button"
                 className={classes.copy}
                 onClick={stat.onCopy}
-                aria-label={`${stat.label}: ${stat.value}. Copy`}
+                aria-label={t`${stat.label}: ${stat.value}. Copy`}
               >
                 <span>{stat.value}</span>
                 <Icon idea="copy" size={14} />

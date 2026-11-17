@@ -29,6 +29,7 @@ export const enUS: Catalogue = {
   "A box to tick": "A box to check",
   "A carpark, a campsite, the exit.": "A parking lot, a campsite, the exit.",
   "A suburb is enough.": "A town or neighborhood is enough.",
+  "Allow on mobile data": "Allow on cellular data",
   "About land tenure": "About land ownership",
   "Bushland greys with a hint of green, and fog-softened neutrals.":
     "Woodland grays with a hint of green, and fog-softened neutrals.",
@@ -95,6 +96,8 @@ export const enUS: Catalogue = {
   "You cancelled this.": "You canceled this.",
   "You're not on Wi-Fi. Download over mobile data?":
     "You're not on Wi-Fi. Download over cellular data?",
+  "Your canyoning trips and offline maps.":
+    "Your canyoneering trips and offline maps.",
   "Your private map and trips for canyoning in {0}.":
     "Your private map and trips for canyoneering in {0}.",
   "Your private map and trips for canyoning.":

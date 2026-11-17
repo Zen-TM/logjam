@@ -3,6 +3,7 @@ import { Tooltip } from "./Tooltip";
 import classes from "./SettingsRow.module.css";
 import { Icon } from "./Icon";
 import type { Disablable } from "./Button";
+import { t } from "@logjam/shared";
 
 /**
  * One setting as a LINE: what it is at the left, the control that sets it at
@@ -59,7 +60,7 @@ export function InfoTip({
         <button
           type="button"
           className={classes.info}
-          aria-label={`About ${label.toLowerCase()}`}
+          aria-label={t`About ${label.toLowerCase()}`}
           aria-describedby={describedById}
         >
           <Icon idea="info" size={14} aria-hidden />

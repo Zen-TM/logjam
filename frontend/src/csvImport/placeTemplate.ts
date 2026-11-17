@@ -1,6 +1,7 @@
 import {
   SYSTEM_PLACE_TYPE_IDS,
   type TripLogCustomFieldDef,
+  t,
 } from "@logjam/shared";
 
 // The import template for ONE place type, generated from that type's own field
@@ -58,7 +59,7 @@ export function placeImportTemplateCsv(
     `Example ${typeName}`,
     "-33.700000",
     "150.300000",
-    "Alt Name 1; Alt Name 2",
+    t`Alt Name 1; Alt Name 2`,
     // The notes cell carries the comma the quoting rule exists for.
     `Sample notes about the ${typeName.toLowerCase()}`,
     ...defs.map(exampleValue),

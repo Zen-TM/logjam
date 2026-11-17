@@ -6,6 +6,7 @@ import {
 } from "react";
 import { IconButton } from "./Button";
 import classes from "./Hero.module.css";
+import { t } from "@logjam/shared";
 
 /**
  * What closing the open panel does: the same call as pressing its nav-rail icon
@@ -28,7 +29,7 @@ export function Hero({
   title,
   actions,
   onBack,
-  backLabel = "Back",
+  backLabel = t`Back`,
   onClose,
   closeDisabled = false,
 }: {
@@ -55,10 +56,10 @@ export function Hero({
       {close && (
         <IconButton
           icon="close"
-          label="Close"
+          label={t`Close`}
           onClick={close}
           disabled={closeDisabled}
-          disabledReason="Wait for this to finish"
+          disabledReason={t`Wait for this to finish`}
         />
       )}
     </header>
