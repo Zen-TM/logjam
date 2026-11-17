@@ -141,6 +141,23 @@ describe("opTitle", () => {
     );
     expect(title).toBe("Couldn't sync a somethingNew");
   });
+
+  it("falls back for an unknown kind on every op, named or not", () => {
+    const unknown = "somethingNew" as ParkedOp["entity"];
+    const named = { entityName: "Car park" };
+    expect(opTitle(parked({ entity: unknown, op: "create", ...named }))).toBe(
+      "Couldn't add somethingNew “Car park”",
+    );
+    expect(opTitle(parked({ entity: unknown, op: "create" }))).toBe(
+      "Couldn't add a new somethingNew",
+    );
+    expect(opTitle(parked({ entity: unknown, op: "update" }))).toBe(
+      "Couldn't save your changes to a somethingNew",
+    );
+    expect(opTitle(parked({ entity: unknown, op: "delete" }))).toBe(
+      "Couldn't delete a somethingNew",
+    );
+  });
 });
 
 describe("opAdvice", () => {
@@ -668,7 +685,7 @@ describe("selectionCountLabel", () => {
   it("carries a tally per group verb, because each acts on a subset", () => {
     expect(
       selectionCountLabel({ selected: 5, retryCount: 3, restoreCount: 0 }),
-    ).toBe("5 selected · 3 retry");
+    ).toBe("5 selected · 3 to try again");
     expect(
       selectionCountLabel({ selected: 4, retryCount: 0, restoreCount: 3 }),
     ).toBe("4 selected · 3 restore");
@@ -676,11 +693,11 @@ describe("selectionCountLabel", () => {
 
   it("sheds the total when both verbs are live, because the bar has no room", () => {
     // Measured on a Pixel: five controls in the bar truncated
-    // "5 selected · 2 retry · 3 restore" to "5 selected · 2 retry · …", losing
+    // "5 selected · 2 to try again · 3 restore" to "5 selected · 2 to try again · …", losing
     // the one tally the ticks can't tell you.
     expect(
       selectionCountLabel({ selected: 5, retryCount: 2, restoreCount: 3 }),
-    ).toBe("2 retry · 3 restore");
+    ).toBe("2 to try again · 3 restore");
   });
 
   it("names no verb when nothing picked can take one", () => {

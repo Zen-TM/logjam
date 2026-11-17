@@ -35,6 +35,7 @@ import {
   type LeaderboardBoard as Board,
   type LeaderboardResponse,
   type LeaderboardRow,
+  type Medal,
   type SectionKeysOn,
   t,
 } from "@logjam/shared";
@@ -315,6 +316,12 @@ function Podium({
   );
 }
 
+const MEDAL_LABEL: Record<Medal, string> = {
+  gold: t`gold medal`,
+  silver: t`silver medal`,
+  bronze: t`bronze medal`,
+};
+
 /** Read-only: a friend's row opens nothing, since there is nothing more of
  *  theirs to see. The medal travels with "#rank", so colour is never the only
  *  signal (shared/DESIGN.md §7). Composed as Logjam Web's board row is. */
@@ -339,7 +346,7 @@ function BoardRow({
         entry.username,
         entry.isSelf ? copy.you : null,
         count,
-        medal ? `${medal} medal` : null,
+        medal ? MEDAL_LABEL[medal] : null,
       ]
         .filter(Boolean)
         .join(", ")}

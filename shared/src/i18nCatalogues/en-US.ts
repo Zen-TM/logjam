@@ -117,4 +117,7 @@ export const enUS: Catalogue = {
   "mobile reception": "cell reception",
   "no mobile reception": "no cell reception",
   "{0} abseils": "{0} rappels",
+  "abseil count": "rappel count",
+  "longest abseil": "longest rappel",
+  colour: "color",
 };

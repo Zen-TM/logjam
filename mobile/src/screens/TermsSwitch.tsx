@@ -6,8 +6,8 @@ import {
   openLegalDocument,
 } from "../legalLinks";
 import { makeStyles, radius, spacing } from "../theme";
-import { Toggle } from "../ui";
-import { t } from "@logjam/shared";
+import { Rich, Toggle } from "../ui";
+import { rich, t } from "@logjam/shared";
 
 /**
  * The agreement switch, on the sign-up form and in ConsentGate. Its words carry
@@ -38,9 +38,17 @@ export function TermsSwitch({
   return (
     <View style={styles.row}>
       <Text style={styles.words}>
-        I agree to the {updated ? "updated " : ""}
-        {link(updated ? t`Terms` : t`Terms of Use`, TERMS_URL)} and acknowledge
-        the {link("Privacy Policy", PRIVACY_POLICY_URL)}.
+        <Rich
+          parts={
+            updated
+              ? rich`I agree to the updated <terms>Terms</terms> and acknowledge the <privacy>Privacy Policy</privacy>.`
+              : rich`I agree to the <terms>Terms of Use</terms> and acknowledge the <privacy>Privacy Policy</privacy>.`
+          }
+          tags={{
+            terms: (label) => link(label, TERMS_URL),
+            privacy: (label) => link(label, PRIVACY_POLICY_URL),
+          }}
+        />
       </Text>
       <Toggle
         checked={checked}
