@@ -9,6 +9,7 @@
 // of only one kind never mentions the other, rather than reading as a
 // filled-in template.
 import { formatBytes } from "../format";
+import { t } from "@logjam/shared";
 
 /** The split, read from each item's own delete descriptor and never its kind. */
 export function bulkDeleteCounts(items: { delete?: { synced: boolean } }[]): {
@@ -36,7 +37,7 @@ export function bulkDeleteConfirmBody({
     onDeviceBytes > 0 ? `, freeing ${formatBytes(onDeviceBytes)}` : "";
   const accountReach =
     "removed from your account and from any friends they're shared with";
-  const undone = "This can't be undone.";
+  const undone = t`This can't be undone.`;
 
   // Single-kind selections talk about the whole thing, so they take a pronoun
   // back to the title ("Delete 3 items?") instead of restating the count.

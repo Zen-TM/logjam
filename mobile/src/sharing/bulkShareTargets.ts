@@ -19,6 +19,7 @@
 // used here at all — the sentence counts rows, it never lists them — and
 // nothing in this module is logged.
 import type { BulkShareItem, BulkShareItemType } from "@logjam/shared";
+import { t } from "@logjam/shared";
 
 /**
  * The `sendCopy` descriptor, structurally typed so this module never imports
@@ -251,9 +252,9 @@ export function bulkShareButtonLabel(
   progress: BulkShareProgress | null,
 ): string {
   if (progress?.phase === "copies") {
-    return `Sending ${progress.done + 1} of ${progress.total} — ${progress.filename}`;
+    return t`Sending ${progress.done + 1} of ${progress.total} — ${progress.filename}`;
   }
-  if (progress?.phase === "shares") return "Sharing…";
+  if (progress?.phase === "shares") return t`Sharing…`;
   const verb = plan.copies.length > 0 ? "Send" : "Share";
   return recipientCount === 0
     ? `${verb} with friends`
@@ -293,7 +294,7 @@ export function bulkShareOutcomeMessage(outcome: BulkShareOutcome): {
         tone: "error",
       };
     }
-    return { text: "Nothing to share.", tone: "error" };
+    return { text: t`Nothing to share.`, tone: "error" };
   }
 
   // The copy clause is written lower-case to follow "Shared 6 items and …",
