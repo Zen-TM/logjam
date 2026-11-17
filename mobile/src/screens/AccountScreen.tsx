@@ -49,7 +49,7 @@ import { getSession } from "../auth/oidcSession";
 import { capabilityRowProps, changeEmailRowProps } from "../auth/capabilities";
 import { CLIENT_VERSION_LABEL, config } from "../config";
 import { LegalLinks } from "./LegalLinks";
-import { Rich } from "../ui";
+import { Rich, useNow } from "../ui";
 import { formatBytes } from "../format";
 import { useConnectivity } from "../map/connectivity";
 import { countLocalEntities, type LocalEntityCounts } from "../sync/syncDb";
