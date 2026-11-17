@@ -44,7 +44,11 @@ import { usePlacePicker } from "../places/usePlacePicker";
 import { useMirrorPlaces } from "../sync/useSyncQueries";
 import { updateRouteLocal } from "../sync/outbox";
 import type { MirrorRoute } from "../sync/mirrorStore";
-import { exportRoute, ExportUnsupportedError } from "../fileExport";
+import {
+  exportRoute,
+  ExportUnsupportedError,
+  savedMessage,
+} from "../fileExport";
 import { RouteStatsBody } from "./RouteStatsBody";
 import { MapCoverageRow } from "../offline/MapCoverageRow";
 import { bboxOfPoints } from "../saved/bboxOfPoints";
@@ -247,7 +251,7 @@ export function RouteOptionsSheet({
       .then((filename) => {
         // Null = the user backed out of the folder picker. Not a failure, and
         // a toast claiming success would be a lie.
-        if (filename) onInfo(t`Saved ${filename}.`);
+        if (filename) onInfo(savedMessage(filename));
       })
       .catch((err: unknown) => {
         if (err instanceof ExportUnsupportedError) {

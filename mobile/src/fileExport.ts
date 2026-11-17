@@ -47,8 +47,16 @@ import {
   t,
 } from "@logjam/shared";
 
-// Read by callers as `Saved ${name}.` when the provider didn't report a name.
-const UNNAMED = "to the folder you chose";
+// Returned in place of a name when the provider didn't report one. "/" cannot
+// be in a file name, so it cannot be mistaken for one; `savedMessage` words it.
+const UNNAMED = "/";
+
+/** The toast for a file `saveExportFile` wrote, named or not. */
+export function savedMessage(filename: string): string {
+  return filename === UNNAMED
+    ? t`Saved to the folder you chose.`
+    : t`Saved ${filename}.`;
+}
 
 // Directory.pickDirectoryAsync rejects with this code when the user backs out.
 const PICKER_CANCELLED = "ERR_PICKER_CANCELLED";
@@ -77,8 +85,8 @@ function stampedName(filename: string, now = new Date()): string {
 /**
  * Write one file to a folder the user picks.
  *
- * Returns the filename actually used on success (or a phrase that completes
- * "Saved …." when the provider didn't report it), or null when the user backed
+ * Returns the filename actually used on success (or `UNNAMED` when the provider didn't
+ * report it), or null when the user backed
  * out of the folder picker — a cancel is not a failure and must not raise an
  * error the caller shows as one.
  */

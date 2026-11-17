@@ -63,7 +63,17 @@ const ALLOWED: { file: string; text: string; reason: string }[] = [
 ];
 
 // Strings still to reword to the glossary; delete an entry with its string.
-const BASELINE: { file: string; text: string; rule: string }[] = [];
+const BASELINE: { file: string; text: string; rule: string }[] = [
+  // Sentences that moved into `t` unchanged from bare strings this scan did not
+  // read; no screen shows them yet (sync/parkedError.ts).
+  { file: "sync/syncEngine.ts", text: "Will retry.", rule: "retry" },
+  { file: "sync/syncErrorSentence.ts", text: "and retry.", rule: "retry" },
+  {
+    file: "sync/syncErrorSentence.ts",
+    text: "The server rejected",
+    rule: "the-server",
+  },
+];
 
 const baselined = (file: string, rule: string, text: string) =>
   BASELINE.some(

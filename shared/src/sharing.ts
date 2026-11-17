@@ -403,12 +403,34 @@ export function removeShareConfirm(args: {
   /** The owner's username, on the surfaces that know it. */
   ownerName?: string | null;
 }): { title: string; body: string } {
-  const owner = args.ownerName ?? t`The owner`;
   return {
     title: t`Remove shared ${args.kindLabel}?`,
-    body: [
-      t`“${args.itemName}” is removed from your account, on every device.`,
-      t`${owner} keeps the original — ask them to share it again if you want it back.`,
-    ].join(" "),
+    body: removeShareBody(args),
   };
+}
+
+/**
+ * `removeShareConfirm` for a LiDAR topo that Logjam Web calls a sharpened
+ * area. The title is a whole message rather than "sharpened area" in the
+ * kind's hole, so a language can decline the phrase as one piece.
+ */
+export function removeSharedAreaConfirm(args: {
+  itemName: string;
+  ownerName?: string | null;
+}): { title: string; body: string } {
+  return {
+    title: t`Remove shared sharpened area?`,
+    body: removeShareBody(args),
+  };
+}
+
+function removeShareBody(args: {
+  itemName: string;
+  ownerName?: string | null;
+}): string {
+  const owner = args.ownerName ?? t`The owner`;
+  return [
+    t`“${args.itemName}” is removed from your account, on every device.`,
+    t`${owner} keeps the original — ask them to share it again if you want it back.`,
+  ].join(" ");
 }

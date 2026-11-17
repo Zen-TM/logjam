@@ -37,7 +37,7 @@ import {
 import { deleteLabel, vectorImportActions } from "../saved/assetActions";
 import { usePlacePicker } from "../places/usePlacePicker";
 import type { Bbox } from "../saved/bboxOfPoints";
-import { ExportUnsupportedError } from "../fileExport";
+import { ExportUnsupportedError, savedMessage } from "../fileExport";
 import { useSharePanel, useShareRowProps } from "../sharing/SharePanel";
 import { useConnectivity } from "../map/connectivity";
 import { useElevationProfile } from "../map/useElevationProfile";
@@ -159,7 +159,7 @@ export function ImportOptionsSheet({
       (filename) => {
         // Null = the user backed out of the folder picker. Not a failure, and a
         // toast claiming success would be a lie.
-        if (filename) onInfo(t`Saved ${filename}.`);
+        if (filename) onInfo(savedMessage(filename));
       },
       (err: unknown) => {
         if (err instanceof ExportUnsupportedError) {

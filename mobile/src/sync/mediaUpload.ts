@@ -27,6 +27,7 @@ import { markTransferCut } from "../api/noResponse";
 import type { MirrorMedia } from "./mirrorStore";
 import { getSyncDb, notifyMirrorChanged, withSyncTransaction } from "./syncDb";
 import { scheduleMutationSync } from "./mediaSyncBridge";
+import type { SyncErrorCode } from "./syncErrorSentence";
 import {
   MEDIA_CACHE_DIR as CACHE_DIR,
   WIPED_DIRS,
@@ -668,7 +669,7 @@ export async function runMediaCreateOp(
       "UPDATE outbox SET state = 'blocked', error_json = ? WHERE seq = ?",
       JSON.stringify({
         code: 0,
-        message: "This file is no longer on this phone. Discard this upload.",
+        reason: "file_missing" satisfies SyncErrorCode,
       }),
       row.seq,
     );
@@ -701,7 +702,7 @@ export async function runMediaCreateOp(
     if (typeof status === "number" && PERMANENT_PRESIGN_STATUSES.has(status)) {
       await db.runAsync(
         "UPDATE outbox SET state = 'blocked', error_json = ? WHERE seq = ?",
-        JSON.stringify({ code: status, message: messageForBlock(status) }),
+        JSON.stringify({ code: status, reason: reasonForBlock(status) }),
         row.seq,
       );
       return "blocked";
@@ -900,7 +901,7 @@ export async function runMediaLinkOp(row: MediaOpRow): Promise<MediaOpOutcome> {
     if (typeof status === "number" && PERMANENT_PRESIGN_STATUSES.has(status)) {
       await db.runAsync(
         "UPDATE outbox SET state = 'blocked', error_json = ? WHERE seq = ?",
-        JSON.stringify({ code: status, message: messageForBlock(status) }),
+        JSON.stringify({ code: status, reason: reasonForBlock(status) }),
         row.seq,
       );
       return "blocked";
@@ -939,11 +940,10 @@ export async function runMediaDeleteOp(
   return "done";
 }
 
-function messageForBlock(status: number): string {
-  if (status === 507)
-    return "Not enough storage space. Free some space and retry.";
-  if (status === 409) return "This place already has a track. Remove it first.";
-  return "The server rejected this upload.";
+function reasonForBlock(status: number): SyncErrorCode {
+  if (status === 507) return "storage_full";
+  if (status === 409) return "track_exists";
+  return "rejected";
 }
 
 /**

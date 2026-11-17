@@ -51,7 +51,11 @@ import { useMirrorPlaceTypes, useMirrorTrips } from "../sync/useSyncQueries";
 import type { MirrorPlace } from "../sync/mirrorStore";
 import { deletePlaceLocal } from "../sync/outbox";
 import { useFieldDefs } from "../customFields/useFieldDefs";
-import { exportPlace, ExportUnsupportedError } from "../fileExport";
+import {
+  exportPlace,
+  ExportUnsupportedError,
+  savedMessage,
+} from "../fileExport";
 
 type GpsPlaceVerbId = PlaceVerbIdOn<"gps">;
 
@@ -234,7 +238,7 @@ export function PlaceOptionsSheet({
     )
       .then((filename) => {
         // Null = the user backed out of the folder picker, not a failure.
-        if (filename) onInfo(t`Saved ${filename}.`);
+        if (filename) onInfo(savedMessage(filename));
       })
       .catch((err: unknown) => {
         if (err instanceof ExportUnsupportedError) {

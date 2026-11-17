@@ -298,7 +298,7 @@ export function requestSync(): Promise<void> {
       // event triggers, so a flaky link recovers without user action.
       setStatus({
         state: "error",
-        errorMessage: "Couldn't sync. Will retry.",
+        errorMessage: t`Couldn't sync. Will retry.`,
         errorKind: "unreachable",
       });
       scheduleBackoffRetry();

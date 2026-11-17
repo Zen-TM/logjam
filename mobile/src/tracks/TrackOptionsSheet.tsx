@@ -39,7 +39,7 @@ import { trackActions } from "../saved/assetActions";
 import { useMirrorLoggedTrackIds } from "../sync/useSyncQueries";
 import { usePlacePicker } from "../places/usePlacePicker";
 import type { Bbox } from "../saved/bboxOfPoints";
-import { ExportUnsupportedError } from "../fileExport";
+import { ExportUnsupportedError, savedMessage } from "../fileExport";
 import { type Track } from "./tracksDb";
 import type { TripTrackSource } from "./tripTrackSource";
 import { useSharePanel, useShareRowProps } from "../sharing/SharePanel";
@@ -219,7 +219,7 @@ export function TrackOptionsSheet({
       (filename) => {
         // Null = the user backed out of the folder picker. Not a failure, and a
         // toast claiming success would be a lie.
-        if (filename) onInfo(t`Saved ${filename}.`);
+        if (filename) onInfo(savedMessage(filename));
       },
       (err: unknown) => {
         if (err instanceof ExportUnsupportedError) {

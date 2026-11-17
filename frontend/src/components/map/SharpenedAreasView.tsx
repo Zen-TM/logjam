@@ -6,7 +6,7 @@ import {
   incomingLabel,
   LIDAR_JOB_COPY,
   lidarJobSharePromise,
-  removeShareConfirm,
+  removeSharedAreaConfirm,
   plural,
   t,
   type SharePromiseKind,
@@ -158,8 +158,7 @@ export default function SharpenedAreasView({
     // A topo is only ever shared DIRECTLY — it has no place to inherit
     // visibility from — so a shared row always has a share of its own to drop
     // (api/src/lib/shareAccess.unit.test.ts).
-    const confirm = removeShareConfirm({
-      kindLabel: "sharpened area",
+    const confirm = removeSharedAreaConfirm({
       itemName: label,
     });
     return [

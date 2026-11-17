@@ -6,6 +6,7 @@ import {
   isCopyableSharedRow,
   isSharableEntityType,
   removeShareConfirm,
+  removeSharedAreaConfirm,
   sharedRowVisibility,
 } from "./sharing";
 
@@ -60,6 +61,18 @@ describe("removeShareConfirm", () => {
     expect(
       removeShareConfirm({ kindLabel: "waypoint", itemName: "Carpark" }).body,
     ).toContain("The owner keeps the original");
+  });
+});
+
+describe("removeSharedAreaConfirm", () => {
+  it("says what removeShareConfirm says of a sharpened area", () => {
+    const confirm = removeSharedAreaConfirm({ itemName: "Claustral" });
+    const same = removeShareConfirm({
+      kindLabel: "sharpened area",
+      itemName: "Claustral",
+    });
+    expect(confirm).toEqual(same);
+    expect(confirm.title).toBe("Remove shared sharpened area?");
   });
 });
 
