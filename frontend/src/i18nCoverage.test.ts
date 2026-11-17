@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import ts from "typescript";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
-  ceilingFailures,
+  bareCopyFailures,
   I18N_ADR,
   ratchetReads,
   scanSources,
@@ -12,33 +12,10 @@ import {
 
 // User-facing text goes through `t`, `plural`, `rich` or `say`
 // (docs/decisions/0050-user-facing-text-goes-through-one-catalogue-function.md).
-// Text written the old way is counted per directory and may only fall: new
-// copy in Logjam Web goes through the catalogue, and a directory that moves its
-// text lowers its number in the same change. The scanner is `i18nSource.ts` in
+// Any other text in Logjam Web is a failure here. The scanner is `i18nSource.ts` in
 // @logjam/shared; what it must and must not flag is held in its own test.
 
 const SRC = dirname(fileURLToPath(import.meta.url));
-
-/** Bare literals a user may read, per directory under src. Lower an entry when its text moves; never raise one. */
-const CEILINGS: Record<string, number> = {
-  ".": 0,
-  components: 0,
-  "components/common": 0,
-  "components/dialogs": 0,
-  "components/dialogs/topoSettings": 0,
-  "components/feedback": 0,
-  "components/gauges": 0,
-  "components/map": 0,
-  "components/media": 0,
-  "components/plans": 0,
-  "components/routes": 0,
-  "components/sidebar": 0,
-  "components/sidebar/panels": 0,
-  csvImport: 0,
-  geoPdf: 0,
-  "geoPdf/draw": 0,
-  ui: 0,
-};
 
 function sources(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
@@ -92,9 +69,8 @@ describe("Logjam Web i18n coverage", () => {
     ).toEqual([]);
   });
 
-  // Mutation: add `export const zz = "Open the file";` to any source file, or
-  // raise or lower a ceiling, or move a directory's text into `t` without lowering it.
-  it("writes no new text outside the catalogue, and every ceiling is the count", () => {
-    expect(ceilingFailures(scan.counts, CEILINGS, scan.bare)).toEqual([]);
+  // Mutation: add `export const zz = "Open the file";` to any source file.
+  it("writes no text outside the catalogue", () => {
+    expect(bareCopyFailures(scan.bare)).toEqual([]);
   });
 });

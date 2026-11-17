@@ -7,7 +7,7 @@ import type { Catalogue } from "./i18n.js";
 import { enUS } from "./i18nCatalogues/en-US.js";
 import {
   bareCopyIn,
-  ceilingFailures,
+  bareCopyFailures,
   DATA_LITERALS,
   EXEMPT_FILES,
   I18N_ADR,
@@ -20,15 +20,10 @@ import {
 
 // User-facing text goes through `t`, `plural`, `rich` or `say`
 // (docs/decisions/0050-user-facing-text-goes-through-one-catalogue-function.md).
-// Text written the old way is counted per directory and may only fall: new
-// copy in @logjam/shared goes through the catalogue, and a directory that moves its
-// text lowers its number in the same change. The scanner is `i18nSource.ts` in
+// Any other text in @logjam/shared is a failure here. The scanner is `i18nSource.ts` in
 // @logjam/shared; what it must and must not flag is held in its own test.
 
 const SRC = dirname(fileURLToPath(import.meta.url));
-
-/** Bare literals a user may read, per directory under src. Lower an entry when its text moves; never raise one. */
-const CEILINGS: Record<string, number> = {};
 
 function sources(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
@@ -81,10 +76,9 @@ describe("@logjam/shared i18n coverage", () => {
     ).toEqual([]);
   });
 
-  // Mutation: add `export const zz = "Open the file";` to any source file, or
-  // raise or lower a ceiling, or move a directory's text into `t` without lowering it.
-  it("writes no new text outside the catalogue, and every ceiling is the count", () => {
-    expect(ceilingFailures(scan.counts, CEILINGS, scan.bare)).toEqual([]);
+  // Mutation: add `export const zz = "Open the file";` to any source file.
+  it("writes no text outside the catalogue", () => {
+    expect(bareCopyFailures(scan.bare)).toEqual([]);
   });
 });
 

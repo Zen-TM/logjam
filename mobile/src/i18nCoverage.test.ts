@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import ts from "typescript";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
-  ceilingFailures,
+  bareCopyFailures,
   I18N_ADR,
   ratchetReads,
   scanSources,
@@ -12,39 +12,12 @@ import {
 
 // User-facing text goes through `t`, `plural`, `rich` or `say`
 // (docs/decisions/0050-user-facing-text-goes-through-one-catalogue-function.md).
-// Text written the old way is counted per directory and may only fall: new
-// copy in Logjam GPS goes through the catalogue, and a directory that moves its
-// text lowers its number in the same change. The scanner is `i18nSource.ts` in
+// Any other text in Logjam GPS is a failure here. The scanner is `i18nSource.ts` in
 // @logjam/shared; what it must and must not flag is held in its own test.
 
 const SRC = dirname(fileURLToPath(import.meta.url));
-// The root component holds user copy too ("Update required"); it is counted with `.`.
+// The root component holds user copy too ("Update required"), so it is read with `src`.
 const APP = join(SRC, "..", "App.tsx");
-
-/** Bare literals a user may read, per directory under src. Lower an entry when its text moves; never raise one. */
-const CEILINGS: Record<string, number> = {
-  ".": 0,
-  api: 0,
-  auth: 0,
-  customFields: 0,
-  gauges: 0,
-  geopdf: 0,
-  imports: 0,
-  logs: 0,
-  map: 0,
-  media: 0,
-  notifications: 0,
-  offline: 0,
-  places: 0,
-  plans: 0,
-  saved: 0,
-  screens: 0,
-  "screens/settings": 0,
-  sharing: 0,
-  sync: 0,
-  tracks: 0,
-  ui: 0,
-};
 
 function sources(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
@@ -59,12 +32,14 @@ function sources(dir: string): string[] {
 // beforeAll with a long timeout, as `copyRules.test.ts` does.
 let scan: ReturnType<typeof scanSources>;
 let fileCount = 0;
+let scanned: string[] = [];
 beforeAll(() => {
   const files = [...sources(SRC), APP].map((path) => ({
     path: path === APP ? "App.tsx" : relative(SRC, path),
     source: readFileSync(path, "utf8"),
   }));
   fileCount = files.length;
+  scanned = files.map((file) => file.path);
   scan = scanSources(ts, "mobile", files);
 }, 30_000);
 
@@ -72,6 +47,8 @@ describe("Logjam GPS i18n coverage", () => {
   // Mutation: change `sources`'s extension test to `/\.tsxx?$/`, so it finds no file.
   it("reads the source at all — a silent zero would pass forever", () => {
     expect(fileCount).toBeGreaterThan(300);
+    // Mutation: drop `APP` from the list in `beforeAll`.
+    expect(scanned).toContain("App.tsx");
     // The floor is on the total found: bare literals fall as text moves into
     // messages, so their sum stays put while the scan keeps working.
     expect(scan.bare.length + scan.messages.length).toBeGreaterThan(1000);
@@ -98,10 +75,9 @@ describe("Logjam GPS i18n coverage", () => {
     ).toEqual([]);
   });
 
-  // Mutation: drop `APP` from the list in `beforeAll`, or add
-  // `export const zz = "Open the file";` to any source file, or
-  // raise or lower a ceiling, or move a directory's text into `t` without lowering it.
-  it("writes no new text outside the catalogue, and every ceiling is the count", () => {
-    expect(ceilingFailures(scan.counts, CEILINGS, scan.bare)).toEqual([]);
+  // Mutation: add `<Text>Save the place</Text>` to any screen, or
+  // `export const zz = "Open the file";` to any source file.
+  it("writes no text outside the catalogue", () => {
+    expect(bareCopyFailures(scan.bare)).toEqual([]);
   });
 });

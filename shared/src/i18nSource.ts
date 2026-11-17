@@ -893,6 +893,19 @@ export function directoryOf(relativePath: string): string {
   return slash < 0 ? "." : relativePath.slice(0, slash);
 }
 
+/** The advice every bare-text failure ends with, up to the rows that say where the text is. */
+const WRITE_THROUGH_T = `Write the text through t, plural, rich or say (${I18N_ADR}). A change that converts a whole directory runs \`node scripts/i18n-extract.mjs <directory>\` (after \`make shared\`), then \`node scripts/i18n-identity-check.mjs <base>\`. Where they are:`;
+
+/** One row per file, with the lines of its hits, so a new literal can be found. */
+function whereTheyAre(
+  hits: readonly { file: string; line: number }[],
+): string[] {
+  const lines = new Map<string, number[]>();
+  for (const hit of hits)
+    lines.set(hit.file, [...(lines.get(hit.file) ?? []), hit.line]);
+  return [...lines].map(([file, at]) => `  ${file}: ${at.join(", ")}`);
+}
+
 /**
  * What a ratchet ceiling map says is wrong with `counts` (bare literals per
  * directory): a count above its ceiling is new copy outside the catalogue; one
@@ -914,14 +927,10 @@ export function ceilingFailures(
     const count = counts[dir] ?? 0;
     const ceiling = ceilings[dir] ?? 0;
     if (count > ceiling) {
-      const lines = new Map<string, number[]>();
-      for (const hit of found)
-        if (hit.dir === dir)
-          lines.set(hit.file, [...(lines.get(hit.file) ?? []), hit.line]);
       failures.push(
         [
-          `${dir}: ${count} bare literals, ceiling ${ceiling}. Write the new text through t, plural, rich or say, never raise the ceiling (${I18N_ADR}). A change that converts a whole directory runs \`node scripts/i18n-extract.mjs <directory>\` (after \`make shared\`), then \`node scripts/i18n-identity-check.mjs <base>\`. Where they are:`,
-          ...[...lines].map(([file, at]) => `  ${file}: ${at.join(", ")}`),
+          `${dir}: ${count} bare literals, ceiling ${ceiling}, and never raise it. ${WRITE_THROUGH_T}`,
+          ...whereTheyAre(found.filter((hit) => hit.dir === dir)),
         ].join("\n"),
       );
     } else if (count < ceiling)
@@ -930,6 +939,23 @@ export function ceilingFailures(
       );
   }
   return failures.sort();
+}
+
+/**
+ * What is wrong with the bare literals `found` in a package that holds none:
+ * one failure naming how many there are and, per file, the lines. An empty list
+ * means there is no bare text.
+ */
+export function bareCopyFailures(
+  found: readonly { file: string; line: number }[],
+): string[] {
+  if (found.length === 0) return [];
+  return [
+    [
+      `${found.length} bare literals. ${WRITE_THROUGH_T}`,
+      ...whereTheyAre(found),
+    ].join("\n"),
+  ];
 }
 
 export type SourceScan = {

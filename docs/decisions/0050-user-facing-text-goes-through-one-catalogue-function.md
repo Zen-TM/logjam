@@ -94,8 +94,10 @@ User-facing text is written through `t`, `plural`, `rich` or `say`
 Guard: `shared/src/i18n.test.ts` holds the mechanism (key, reorder, fallback,
 plural categories with and without `Intl.PluralRules`, pseudo, `say`'s marks,
 `matchLanguage`). `i18nCoverage.test.ts` in each package holds that the text
-written outside these functions does not grow: a ceiling of bare literals per
-directory that may only fall, found by `shared/src/i18nSource.ts`; the same
+written outside these functions is none in `shared`, Logjam Web and Logjam GPS,
+which fail on any bare literal, and does not grow in the API, whose bare
+literals have a ceiling per directory that may only fall (updated 2026-11-18),
+all found by `shared/src/i18nSource.ts`; the same
 tests hold each message to its hygiene rules (no leading or trailing space, no
 literal `{0}`, a `#` in a plural, only tags `rich` can consume). On Logjam
 Web's main screens, started in the pseudo-language, text that is outside ⟦ ⟧
@@ -106,9 +108,9 @@ shows any more; so does a label wider than its control that is not in
 its entries that fit are no failure). Started in US English, Logjam Web
 reads its spellings, words and day order (`frontend/e2e/us-english.spec.ts`;
 `shared/src/usEnglish.test.ts` holds the same as unit tests) (updated 2026-11-16).
-No test yet
-holds that every call site uses it, since existing literals are not converted,
-or that the API's resolver is installed from `AsyncLocalStorage` for every
+The API has no test yet
+that every call site uses it, since its literals are not all converted (updated 2026-11-18),
+nor that the API's resolver is installed from `AsyncLocalStorage` for every
 path that writes text; a later change adds it. Each client's entry file sets
 the global before it imports `@logjam/shared`
 (`frontend/src/language.test.ts`, `frontend/src/mainLanguage.test.ts`,
