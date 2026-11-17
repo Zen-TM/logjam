@@ -40,10 +40,15 @@
       "customFields": {}
     }
   ],
-  "warnings": [
-    "Row 4: date \"sometime in March\" couldn't be read — skipped"
+  "skipped": [
+    {
+      "rowIndex": 2,
+      "reason": "date \"sometime in March\" couldn't be read"
+    }
   ],
-  "droppedRows": 1,
+  "warnings": [
+    "Row 4: date \"sometime in March\" couldn't be read"
+  ],
   "matches": [
     {
       "name": "Claustral Canyon",
