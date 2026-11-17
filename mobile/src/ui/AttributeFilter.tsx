@@ -18,6 +18,7 @@ import {
   type PlaceThresholdFilter,
   type ScopedCustomFieldDef,
   displayUnits,
+  t,
 } from "@logjam/shared";
 
 import { formRhythm, spacing, makeStyles } from "../theme";
@@ -189,7 +190,7 @@ function MinMaxFilter({
       <View style={styles.pair}>
         <View style={styles.pairField}>
           <TextField
-            label="From"
+            label={t`From`}
             placeholder={String(bounds[0])}
             value={low}
             keyboardType="numeric"
@@ -201,7 +202,7 @@ function MinMaxFilter({
         </View>
         <View style={styles.pairField}>
           <TextField
-            label="To"
+            label={t`To`}
             placeholder={String(bounds[1])}
             value={high}
             keyboardType="numeric"
@@ -295,7 +296,7 @@ function ThresholdFilter({
     <View style={styles.block}>
       <Header
         label={label}
-        summary={value == null ? "Any" : formatThreshold(value, length)}
+        summary={value == null ? t`Any` : formatThreshold(value, length)}
         active={value != null}
       />
       <View style={styles.chipRow}>
@@ -313,7 +314,7 @@ function ThresholdFilter({
       </View>
       <View style={styles.valueField}>
         <TextField
-          label="Value"
+          label={t`Value`}
           value={text}
           keyboardType="numeric"
           onChangeText={(next) => {
@@ -333,14 +334,14 @@ function BooleanFilter({ def, value, onChange }: Props) {
     <View style={styles.block}>
       <Header
         label={def.label}
-        summary={current == null ? "Any" : current ? "Yes" : "No"}
+        summary={current == null ? t`Any` : current ? t`Yes` : t`No`}
         active={current != null}
       />
       <View style={styles.chipRow}>
         {[true, false].map((option) => (
           <Chip
             key={String(option)}
-            label={option ? "Yes" : "No"}
+            label={option ? t`Yes` : t`No`}
             active={current === option}
             // Tapping the active chip clears it: "either" is the third state
             // and it needs to be reachable without a Reset.

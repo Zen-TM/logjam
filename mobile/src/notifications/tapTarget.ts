@@ -6,6 +6,7 @@
 
 import {
   notificationPlanTarget,
+  t,
   TRIP_PLANS_LIST,
   type TNotification,
 } from "@logjam/shared";
@@ -153,7 +154,7 @@ export function tapTargetCall(
         name: "Places",
         params: {
           screen: "PlaceDetail",
-          params: { placeId: target.placeId, name: "Place" },
+          params: { placeId: target.placeId, name: t`Place` },
         },
       };
     case "plan":

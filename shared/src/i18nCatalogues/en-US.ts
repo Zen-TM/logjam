@@ -41,6 +41,7 @@ export const enUS: Catalogue = {
   Colour: "Color",
   "Coloured by steepness": "Colored by steepness",
   "Couldn't change the colour.": "Couldn't change the color.",
+  "Couldn't update the colour.": "Couldn't update the color.",
   "Couldn't update track colour.": "Couldn't update track color.",
   "Band {0} colour, taken from the scale":
     "Band {0} color, taken from the scale",
@@ -81,6 +82,8 @@ export const enUS: Catalogue = {
   "Scrub density for bushbashing": "Scrub density for bushwhacking",
   "Scrub density for bushbashing: denser reads darker. Orange stripes mark ground burnt since the survey, so the scrub there may have changed.":
     "Scrub density for bushwhacking: denser reads darker. Orange stripes mark ground burned since the survey, so the scrub there may have changed.",
+  "Sign-in didn't return an account identity, so it was cancelled. Try again.":
+    "Sign-in didn't return an account identity, so it was canceled. Try again.",
   "Search for a place to centre the map":
     "Search for a place to center the map",
   "Shallowest colour": "Shallowest color",
@@ -89,6 +92,8 @@ export const enUS: Catalogue = {
     "Steepness in degrees from flat. An easy walk is under 10°, a steep scramble around 30°, and a cliff 45° or more. Ground flatter than the first band has no color.",
   "The sharpened area is deleted from your account, and friends you shared it with lose it too. Map files already made from it stay until they expire; one still waiting to start is cancelled.":
     "The sharpened area is deleted from your account, and friends you shared it with lose it too. Map files already made from it stay until they expire; one still waiting to start is canceled.",
+  "This version ({0}) is no longer supported. You can update now over mobile data, or on Wi-Fi later.":
+    "This version ({0}) is no longer supported. You can update now over cellular data, or on Wi-Fi later.",
   "This download will use your mobile data.":
     "This download will use your cellular data.",
   "Tick list": "Checklist",

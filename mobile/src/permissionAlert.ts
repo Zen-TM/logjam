@@ -5,6 +5,7 @@
 import { Linking } from "react-native";
 
 import { confirm, type ToastMessage } from "./ui";
+import { t } from "@logjam/shared";
 
 type Listener = (message: Omit<ToastMessage, "nonce">) => void;
 const toastListeners = new Set<Listener>();
@@ -38,7 +39,7 @@ export function alertPermissionDenied(input: {
   void confirm({
     confirmTitle: input.title,
     confirmBody: input.settingsMessage,
-    confirmLabel: "Open settings",
+    confirmLabel: t`Open settings`,
     tone: "filled",
   }).then((open) => {
     if (open) void Linking.openSettings();

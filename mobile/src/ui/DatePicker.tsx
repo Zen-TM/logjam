@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Animated, PanResponder, Pressable, Text, View } from "react-native";
 
-import { weekBand, type BandCell } from "@logjam/shared";
+import { weekBand, type BandCell, t } from "@logjam/shared";
 
 import {
   hitSlop,
@@ -169,7 +169,7 @@ export function DatePicker({
             setYearPageStart(yearBlockStart(visibleMonth.year, YEARS_PER_PAGE));
           setPickingYear(!pickingYear);
         }}
-        labelAccessibility={pickingYear ? "Back to months" : "Pick a year"}
+        labelAccessibility={pickingYear ? t`Back to months` : t`Pick a year`}
         expanded={pickingYear}
       />
 
@@ -484,7 +484,7 @@ function Header({
     <View style={styles.headerRow}>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel="Earlier"
+        accessibilityLabel={t`Earlier`}
         hitSlop={hitSlop}
         onPress={onPrev}
         style={({ pressed }) => [styles.nav, pressed && styles.pressed]}
@@ -508,7 +508,7 @@ function Header({
       </Pressable>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel="Later"
+        accessibilityLabel={t`Later`}
         accessibilityState={{ disabled: nextDisabled }}
         disabled={nextDisabled}
         hitSlop={hitSlop}

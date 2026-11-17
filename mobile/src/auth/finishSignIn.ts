@@ -13,6 +13,7 @@ import {
   writeLocalIdentity,
 } from "./localIdentity";
 import { identityFromIdToken } from "./oidcSession";
+import { t } from "@logjam/shared";
 
 export type FinishedSignIn = { ok: true } | { ok: false; error: string };
 
@@ -37,8 +38,7 @@ export async function finishSignIn(signIn: {
     // through would sign in blind.
     return {
       ok: false,
-      error:
-        "Sign-in didn't return an account identity, so it was cancelled. Try again.",
+      error: t`Sign-in didn't return an account identity, so it was cancelled. Try again.`,
     };
   }
   const previous = await readPreviousIdentity();

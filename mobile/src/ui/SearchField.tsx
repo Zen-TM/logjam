@@ -12,6 +12,7 @@ import {
 } from "../theme";
 import { Icon } from "./Icon";
 import { IconButton } from "./IconButton";
+import { t } from "@logjam/shared";
 
 /**
  * A search box over a list: a pill with the glyph inside, the twin of Logjam
@@ -63,7 +64,7 @@ export function SearchField({
         <IconButton
           icon="close"
           size={16}
-          accessibilityLabel="Clear search"
+          accessibilityLabel={t`Clear search`}
           onPress={() => onChangeText("")}
         />
       ) : null}

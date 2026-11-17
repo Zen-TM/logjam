@@ -32,6 +32,7 @@ import {
   type GeoPdfImportOutcome,
   type GeoPdfProgress,
 } from "./importPipeline";
+import { t } from "@logjam/shared";
 
 export type GeoPdfImportRun = {
   label: string;
@@ -51,15 +52,15 @@ export type GeoPdfImportRun = {
  * flicker three labels past too fast to read.
  */
 export const GEOPDF_PHASE_LABEL: Record<GeoPdfImportState, string> = {
-  copying: "Reading the file",
-  hashing: "Reading the file",
-  parsing: "Reading the georeferencing",
+  copying: t`Reading the file`,
+  hashing: t`Reading the file`,
+  parsing: t`Reading the georeferencing`,
   planning: "Working out the tiles",
-  rasterising: "Rendering the map",
-  overviews: "Building the zoomed-out levels",
-  finalising: "Finishing up",
-  ready: "Done",
-  failed: "Couldn't import this PDF",
+  rasterising: t`Rendering the map`,
+  overviews: t`Building the zoomed-out levels`,
+  finalising: t`Finishing up`,
+  ready: t`Done`,
+  failed: t`Couldn't import this PDF`,
 };
 
 /**
@@ -161,7 +162,7 @@ export async function runGeoPdfImport(
   ) => Promise<GeoPdfImportOutcome>,
 ): Promise<GeoPdfImportOutcome | null> {
   if (current) {
-    emitToast("One GeoPDF is already importing — this one can wait.", "error");
+    emitToast(t`One GeoPDF is already importing — this one can wait.`, "error");
     return null;
   }
   const token: GeoPdfCancelToken = { cancelled: false };
@@ -235,13 +236,13 @@ export async function runGeoPdfImport(
     const named = current?.label ?? label;
     switch (outcome.status) {
       case "imported":
-        emitToast(`${named} imported.`, "done");
+        emitToast(t`${named} imported.`, "done");
         break;
       case "existing":
-        emitToast(`${named} was already imported.`, "done");
+        emitToast(t`${named} was already imported.`, "done");
         break;
       case "paused":
-        emitToast("Import paused — resume it from Saved.", "done");
+        emitToast(t`Import paused — resume it from Saved.`, "done");
         break;
       case "cancelled":
         break;
@@ -252,7 +253,7 @@ export async function runGeoPdfImport(
     // Words are ours, never the exception's message: it can carry a file name.
     const code = geoPdfErrorCode(err);
     emitToast(
-      (code && GEOPDF_ERRORS[code]) || "Couldn't import that PDF.",
+      (code && GEOPDF_ERRORS[code]) || t`Couldn't import that PDF.`,
       "error",
     );
     return null;

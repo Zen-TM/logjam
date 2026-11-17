@@ -6,6 +6,7 @@ import { libraryPickerOptions } from "./attachBatch";
 import { savesCapturesToGallery } from "./galleryPreference";
 import type { PickedFile } from "../sync/mediaUpload";
 import type { Glyph } from "../ui";
+import { t } from "@logjam/shared";
 
 /**
  * Copy a just-captured file into the phone's gallery, if the user asked for
@@ -47,18 +48,18 @@ async function saveToGalleryIfWanted(uri: string): Promise<void> {
 /** The sources a photo or video comes from, in the order every sheet lists
  *  them, and the words for the sheet and the entry that opens it. One list, so
  *  the place page's strip and the Add-a-place form cannot drift. */
-export const ADD_PHOTO_LABEL = "Add a photo or video";
+export const ADD_PHOTO_LABEL = t`Add a photo or video`;
 export const PHOTO_SOURCES: readonly {
   icon: Glyph;
   title: string;
   source: "camera" | "library";
   kind: "photo" | "video";
 }[] = [
-  { icon: "camera", title: "Take photo", source: "camera", kind: "photo" },
-  { icon: "video", title: "Record video", source: "camera", kind: "video" },
+  { icon: "camera", title: t`Take photo`, source: "camera", kind: "photo" },
+  { icon: "video", title: t`Record video`, source: "camera", kind: "video" },
   {
     icon: "photo",
-    title: "Choose from library",
+    title: t`Choose from library`,
     source: "library",
     kind: "photo",
   },
@@ -89,11 +90,9 @@ export async function pickMedia(
       : await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
       alertPermissionDenied({
-        title: "Photo access needed",
-        askAgainMessage:
-          "Allow photo library access to attach photos and videos.",
-        settingsMessage:
-          "Photo access was previously denied. Enable it for Logjam GPS in system settings.",
+        title: t`Photo access needed`,
+        askAgainMessage: t`Allow photo library access to attach photos and videos.`,
+        settingsMessage: t`Photo access was previously denied. Enable it for Logjam GPS in system settings.`,
         canAskAgain: permission.canAskAgain,
       });
       return [];
@@ -122,10 +121,9 @@ export async function pickMedia(
       const permission = await ImagePicker.getCameraPermissionsAsync();
       if (!permission.granted) {
         alertPermissionDenied({
-          title: "Camera permission needed",
-          askAgainMessage: "Allow camera access to take a photo here.",
-          settingsMessage:
-            "The camera was previously denied. Enable it for Logjam GPS in system settings.",
+          title: t`Camera permission needed`,
+          askAgainMessage: t`Allow camera access to take a photo here.`,
+          settingsMessage: t`The camera was previously denied. Enable it for Logjam GPS in system settings.`,
           canAskAgain: permission.canAskAgain,
         });
         return [];

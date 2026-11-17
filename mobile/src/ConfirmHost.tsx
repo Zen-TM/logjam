@@ -3,6 +3,7 @@ import { Modal, Pressable, ScrollView, Text, View } from "react-native";
 
 import { radius, scrim, spacing, makeStyles } from "./theme";
 import { answerConfirm, Button, pendingConfirm, subscribeConfirm } from "./ui";
+import { t } from "@logjam/shared";
 
 /**
  * Draws what `confirm()` asks, in the current scheme: the kit's dialog, as
@@ -28,7 +29,7 @@ export function ConfirmHost() {
       <Pressable
         style={styles.backdrop}
         onPress={cancel}
-        accessibilityLabel="Cancel"
+        accessibilityLabel={t`Cancel`}
         accessibilityRole="button"
       >
         {pending && copy ? (

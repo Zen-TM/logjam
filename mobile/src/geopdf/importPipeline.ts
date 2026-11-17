@@ -58,6 +58,7 @@ import {
   type GeoPdfImport,
   type GeoPdfImportState,
 } from "./geoPdfImportsDb";
+import { t } from "@logjam/shared";
 
 /**
  * Reject oversized files before loading them into memory.
@@ -122,22 +123,20 @@ function assertRendererPageMatchesGeoref(
 }
 
 export const GEOPDF_ERRORS: Record<string, string> = {
-  NOT_A_PDF: "This file isn't a readable PDF.",
-  ENCRYPTED: "This PDF is encrypted and can't be imported.",
-  NO_GEOREF: "This PDF has no georeferencing — it can't be placed on the map.",
-  LGIDICT_ONLY:
-    "This GeoPDF uses an older georeferencing format that isn't supported yet.",
-  MALFORMED_GEOREF: "This PDF's georeferencing is malformed.",
-  UNSUPPORTED_PAGE_BOX:
-    "This PDF's page is rotated in a way Logjam GPS can't place accurately.",
-  UNSUPPORTED_CRS: "This PDF uses a map projection that isn't supported.",
-  FILE_TOO_LARGE: `This PDF is too large to import (${Math.round(MAX_GEOPDF_FILE_BYTES / 1024 / 1024)} MB limit).`,
-  RENDER_FAILED: "Rendering this PDF failed.",
+  NOT_A_PDF: t`This file isn't a readable PDF.`,
+  ENCRYPTED: t`This PDF is encrypted and can't be imported.`,
+  NO_GEOREF: t`This PDF has no georeferencing — it can't be placed on the map.`,
+  LGIDICT_ONLY: t`This GeoPDF uses an older georeferencing format that isn't supported yet.`,
+  MALFORMED_GEOREF: t`This PDF's georeferencing is malformed.`,
+  UNSUPPORTED_PAGE_BOX: t`This PDF's page is rotated in a way Logjam GPS can't place accurately.`,
+  UNSUPPORTED_CRS: t`This PDF uses a map projection that isn't supported.`,
+  FILE_TOO_LARGE: t`This PDF is too large to import (${Math.round(MAX_GEOPDF_FILE_BYTES / 1024 / 1024)} MB limit).`,
+  RENDER_FAILED: t`Rendering this PDF failed.`,
   // The planner refused before rendering: a sheet this large at this scale is
   // tens of minutes of work. It steps the zoom down first, so reaching this
   // means the georeferencing is implausible rather than the map merely big.
-  TOO_MANY_TILES: "This map covers too much ground to import.",
-  NO_SPACE: "There isn't enough free space on this phone for this map.",
+  TOO_MANY_TILES: t`This map covers too much ground to import.`,
+  NO_SPACE: t`There isn't enough free space on this phone for this map.`,
 };
 
 /**

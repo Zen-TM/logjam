@@ -9,6 +9,7 @@ import {
   wash,
 } from "../theme";
 import { Icon } from "./Icon";
+import { t } from "@logjam/shared";
 
 type ErrorBannerProps = {
   message: string;
@@ -25,7 +26,7 @@ type ErrorBannerProps = {
 export function ErrorBanner({
   message,
   onRetry,
-  retryLabel = "Try again",
+  retryLabel = t`Try again`,
   onDismiss,
 }: ErrorBannerProps) {
   const theme = useTheme();
@@ -53,7 +54,7 @@ export function ErrorBanner({
                 accessibilityRole="button"
                 hitSlop={16}
               >
-                <Text style={styles.action}>Dismiss</Text>
+                <Text style={styles.action}>{t`Dismiss`}</Text>
               </Pressable>
             ) : null}
           </View>

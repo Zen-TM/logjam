@@ -1,5 +1,5 @@
 import { Text, View } from "react-native";
-import { dateSummary, formatDateKey } from "@logjam/shared";
+import { dateSummary, formatDateKey, t } from "@logjam/shared";
 
 import { formRhythm, spacing, makeStyles } from "../theme";
 import { Chip } from "./Chip";
@@ -17,9 +17,9 @@ export function DateRangeFilter({
   value,
   onPick,
   onClear,
-  fromLabel = "From",
-  toLabel = "To",
-  clearLabel = "Clear",
+  fromLabel = t`From`,
+  toLabel = t`To`,
+  clearLabel = t`Clear`,
 }: {
   label: string;
   value: readonly [string | null, string | null] | null;
