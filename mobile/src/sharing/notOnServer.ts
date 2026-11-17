@@ -1,4 +1,5 @@
 import { ApiError, t } from "@logjam/shared";
+import { unavailableReasonText } from "../auth/capabilities";
 
 /**
  * What a grant that the API 404s means for the sharer's own item (ADR 0002:
@@ -13,6 +14,6 @@ export function shareGrantNotFound(
 ): { message: string; syncFixes: boolean } | null {
   if (!(err instanceof ApiError) || err.status !== 404) return null;
   return stillHeld
-    ? { message: t`Needs to sync first.`, syncFixes: true }
+    ? { message: `${unavailableReasonText("needs-upload")}.`, syncFixes: true }
     : { message: t`This was deleted.`, syncFixes: false };
 }

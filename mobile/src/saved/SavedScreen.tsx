@@ -313,7 +313,7 @@ function searchCopy(filter: Category | "all"): {
     case "all":
       return {
         label: t`Search everything`,
-        noMatch: t`No everything match that`,
+        noMatch: t`Nothing matches that`,
       };
     case "region":
       return {
@@ -327,8 +327,8 @@ function searchCopy(filter: Category | "all"): {
       };
     case "geoPdf":
       return {
-        label: t`Search geopdfs`,
-        noMatch: t`No geopdfs match that`,
+        label: t`Search GeoPDFs`,
+        noMatch: t`No GeoPDFs match that`,
       };
     case "track":
       return {
@@ -361,7 +361,7 @@ function renameTitle(category: Category): string {
     case "overlay":
       return t`Rename sharpened area`;
     case "geoPdf":
-      return t`Rename geopdf`;
+      return t`Rename GeoPDF`;
     case "route":
       return t`Rename route`;
     case "import":
