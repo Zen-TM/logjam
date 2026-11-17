@@ -22,6 +22,7 @@ import {
   wayVerbLabel,
   type TrackPass,
   ELEVATION_TRACK_MAX_SAMPLES,
+  plural,
   t,
 } from "@logjam/shared";
 
@@ -173,7 +174,9 @@ export function TrackOptionsSheet({
     onSent: (count) => {
       setSending(false);
       onClose();
-      onInfo(`Sent a copy to ${count} friend${count === 1 ? "" : "s"}.`);
+      onInfo(
+        plural(count, "Sent a copy to # friend.", "Sent a copy to # friends."),
+      );
     },
   });
 
@@ -216,7 +219,7 @@ export function TrackOptionsSheet({
       (filename) => {
         // Null = the user backed out of the folder picker. Not a failure, and a
         // toast claiming success would be a lie.
-        if (filename) onInfo(`Saved ${filename}.`);
+        if (filename) onInfo(t`Saved ${filename}.`);
       },
       (err: unknown) => {
         if (err instanceof ExportUnsupportedError) {

@@ -247,7 +247,7 @@ export function RouteOptionsSheet({
       .then((filename) => {
         // Null = the user backed out of the folder picker. Not a failure, and
         // a toast claiming success would be a lie.
-        if (filename) onInfo(`Saved ${filename}.`);
+        if (filename) onInfo(t`Saved ${filename}.`);
       })
       .catch((err: unknown) => {
         if (err instanceof ExportUnsupportedError) {

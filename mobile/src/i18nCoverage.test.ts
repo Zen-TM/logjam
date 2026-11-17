@@ -42,7 +42,7 @@ const CEILINGS: Record<string, number> = {
   "screens/settings": 2,
   sharing: 1,
   sync: 11,
-  tracks: 9,
+  tracks: 2,
   ui: 7,
 };
 
