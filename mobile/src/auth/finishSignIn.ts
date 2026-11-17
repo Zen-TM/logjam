@@ -59,7 +59,7 @@ export async function finishSignIn(signIn: {
       // alternative is silently merging two people's data.
       return {
         ok: false,
-        error: `Couldn't clear the previous account's ${wiped.failed.join(" and ")} from this phone, so sign-in was cancelled.`,
+        error: t`Couldn't clear the previous account's ${wiped.failed.join(" and ")} from this phone, so sign-in was cancelled.`,
       };
     }
     await clearLocalIdentity();

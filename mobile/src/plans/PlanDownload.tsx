@@ -10,6 +10,7 @@ import { View } from "react-native";
 import {
   formatBytes,
   planCountsLabel,
+  t,
   TRIP_PLAN_OFFLINE,
 } from "@logjam/shared";
 
@@ -59,7 +60,10 @@ export function PlanDownload({ cached }: { cached: CachedPlan }) {
         <Row
           icon="saveOffline"
           title={TRIP_PLAN_OFFLINE.downloading}
-          subtitle={`${formatBytes(progress.done)} of ${formatBytes(progress.total)}. ${TRIP_PLAN_OFFLINE.downloadKeepOpen}`}
+          subtitle={[
+            t`${formatBytes(progress.done)} of ${formatBytes(progress.total)}.`,
+            TRIP_PLAN_OFFLINE.downloadKeepOpen,
+          ].join(" ")}
           progress={progress.total > 0 ? progress.done / progress.total : 0}
         />
       </View>

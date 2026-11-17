@@ -55,7 +55,7 @@ export const GEOPDF_PHASE_LABEL: Record<GeoPdfImportState, string> = {
   copying: t`Reading the file`,
   hashing: t`Reading the file`,
   parsing: t`Reading the georeferencing`,
-  planning: "Working out the tiles",
+  planning: t`Working out the map data`,
   rasterising: t`Rendering the map`,
   overviews: t`Building the zoomed-out levels`,
   finalising: t`Finishing up`,

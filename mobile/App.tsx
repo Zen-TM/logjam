@@ -249,7 +249,7 @@ export default function App() {
                   reportWipeIncomplete: (failed) =>
                     Alert.alert(
                       t`Some data couldn't be removed`,
-                      `This phone kept your ${failed.join(" and ")}. Signing out anyway; clear Logjam GPS's storage in Android settings to be sure.`,
+                      t`This phone kept your ${failed.join(" and ")}. Signing out anyway; clear Logjam GPS's storage in Android settings to be sure.`,
                     ),
                   finish: () => auth.signOut(),
                 })

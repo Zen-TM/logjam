@@ -44,12 +44,12 @@ export function DateRangeFilter({
       </View>
       <View style={styles.chips}>
         <Chip
-          label={from ? `${fromLabel} ${shortDate(from)}` : fromLabel}
+          label={from ? t`${fromLabel} ${shortDate(from)}` : fromLabel}
           active={from != null}
           onPress={() => onPick(0)}
         />
         <Chip
-          label={to ? `${toLabel} ${shortDate(to)}` : toLabel}
+          label={to ? t`${toLabel} ${shortDate(to)}` : toLabel}
           active={to != null}
           onPress={() => onPick(1)}
         />

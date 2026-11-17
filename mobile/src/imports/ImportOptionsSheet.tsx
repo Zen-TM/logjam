@@ -21,6 +21,7 @@ import {
   messageFromError,
   TRACK_COLORS,
   trackColorName,
+  plural,
   t,
 } from "@logjam/shared";
 
@@ -118,7 +119,9 @@ export function ImportOptionsSheet({
     onSent: (count) => {
       setSending(false);
       onClose();
-      onInfo(`Sent a copy to ${count} friend${count === 1 ? "" : "s"}.`);
+      onInfo(
+        plural(count, "Sent a copy to # friend.", "Sent a copy to # friends."),
+      );
     },
   });
 
@@ -156,7 +159,7 @@ export function ImportOptionsSheet({
       (filename) => {
         // Null = the user backed out of the folder picker. Not a failure, and a
         // toast claiming success would be a lie.
-        if (filename) onInfo(`Saved ${filename}.`);
+        if (filename) onInfo(t`Saved ${filename}.`);
       },
       (err: unknown) => {
         if (err instanceof ExportUnsupportedError) {

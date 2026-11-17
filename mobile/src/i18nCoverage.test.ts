@@ -23,27 +23,27 @@ const APP = join(SRC, "..", "App.tsx");
 
 /** Bare literals a user may read, per directory under src. Lower an entry when its text moves; never raise one. */
 const CEILINGS: Record<string, number> = {
-  ".": 5,
+  ".": 3,
   api: 2,
-  auth: 8,
+  auth: 1,
   customFields: 0,
   gauges: 1,
-  geopdf: 2,
-  imports: 3,
-  logs: 14,
+  geopdf: 1,
+  imports: 2,
+  logs: 0,
   map: 4,
-  media: 4,
-  notifications: 4,
+  media: 0,
+  notifications: 0,
   offline: 1,
   places: 0,
-  plans: 6,
+  plans: 0,
   saved: 0,
   screens: 0,
   "screens/settings": 2,
   sharing: 1,
   sync: 11,
   tracks: 3,
-  ui: 7,
+  ui: 0,
 };
 
 function sources(dir: string): string[] {

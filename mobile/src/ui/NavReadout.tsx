@@ -65,12 +65,18 @@ export function NavReadout({
   const second = !f.known
     ? t`${name} · waiting for GPS…`
     : f.age
-      ? `${name} · ${f.age}`
+      ? t`${name} · ${f.age}`
       : name;
   // What a screen reader says for the figures: the age and "about" included.
   const spoken = !f.known
     ? t`waiting for GPS`
-    : `${f.about ? "about " : ""}${f.distance}${f.unit}, ${f.bearing}${f.age ? `, ${f.age}` : ""}`;
+    : f.about
+      ? f.age
+        ? t`about ${f.distance}${f.unit}, ${f.bearing}, ${f.age}`
+        : t`about ${f.distance}${f.unit}, ${f.bearing}`
+      : f.age
+        ? t`${f.distance}${f.unit}, ${f.bearing}, ${f.age}`
+        : t`${f.distance}${f.unit}, ${f.bearing}`;
 
   return (
     <View style={styles.card}>
@@ -78,12 +84,12 @@ export function NavReadout({
         {/* Its own focus target, so the X stays a button of its own. */}
         <View
           accessible
-          accessibilityLabel={`${name}: ${spoken}`}
+          accessibilityLabel={t`${name}: ${spoken}`}
           style={styles.figures}
         >
           <Icon idea="navigateTo" size={20} color={theme.accent} />
           <Text style={figure}>
-            {f.about ? <Text style={styles.unit}>about </Text> : null}
+            {f.about ? <Text style={styles.unit}>{t`about`} </Text> : null}
             {f.distance}
             <Text style={styles.unit}>{f.unit}</Text>
           </Text>

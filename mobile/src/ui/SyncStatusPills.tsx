@@ -37,7 +37,7 @@ export function SyncStatusPills({
     <View style={styles.row}>
       {online ? null : (
         <StatusPill
-          label={age ? `Offline · ${age}` : t`Offline`}
+          label={age ? t`Offline · ${age}` : t`Offline`}
           tone="muted"
           icon="offline"
         />

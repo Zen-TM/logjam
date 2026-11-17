@@ -335,10 +335,10 @@ export function MediaStrip({
           {atLimit && !readOnly ? (
             <Text style={styles.emptyHint}>
               {limit !== 1
-                ? `This holds up to ${limit} attachments.`
+                ? t`This holds up to ${limit ?? 0} attachments.`
                 : onAddWay
-                  ? "One route per place."
-                  : "One route per place. Press and hold to replace it."}
+                  ? t`One route per place.`
+                  : t`One route per place. Press and hold to replace it.`}
             </Text>
           ) : null}
         </View>

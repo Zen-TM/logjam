@@ -18,7 +18,7 @@ import {
   ApiError,
   messageFromError,
   parseTripPlanFormCreate,
-  pluralCount,
+  plural,
   tripPlanAdoptTheirs,
   tripPlanAtMost,
   tripPlanBlankForm,
@@ -323,10 +323,14 @@ export function FormBuilderSheet({
               icon="form"
               hue={assetHue.plan}
               title={TRIP_PLAN_FORM_PRESETS[id].title}
-              subtitle={`${TRIP_PLAN_FORM_PRESET_BLURBS[id]} ${pluralCount(
-                TRIP_PLAN_FORM_PRESETS[id].questions.length,
-                "question",
-              )}.`}
+              subtitle={[
+                TRIP_PLAN_FORM_PRESET_BLURBS[id],
+                plural(
+                  TRIP_PLAN_FORM_PRESETS[id].questions.length,
+                  "# question.",
+                  "# questions.",
+                ),
+              ].join(" ")}
               onPress={() =>
                 start({ ...TRIP_PLAN_FORM_PRESETS[id], preset: id })
               }
@@ -357,7 +361,11 @@ export function FormBuilderSheet({
                       icon="copy"
                       hue={assetHue.plan}
                       title={other.title}
-                      subtitle={pluralCount(other.questions.length, "question")}
+                      subtitle={plural(
+                        other.questions.length,
+                        "# question",
+                        "# questions",
+                      )}
                       onPress={() => start(valuesOf(other))}
                     />
                   ))}
