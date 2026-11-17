@@ -7,7 +7,7 @@ import {
 } from "../legalLinks";
 import { makeStyles, radius, spacing } from "../theme";
 import { Toggle } from "../ui";
-import { Rich } from "../ui/rich";
+import { Rich } from "../ui";
 import { rich, t } from "@logjam/shared";
 
 /**
