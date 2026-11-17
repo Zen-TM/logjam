@@ -402,8 +402,7 @@ export function prepareTripRows(args: {
   return { rows: out, warnings, droppedRows };
 }
 
-export const NO_PLACE_ROWS_ERROR =
-  "No valid place rows found (each needs a name, latitude and longitude).";
+export const NO_PLACE_ROWS_ERROR = t`No valid place rows found (each needs a name, latitude and longitude).`;
 export const NO_TRIP_ROWS_ERROR =
   "No valid trip rows found — each row needs a place name and a date we could read. " +
   "If your dates look right, check the “Date format” selector on the previous step matches your file (ISO 8601 like 2023-06-15, or day-first like 15/06/2023).";

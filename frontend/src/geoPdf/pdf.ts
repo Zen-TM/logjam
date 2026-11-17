@@ -1,4 +1,5 @@
 import { PDFDocument, PDFName, PDFString, rgb } from "@cantoo/pdf-lib";
+import { t } from "@logjam/shared";
 
 export type GeoPdfPageInput = {
   pageWidthPt: number;
@@ -47,8 +48,8 @@ export async function buildGeoPdf(input: GeoPdfPageInput): Promise<Uint8Array> {
   const sy = mapH / input.mapHeightPx;
 
   const doc = await PDFDocument.create();
-  doc.setTitle(input.title ?? "Logjam GeoPDF Export");
-  doc.setCreator("Logjam");
+  doc.setTitle(input.title ?? t`Logjam GeoPDF Export`);
+  doc.setCreator(t`Logjam`);
   doc.setProducer("Logjam GeoPDF Generator");
   const page = doc.addPage([w, h]);
   page.drawRectangle({ x: 0, y: 0, width: w, height: h, color: rgb(1, 1, 1) });

@@ -11,6 +11,7 @@ import { Popover } from "./Menu";
 import { hexToHsva, hsvaToHex, isHexRgba, type Hsva } from "./colour";
 import choice from "./Choice.module.css";
 import classes from "./ColourField.module.css";
+import { t } from "@logjam/shared";
 
 /**
  * Any colour, opacity included (`#RRGGBBAA`) — how a topo draws its contours,
@@ -112,7 +113,7 @@ function FreeColourField({
         >
           <Plane hsva={hsva} onChange={(s, v) => change({ ...hsva, s, v })} />
           <Strip
-            label="Hue"
+            label={t`Hue`}
             className={classes.hue}
             ratio={hsva.h / 360}
             valueNow={Math.round(hsva.h)}
@@ -122,7 +123,7 @@ function FreeColourField({
             onChange={(ratio) => change({ ...hsva, h: ratio * 360 })}
           />
           <Strip
-            label="Opacity"
+            label={t`Opacity`}
             className={classes.alpha}
             ratio={hsva.a}
             valueNow={Math.round(hsva.a * 100)}
@@ -133,7 +134,7 @@ function FreeColourField({
           />
           <input
             type="text"
-            aria-label={`${label}, as #RRGGBBAA`}
+            aria-label={t`${label}, as #RRGGBBAA`}
             className={classes.hex}
             value={draft}
             maxLength={9}
@@ -192,7 +193,7 @@ function PaletteField({
   const name = useId();
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
-  const chosen = value ? (nameOf?.(value) ?? value) : "No colour";
+  const chosen = value ? (nameOf?.(value) ?? value) : t`No colour`;
 
   return (
     <div className={choice.swatchField}>
@@ -350,7 +351,7 @@ function Plane({
       className={classes.plane}
       tabIndex={0}
       role="slider"
-      aria-label="Saturation and brightness"
+      aria-label={t`Saturation and brightness`}
       aria-valuemin={0}
       aria-valuemax={100}
       aria-valuenow={Math.round(hsva.s)}

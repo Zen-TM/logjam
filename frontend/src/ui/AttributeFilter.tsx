@@ -17,6 +17,7 @@ import {
   type PlaceThresholdFilter,
   type ScopedCustomFieldDef,
   displayUnits,
+  t,
 } from "@logjam/shared";
 import { Chip } from "./Chip";
 import { FilterField } from "./FilterField";
@@ -97,7 +98,7 @@ export function AttributeFilter({
     return (
       <FilterField
         label={def.label}
-        summary={current == null ? "Any" : current ? "Yes" : "No"}
+        summary={current == null ? t`Any` : current ? t`Yes` : t`No`}
         active={current != null}
         onClear={clear}
       >
@@ -105,7 +106,7 @@ export function AttributeFilter({
           {[true, false].map((option) => (
             <Chip
               key={String(option)}
-              label={option ? "Yes" : "No"}
+              label={option ? t`Yes` : t`No`}
               active={current === option}
               aria-pressed={current === option}
               // Pressing the active chip clears it: "either" must be reachable
@@ -129,12 +130,12 @@ export function AttributeFilter({
     return (
       <FilterField
         label={def.label}
-        summary={text ? `Contains “${text}”` : "Any"}
+        summary={text ? `Contains “${text}”` : t`Any`}
         active={text !== ""}
         onClear={clear}
       >
         <TextField
-          label="Contains"
+          label={t`Contains`}
           value={text}
           onChange={(event) =>
             onChange(
@@ -168,13 +169,13 @@ export function AttributeFilter({
       <div className={classes.pair}>
         <TextField
           type="date"
-          label="From"
+          label={t`From`}
           value={dates?.[0] ?? ""}
           onChange={(event) => setBound(0, event.target.value)}
         />
         <TextField
           type="date"
-          label="To"
+          label={t`To`}
           value={dates?.[1] ?? ""}
           onChange={(event) => setBound(1, event.target.value)}
         />
@@ -233,7 +234,7 @@ function MinMaxFilter({
       <div className={classes.pair}>
         <TextField
           type="number"
-          label="From"
+          label={t`From`}
           placeholder={String(bounds[0])}
           value={low}
           onChange={(event) => {
@@ -243,7 +244,7 @@ function MinMaxFilter({
         />
         <TextField
           type="number"
-          label="To"
+          label={t`To`}
           placeholder={String(bounds[1])}
           value={high}
           onChange={(event) => {
@@ -332,7 +333,7 @@ function ThresholdFilter({
   return (
     <FilterField
       label={label}
-      summary={value == null ? "Any" : formatThreshold(value, length)}
+      summary={value == null ? t`Any` : formatThreshold(value, length)}
       active={value != null}
       onClear={() => onChange(null)}
     >

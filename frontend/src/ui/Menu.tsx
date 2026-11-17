@@ -15,6 +15,7 @@ import { useAnchoredPosition, type Placement } from "./floating";
 import { nextEnabledIndex } from "./rovingFocus";
 import { useEscape } from "./useEscape";
 import classes from "./Menu.module.css";
+import { t } from "@logjam/shared";
 
 export type MenuItem = {
   id: string;
@@ -386,7 +387,7 @@ export function Popover({
         <div className={classes.bar}>
           <IconButton
             icon="close"
-            label="Close"
+            label={t`Close`}
             onClick={() => {
               onClose();
               anchorRef.current?.focus();

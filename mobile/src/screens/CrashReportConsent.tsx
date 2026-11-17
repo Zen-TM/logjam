@@ -24,6 +24,7 @@ import {
 import { initSentry } from "../sentry/initSentry";
 import { spacing, makeStyles, muted } from "../theme";
 import { BottomSheet, Button } from "../ui";
+import { t } from "@logjam/shared";
 
 export function CrashReportConsent() {
   const styles = useStyles();
@@ -47,25 +48,24 @@ export function CrashReportConsent() {
     <BottomSheet
       visible={asking}
       onClose={() => answer(false)}
-      title="Send crash reports?"
+      title={t`Send crash reports?`}
       footer={
         <View style={styles.actions}>
-          <Button label="Send crash reports" onPress={() => answer(true)} />
+          <Button label={t`Send crash reports`} onPress={() => answer(true)} />
           <Button
-            label="Not now"
+            label={t`Not now`}
             variant="ghost"
             onPress={() => answer(false)}
           />
         </View>
       }
     >
-      <Text style={styles.body}>
-        If Logjam GPS crashes, we get the technical details. Reports are
-        anonymous and stripped of place names and coordinates.
-      </Text>
-      <Text style={styles.body}>
-        Off by default. Change it any time in Settings › Privacy and security.
-      </Text>
+      <Text
+        style={styles.body}
+      >{t`If Logjam GPS crashes, we get the technical details. Reports are anonymous and stripped of place names and coordinates.`}</Text>
+      <Text
+        style={styles.body}
+      >{t`Off by default. Change it any time in Settings › Privacy and security.`}</Text>
     </BottomSheet>
   );
 }

@@ -16,7 +16,7 @@
 //
 // PRIVACY: sides, colours, enums and two sampling numbers. Nothing positional.
 import { useCallback, useState } from "react";
-import { formatHeight } from "@logjam/shared";
+import { formatHeight, t } from "@logjam/shared";
 
 import {
   isCompassEnabled,
@@ -85,12 +85,12 @@ import { ChoiceGroup, PreferenceRow } from "./settingsKit";
 // not: a waypoint is a place of the Marker type now, and this screen and the
 // long-press sheet are one vocabulary (DESIGN.md).
 const LONG_PRESS_LABELS: Record<LongPressAction, string> = {
-  ask: "Ask each time",
-  waypoint: "Drop a marker",
-  navigate: "Navigate",
-  route: "Draw a route",
-  measure: "Measure",
-  place: "Add place",
+  ask: t`Ask each time`,
+  waypoint: t`Drop a marker`,
+  navigate: t`Navigate`,
+  route: t`Draw a route`,
+  measure: t`Measure`,
+  place: t`Add place`,
 };
 
 /**
@@ -99,8 +99,7 @@ const LONG_PRESS_LABELS: Record<LongPressAction, string> = {
  * the same screen disagree, and the user has to know which one moved.
  */
 const NORTH_REFERENCE_HINTS: Partial<Record<NorthReference, string>> = {
-  magnetic:
-    "Applies only to the compass — the map is always oriented true north.",
+  magnetic: t`Applies only to the compass — the map is always oriented true north.`,
 };
 
 /**
@@ -138,16 +137,16 @@ function declinationHint(): string {
 }
 
 const KEEP_AWAKE_LABELS: Record<KeepAwakeMode, string> = {
-  off: "Never",
-  recording: "While recording",
-  map: "On the map",
+  off: t`Never`,
+  recording: t`While recording`,
+  map: t`On the map`,
 };
 
 const FIX_RATE_LABELS: Record<FixRate, string> = {
-  finest: "Finest",
-  detailed: "Detailed",
-  balanced: "Balanced",
-  batterySaver: "Battery saver",
+  finest: t`Finest`,
+  detailed: t`Detailed`,
+  balanced: t`Balanced`,
+  batterySaver: t`Battery saver`,
 };
 
 /**
@@ -160,11 +159,10 @@ const FIX_RATE_LABELS: Record<FixRate, string> = {
  * screen would be a promise the map breaks the moment the user looks at it.
  */
 const FIX_RATE_HINTS: Record<FixRate, string> = {
-  finest: "A recorded position every 3 seconds. Shortest battery life.",
-  detailed: "A recorded position every 10 seconds.",
-  balanced: "A recorded position every 30 seconds. The default.",
-  batterySaver:
-    "A recorded position every 2 minutes. Longest battery life, roughest line.",
+  finest: t`A recorded position every 3 seconds. Shortest battery life.`,
+  detailed: t`A recorded position every 10 seconds.`,
+  balanced: t`A recorded position every 30 seconds. The default.`,
+  batterySaver: t`A recorded position every 2 minutes. Longest battery life, roughest line.`,
 };
 
 function accuracyLabel(limit: AccuracyLimitM): string {
@@ -183,7 +181,7 @@ export function MapSettingsScreen() {
   // silently reverts on the next launch is the failure this must not have.
   const stored = useCallback(
     (ok: boolean) => {
-      if (!ok) notify("This phone wouldn't store that setting.");
+      if (!ok) notify(t`This phone wouldn't store that setting.`);
       return ok;
     },
     [notify],
@@ -250,10 +248,10 @@ export function MapSettingsScreen() {
       <ScreenScroll>
         {/* ── Layout ────────────────────────────────────────────────────── */}
         <ChoiceGroup
-          label="Button side"
+          label={t`Button side`}
           options={[
-            { value: "right", label: "Right" },
-            { value: "left", label: "Left" },
+            { value: "right", label: t`Right` },
+            { value: "left", label: t`Left` },
           ]}
           value={controlSide}
           onChange={(next) => {
@@ -264,13 +262,13 @@ export function MapSettingsScreen() {
           // Says the compass and scale bar move too, because that is the part
           // a one-word chip can't: they swap with the buttons rather than
           // staying put. Search is the exception and is not worth a sentence.
-          hint="The compass and scale bar move to the other side."
+          hint={t`The compass and scale bar move to the other side.`}
         />
 
-        <SectionHeader title="Your location marker" />
+        <SectionHeader title={t`Your location marker`} />
         <ColourField
           icon="colour"
-          label="Colour"
+          label={t`Colour`}
           palette={MARKER_COLOR_ORDER.map((id) => MARKER_COLORS[id])}
           value={MARKER_COLORS[markerColorId]}
           nameOf={(color) =>
@@ -286,10 +284,10 @@ export function MapSettingsScreen() {
           }}
         />
 
-        <SectionHeader title="On the map" />
+        <SectionHeader title={t`On the map`} />
         <PreferenceRow
           icon="northUp"
-          title="Map always north-up"
+          title={t`Map always north-up`}
           value={northUp}
           ready
           onToggle={() => {
@@ -300,7 +298,7 @@ export function MapSettingsScreen() {
         />
         <PreferenceRow
           icon="scaleBar"
-          title="Scale bar"
+          title={t`Scale bar`}
           value={scaleBar}
           ready
           onToggle={() => {
@@ -315,8 +313,8 @@ export function MapSettingsScreen() {
             difference in kind when the only difference is which sensor. */}
         <PreferenceRow
           icon="compass"
-          title="Compass"
-          subtitle="Uses more battery on the map."
+          title={t`Compass`}
+          subtitle={t`Uses more battery on the map.`}
           value={compassEnabled}
           ready
           onToggle={() => void toggleCompass()}
@@ -325,18 +323,18 @@ export function MapSettingsScreen() {
         {/* Beneath the two instruments it joins in the same stack. */}
         <PreferenceRow
           icon="elevation"
-          title="Speed and elevation"
-          subtitle="Uses more battery on the map."
+          title={t`Speed and elevation`}
+          subtitle={t`Uses more battery on the map.`}
           value={speedElevation}
           ready
           onToggle={() => void toggleSpeedElevation()}
         />
 
         <ChoiceGroup
-          label="Compass bearings from"
+          label={t`Compass bearings from`}
           options={[
-            { value: "true", label: "True north" },
-            { value: "magnetic", label: "Magnetic north" },
+            { value: "true", label: t`True north` },
+            { value: "magnetic", label: t`Magnetic north` },
           ]}
           value={northReference}
           hint={[
@@ -346,7 +344,7 @@ export function MapSettingsScreen() {
           ]
             .filter(Boolean)
             .join(" ")}
-          disabledReason={compassEnabled ? undefined : "Needs the compass"}
+          disabledReason={compassEnabled ? undefined : t`Needs the compass`}
           onChange={(next) => {
             const reference = next as NorthReference;
             if (!stored(writeNorthReference(reference))) return;
@@ -355,7 +353,7 @@ export function MapSettingsScreen() {
         />
 
         <ChoiceGroup
-          label="Press and hold the map to"
+          label={t`Press and hold the map to`}
           options={(Object.keys(LONG_PRESS_LABELS) as LongPressAction[]).map(
             (action) => ({
               value: action,
@@ -371,7 +369,7 @@ export function MapSettingsScreen() {
         />
 
         <ChoiceGroup
-          label="Keep the screen on"
+          label={t`Keep the screen on`}
           options={(Object.keys(KEEP_AWAKE_LABELS) as KeepAwakeMode[]).map(
             (mode) => ({
               value: mode,
@@ -387,9 +385,9 @@ export function MapSettingsScreen() {
         />
 
         {/* ── Recording ─────────────────────────────────────────────────── */}
-        <SectionHeader title="Recording" />
+        <SectionHeader title={t`Recording`} />
         <ChoiceGroup
-          label="Track detail"
+          label={t`Track detail`}
           options={(Object.keys(FIX_RATE_LABELS) as FixRate[]).map((rate) => ({
             value: rate,
             label: FIX_RATE_LABELS[rate],
@@ -405,17 +403,18 @@ export function MapSettingsScreen() {
             // stretch, and getting it on the following trip is no use.
             applyRecordingOptionsToActiveTrack()
               .then((applied) => {
-                if (applied) notify("Recording now at the new detail.", "done");
+                if (applied)
+                  notify(t`Recording now at the new detail.`, "done");
               })
               .catch((error: unknown) => {
                 console.error(error);
-                notify("Couldn't change the recording in progress.");
+                notify(t`Couldn't change the recording in progress.`);
               });
           }}
         />
 
         <ChoiceGroup
-          label="Discard track positions less accurate than"
+          label={t`Discard track positions less accurate than`}
           options={ACCURACY_LIMITS.map((limit) => ({
             value: String(limit),
             label: accuracyLabel(limit),
@@ -438,7 +437,7 @@ export function MapSettingsScreen() {
         {sensorLoggingAvailable() && sensorCaps != null && (
           <PreferenceRow
             icon="sensors"
-            title="Log raw sensors"
+            title={t`Log raw sensors`}
             subtitle={sensorLoggingSubtitle(sensorCaps, sensorLogging)}
             subtitleNumberOfLines={4}
             value={sensorLogging}
@@ -459,8 +458,8 @@ export function MapSettingsScreen() {
               // that from a phone that stopped sampling.
               notify(
                 next
-                  ? "Raw sensors will be logged from the next recording."
-                  : "Sensor logging off from the next recording.",
+                  ? t`Raw sensors will be logged from the next recording.`
+                  : t`Sensor logging off from the next recording.`,
                 "done",
               );
             }}

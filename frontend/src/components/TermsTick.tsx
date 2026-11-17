@@ -1,4 +1,5 @@
 import { Checkbox } from "../ui";
+import { t } from "@logjam/shared";
 
 function DocLink({ href, children }: { href: string; children: string }) {
   return (
@@ -27,13 +28,13 @@ function TermsTick({
           I agree to the{" "}
           {updated ? (
             <>
-              updated <DocLink href="/tos.html">Terms</DocLink>
+              updated <DocLink href="/tos.html">{t`Terms`}</DocLink>
             </>
           ) : (
-            <DocLink href="/tos.html">Terms of Use</DocLink>
+            <DocLink href="/tos.html">{t`Terms of Use`}</DocLink>
           )}{" "}
           and acknowledge the{" "}
-          <DocLink href="/privacy.html">Privacy Policy</DocLink>.
+          <DocLink href="/privacy.html">{t`Privacy Policy`}</DocLink>.
         </>
       }
       checked={checked}
