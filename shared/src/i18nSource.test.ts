@@ -2,6 +2,7 @@ import ts from "typescript";
 import { describe, expect, it } from "vitest";
 import {
   bareCopyIn,
+  bareCopyFailures,
   ceilingFailures,
   directoryOf,
   messageProblems,
@@ -515,6 +516,34 @@ describe("ratchetReads", () => {
     ["a.js", false],
   ])("reads the file %s: %s", (name, read) => {
     expect(ratchetReads(name, false)).toBe(read);
+  });
+});
+
+describe("bareCopyFailures", () => {
+  // Mutation: return an empty list always, or drop the `found.length === 0` test.
+  it("is empty when there is no bare text, and otherwise says so", () => {
+    expect(bareCopyFailures([])).toEqual([]);
+    expect(bareCopyFailures([{ file: "a.ts", line: 3 }])).toHaveLength(1);
+  });
+
+  // Mutation: delete the codemod's two commands or the `through t, plural, rich or say` advice from the message.
+  it("tells whoever wrote bare text to write it through t, and names the codemod for a whole directory", () => {
+    const [failure] = bareCopyFailures([{ file: "a.ts", line: 3 }]);
+    expect(failure).toContain("1 bare literals");
+    expect(failure).toContain("Write the text through t, plural, rich or say");
+    expect(failure).toContain("node scripts/i18n-extract.mjs");
+    expect(failure).toContain("node scripts/i18n-identity-check.mjs");
+  });
+
+  // Mutation: list each hit on its own line, or drop the file grouping.
+  it("lists each file once, with its lines", () => {
+    const [failure] = bareCopyFailures([
+      { file: "a.ts", line: 3 },
+      { file: "sub/b.ts", line: 1 },
+      { file: "a.ts", line: 9 },
+    ]);
+    expect(failure).toContain("3 bare literals");
+    expect(failure).toContain("  a.ts: 3, 9\n  sub/b.ts: 1");
   });
 });
 
