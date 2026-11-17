@@ -153,6 +153,9 @@ const NOT_COPY_TAGS = /^(?:sql|Prisma\.sql|css|glsl|html)$/;
 /** `new X(…)` whose argument is a developer's message. */
 const NOT_COPY_NEW = /^(?:\w*Error|RegExp|URL|URLSearchParams|Set|Map)$/;
 
+/** A `console` call: everything inside it is a developer's log line. */
+const CONSOLE = /^console\.\w+$/;
+
 /** A word: two or more letters, or letters round an inner apostrophe ("You're"). */
 const WORD = String.raw`(?:\p{L}{2,}|\p{L}+['\u2019]\p{L}+)`;
 
@@ -229,6 +232,15 @@ const CODE_ERROR = "an import failure code, matched with ===";
 const LAMBDA = "matched against the pre-signup Lambda's English message";
 const DETAIL =
   "developer detail: the API logs it (`malformed`), no client shows it";
+const SQL_TEXT = "SQL text the query is built from";
+const SELECTOR = "a CSS selector a script looks an element up by";
+const FONT =
+  "a font's name, which the map or the PDF looks up by that spelling";
+const PRODUCT = "the product's name, which is not translated";
+const STORAGE_ERROR =
+  "a message of the storage PUT, matched with includes to tell a dropped link, never shown";
+const CSV_HEADER =
+  "an English column header matched against the user's own file, not shown";
 
 /**
  * Text that reads as words and is not words a user reads, per file that holds
@@ -244,7 +256,6 @@ export const DATA_LITERALS: Readonly<
   Record<string, Readonly<Record<string, string>>>
 > = {
   "shared/src/apiErrors.ts": {
-    "API error …: … …": DETAIL,
     "Logjam is not taking new accounts this month": LAMBDA,
   },
   "shared/src/demSources.ts": {
@@ -411,16 +422,113 @@ export const DATA_LITERALS: Readonly<
   "frontend/src/components/dialogs/PlaceDialog.tsx": {
     "https://": "the start of the address a user types after it, not words",
   },
+  "frontend/src/components/map/terrainRouter.ts": {
+    "absent terrain tile":
+      "a message the router matches to tell a tile that does not exist, never shown",
+  },
+  "frontend/src/components/plans/PlanDetailPanel.tsx": {
+    "header button": SELECTOR,
+  },
+  "frontend/src/components/sidebar/panels/AnalyticsPanel.tsx": {
+    "header button": SELECTOR,
+  },
+  "frontend/src/components/sidebar/panels/NotificationsPanel.tsx": {
+    info: "the name of an icon",
+    "var(--color-accent)": "a CSS colour variable",
+  },
+  "frontend/src/components/sidebar/panels/SettingsPanel.tsx": {
+    "Logjam Web": PRODUCT,
+  },
+  "frontend/src/components/sidebar/panels/wayImport.ts": {
+    "Upload failed (network error)": STORAGE_ERROR,
+    "Upload failed (timeout)": STORAGE_ERROR,
+    "Upload stalled": STORAGE_ERROR,
+  },
+  "frontend/src/csvImport/detectColumns.ts": {
+    "place name": CSV_HEADER,
+    "trip date": CSV_HEADER,
+    "visit date": CSV_HEADER,
+    "trip type": CSV_HEADER,
+  },
+  "frontend/src/csvImport/detectFileKind.ts": {
+    "lat dd": CSV_HEADER,
+    "latitude dd": CSV_HEADER,
+    "lon dd": CSV_HEADER,
+    "lng dd": CSV_HEADER,
+    "longitude dd": CSV_HEADER,
+  },
+  "frontend/src/csvImport/placeColumns.ts": {
+    "place name": CSV_HEADER,
+    "alt names": CSV_HEADER,
+    "alt name": CSV_HEADER,
+    "alternative names": CSV_HEADER,
+    "alternative name": CSV_HEADER,
+    "other names": CSV_HEADER,
+    "num abseils": CSV_HEADER,
+    "number abseils": CSV_HEADER,
+    "num raps": CSV_HEADER,
+    "number of pitches": CSV_HEADER,
+    "number of abseils": CSV_HEADER,
+    "longest rap": CSV_HEADER,
+    "longest abseil": CSV_HEADER,
+    "longest pitch": CSV_HEADER,
+    "max rap": CSV_HEADER,
+    "max abseil": CSV_HEADER,
+    "longest abseil m": CSV_HEADER,
+    "longest rap m": CSV_HEADER,
+    "trip time": CSV_HEADER,
+    "trip duration": CSV_HEADER,
+    "time hrs": CSV_HEADER,
+    "hours hrs": CSV_HEADER,
+    "vertical grade": CSV_HEADER,
+    "a grade": CSV_HEADER,
+    "aquatic grade": CSV_HEADER,
+    "water grade": CSV_HEADER,
+  },
+  "frontend/src/geoPdf/draw/common.ts": {
+    '"Source Sans 3"': FONT,
+  },
   "frontend/src/geoPdf/pdf.ts": {
     "Logjam GeoPDF Generator":
       "the producer Logjam writes into a PDF and recognises on import",
   },
+  "frontend/src/geoPdf/tiles.ts": {
+    "archive changed while it was read":
+      "the message of the mismatch the PMTiles library catches and retries on, never shown",
+  },
   "frontend/src/ui/AttributeFilter.tsx": {
     "Less than": "a stored operator of a number filter",
+  },
+  "frontend/src/ui/Row.tsx": {
+    "noopener noreferrer": "the rel of a link that opens a tab",
+  },
+  "mobile/src/geopdf/geoPdfImportsDb.ts": {
+    "west = ?, south = ?, east = ?, north = ?": SQL_TEXT,
   },
   "mobile/src/map/BasemapThumb.tsx": {
     "Preview tiles: © OpenStreetMap contributors, OpenTopoMap and CyclOSM (CC BY-SA); © State of New South Wales (Spatial Services).":
       CREDIT,
+  },
+  "mobile/src/map/mapLabelText.ts": {
+    "Noto Sans Medium": FONT,
+  },
+  "mobile/src/screens/settings/NotificationSettingsScreen.tsx": {
+    "Logjam GPS": PRODUCT,
+  },
+  "mobile/src/sync/deltaPull.ts": {
+    "…: … row(s) this app version cannot apply":
+      "an entry in the list the delta pull only logs and counts, never shows",
+  },
+  "mobile/src/sync/mirrorSchema.ts": {
+    "outbox(state, seq)": "an index definition in SQL",
+  },
+  "mobile/src/sync/outbox.ts": {
+    label: "a column name in the table the update is built from",
+  },
+  "mobile/src/tracks/tracksDb.ts": {
+    "distanceM = ?, durationMs = ?, elevationGainM = ?, elevationLossM = ?, elevationSource = ?, elevationCheckedFor = NULL":
+      SQL_TEXT,
+    "elevationGainM = ?, elevationLossM = ?, elevationSource = ?": SQL_TEXT,
   },
   "mobile/src/ui/AttributeFilter.tsx": {
     "Less than": "a stored operator of a number filter",
@@ -536,7 +644,7 @@ export function bareCopyIn(
   const visit = (node: TypeScript.Node, copy: boolean): void => {
     const into = (child: TypeScript.Node, c = copy) => visit(child, c);
     const all = (c = copy) => ts.forEachChild(node, (child) => visit(child, c));
-    // `"a" + b`, `"a" ${b}` and `b || "a"`: text built or defaulted in place.
+    // `"a" + b`, `"a" ${b}`, `b || "a"` and `c ? "a" : "b"`: text built, defaulted or chosen in place.
     const isText = (arg: TypeScript.Node): boolean =>
       ts.isStringLiteralLike(arg) ||
       ts.isTemplateExpression(arg) ||
@@ -544,7 +652,21 @@ export function bareCopyIn(
         (arg.operatorToken.kind === ts.SyntaxKind.PlusToken ||
           arg.operatorToken.kind === ts.SyntaxKind.BarBarToken ||
           arg.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken) &&
-        (isText(arg.left) || isText(arg.right)));
+        (isText(arg.left) || isText(arg.right))) ||
+      (ts.isConditionalExpression(arg) &&
+        (isText(arg.whenTrue) || isText(arg.whenFalse)));
+    // `super("message")` in a class that extends an Error: its message is the developer's, as `new Error(...)`'s is.
+    const isErrorSuper = (call: TypeScript.CallExpression): boolean => {
+      if (call.expression.kind !== ts.SyntaxKind.SuperKeyword) return false;
+      for (let n = call.parent; n; n = n.parent)
+        if (ts.isClassLike(n))
+          return !!n.heritageClauses?.some(
+            (h) =>
+              h.token === ts.SyntaxKind.ExtendsKeyword &&
+              /^\w*Error$/.test(h.types[0]?.expression.getText() ?? ""),
+          );
+      return false;
+    };
     // An argument that is text is code here; any other (a callback) is read.
     const codeArguments = (
       call: TypeScript.CallExpression | TypeScript.NewExpression,
@@ -573,6 +695,10 @@ export function bareCopyIn(
     }
     if (ts.isCallExpression(node)) {
       const callee = node.expression.getText();
+      // A log line is code throughout, nested fallbacks included:
+      // `console.error(messageFromError(err, "Could not save"))`.
+      if (CONSOLE.test(callee)) return;
+      if (isErrorSuper(node)) return codeArguments(node);
       if (NOT_COPY_CALLS.test(callee)) return codeArguments(node);
       if (plurals.has(callee)) {
         node.arguments.forEach((arg, i) => {
