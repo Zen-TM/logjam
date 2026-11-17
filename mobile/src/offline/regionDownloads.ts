@@ -24,6 +24,7 @@ import {
   fetchExtractRequest,
   planExtract,
   saveClipArchive,
+  t,
   type ExtractPlan,
   type RegionBbox,
 } from "@logjam/shared";
@@ -130,7 +131,7 @@ function clipArchiveFor(spec: RegionClipSpec): {
 /** The CDN answered, and not with the bytes asked for. */
 class ArchiveStatusError extends Error {
   constructor(readonly status: number) {
-    super(`The map archive answered ${status}`);
+    super(t`The map archive answered ${status}`);
   }
 }
 

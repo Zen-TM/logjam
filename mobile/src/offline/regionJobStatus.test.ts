@@ -105,7 +105,7 @@ describe("sourceUnavailableLine", () => {
       /Saving the area again fetches it/,
     );
     expect(sourceUnavailableLine(undefined)).toBe(
-      "Logjam couldn't prepare this map right now. Other maps still work.",
+      "Logjam GPS couldn't prepare this map right now. Other maps still work.",
     );
   });
 });

@@ -129,7 +129,7 @@ export async function startRegionUpdate(
     );
   } catch (err) {
     if (!(err instanceof NotEnoughSpaceError)) throw err;
-    return `Not enough space. ${err.message}`;
+    return [t`Not enough space.`, err.message].join(" ");
   }
   enqueueRegionDownloads(specs.map((spec) => ({ ...spec, allowCellular })));
   return null;

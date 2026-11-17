@@ -324,7 +324,7 @@ describe("wipeAllLocalData", () => {
 
 // The sign-out wipe resets MapLibre's ambient tile cache, and a failure there
 // is reported rather than swallowed. Dropping the `resetDatabase` call turns
-// the first test red; dropping the `failed.push("map tile cache")` turns the
+// the first test red; dropping the `failed.push(t`map data cache`)` turns the
 // second red.
 describe("wipeAllLocalData and the MapLibre tile cache", () => {
   it("resets the ambient cache and reports a clean wipe", async () => {
@@ -334,7 +334,7 @@ describe("wipeAllLocalData and the MapLibre tile cache", () => {
 
   it("names the tile cache as failed, and still clears the rest", async () => {
     resetDatabase.mockRejectedValue(new Error("boom"));
-    expect(await wipeAllLocalData()).toEqual({ failed: ["map tile cache"] });
+    expect(await wipeAllLocalData()).toEqual({ failed: ["map data cache"] });
     expect(events).toContain("sql:DELETE FROM map_artifact");
   });
 });

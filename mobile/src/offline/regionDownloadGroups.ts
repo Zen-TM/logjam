@@ -7,7 +7,7 @@
 //
 // Pure, so the aggregation the card and the finish toast both read has one
 // definition and a test beside it.
-import { DEM_SOURCE_ID, t } from "@logjam/shared";
+import { DEM_SOURCE_ID, plural, t } from "@logjam/shared";
 
 import { isJobSettled, isRetryableFailure } from "./regionJobStatus";
 import type { RegionJob } from "./regionDownloadQueue";
@@ -84,22 +84,23 @@ export function retryableJobs(jobs: RegionJob[]): RegionJob[] {
   );
 }
 
-function maps(count: number): string {
-  return `${count} map${count === 1 ? "" : "s"}`;
-}
-
-function layers(count: number): string {
-  return `${count} layer${count === 1 ? "" : "s"}`;
-}
-
 /** What the run's card says: progress while it runs, the outcome once it stops. */
 export function regionGroupStatusLine(group: RegionDownloadGroup): string {
   if (!group.settled) {
-    return `${group.ready} of ${layers(group.layerCount)} saved`;
+    return plural(
+      group.layerCount,
+      "{0} of # layer saved",
+      "{0} of # layers saved",
+      group.ready,
+    );
   }
   return group.ready > 0
-    ? `Saved with ${layers(group.unfinished)} missing`
-    : "Nothing saved";
+    ? plural(
+        group.unfinished,
+        "Saved with # layer missing",
+        "Saved with # layers missing",
+      )
+    : t`Nothing saved`;
 }
 
 /**
@@ -124,7 +125,7 @@ export function updateProgressLine(
 ): string {
   return group.settled
     ? t`Update didn't finish`
-    : `Updating · ${Math.round(group.fraction * 100)}%`;
+    : t`Updating · ${Math.round(group.fraction * 100)}%`;
 }
 
 /**
@@ -150,19 +151,39 @@ export function regionGroupToastText(group: RegionDownloadGroup): string {
       return t`Couldn't update ${group.label} · your saved map is unchanged`;
     }
     if (group.unfinished > 0 || group.demUnfinished) {
-      return `${group.label} partly updated · ${maps(group.unfinished)} didn't finish · older copies kept`;
+      return plural(
+        group.unfinished,
+        "{0} partly updated · # map didn't finish · older copies kept",
+        "{0} partly updated · # maps didn't finish · older copies kept",
+        group.label,
+      );
     }
-    return `${group.label} updated · ${maps(group.ready)}`;
+    return plural(
+      group.ready,
+      "{0} updated · # map",
+      "{0} updated · # maps",
+      group.label,
+    );
   }
   const saved =
     group.ready === 0
-      ? `${group.label} · nothing saved`
+      ? t`${group.label} · nothing saved`
       : group.unfinished === 0
-        ? `${group.label} saved · ${layers(group.ready)}`
-        : `${group.label} saved with ${layers(group.unfinished)} missing`;
+        ? plural(
+            group.ready,
+            "{0} saved · # layer",
+            "{0} saved · # layers",
+            group.label,
+          )
+        : plural(
+            group.unfinished,
+            "{0} saved with # layer missing",
+            "{0} saved with # layers missing",
+            group.label,
+          );
   // Named as well as counted: the consequence is specific (no elevation
   // profiles out there), and it is not fixed by picking maps again.
-  return group.demUnfinished ? `${saved} · no elevation data` : saved;
+  return group.demUnfinished ? t`${saved} · no elevation data` : saved;
 }
 
 /**
@@ -204,7 +225,7 @@ export function downloadNotice(
     (jobs.reduce((sum, job) => sum + jobFraction(job), 0) / jobs.length) * 100,
   );
   return {
-    text: working ? `${percent}% saved` : t`Waiting for a connection`,
+    text: working ? t`${percent}% saved` : t`Waiting for a connection`,
     percent,
     waiting: !working,
   };
