@@ -29,7 +29,7 @@ import { relativeTime } from "./syncHealth";
  * which is a column to us and nothing at all to the reader — "Place · vGrade"
  * was the whole of a row's title. Anything not listed falls back to the raw
  * name rather than being hidden: an unlabelled field is a copy gap, not a
- * feature.
+ * reason to withhold what the user typed.
  */
 const FIELD_LABEL: Record<string, string> = {
   name: t`name`,
@@ -93,6 +93,8 @@ function addNamedTitle(entity: OutboxEntity, name: string): string {
       return t`Couldn't add notification “${name}”`;
     case "media":
       return t`Couldn't add photo or file “${name}”`;
+    default:
+      return t`Couldn't add ${entity} “${name}”`;
   }
 }
 
@@ -114,6 +116,8 @@ function addUnnamedTitle(entity: OutboxEntity): string {
       return t`Couldn't add a new notification`;
     case "media":
       return t`Couldn't add a new photo or file`;
+    default:
+      return t`Couldn't add a new ${entity}`;
   }
 }
 
@@ -135,6 +139,8 @@ function updateUnnamedTitle(entity: OutboxEntity): string {
       return t`Couldn't save your changes to a notification`;
     case "media":
       return t`Couldn't save your changes to a photo or file`;
+    default:
+      return t`Couldn't save your changes to a ${entity}`;
   }
 }
 
@@ -156,6 +162,8 @@ function deleteUnnamedTitle(entity: OutboxEntity): string {
       return t`Couldn't delete a notification`;
     case "media":
       return t`Couldn't delete a photo or file`;
+    default:
+      return t`Couldn't delete a ${entity}`;
   }
 }
 

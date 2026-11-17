@@ -141,6 +141,23 @@ describe("opTitle", () => {
     );
     expect(title).toBe("Couldn't sync a somethingNew");
   });
+
+  it("falls back for an unknown kind on every op, named or not", () => {
+    const unknown = "somethingNew" as ParkedOp["entity"];
+    const named = { entityName: "Car park" };
+    expect(opTitle(parked({ entity: unknown, op: "create", ...named }))).toBe(
+      "Couldn't add somethingNew “Car park”",
+    );
+    expect(opTitle(parked({ entity: unknown, op: "create" }))).toBe(
+      "Couldn't add a new somethingNew",
+    );
+    expect(opTitle(parked({ entity: unknown, op: "update" }))).toBe(
+      "Couldn't save your changes to a somethingNew",
+    );
+    expect(opTitle(parked({ entity: unknown, op: "delete" }))).toBe(
+      "Couldn't delete a somethingNew",
+    );
+  });
 });
 
 describe("opAdvice", () => {
