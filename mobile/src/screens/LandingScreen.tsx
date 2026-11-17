@@ -31,6 +31,7 @@ import type { useAuth } from "../auth/useAuth";
 import { radius, spacing, makeStyles, muted } from "../theme";
 import { Button, ErrorBanner, FormStack } from "../ui";
 import { AccountForms } from "./AccountForms";
+import { t } from "@logjam/shared";
 
 type Auth = ReturnType<typeof useAuth>;
 
@@ -57,10 +58,10 @@ export function LandingScreen({ auth }: { auth: Auth }) {
             style={styles.logo}
             accessibilityIgnoresInvertColors
           />
-          <Text style={styles.appTitle}>Logjam</Text>
-          <Text style={styles.tagline}>
-            Your canyoning trips and offline maps.
-          </Text>
+          <Text style={styles.appTitle}>{t`Logjam`}</Text>
+          <Text
+            style={styles.tagline}
+          >{t`Your canyoning trips and offline maps.`}</Text>
         </View>
 
         {mode === "signIn" && auth.ownForms ? (
@@ -112,7 +113,7 @@ function SignInPanel({
           screen — never at the top of the form (shared/DESIGN.md §11). */}
       {auth.error ? <ErrorBanner message={auth.error} /> : null}
       <Button
-        label="Sign in or create an account"
+        label={t`Sign in or create an account`}
         onPress={submit}
         loading={submitting}
       />
@@ -121,12 +122,16 @@ function SignInPanel({
       <View style={styles.secondary}>
         {offersGuest ? (
           <Button
-            label="Continue without an account"
+            label={t`Continue without an account`}
             variant="ghost"
             onPress={onExplainGuest}
           />
         ) : (
-          <Button label="Back" variant="ghost" onPress={auth.backToChooser} />
+          <Button
+            label={t`Back`}
+            variant="ghost"
+            onPress={auth.backToChooser}
+          />
         )}
       </View>
     </FormStack>
@@ -147,26 +152,23 @@ function GuestExplainer({
 
   return (
     <FormStack>
-      <Text style={styles.heading}>Without an account</Text>
-      <Text style={styles.body}>
-        Everything you record stays on this phone and is never uploaded or
-        backed up. If you lose the phone, it&apos;s gone. An account later keeps
-        what you&apos;ve already recorded.
-      </Text>
-      <Text style={styles.body}>
-        Sharing with friends and sharpened areas from Logjam Web need an
-        account. Downloaded maps work without one.
-      </Text>
+      <Text style={styles.heading}>{t`Without an account`}</Text>
+      <Text
+        style={styles.body}
+      >{t`Everything you record stays on this phone and is never uploaded or backed up. If you lose the phone, it's gone. An account later keeps what you've already recorded.`}</Text>
+      <Text
+        style={styles.body}
+      >{t`Sharing with friends and sharpened areas from Logjam Web need an account. Downloaded maps work without one.`}</Text>
       {/* "Continue anyway" is this panel's submit — a failure to store the
           choice belongs directly above it (shared/DESIGN.md §11). */}
       {auth.error ? <ErrorBanner message={auth.error} /> : null}
       <View style={styles.secondary}>
         <Button
-          label="Continue anyway"
+          label={t`Continue anyway`}
           variant="outlineAccent"
           onPress={onContinue}
         />
-        <Button label="Back to sign in" variant="ghost" onPress={onBack} />
+        <Button label={t`Back to sign in`} variant="ghost" onPress={onBack} />
       </View>
     </FormStack>
   );

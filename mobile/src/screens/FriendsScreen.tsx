@@ -51,6 +51,7 @@ import {
   type FriendsBucket,
   type SectionKeysOn,
   loadStateOf,
+  t,
 } from "@logjam/shared";
 
 import {
@@ -164,7 +165,7 @@ export function FriendsScreen({
   // the change.
   const userQuery = useApiQuery(
     fetchCurrentUser,
-    "Couldn't load your account.",
+    t`Couldn't load your account.`,
     !guestBlock,
   );
   const { refetch: refetchUser } = userQuery;
@@ -243,7 +244,7 @@ export function FriendsScreen({
       // verb suggests (DESIGN.md).
       const ok = await confirm({
         ...friendRemoveConfirm(item.username),
-        confirmLabel: "Remove",
+        confirmLabel: t`Remove`,
         tone: "destructive",
       });
       if (!ok) return;
@@ -585,7 +586,7 @@ const FriendRow = memo(function FriendRow({
         ) : (
           <IconButton
             icon="overflow"
-            accessibilityLabel={`Actions for ${item.username}`}
+            accessibilityLabel={t`Actions for ${item.username}`}
             onPress={() => onMenu(item)}
           />
         )
@@ -721,7 +722,7 @@ function AddFriendBody({
         icon="link"
         variant="outlineAccent"
         disabled={inviting}
-        disabledReason="Making the link…"
+        disabledReason={t`Making the link…`}
         onPress={() => void shareInvite()}
       />
       {liveInvites === null ? (

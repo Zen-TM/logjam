@@ -34,6 +34,7 @@ import {
   SETTINGS_LIST,
   type ScopedCustomFieldDef,
   type SectionKeysOn,
+  t,
 } from "@logjam/shared";
 
 import { type CustomFieldEntity } from "../api/queries";
@@ -354,9 +355,9 @@ export function SettingsScreen({
 function sheetTitle(sheet: SheetMode): string {
   // The attributes step titles itself (`useTypeAttributesStep`).
   if (sheet.kind === "closed" || sheet.kind === "typeAttributes") return "";
-  if (sheet.kind === "placeTypes") return "Place types";
+  if (sheet.kind === "placeTypes") return t`Place types`;
   if (sheet.kind === "placeTypeForm") {
-    return sheet.editing ? sheet.editing.name : "New place type";
+    return sheet.editing ? sheet.editing.name : t`New place type`;
   }
   const noun = sheet.entity === "tripLog" ? "Trip" : "Place";
   if (sheet.kind === "fields") return `${noun} ${ATTRIBUTE_NOUN.many}`;

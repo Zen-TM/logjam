@@ -36,6 +36,7 @@ import {
   type LeaderboardResponse,
   type LeaderboardRow,
   type SectionKeysOn,
+  t,
 } from "@logjam/shared";
 
 import { getLeaderboard } from "../api/friends";
@@ -193,7 +194,7 @@ export function LeaderboardScreen({
     if (season === undefined) return;
     if (!dismissPodium(season)) {
       setToast({
-        text: "This phone wouldn't store that setting.",
+        text: t`This phone wouldn't store that setting.`,
         tone: "error",
         nonce: Date.now(),
       });
