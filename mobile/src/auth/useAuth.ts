@@ -30,7 +30,7 @@
 // path.
 import { useCallback, useEffect, useState } from "react";
 import { AppState } from "react-native";
-import { messageFromError } from "@logjam/shared";
+import { messageFromError, t } from "@logjam/shared";
 
 import { config } from "../config";
 import { setSessionRejectedHandler } from "../api/apiFetch";
@@ -155,7 +155,7 @@ export function useAuth() {
     setSessionRejectedHandler(() => {
       setState((prev) => {
         if (prev !== "authenticated") return prev;
-        setError("Your session has expired. Sign in again.");
+        setError(t`Your session has expired. Sign in again.`);
         return "signIn";
       });
     });
@@ -173,7 +173,7 @@ export function useAuth() {
           if (classifySessionError(err) === "rejected") {
             setState((prev) => {
               if (prev !== "authenticated") return prev;
-              setError("Your session has expired. Sign in again.");
+              setError(t`Your session has expired. Sign in again.`);
               return "signIn";
             });
           }
@@ -206,7 +206,7 @@ export function useAuth() {
       return true;
     } catch (err) {
       console.error(err);
-      setError(messageFromError(err, "Couldn't sign in. Try again."));
+      setError(messageFromError(err, t`Couldn't sign in. Try again.`));
       return false;
     }
   }, []);
@@ -274,7 +274,7 @@ export function useAuth() {
     if (!writeEntryChoice("guest")) {
       // A choice that didn't stick means the next cold start throws them back
       // here with their data apparently gone. Say so instead of proceeding.
-      setError("Couldn't save that choice. Try again.");
+      setError(t`Couldn't save that choice. Try again.`);
       return false;
     }
     setError(null);

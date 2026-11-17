@@ -47,6 +47,7 @@ import {
   type TripPlanLeaderForm,
   type TripPlanQuestion,
   type TripPlanView,
+  t,
 } from "@logjam/shared";
 
 import { unavailableReasonText } from "../auth/capabilities";
@@ -552,7 +553,7 @@ const QuestionCard = memo(function QuestionCard({
           accessibilityLabel={`${copy.moveUp}: ${index + 1}`}
           color={theme.textMuted}
           disabled={index === 0}
-          disabledReason="Already the first question"
+          disabledReason={t`Already the first question`}
           onPress={() => onMove(question.id, -1)}
         />
         <IconButton
@@ -560,7 +561,7 @@ const QuestionCard = memo(function QuestionCard({
           accessibilityLabel={`${copy.moveDown}: ${index + 1}`}
           color={theme.textMuted}
           disabled={last}
-          disabledReason="Already the last question"
+          disabledReason={t`Already the last question`}
           onPress={() => onMove(question.id, 1)}
         />
         <IconButton

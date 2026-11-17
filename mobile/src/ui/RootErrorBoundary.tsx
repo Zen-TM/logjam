@@ -5,6 +5,7 @@ import { Text, View } from "react-native";
 
 import { spacing, makeStyles, muted } from "../theme";
 import { Button } from "./Button";
+import { t } from "@logjam/shared";
 
 interface Props {
   children: ReactNode;
@@ -59,11 +60,11 @@ function Fallback({ onRestart }: { onRestart: () => void }) {
   const styles = useStyles();
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Something went wrong</Text>
-      <Text style={styles.message}>
-        Logjam GPS hit an unexpected error. Restarting it usually fixes it.
-      </Text>
-      <Button label="Restart" variant="outlineAccent" onPress={onRestart} />
+      <Text style={styles.title}>{t`Something went wrong`}</Text>
+      <Text
+        style={styles.message}
+      >{t`Logjam GPS hit an unexpected error. Restarting it usually fixes it.`}</Text>
+      <Button label={t`Restart`} variant="outlineAccent" onPress={onRestart} />
     </View>
   );
 }

@@ -3,7 +3,7 @@
 // the answer to "will I have a map there?" is read before leaving signal.
 import { useNavigation } from "@react-navigation/native";
 
-import { BASEMAP_CATALOG } from "@logjam/shared";
+import { BASEMAP_CATALOG, t } from "@logjam/shared";
 
 import { useConnectivity } from "../map/connectivity";
 import { boundsView } from "../map/basemapMeta";
@@ -47,7 +47,7 @@ export function MapCoverageRow({
     return (
       <Row
         icon="saveOffline"
-        title="Offline map saved for this area"
+        title={t`Offline map saved for this area`}
         subtitle={basemapName}
       />
     );
@@ -56,7 +56,7 @@ export function MapCoverageRow({
   return (
     <Row
       icon="saveOffline"
-      title="Save an offline map"
+      title={t`Save an offline map`}
       subtitle={coverageSubtitle(online, basemapName)}
       disabled={!online}
       onPress={() => {

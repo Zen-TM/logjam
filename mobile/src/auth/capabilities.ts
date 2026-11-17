@@ -27,6 +27,7 @@
 // (src/ui/Row.tsx), the same shape `map/sourceResolver.ts` already uses for
 // unavailable tile sources.
 
+import { t } from "@logjam/shared";
 export type AccountState = "guest" | "linked";
 
 /**
@@ -120,11 +121,11 @@ export function capabilityStatus(
 export function unavailableReasonText(reason: UnavailableReason): string {
   switch (reason) {
     case "needs-account":
-      return "Needs an account";
+      return t`Needs an account`;
     case "needs-connection":
-      return "Needs a connection";
+      return t`Needs a connection`;
     case "needs-upload":
-      return "Needs to sync first";
+      return t`Needs to sync first`;
   }
 }
 
@@ -190,7 +191,7 @@ export function changeEmailRowProps(
   authMode: "oidc" | "fake",
 ): { disabled: boolean; subtitle?: string } {
   if (authMode === "fake") {
-    return { disabled: true, subtitle: "Not available under fake sign-in." };
+    return { disabled: true, subtitle: t`Not available under fake sign-in.` };
   }
   return capabilityRowProps("serverPrefs", "linked", online);
 }

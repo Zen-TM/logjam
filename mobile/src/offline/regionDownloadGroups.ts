@@ -7,7 +7,7 @@
 //
 // Pure, so the aggregation the card and the finish toast both read has one
 // definition and a test beside it.
-import { DEM_SOURCE_ID } from "@logjam/shared";
+import { DEM_SOURCE_ID, t } from "@logjam/shared";
 
 import { isJobSettled, isRetryableFailure } from "./regionJobStatus";
 import type { RegionJob } from "./regionDownloadQueue";
@@ -123,7 +123,7 @@ export function updateProgressLine(
   group: Pick<RegionDownloadGroup, "settled" | "fraction">,
 ): string {
   return group.settled
-    ? "Update didn't finish"
+    ? t`Update didn't finish`
     : `Updating · ${Math.round(group.fraction * 100)}%`;
 }
 
@@ -147,7 +147,7 @@ export function regionGroupToastText(group: RegionDownloadGroup): string {
   if (group.update) {
     // Nothing replaced a file when no job saved: the card is as it was.
     if (group.jobs.every((job) => job.state.kind !== "ready")) {
-      return `Couldn't update ${group.label} · your saved map is unchanged`;
+      return t`Couldn't update ${group.label} · your saved map is unchanged`;
     }
     if (group.unfinished > 0 || group.demUnfinished) {
       return `${group.label} partly updated · ${maps(group.unfinished)} didn't finish · older copies kept`;
@@ -204,7 +204,7 @@ export function downloadNotice(
     (jobs.reduce((sum, job) => sum + jobFraction(job), 0) / jobs.length) * 100,
   );
   return {
-    text: working ? `${percent}% saved` : "Waiting for a connection",
+    text: working ? `${percent}% saved` : t`Waiting for a connection`,
     percent,
     waiting: !working,
   };

@@ -234,7 +234,7 @@ describe("syncHealth", () => {
       const health = syncHealth(
         input({ state: "error", errorKind: "unsupported" }),
       );
-      expect(health.headline).toBe("The server isn't ready to sync");
+      expect(health.headline).toBe("Logjam isn't ready to sync");
       expect(health.headline).not.toMatch(/reach/i);
       expect(health.detail).not.toMatch(/retry/i);
       expect(health.tone).toBe("problem");
@@ -245,7 +245,7 @@ describe("syncHealth", () => {
         syncHealth(
           input({ state: "error", errorKind: "unsupported", pendingCount: 9 }),
         ).headline,
-      ).toBe("The server isn't ready to sync");
+      ).toBe("Logjam isn't ready to sync");
       // applyFailed has a repair; this doesn't, so that one stays the answer.
       expect(
         syncHealth(input({ state: "error", errorKind: "applyFailed" }))

@@ -44,6 +44,7 @@ import {
   type TExportFormat,
   type TPlace,
   type RoutePoint,
+  t,
 } from "@logjam/shared";
 
 // Read by callers as `Saved ${name}.` when the provider didn't report a name.
@@ -57,7 +58,7 @@ export type ExportFormat = "gpx" | "kml";
 /** Thrown when the platform can't save a file at all — the caller says so. */
 export class ExportUnsupportedError extends Error {
   constructor() {
-    super("Saving files isn't supported on this device yet.");
+    super(t`Saving files isn't supported on this device yet.`);
     this.name = "ExportUnsupportedError";
   }
 }

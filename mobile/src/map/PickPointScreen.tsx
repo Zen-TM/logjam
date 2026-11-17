@@ -51,6 +51,7 @@ import {
   MAP_INK,
   pointBox,
   regionInView,
+  t,
 } from "@logjam/shared";
 
 import { config } from "../config";
@@ -347,7 +348,7 @@ export function PickPointScreen({
       >
         <Text style={styles.hintText}>
           {picked
-            ? "Tap again to move the point"
+            ? t`Tap again to move the point`
             : `Tap where the ${subject} is`}
         </Text>
       </View>
@@ -358,18 +359,22 @@ export function PickPointScreen({
           navigation bar's height above the tabs. */}
       <View style={styles.actions}>
         <View style={styles.action}>
-          <Button label="Cancel" variant="outlineAccent" onPress={onCancel} />
+          <Button
+            label={t`Cancel`}
+            variant="outlineAccent"
+            onPress={onCancel}
+          />
         </View>
         <View style={styles.action}>
           <Button
-            label="Use this point"
+            label={t`Use this point`}
             icon="done"
             // Absent-minded taps aside, there is nothing to confirm without a
             // point — and a button that exists only to refuse is worse than a
             // disabled one saying why (DESIGN.md), which is what the hint
             // above is for.
             disabled={picked == null}
-            disabledReason="Tap the map to pick a point"
+            disabledReason={t`Tap the map to pick a point`}
             onPress={() => picked && onConfirm(picked)}
           />
         </View>

@@ -120,7 +120,7 @@ export function deleteLabel(
   memberCount = 1,
 ): string {
   if (removal.synced) return t`Delete`;
-  return memberCount > 1 ? "Delete all from device" : "Delete from device";
+  return memberCount > 1 ? t`Delete all from device` : t`Delete from device`;
 }
 
 export type AssetActions = {

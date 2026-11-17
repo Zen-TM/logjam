@@ -2,7 +2,6 @@ import type { ReactNode } from "react";
 import { useCallback, useState } from "react";
 import { Text, View } from "react-native";
 import {
-  ATTRIBUTE_NOUN,
   buildCustomFieldDef,
   attributeDeleteConfirm,
   attributesHint,
@@ -10,6 +9,7 @@ import {
   distinctTripTypes,
   drawsYoursHeading,
   isSystemFieldDef,
+  plural,
   SETTINGS_LIST,
   TRIP_TYPE_SUGGESTIONS,
   type ScopedCustomFieldDef,
@@ -69,17 +69,9 @@ const listCopy = SETTINGS_LIST.copy;
  */
 
 /** The only per-entity difference in this file: what to call the rows. */
-const ENTITY_NOUN: Record<
-  CustomFieldEntity,
-  { one: string; many: string; has: string; have: string }
-> = {
-  tripLog: { one: "trip", many: "trips", has: "trip has", have: "trips have" },
-  place: {
-    one: "place",
-    many: "places",
-    has: "place has",
-    have: "places have",
-  },
+const ENTITY_NOUN: Record<CustomFieldEntity, { one: string; many: string }> = {
+  tripLog: { one: t`trip`, many: t`trips` },
+  place: { one: t`place`, many: t`places` },
 };
 
 export function CustomFieldList({
@@ -310,19 +302,14 @@ export function useCustomFieldForm({
     setSaving(true);
     try {
       await saveFieldDefs(entity, next);
-      onSaved(
-        next,
-        editing
-          ? `${capitalize(ATTRIBUTE_NOUN.one)} updated.`
-          : `${capitalize(ATTRIBUTE_NOUN.one)} added.`,
-      );
+      onSaved(next, editing ? t`Attribute updated.` : t`Attribute added.`);
       onDone();
     } catch (err) {
       console.error(err);
       // A local write, so a failure here is a broken database rather than a
       // missing connection — do not offer the user a network explanation for
       // something reconnecting cannot fix.
-      setFormError(`Couldn't save that ${ATTRIBUTE_NOUN.one} on this phone.`);
+      setFormError(t`Couldn't save that attribute on this phone.`);
     } finally {
       setSaving(false);
     }
@@ -362,20 +349,32 @@ export function useCustomFieldForm({
             onSaved(
               defs.filter((def) => def.key !== key),
               removed === 0
-                ? `${capitalize(ATTRIBUTE_NOUN.one)} deleted.`
-                : `${capitalize(ATTRIBUTE_NOUN.one)} deleted. Cleared from ${removed} ${removed === 1 ? noun.one : noun.many}.`,
+                ? t`Attribute deleted.`
+                : entity === "tripLog"
+                  ? plural(
+                      removed,
+                      "Attribute deleted. Cleared from # trip.",
+                      "Attribute deleted. Cleared from # trips.",
+                    )
+                  : plural(
+                      removed,
+                      "Attribute deleted. Cleared from # place.",
+                      "Attribute deleted. Cleared from # places.",
+                    ),
             );
             onDone();
           })
           .catch((err: unknown) => {
             console.error(err);
-            setFormError(`Couldn't delete that ${ATTRIBUTE_NOUN.one}.`);
+            setFormError(t`Couldn't delete that attribute.`);
           });
       })
       .catch((err: unknown) => {
         console.error(err);
         setFormError(
-          `Couldn't check which ${noun.many} use this ${ATTRIBUTE_NOUN.one}.`,
+          entity === "tripLog"
+            ? t`Couldn't check which trips use this attribute.`
+            : t`Couldn't check which places use this attribute.`,
         );
       });
   }, [defs, editing, entity, noun, onDone, onSaved]);
@@ -383,7 +382,7 @@ export function useCustomFieldForm({
   const body = (
     <FormStack>
       <TextField
-        label={`${capitalize(ATTRIBUTE_NOUN.one)} name`}
+        label={t`Attribute name`}
         value={label}
         onChangeText={(next) => {
           patch({ label: next });
@@ -529,7 +528,7 @@ export function useCustomFieldForm({
     <FormStack>
       {formError ? <ErrorBanner message={formError} /> : null}
       <Button
-        label={editing ? t`Save` : `Add ${ATTRIBUTE_NOUN.one}`}
+        label={editing ? t`Save` : t`Add attribute`}
         icon="done"
         loading={saving}
         onPress={() => void save()}
@@ -570,10 +569,6 @@ function defRowKey(def: ScopedCustomFieldDef): string {
   return `${def.ownerId ?? "system"}:${def.key}`;
 }
 
-function capitalize(word: string): string {
-  return word.charAt(0).toUpperCase() + word.slice(1);
-}
-
 function fieldSummary(def: ScopedCustomFieldDef): string {
   const base = typeLabel(def.type);
   // ONE-SIDED BOUNDS COUNT. Requiring both would print a bare "Integer" for a
@@ -581,7 +576,20 @@ function fieldSummary(def: ScopedCustomFieldDef): string {
   if (def.min != null && def.max != null)
     return `${base} · ${def.min}–${def.max}`;
   if (def.min != null) return `${base} · ${def.min}+`;
-  if (def.max != null) return `${base} · up to ${def.max}`;
+  if (def.max != null) {
+    switch (def.type) {
+      case "string":
+        return t`Text · up to ${def.max}`;
+      case "integer":
+        return t`Integer · up to ${def.max}`;
+      case "float":
+        return t`Decimal · up to ${def.max}`;
+      case "date":
+        return t`Date · up to ${def.max}`;
+      case "boolean":
+        return t`Yes / No · up to ${def.max}`;
+    }
+  }
   return base;
 }
 

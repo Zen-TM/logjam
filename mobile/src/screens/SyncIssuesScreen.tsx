@@ -98,7 +98,7 @@ import {
   shelfTitle,
 } from "./syncIssueDisplay";
 import { relativeTime, syncIssuesTitle } from "./syncHealth";
-import { t } from "@logjam/shared";
+import { plural, t } from "@logjam/shared";
 
 type Issue =
   | { kind: "stuck"; key: string; op: ParkedOp }
@@ -173,9 +173,7 @@ export function SyncIssuesScreen({
     if (
       !(await confirm({
         confirmTitle: t`Get a fresh copy?`,
-        confirmBody:
-          "Re-downloads your places, trips and photos from scratch. " +
-          "Uploads still waiting are kept.",
+        confirmBody: t`Re-downloads your places, trips and photos from scratch. Uploads still waiting are kept.`,
         confirmLabel: t`Download again`,
         tone: "filled",
       }))
@@ -279,8 +277,16 @@ export function SyncIssuesScreen({
       .then(() => {
         notify(
           online
-            ? `${retryable.length === 1 ? "Change" : `${retryable.length} changes`} sent again.`
-            : `${retryable.length === 1 ? "Change" : `${retryable.length} changes`} queued. They go up when you have signal.`,
+            ? plural(
+                retryable.length,
+                "Change sent again.",
+                "# changes sent again.",
+              )
+            : plural(
+                retryable.length,
+                "Change queued. They go up when you have signal.",
+                "# changes queued. They go up when you have signal.",
+              ),
         );
         load();
       })
@@ -292,10 +298,11 @@ export function SyncIssuesScreen({
     // user cannot read one value at a time — so it confirms, like the delete
     // beside it, and the body says what it costs.
     const ok = await confirm({
-      confirmTitle:
-        restorable.length === 1
-          ? "Restore the earlier version?"
-          : `Restore ${restorable.length} earlier versions?`,
+      confirmTitle: plural(
+        restorable.length,
+        "Restore the earlier version?",
+        "Restore # earlier versions?",
+      ),
       // A one-row selection gets the same quoted value the sheet's own confirm
       // gives it: the bar is a different route to the same irreversible write,
       // not a reason to say less about it.
@@ -312,9 +319,11 @@ export function SyncIssuesScreen({
     void Promise.all(restorable.map((entry) => restoreShelfValue(entry.id)))
       .then(() => {
         notify(
-          restorable.length === 1
-            ? "Earlier version restored."
-            : `${restorable.length} earlier versions restored.`,
+          plural(
+            restorable.length,
+            "Earlier version restored.",
+            "# earlier versions restored.",
+          ),
         );
         clearSelection();
         load();
@@ -337,7 +346,7 @@ export function SyncIssuesScreen({
     });
     const total = selectedStuck.length + selectedLost.length;
     const ok = await confirm({
-      confirmTitle: total === 1 ? "Discard this?" : `Discard ${total} entries?`,
+      confirmTitle: plural(total, "Discard this?", "Discard # entries?"),
       confirmBody: body,
       confirmLabel: t`Discard`,
       tone: "destructive",
@@ -349,7 +358,7 @@ export function SyncIssuesScreen({
     ])
       .then(() => {
         clearSelection();
-        notify(total === 1 ? "Discarded." : `${total} entries discarded.`);
+        notify(plural(total, "Discarded.", "# entries discarded."));
         load();
       })
       .catch((err: unknown) => console.error(err));
@@ -367,10 +376,14 @@ export function SyncIssuesScreen({
       const kept = salvageableFields(op);
       const ok = await confirm({
         confirmTitle: t`Send the rest?`,
-        confirmBody:
-          `${listFields(kept)} ${kept.length === 1 ? "is" : "are"} saved to your account. ` +
-          `${listFields(dropped)} ${dropped.length === 1 ? "is" : "are"} deleted — ` +
-          `${dropped.length === 1 ? "it's" : "they're"} what your account refused.`,
+        confirmBody: [
+          kept.length === 1
+            ? t`${listFields(kept)} is saved to your account.`
+            : t`${listFields(kept)} are saved to your account.`,
+          dropped.length === 1
+            ? t`${listFields(dropped)} is deleted — it's what your account refused.`
+            : t`${listFields(dropped)} are deleted — they're what your account refused.`,
+        ].join(" "),
         confirmLabel: t`Send the rest`,
         tone: "destructive",
       });
@@ -518,7 +531,7 @@ export function SyncIssuesScreen({
         title={syncIssuesTitle(total)}
         onBack={onBack}
         backLabel={backLabel}
-        value={total === 1 ? "1 change" : `${total} changes`}
+        value={plural(total, "# change", "# changes")}
       />
 
       {total > 0 ? (
@@ -713,8 +726,8 @@ function StuckMenu({
           icon="send"
           title={
             salvageable.length === 1
-              ? "Send the other change"
-              : "Send the other changes"
+              ? t`Send the other change`
+              : t`Send the other changes`
           }
           subtitle={t`Saves ${listFields(salvageable)}, and drops ${listFields(rejectedFields(op))}.`}
           onPress={() => onSendRest(op)}
@@ -831,8 +844,9 @@ function LostMenu({
 /** "notes and longest abseil" — field labels for a sentence. */
 function listFields(fields: string[]): string {
   const labels = fields.map(fieldLabel);
-  if (labels.length <= 1) return labels[0] ?? "nothing";
-  return `${labels.slice(0, -1).join(", ")} and ${labels[labels.length - 1]}`;
+  if (labels.length === 0) return t`nothing`;
+  if (labels.length === 1) return labels[0];
+  return t`${labels.slice(0, -1).join(", ")} and ${labels[labels.length - 1]}`;
 }
 
 function issueTitle(issue: Issue): string {

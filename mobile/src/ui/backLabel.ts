@@ -1,4 +1,4 @@
-import { LEADERBOARD, navLabel } from "@logjam/shared";
+import { LEADERBOARD, navLabel, t } from "@logjam/shared";
 
 type StackRoute = { key: string; name: string; params?: object | undefined };
 type Param = (params: Record<string, unknown>) => string | undefined;
@@ -12,11 +12,11 @@ const param =
     typeof p[key] === "string" ? (p[key] as string) : undefined;
 
 const LABELS: Record<string, string | Param> = {
-  MapView: "Map",
+  MapView: t`Map`,
   PlaceList: navLabel("places"),
   TripList: navLabel("logs"),
   SavedHome: navLabel("saved"),
-  MoreHome: "More",
+  MoreHome: t`More`,
   Inbox: navLabel("inbox"),
   Plans: navLabel("plans"),
   Plan: param("name"),
@@ -26,15 +26,15 @@ const LABELS: Record<string, string | Param> = {
   Account: navLabel("account"),
   Settings: navLabel("settings"),
   SyncIssues: navLabel("syncIssues"),
-  TripStats: "Stats",
-  MapPlaceDetail: "Place",
-  PlaceDetail: "Place",
-  TripPlaceDetail: "Place",
-  MorePlaceDetail: "Place",
-  MapTripDetail: "Trip",
-  PlaceTripDetail: "Trip",
-  TripDetail: "Trip",
-  MoreTripDetail: "Trip",
+  TripStats: t`Stats`,
+  MapPlaceDetail: t`Place`,
+  PlaceDetail: t`Place`,
+  TripPlaceDetail: t`Place`,
+  MorePlaceDetail: t`Place`,
+  MapTripDetail: t`Trip`,
+  PlaceTripDetail: t`Trip`,
+  TripDetail: t`Trip`,
+  MoreTripDetail: t`Trip`,
 };
 
 /**
@@ -54,5 +54,5 @@ export function backLabelOf(
     typeof label === "function"
       ? label((prev.params ?? {}) as Record<string, unknown>)
       : label;
-  return name ?? "Back";
+  return name ?? t`Back`;
 }

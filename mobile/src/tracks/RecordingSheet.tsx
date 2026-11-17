@@ -13,7 +13,7 @@ import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { AppState, StyleSheet, View } from "react-native";
 
 import { ensureForegroundLocationPermission } from "../map/locationPermission";
-import { ELEVATION_TRACK_MAX_SAMPLES } from "@logjam/shared";
+import { ELEVATION_TRACK_MAX_SAMPLES, t } from "@logjam/shared";
 
 import { useElevationProfile } from "../map/useElevationProfile";
 import { spacing, useTheme } from "../theme";
@@ -156,8 +156,8 @@ export function RecordingSheet({
       console.error(err);
       setError(
         recording
-          ? "Couldn't pause the recording."
-          : "Couldn't resume the recording.",
+          ? t`Couldn't pause the recording.`
+          : t`Couldn't resume the recording.`,
       );
     });
   }, [activeTrack, recording]);
@@ -180,7 +180,7 @@ export function RecordingSheet({
     <BottomSheet
       visible={visible}
       onClose={close}
-      title={recording ? "Recording" : "Recording paused"}
+      title={recording ? t`Recording` : t`Recording paused`}
       footer={
         <View style={styles.actions}>
           {/* Full size, never compact: these are the controls most likely to
@@ -188,14 +188,14 @@ export function RecordingSheet({
           <View style={styles.verbs}>
             <CardActions>
               <Button
-                label={recording ? "Pause" : "Resume"}
+                label={recording ? t`Pause` : t`Resume`}
                 icon={recording ? "pause" : "play"}
                 variant="outlineAccent"
                 compact={false}
                 onPress={handlePauseResume}
               />
               <Button
-                label="Finish"
+                label={t`Finish`}
                 icon="done"
                 compact={false}
                 onPress={handleFinish}
@@ -205,7 +205,7 @@ export function RecordingSheet({
           <IconButton
             icon="delete"
             color={theme.warning}
-            accessibilityLabel="Discard this recording"
+            accessibilityLabel={t`Discard this recording`}
             onPress={handleDiscard}
           />
         </View>
@@ -216,7 +216,9 @@ export function RecordingSheet({
           <ErrorBanner message={error} onDismiss={() => setError(null)} />
         ) : null}
         {writeFailing ? (
-          <FieldError message="Points aren't being saved — this phone's storage is full or can't be written to. Finish, then free up space." />
+          <FieldError
+            message={t`Points aren't being saved — this phone's storage is full or can't be written to. Finish, then free up space.`}
+          />
         ) : null}
         <TrackStatsBody
           detail={detail}

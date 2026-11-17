@@ -2,12 +2,12 @@ import type { ReactNode } from "react";
 import { useState } from "react";
 import { StyleSheet, View } from "react-native";
 import {
-  ATTRIBUTE_NOUN,
   defsForType,
   listedAttributeDefs,
   NEW_TYPE_ATTRIBUTES,
   placeAttributesTitle,
   SETTINGS_LIST,
+  t,
   type ScopedCustomFieldDef,
 } from "@logjam/shared";
 
@@ -66,7 +66,7 @@ export function useTypeAttributesStep({
   const title = form?.editing
     ? form.editing.label
     : form
-      ? `New place ${ATTRIBUTE_NOUN.one}`
+      ? t`New place attribute`
       : placeAttributesTitle(type?.name ?? null);
 
   if (form) {

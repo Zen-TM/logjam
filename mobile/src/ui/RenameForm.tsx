@@ -15,6 +15,7 @@ import type { TextInputInstance } from "react-native";
 
 import { Button } from "./Button";
 import { TextField } from "./TextField";
+import { t } from "@logjam/shared";
 
 export function RenameForm({
   initialName,
@@ -69,7 +70,7 @@ export function RenameForm({
   return (
     <>
       <TextField
-        label="Name"
+        label={t`Name`}
         value={name}
         onChangeText={(text) => {
           setName(text);
@@ -78,17 +79,17 @@ export function RenameForm({
         inputRef={inputRef}
         returnKeyType={showNotes ? "next" : "done"}
         onSubmitEditing={showNotes ? undefined : commit}
-        error={showEmptyError ? "Enter a name." : undefined}
+        error={showEmptyError ? t`Enter a name.` : undefined}
       />
       {showNotes ? (
         <TextField
-          label="Notes"
+          label={t`Notes`}
           value={notes}
           onChangeText={setNotes}
           multiline
         />
       ) : null}
-      <Button label="Save" icon="done" onPress={commit} />
+      <Button label={t`Save`} icon="done" onPress={commit} />
     </>
   );
 }

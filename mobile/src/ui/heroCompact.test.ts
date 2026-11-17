@@ -30,7 +30,8 @@ describe("Saved's compact title", () => {
       new URL("../saved/SavedScreen.tsx", import.meta.url),
       "utf8",
     );
-    expect(saved).toContain("`Saved · ${CATEGORY_META[filter].plural}`");
+    expect(saved).toContain("t`Saved · ${CATEGORY_META[filter].plural}`");
+    expect(saved).toContain("const name = savedFilterTitle(filter);");
   });
 });
 

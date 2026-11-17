@@ -97,8 +97,9 @@ describe("an empty list is the kit's EmptyState", () => {
 describe("a form in a sheet is left by the sheet's ×", () => {
   // shared/DESIGN.md §3: its footer holds only the submit. A Cancel button is
   // for a full-screen pick or a sub-view that backs out to its sheet.
-  // Mutation: put `<Button label="Cancel" …>` back in a `CustomFieldsEditor`
-  // or `PlaceTypesEditor` footer.
+  // Mutations: put `<Button label="Cancel" …>` or `<Button label={t`Cancel`} …>`
+  // back in a `CustomFieldsEditor` or `PlaceTypesEditor` footer; the `t` form is
+  // what the codemod writes, so a pattern for the bare one alone passes it.
   const MAY_CANCEL = [
     "map/PickAreaScreen.tsx",
     "map/PickPointScreen.tsx",
@@ -106,11 +107,14 @@ describe("a form in a sheet is left by the sheet's ×", () => {
     "logs/LogsFilterSheet.tsx",
   ];
   it("has no Cancel button outside a pick or a sub-view", () => {
-    const offenders = sources(SRC)
-      .filter((path) => /label="Cancel"/.test(readFileSync(path, "utf8")))
-      .map((path) => relative(SRC, path))
-      .filter((file) => !MAY_CANCEL.includes(file));
-    expect(offenders).toEqual([]);
+    const withCancel = sources(SRC)
+      .filter((path) =>
+        /label=(?:"Cancel"|\{t`Cancel`\})/.test(readFileSync(path, "utf8")),
+      )
+      .map((path) => relative(SRC, path));
+    // A floor: a pattern that stops matching must not pass by finding nothing.
+    expect(withCancel).toEqual(expect.arrayContaining(MAY_CANCEL));
+    expect(withCancel.filter((file) => !MAY_CANCEL.includes(file))).toEqual([]);
   });
 });
 

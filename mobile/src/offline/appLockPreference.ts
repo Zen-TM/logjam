@@ -28,6 +28,7 @@ import { Platform } from "react-native";
 import LogjamPdfRenderer from "../../modules/logjam-pdf-renderer/src/LogjamPdfRendererModule";
 
 import { readPref, writePref } from "../prefsDb";
+import { t } from "@logjam/shared";
 
 const APP_LOCK_PREF_KEY = "appLockEnabled";
 
@@ -73,7 +74,7 @@ export async function setAppLockEnabled(
   if (!writePref(APP_LOCK_PREF_KEY, enabled ? "on" : "off")) {
     return {
       status: "failed",
-      message: "This phone wouldn't store that setting.",
+      message: t`This phone wouldn't store that setting.`,
     };
   }
   // Logged, not fatal: the lock itself is the guard and is set either
@@ -136,7 +137,7 @@ async function confirmWithDeviceAuth(): Promise<AuthOutcome> {
       status: "no",
       result: {
         status: "failed",
-        message: "Couldn't confirm it's you. The lock stays on.",
+        message: t`Couldn't confirm it's you. The lock stays on.`,
       },
     };
   }

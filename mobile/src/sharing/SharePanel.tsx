@@ -52,6 +52,7 @@ import {
   messageFromError,
   noFriendsMatch,
   noFriendsMessage,
+  plural,
   SEND_COPY,
   sendCopyLabel,
   SHARE_SHEET,
@@ -440,7 +441,11 @@ export function useSharePanel({
           {plan.copies.length > 0 ? (
             <PromiseBanner
               tone="copy"
-              text={`${plan.copies.length === 1 ? "One item" : `${plan.copies.length} of these`} can only be sent as a copy — those become theirs to keep, and you can't take them back.`}
+              text={plural(
+                plan.copies.length,
+                "One item can only be sent as a copy — those become theirs to keep, and you can't take them back.",
+                "# of these can only be sent as a copy — those become theirs to keep, and you can't take them back.",
+              )}
             />
           ) : null}
           {search}
@@ -477,8 +482,8 @@ export function useSharePanel({
               sending
                 ? t`Sending…`
                 : selected.size === 0
-                  ? "Pick at least one friend"
-                  : "None of these can be shared"
+                  ? t`Pick at least one friend`
+                  : t`None of these can be shared`
             }
           />
         </View>
@@ -773,7 +778,9 @@ function FriendRows({
             selected={selected}
             accessibilityLabel={
               mode === "select"
-                ? `${friend.username}${selected ? ", selected" : ""}`
+                ? selected
+                  ? t`${friend.username}, selected`
+                  : friend.username
                 : t`Share with ${friend.username}`
             }
             onPress={

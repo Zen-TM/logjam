@@ -55,6 +55,11 @@ const ALLOWED: { file: string; text: string; reason: string }[] = [
     text: "a region Logjam covers",
     reason: "the service covers regions, not this phone",
   },
+  {
+    file: "screens/syncHealth.ts",
+    text: "Logjam isn't ready to sync",
+    reason: "the service, not this phone",
+  },
 ];
 
 // Strings still to reword to the glossary; delete an entry with its string.
