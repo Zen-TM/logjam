@@ -9,7 +9,7 @@
 // of only one kind never mentions the other, rather than reading as a
 // filled-in template.
 import { formatBytes } from "../format";
-import { t } from "@logjam/shared";
+import { plural, t } from "@logjam/shared";
 
 /** The split, read from each item's own delete descriptor and never its kind. */
 export function bulkDeleteCounts(items: { delete?: { synced: boolean } }[]): {
@@ -33,30 +33,44 @@ export function bulkDeleteConfirmBody({
   /** Disk the on-device half gives back. Zero for kinds with no file size. */
   onDeviceBytes: number;
 }): string {
-  const freed =
-    onDeviceBytes > 0 ? `, freeing ${formatBytes(onDeviceBytes)}` : "";
-  const accountReach =
-    "removed from your account and from any friends they're shared with";
-  const undone = t`This can't be undone.`;
-
   // Single-kind selections talk about the whole thing, so they take a pronoun
   // back to the title ("Delete 3 items?") instead of restating the count.
   if (syncedCount === 0) {
-    return `${onDeviceCount === 1 ? "It is" : "They are"} deleted from this phone${freed}. ${undone}`;
+    if (onDeviceBytes > 0) {
+      const freed = formatBytes(onDeviceBytes);
+      return onDeviceCount === 1
+        ? t`It is deleted from this phone, freeing ${freed}. This can't be undone.`
+        : t`They are deleted from this phone, freeing ${freed}. This can't be undone.`;
+    }
+    return onDeviceCount === 1
+      ? t`It is deleted from this phone. This can't be undone.`
+      : t`They are deleted from this phone. This can't be undone.`;
   }
   if (onDeviceCount === 0) {
-    return `${syncedCount === 1 ? "It is" : "They are"} ${accountReach}. ${undone}`;
+    return syncedCount === 1
+      ? t`It is removed from your account and from any friends they're shared with. This can't be undone.`
+      : t`They are removed from your account and from any friends they're shared with. This can't be undone.`;
   }
 
   // Mixed: the account-reaching half leads, because it is the consequence that
   // travels beyond this handset.
-  const synced =
-    syncedCount === 1
-      ? `One of them is a synced file or route, ${accountReach}`
-      : `${syncedCount} of them are synced files and routes, ${accountReach}`;
+  const synced = plural(
+    syncedCount,
+    "One of them is a synced file or route, removed from your account and from any friends they're shared with.",
+    "# of them are synced files and routes, removed from your account and from any friends they're shared with.",
+  );
   const rest =
-    onDeviceCount === 1
-      ? "The other one is deleted from this phone"
-      : `The other ${onDeviceCount} are deleted from this phone`;
-  return `${synced}. ${rest}${freed}. ${undone}`;
+    onDeviceBytes > 0
+      ? plural(
+          onDeviceCount,
+          "The other one is deleted from this phone, freeing {0}.",
+          "The other # are deleted from this phone, freeing {0}.",
+          formatBytes(onDeviceBytes),
+        )
+      : plural(
+          onDeviceCount,
+          "The other one is deleted from this phone.",
+          "The other # are deleted from this phone.",
+        );
+  return `${synced} ${rest} ${t`This can't be undone.`}`;
 }

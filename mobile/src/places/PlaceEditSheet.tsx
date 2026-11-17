@@ -588,11 +588,11 @@ export function PlaceEditSheet({
       ? (customFieldDefs.find((def) => def.key === dateFieldKey)?.label ??
         t`Date`)
       : mode === "fields"
-        ? `Your place ${ATTRIBUTE_NOUN.many}`
+        ? t`Your place attributes`
         : mode === "fieldForm"
           ? editingField
             ? editingField.label
-            : `New place ${ATTRIBUTE_NOUN.one}`
+            : t`New place attribute`
           : editing
             ? PLACE_FORM.copy.editTitle
             : PLACE_FORM.copy.addTitle;
@@ -831,11 +831,11 @@ export function PlaceEditSheet({
             is open with no account and no signal, for everyone. */}
         <Row
           icon="tag"
-          title={`Your place ${ATTRIBUTE_NOUN.many}`}
+          title={t`Your place attributes`}
           subtitle={
             typeFieldDefs.length === 0
-              ? "Add your own — permits, access notes, anything."
-              : `${typeFieldDefs.length} on this type`
+              ? t`Add your own — permits, access notes, anything.`
+              : t`${typeFieldDefs.length} on this type`
           }
           chevron
           onPress={() => setMode("fields")}

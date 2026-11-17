@@ -56,7 +56,6 @@ import {
   friendSharesNote,
   friendShareVerb,
   messageFromError,
-  removeRowSubtitle,
   type BulkShareItemType,
   type FriendShareCard,
   type FriendShareDirection,
