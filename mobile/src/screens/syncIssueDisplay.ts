@@ -21,6 +21,7 @@ import {
 } from "@logjam/shared";
 
 import type { ParkedOp, ShelfEntry } from "../sync/syncIssues";
+import type { OutboxEntity } from "../sync/outboxTables";
 import { relativeTime } from "./syncHealth";
 
 /**
@@ -74,7 +75,7 @@ export function fieldLabel(field: string): string {
   return FIELD_LABEL[field] ?? field;
 }
 
-function addNamedTitle(entity: string, name: string): string {
+function addNamedTitle(entity: OutboxEntity, name: string): string {
   switch (entity) {
     case "place":
       return t`Couldn't add place “${name}”`;
@@ -92,12 +93,10 @@ function addNamedTitle(entity: string, name: string): string {
       return t`Couldn't add notification “${name}”`;
     case "media":
       return t`Couldn't add photo or file “${name}”`;
-    default:
-      return t`Couldn't add ${entity} “${name}”`;
   }
 }
 
-function addUnnamedTitle(entity: string): string {
+function addUnnamedTitle(entity: OutboxEntity): string {
   switch (entity) {
     case "place":
       return t`Couldn't add a new place`;
@@ -115,12 +114,10 @@ function addUnnamedTitle(entity: string): string {
       return t`Couldn't add a new notification`;
     case "media":
       return t`Couldn't add a new photo or file`;
-    default:
-      return t`Couldn't add a new ${entity}`;
   }
 }
 
-function updateUnnamedTitle(entity: string): string {
+function updateUnnamedTitle(entity: OutboxEntity): string {
   switch (entity) {
     case "place":
       return t`Couldn't save your changes to a place`;
@@ -138,12 +135,10 @@ function updateUnnamedTitle(entity: string): string {
       return t`Couldn't save your changes to a notification`;
     case "media":
       return t`Couldn't save your changes to a photo or file`;
-    default:
-      return t`Couldn't save your changes to a ${entity}`;
   }
 }
 
-function deleteUnnamedTitle(entity: string): string {
+function deleteUnnamedTitle(entity: OutboxEntity): string {
   switch (entity) {
     case "place":
       return t`Couldn't delete a place`;
@@ -161,12 +156,10 @@ function deleteUnnamedTitle(entity: string): string {
       return t`Couldn't delete a notification`;
     case "media":
       return t`Couldn't delete a photo or file`;
-    default:
-      return t`Couldn't delete a ${entity}`;
   }
 }
 
-function syncUnnamedTitle(entity: string): string {
+function syncUnnamedTitle(entity: OutboxEntity): string {
   switch (entity) {
     case "place":
       return t`Couldn't sync a place`;
@@ -184,8 +177,6 @@ function syncUnnamedTitle(entity: string): string {
       return t`Couldn't sync a notification`;
     case "media":
       return t`Couldn't sync a photo or file`;
-    default:
-      return t`Couldn't sync a ${entity}`;
   }
 }
 
