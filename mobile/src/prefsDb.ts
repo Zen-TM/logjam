@@ -23,7 +23,7 @@ type Db = SQLiteModule.SQLiteDatabase;
 
 // `undefined` = not tried yet, `null` = unavailable (see openDatabase).
 let database: Db | null | undefined;
-/** Why a write failed; `prefWriteErrorSentence.ts` has the sentence. */
+/** Why the last write failed. */
 export type PrefWriteError = "unavailable" | "not_stored";
 let lastWriteError: PrefWriteError | null = null;
 
@@ -90,9 +90,9 @@ export function writePref(key: string, value: string): boolean {
 }
 
 /**
- * Why the last write failed, as a code the surface that requested it turns
- * into a sentence (`prefWriteErrorSentence`). A code because this file cannot
- * import `t`: it loads before the language is known (language.ts).
+ * Why the last write failed, as a code the surface that requested it words.
+ * A code because this file cannot import `t`: it loads before the language is
+ * known (language.ts).
  */
 export function lastPrefWriteError(): PrefWriteError | null {
   return lastWriteError;

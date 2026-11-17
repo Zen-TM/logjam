@@ -27,7 +27,7 @@ import { markTransferCut } from "../api/noResponse";
 import type { MirrorMedia } from "./mirrorStore";
 import { getSyncDb, notifyMirrorChanged, withSyncTransaction } from "./syncDb";
 import { scheduleMutationSync } from "./mediaSyncBridge";
-import type { SyncErrorCode } from "./syncErrorSentence";
+import type { SyncErrorCode } from "./parkedError";
 import {
   MEDIA_CACHE_DIR as CACHE_DIR,
   WIPED_DIRS,

@@ -139,7 +139,7 @@ describe("failure classification", () => {
     pullError = new Error("Network request failed");
     await settle();
     expect(getSyncStatus().errorKind).toBe("unreachable");
-    expect(getSyncStatus().errorMessage).toContain("retry");
+    expect(getSyncStatus().errorMessage).toContain("try again");
 
     const before = pulls;
     await vi.advanceTimersByTimeAsync(400_000);

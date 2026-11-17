@@ -39,7 +39,7 @@ import {
 } from "./mediaUpload";
 import { upsertPlace, upsertPlaceLink, upsertTrip } from "./mirrorStore";
 import { getSyncDb, notifyMirrorChanged } from "./syncDb";
-import type { SyncErrorCode } from "./syncErrorSentence";
+import type { SyncErrorCode } from "./parkedError";
 
 /**
  * An op's last error record, which is also where its failure tally lives
