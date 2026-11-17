@@ -139,9 +139,9 @@ export function messagesIn(
 const NOT_COPY_ATTRS =
   /^(?:className|class|style|id|key|ref|testID|nativeID|role|type|name|href|src|to|target|rel|htmlFor|for|value|defaultValue|autoComplete|inputMode|pointerEvents|resizeMode|source|d|viewBox|fill|stroke|transform|data-.*|aria-(?!label).*)$/;
 
-/** Calls whose string arguments are code, a log line or a developer's message, never words a user reads. */
+/** Calls whose string arguments are code, a log line or a developer's message, never words a user reads (`console.*` is `CONSOLE`). */
 const NOT_COPY_CALLS =
-  /^(?:console\.\w+|logger\.\w+|log\.\w+|require|malformed|fault|\w+\.\$(?:query|execute)Raw\w*|Prisma\.sql|matchMedia|\w+\.(?:querySelector\w*|getElementById|setItem|getItem|removeItem|addEventListener|removeEventListener|getAttribute|setAttribute|setHeader|header|set|append))$/;
+  /^(?:logger\.\w+|log\.\w+|require|malformed|fault|\w+\.\$(?:query|execute)Raw\w*|Prisma\.sql|matchMedia|\w+\.(?:querySelector\w*|getElementById|setItem|getItem|removeItem|addEventListener|removeEventListener|getAttribute|setAttribute|setHeader|header|set|append))$/;
 
 /** An all-capitals SQL keyword: a string holding one is a query, and so is every part of a template that does. */
 const SQL =
@@ -644,7 +644,7 @@ export function bareCopyIn(
   const visit = (node: TypeScript.Node, copy: boolean): void => {
     const into = (child: TypeScript.Node, c = copy) => visit(child, c);
     const all = (c = copy) => ts.forEachChild(node, (child) => visit(child, c));
-    // `"a" + b`, `"a" ${b}`, `b || "a"` and `c ? "a" : "b"`: text built, defaulted or chosen in place.
+    // `"a" + b`, `"a" ${b}` and `b || "a"`: text built or defaulted in place.
     const isText = (arg: TypeScript.Node): boolean =>
       ts.isStringLiteralLike(arg) ||
       ts.isTemplateExpression(arg) ||
@@ -652,9 +652,13 @@ export function bareCopyIn(
         (arg.operatorToken.kind === ts.SyntaxKind.PlusToken ||
           arg.operatorToken.kind === ts.SyntaxKind.BarBarToken ||
           arg.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken) &&
-        (isText(arg.left) || isText(arg.right))) ||
+        (isText(arg.left) || isText(arg.right)));
+    // An error's message may also be chosen in place, `new Error(c ? "a" : "b")`;
+    // a ternary handed to `.set(` or `.append(` can still be a sentence a screen shows.
+    const isErrorText = (arg: TypeScript.Node): boolean =>
+      isText(arg) ||
       (ts.isConditionalExpression(arg) &&
-        (isText(arg.whenTrue) || isText(arg.whenFalse)));
+        (isErrorText(arg.whenTrue) || isErrorText(arg.whenFalse)));
     // `super("message")` in a class that extends an Error: its message is the developer's, as `new Error(...)`'s is.
     const isErrorSuper = (call: TypeScript.CallExpression): boolean => {
       if (call.expression.kind !== ts.SyntaxKind.SuperKeyword) return false;
@@ -670,10 +674,11 @@ export function bareCopyIn(
     // An argument that is text is code here; any other (a callback) is read.
     const codeArguments = (
       call: TypeScript.CallExpression | TypeScript.NewExpression,
+      error = false,
     ) => {
       into(call.expression, false);
       for (const arg of call.arguments ?? [])
-        if (!isText(arg)) into(arg, false);
+        if (!(error ? isErrorText : isText)(arg)) into(arg, false);
     };
     if (
       ts.isImportDeclaration(node) ||
@@ -698,7 +703,7 @@ export function bareCopyIn(
       // A log line is code throughout, nested fallbacks included:
       // `console.error(messageFromError(err, "Could not save"))`.
       if (CONSOLE.test(callee)) return;
-      if (isErrorSuper(node)) return codeArguments(node);
+      if (isErrorSuper(node)) return codeArguments(node, true);
       if (NOT_COPY_CALLS.test(callee)) return codeArguments(node);
       if (plurals.has(callee)) {
         node.arguments.forEach((arg, i) => {
@@ -716,7 +721,7 @@ export function bareCopyIn(
       ts.isNewExpression(node) &&
       NOT_COPY_NEW.test(node.expression.getText())
     )
-      return codeArguments(node);
+      return codeArguments(node, /Error$/.test(node.expression.getText()));
     if (ts.isFunctionLike(node) && !ts.isArrowFunction(node)) return all(false);
     if (ts.isArrowFunction(node)) {
       for (const parameter of node.parameters) into(parameter, false);

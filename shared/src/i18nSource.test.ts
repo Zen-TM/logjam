@@ -384,7 +384,8 @@ describe("bareCopyIn", () => {
   });
 
   // Mutation: delete the `isErrorSuper` line of `bareCopyIn`'s call branch, or
-  // the `CONSOLE` line above it, or the `ConditionalExpression` case of `isText`.
+  // the `CONSOLE` line above it, or the `ConditionalExpression` case of `isErrorText`
+  // (or let `isText` take a ternary, which turns the `.set(` control red).
   // Each control is the same sentence in a position that is read, so a rule
   // that stopped matching cannot pass by finding nothing.
   it.each([
@@ -401,7 +402,7 @@ describe("bareCopyIn", () => {
     [
       "a ternary of two messages in an Error",
       'reject(new Error(stalled ? "Upload stalled" : "Upload cancelled"));',
-      'show(stalled ? "Upload stalled" : "Upload cancelled", 1);',
+      'toasts.set(id, stalled ? "Upload stalled" : "Upload cancelled");',
     ],
   ])(
     "leaves %s alone, and reads the same text elsewhere",
