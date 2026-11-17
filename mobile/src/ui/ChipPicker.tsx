@@ -14,6 +14,7 @@ import { Chip, type ChipOption } from "./Chip";
 import { Field } from "./Field";
 import { FieldError } from "./FieldError";
 import { SectionHeader } from "./SectionHeader";
+import { t } from "@logjam/shared";
 
 /**
  * Multi-select over a vocabulary that the user can extend — trip types are a
@@ -32,7 +33,7 @@ export function ChipPicker({
   selected,
   onToggle,
   onAdd,
-  addPlaceholder = "Add",
+  addPlaceholder = t`Add`,
   disabledValues,
   primaryValue,
   hint,

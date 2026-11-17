@@ -13,7 +13,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useVideoPlayer, VideoView } from "expo-video";
-import { mediaCategory, THEME_SCHEMES } from "@logjam/shared";
+import { mediaCategory, THEME_SCHEMES, t } from "@logjam/shared";
 
 import { radius, scrim, spacing, textRoles, withAlpha, veil } from "../theme";
 import { ensureDisplayCached } from "../sync/mediaCache";
@@ -119,7 +119,7 @@ export function MediaViewer({
           )}
           <IconButton
             icon="close"
-            accessibilityLabel="Close"
+            accessibilityLabel={t`Close`}
             color={photoChrome.text}
             onPress={onClose}
           />
@@ -135,7 +135,7 @@ export function MediaViewer({
               {index > 0 ? (
                 <IconButton
                   icon="back"
-                  accessibilityLabel="Previous attachment"
+                  accessibilityLabel={t`Previous attachment`}
                   color={photoChrome.text}
                   filled
                   onPress={() => go(-1)}
@@ -146,7 +146,7 @@ export function MediaViewer({
               {index < items.length - 1 ? (
                 <IconButton
                   icon="forward"
-                  accessibilityLabel="Next attachment"
+                  accessibilityLabel={t`Next attachment`}
                   color={photoChrome.text}
                   filled
                   onPress={() => go(1)}
@@ -220,9 +220,9 @@ function MediaPage({ item, active }: { item: ViewerMedia; active: boolean }) {
     return (
       <View style={styles.page}>
         <Icon idea="offline" size={28} color={photoChrome.textMuted} />
-        <Text style={styles.notice}>
-          Not downloaded to this phone yet. It will appear once you have signal.
-        </Text>
+        <Text
+          style={styles.notice}
+        >{t`Not downloaded to this phone yet. It will appear once you have signal.`}</Text>
       </View>
     );
   }
@@ -233,8 +233,8 @@ function MediaPage({ item, active }: { item: ViewerMedia; active: boolean }) {
     return (
       <View style={styles.page}>
         <Icon idea="map" size={28} color={photoChrome.textMuted} />
-        <Text style={styles.notice}>{item.filename ?? "Route file"}</Text>
-        <Text style={styles.noticeMuted}>Routes open on the map.</Text>
+        <Text style={styles.notice}>{item.filename ?? t`Route file`}</Text>
+        <Text style={styles.noticeMuted}>{t`Routes open on the map.`}</Text>
       </View>
     );
   }

@@ -13,6 +13,7 @@ import {
 import { Icon, type Glyph } from "./Icon";
 import { IconButton } from "./IconButton";
 import { Row } from "./Row";
+import { t } from "@logjam/shared";
 
 const SWATCH = 32;
 const CELL = 48;
@@ -67,7 +68,7 @@ export function ColourField({
   const styles = useStyles();
 
   const [open, setOpen] = useState(false);
-  const chosen = value ? (nameOf?.(value) ?? value) : "No colour";
+  const chosen = value ? (nameOf?.(value) ?? value) : t`No colour`;
   return (
     <View style={icon ? undefined : styles.field}>
       {icon ? (
@@ -120,7 +121,7 @@ export function ColourField({
         onRequestClose={() => setOpen(false)}
       >
         <Pressable
-          accessibilityLabel="Close"
+          accessibilityLabel={t`Close`}
           style={styles.backdrop}
           onPress={() => setOpen(false)}
         >
@@ -130,7 +131,7 @@ export function ColourField({
               <Text style={styles.title}>{label}</Text>
               <IconButton
                 icon="close"
-                accessibilityLabel="Close"
+                accessibilityLabel={t`Close`}
                 onPress={() => setOpen(false)}
               />
             </View>

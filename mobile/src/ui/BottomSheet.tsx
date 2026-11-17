@@ -45,6 +45,7 @@ import {
   sheetReseats,
   sheetSeated,
 } from "./sheetPull";
+import { t } from "@logjam/shared";
 
 // Slide-up modal sheet with a handle + title, capped at 80% height and
 // scrolling within.
@@ -703,7 +704,7 @@ export function BottomSheet({
         <Pressable
           style={styles.spacer}
           accessibilityRole="button"
-          accessibilityLabel={`Close ${title}`}
+          accessibilityLabel={t`Close ${title}`}
           onPress={closable ? requestClose : undefined}
         />
         {/* Keyboard-aware: a sheet containing a TextInput must ride above the
@@ -750,7 +751,7 @@ export function BottomSheet({
               {onBack ? (
                 <IconButton
                   icon="back"
-                  accessibilityLabel="Back"
+                  accessibilityLabel={t`Back`}
                   onPress={() => leave(onBack)}
                 />
               ) : null}
@@ -759,11 +760,11 @@ export function BottomSheet({
               </Text>
               <IconButton
                 icon="close"
-                accessibilityLabel="Close"
+                accessibilityLabel={t`Close`}
                 color={theme.text}
                 disabled={!closable}
                 onPress={requestClose}
-                disabledReason="Finish what is running first"
+                disabledReason={t`Finish what is running first`}
               />
             </View>
             {header != null ? (

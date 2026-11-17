@@ -1,6 +1,7 @@
 import packageJson from "../package.json";
 
 import { resolveAuthMode } from "./authMode";
+import { t } from "@logjam/shared";
 
 // Runtime config, read from EXPO_PUBLIC_* env at build time (parallels the web
 // VITE_* split: dev vs prod parity via separate env files / EAS profiles).
@@ -43,4 +44,4 @@ export const CLIENT_VERSION_HEADER = "x-logjam-client";
 export const CLIENT_SEMVER: string = packageJson.version;
 export const CLIENT_VERSION = `mobile/${CLIENT_SEMVER}`;
 /** The version as a person reads it; `CLIENT_VERSION` is a header value. */
-export const CLIENT_VERSION_LABEL = `Logjam GPS ${CLIENT_SEMVER}`;
+export const CLIENT_VERSION_LABEL = t`Logjam GPS ${CLIENT_SEMVER}`;

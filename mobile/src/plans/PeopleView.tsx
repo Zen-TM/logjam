@@ -29,6 +29,7 @@ import {
   type PlanPersonActionId,
   type TripPlanMemberView,
   type TripPlanView,
+  t,
 } from "@logjam/shared";
 
 import { unavailableReasonText } from "../auth/capabilities";
@@ -50,7 +51,7 @@ import { afterPlanWrite } from "./plansCache";
 
 const copy = TRIP_PLAN_PAGE.copy;
 const OFFLINE = unavailableReasonText("needs-connection");
-const WORKING = "Working…";
+const WORKING = t`Working…`;
 
 export function PeopleView({
   plan,
@@ -122,12 +123,12 @@ export function PeopleView({
       files.count > 0 &&
       (await confirm(
         {
-          confirmTitle: `Delete ${member.user.username}'s files too?`,
+          confirmTitle: t`Delete ${member.user.username}'s files too?`,
           confirmBody: `Their files (${files.count} ${files.count === 1 ? "file" : "files"}, ${formatBytes(files.bytes)}) otherwise count against your storage. ${member.user.username} is removed either way.`,
-          confirmLabel: "Delete files",
+          confirmLabel: t`Delete files`,
           tone: "destructive",
         },
-        { cancelLabel: "Keep files" },
+        { cancelLabel: t`Keep files` },
       ));
     go(deleteFiles);
   };

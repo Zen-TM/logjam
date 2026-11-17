@@ -21,6 +21,7 @@
 // Its own RN-free module, like every other decision in this directory, so the
 // message logic has a test.
 import type { TNotification } from "../api/types";
+import { t } from "@logjam/shared";
 
 export type BatchFileActionKind = "accept" | "decline";
 
@@ -99,7 +100,7 @@ export function batchFileActionMessage(outcome: BatchFileActionOutcome): {
       text:
         kind === "accept"
           ? `Saved ${done} of ${total} — ${countOf(failed, "file")} couldn't be saved. Try those again from the list.`
-          : `Declined ${done} of ${total} — ${failed} couldn't be.`,
+          : t`Declined ${done} of ${total} — ${failed} couldn't be.`,
       tone: "error",
     };
   }
