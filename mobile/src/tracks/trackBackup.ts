@@ -18,7 +18,6 @@ import {
   GPX_MIME_TYPE,
   exportFilename,
   parseMediaMetadata,
-  t,
   trackPointsToGpx,
   type MediaMetadata,
   type RecordedTrackPoint,
@@ -49,7 +48,7 @@ import {
  */
 export class TrackBackupError extends Error {
   constructor(cause: unknown) {
-    super(t`Could not back this recording up.`);
+    super("Could not back this recording up.");
     this.name = "TrackBackupError";
     this.cause = cause;
   }

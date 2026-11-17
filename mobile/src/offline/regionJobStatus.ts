@@ -81,7 +81,7 @@ export function regionRejectedLine(
 export function sourceUnavailableLine(detail: string | undefined): string {
   return detail === "sharpened-area"
     ? t`This sharpened area's link expired, or the area was deleted. Saving the area again fetches it if it's still there.`
-    : t`Logjam GPS couldn't prepare this map right now. Other maps still work.`;
+    : t`Logjam couldn't prepare this map right now. Other maps still work.`;
 }
 
 /** Nothing more will happen unless the user asks — the "may I leave?" gate. */

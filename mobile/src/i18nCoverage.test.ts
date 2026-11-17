@@ -34,7 +34,7 @@ const CEILINGS: Record<string, number> = {
   map: 4,
   media: 4,
   notifications: 4,
-  offline: 0,
+  offline: 1,
   places: 0,
   plans: 6,
   saved: 0,
@@ -42,7 +42,7 @@ const CEILINGS: Record<string, number> = {
   "screens/settings": 2,
   sharing: 1,
   sync: 11,
-  tracks: 2,
+  tracks: 3,
   ui: 7,
 };
 

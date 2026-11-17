@@ -102,7 +102,6 @@ export type PickedPoint = { latitude: number; longitude: number };
 
 export function PickPointScreen({
   initialPoint,
-  subject,
   hidePlaceId = null,
   onCancel,
   onConfirm,
@@ -110,11 +109,7 @@ export function PickPointScreen({
   /** A coordinate already in the form, if any — the picker opens on it with the
    *  marker already placed, so "nudge what I typed" is one drag. */
   initialPoint: PickedPoint | null;
-  /**
-   * What is being placed, for the hint: "Tap where the place is". Naming the
-   * thing matters because the screen is reached from two different forms and
-   * arrives with no other context on it.
-   */
+  /** What is being placed. The hint is the fixed "Tap where the place is". */
   subject: "place";
   /**
    * The place being MOVED, which must not draw itself.

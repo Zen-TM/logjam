@@ -5089,7 +5089,7 @@ export function MapScreen({
     }
     if (coverageHere.current) return null;
     return coverageHere.others.length > 0
-      ? t`No saved map here for this map — switch to one you saved.`
+      ? t`No saved version of this map here — switch to one you saved.`
       : t`No saved map here.`;
   })();
 
