@@ -163,8 +163,9 @@ export type Region = {
    * The ISO 3166-1 alpha-2 code (lower case) a search over this region asks the
    * geocoder to stay in, so a name ranks inside the region's country. Absent
    * where the region has no one country (`WORLD`): the search is then
-   * unrestricted. Guard: `geocode.test.ts` ("sends the region's country code,
-   * and none where the region declares none").
+   * unrestricted. Guards: `geocode.test.ts` ("sends the region's country code,
+   * and none where the region declares none") and `regions.test.ts` ("declares
+   * a geocoder country as two lower-case letters").
    */
   geocoderCountry?: string;
   /** The CDN prefix of the gauge feed (ADR 0044), or null. */
