@@ -36,6 +36,7 @@ import { sanitizeDecimalInput } from "../../numberInput";
 import {
   extentFieldErrors,
   coordTooltip,
+  exportGridLabel,
   extentFieldText,
   hasExtentFieldError,
   parseExtentField,
@@ -70,7 +71,6 @@ import {
 } from "@logjam/shared";
 import {
   AREA_EXPORT_FORMATS,
-  areaExportGrid,
   AREA_EXPORT_LAYERS,
   AREA_EXPORT_LAYERS_BY_FORMAT,
   AREA_EXPORT_OUTSIDE_TERRAIN,
@@ -87,7 +87,6 @@ import {
   type AreaBbox,
   type AreaExportFormat,
   type AreaExportLayer,
-  type GridId,
   t,
   type SharpenedArea,
   TERRAIN_LAYER_KEYS,
@@ -160,25 +159,17 @@ const FORMAT_OPTIONS: ChipOption<FormatChoice>[] = [
   })),
 ];
 
-/** What a GIS reads a grid's EPSG code as: its datum and projection. */
-const GRID_LABELS: Record<GridId, string> = {
-  mga2020: "GDA2020 / MGA",
-  nztm2000: "NZGD2000 / NZTM 2000",
-  utm: "WGS 84 / UTM",
-};
-
 /**
  * What a format is, for the Format rail. A GeoTIFF or GeoPackage names the
  * grid its rasters are warped to (`areaExportGrid`, the one the worker uses);
- * before a box is drawn it says only that the grid follows the ground.
+ * before a box is drawn it names the one declared region's grid, and with
+ * two or more says only that the grid follows the ground (`exportGridLabel`).
  */
 function gisFormatNote(
   format: AreaExportFormat,
   area: AreaBbox | null,
 ): string {
-  const grid = area
-    ? GRID_LABELS[areaExportGrid(area)]
-    : t`the grid of the area you choose`;
+  const grid = exportGridLabel(area) ?? t`the grid of the area you choose`;
   switch (format) {
     case "geotiff":
       return t`A .zip of rasters in ${grid}, for QGIS or ArcGIS: heights in metres, slope in degrees, and hillshade.`;
