@@ -7,6 +7,7 @@ import {
   collapseRanges,
   compactHeroTitle,
   heroReach,
+  listTop,
   roomBelow,
   rowTarget,
   snapTarget,
@@ -180,6 +181,20 @@ describe("roomBelow", () => {
   });
 });
 
+describe("listTop", () => {
+  // Mutation: return the whole header, and the full hero's room is lost; return
+  // 0, and the scroll bar runs behind the header again.
+  it("starts the list under the header as folded", () => {
+    expect(listTop(300, DISTANCE)).toBe(300 - DISTANCE);
+  });
+  // Mutation: drop the clamp, and an unmeasured hero pushes the list off the
+  // top of the screen.
+  it("never goes above the screen, nor shifts before the hero is measured", () => {
+    expect(listTop(100, 250)).toBe(0);
+    expect(listTop(300, 0)).toBe(300);
+  });
+});
+
 describe("heroReach", () => {
   // Mutation: gate on `collapsed` alone (drop `moving`), and the invisible full
   // hero takes the tap that was meant to stop a fling.
@@ -211,10 +226,10 @@ describe("rowTarget", () => {
     gap: 16,
     range: 3000,
   };
-  const folded = base.header - DISTANCE;
-  // Mutation: drop the `folded` term, and the row lands a hero's height too low.
+  // Mutation: subtract the folded header again (the list's top is already
+  // under it), and the row lands a folded header too high.
   it("puts the row a gap under the folded header", () => {
-    expect(rowTarget({ ...base, contentY: 1000 })).toBe(1000 - folded - 16);
+    expect(rowTarget({ ...base, contentY: 1000 })).toBe(1000 - 16);
   });
   // Mutation: drop the null returns, and a row laid out before the header was
   // measured, or before the list was padded for it, scrolls to a short offset.
@@ -228,8 +243,8 @@ describe("rowTarget", () => {
   // past the end of the list or leaves the header half-folded.
   it("never leaves the header half-folded or the list past its end", () => {
     expect(rowTarget({ ...base, contentY: 1000, range: 600 })).toBe(600);
-    expect(rowTarget({ ...base, contentY: 150 })).toBe(0);
-    expect(rowTarget({ ...base, contentY: folded + 16 + 150 })).toBe(DISTANCE);
+    expect(rowTarget({ ...base, contentY: 16 + 20 })).toBe(0);
+    expect(rowTarget({ ...base, contentY: 16 + DISTANCE - 20 })).toBe(DISTANCE);
   });
 });
 
@@ -243,6 +258,13 @@ describe("the hook", () => {
   it("feeds the scroll to the native driver", () => {
     expect(hook).toMatch(/Animated\.event\([\s\S]*useNativeDriver: true/);
     expect(hook).not.toContain("useNativeDriver: false");
+  });
+  // Mutation: read the scroll offset while the page is hidden, or drop the
+  // restore on return: a page left scrolled comes back with the header full.
+  it("puts the header back to the list's offset when the page returns", () => {
+    expect(hook).toContain("if (away.current) return;");
+    expect(hook).toMatch(/scrollY\.setValue\(y\);/);
+    expect(hook).toMatch(/animated: false/);
   });
   // Mutation: bring `LayoutAnimation` back, and the swap lays the list out again.
   it("never animates layout", () => {
@@ -302,10 +324,12 @@ describe("list screens collapse their hero", () => {
       /\{\.\.\.(heroCollapse\.scrollProps|mergeScrollProps\(heroCollapse\.scrollProps,)/,
     );
     expect(source).toContain("heroCollapse.inset(");
+    // The list starts under the folded header, so its scroll bar does.
+    expect(source).toContain("heroCollapse.listStyle");
     // Saved has no pull to refresh.
     if (!file.includes("SavedScreen"))
       expect(source).toContain(
-        "progressViewOffset={heroCollapse.headerHeight}",
+        "progressViewOffset={heroCollapse.refreshOffset}",
       );
     expect(source).toMatch(/<Hero(FlatList|SectionList|ScrollView)\b/);
     expect(source).toContain("compact={compact}");
