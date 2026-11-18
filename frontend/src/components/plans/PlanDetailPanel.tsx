@@ -18,6 +18,7 @@ import {
   planVerbs,
   planVerbsFor,
   PLAN_ADD_VERBS,
+  PLAN_ITEM_ADD_VERBS,
   PLAN_VERBS,
   planSectionsMoved,
   planSectionVerbs,
@@ -109,13 +110,6 @@ const copy = TRIP_PLAN_PAGE.copy;
 /** Add a place or way opened from the page rather than from a pin: nothing ticked. */
 const NOTHING_TICKED = { kind: "place" as const, id: "" };
 const formsCopy = TRIP_PLAN_FORMS.copy;
-/** The add verbs that put a place or way in the plan: the Map view's buttons. */
-const ITEM_ADD_VERBS: readonly PlanAddVerbId[] = [
-  "copy",
-  "newPlace",
-  "route",
-  "import",
-];
 
 export default function PlanDetailPanel({
   view,
@@ -637,7 +631,9 @@ export default function PlanDetailPanel({
         onChanged={refetch}
         onSaved={onOwnChanged}
         adds={addVerbs
-          .filter((verb) => ITEM_ADD_VERBS.includes(verb.id))
+          .filter((verb) =>
+            (PLAN_ITEM_ADD_VERBS as readonly string[]).includes(verb.id),
+          )
           .map((verb) => ({ ...verb, run: addRunners[verb.id] }))}
         onOpen={onOpenItem}
         onView={(place) => openPlacePage(place.id)}

@@ -111,6 +111,15 @@ export const PLAN_ADD_VERBS = [
   { id: "invite", icon: "addFriend", label: "Invite people", roles: LEADERS },
 ] as const satisfies readonly PlanVerbDeclaration[];
 
+/** The add verbs that put a place or way in the plan, in order: the Map view's
+ *  buttons on both clients, which draw them from `PLAN_ADD_VERBS`. */
+export const PLAN_ITEM_ADD_VERBS = [
+  "copy",
+  "newPlace",
+  "route",
+  "import",
+] as const satisfies readonly PlanAddVerbId[];
+
 /** A section's ⋯. */
 export const PLAN_SECTION_VERBS = [
   { id: "edit", icon: "edit", label: "Edit", roles: WRITERS },

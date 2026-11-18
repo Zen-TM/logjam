@@ -20,6 +20,7 @@ import {
   planVerbs,
   planVerbsFor,
   PLAN_ADD_VERBS,
+  PLAN_ITEM_ADD_VERBS,
   PLAN_FORM_VERBS,
   PLAN_SECTION_VERBS,
   PLAN_VERB_LISTS,
@@ -419,6 +420,25 @@ describe("a plan's verbs", () => {
       expect(planVerbsFor(list, "web", "leader", { archived: true })).toEqual(
         [],
       );
+  });
+
+  // Mutation: list an id the add verbs lack, or leave "import" out, and a
+  // client's Map view offers a button that runs nothing, or no import.
+  it("names the add verbs that put an item in the plan, each a real one", () => {
+    const ids = PLAN_ADD_VERBS.map((verb) => verb.id) as string[];
+    for (const id of PLAN_ITEM_ADD_VERBS) expect(ids).toContain(id);
+    expect([...PLAN_ITEM_ADD_VERBS]).toEqual([
+      "copy",
+      "newPlace",
+      "route",
+      "import",
+    ]);
+    // In the menu's order, so the Map's buttons read as the menu does.
+    expect(
+      ids.filter((id) =>
+        (PLAN_ITEM_ADD_VERBS as readonly string[]).includes(id),
+      ),
+    ).toEqual([...PLAN_ITEM_ADD_VERBS]);
   });
 
   it("prints on Logjam Web only; both clients build forms", () => {
