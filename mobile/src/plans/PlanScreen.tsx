@@ -227,6 +227,7 @@ export function PlanScreen({
   initialView,
   joined,
   arrival,
+  onArrivalShown,
   onBack,
   backLabel,
   onShowOnMap,
@@ -242,8 +243,11 @@ export function PlanScreen({
   initialView?: TripPlanPageView;
   /** Arrived by joining from an invite: say so once. */
   joined?: boolean;
-  /** Said once on arrival, as a toast (a route drawn for the plan was added). */
+  /** Said once as a toast (a route drawn for the plan was added), whether this
+   *  page was just opened or was already open. */
   arrival?: string;
+  /** `arrival` was said: the caller clears it, so it is not said again. */
+  onArrivalShown: () => void;
   onBack: () => void;
   backLabel: string;
   /** The map in plan mode, framed on the plan's items when it has any. */
@@ -333,6 +337,7 @@ export function PlanScreen({
       onLeaving={setLeaving}
       joined={joined}
       arrival={arrival}
+      onArrivalShown={onArrivalShown}
     />
   );
 }
@@ -357,6 +362,7 @@ function PlanPage({
   onLeaving,
   joined,
   arrival,
+  onArrivalShown,
 }: {
   myId: string | null;
   cached: CachedPlan;
@@ -377,6 +383,7 @@ function PlanPage({
   onLeaving: (leaving: boolean) => void;
   joined?: boolean;
   arrival?: string;
+  onArrivalShown: () => void;
 }) {
   const theme = useTheme();
   const pull = useRefreshFromTop();
@@ -392,12 +399,21 @@ function PlanPage({
   const [toast, setToast] = useState<ToastMessage | null>(
     joined
       ? { text: TRIP_PLAN_JOIN.copy.joined, tone: "done", nonce: 1 }
-      : arrival
-        ? { text: arrival, tone: "done", nonce: 1 }
-        : null,
+      : null,
   );
   const notify = (text: string, tone: ToastMessage["tone"] = "done") =>
     setToast({ text, tone, nonce: Date.now() });
+  // Not the initial state: the page may already be open when the map hands
+  // it back. Said when `arrival` appears, then cleared by the caller.
+  const [seenArrival, setSeenArrival] = useState<string | undefined>();
+  if (arrival !== seenArrival) {
+    setSeenArrival(arrival);
+    if (arrival)
+      setToast({ text: arrival, tone: "done", nonce: (toast?.nonce ?? 0) + 1 });
+  }
+  useEffect(() => {
+    if (arrival) onArrivalShown();
+  }, [arrival, onArrivalShown]);
   // Stable: FormSheet hands a refusal over from an effect.
   const notifyError = useCallback(
     (text: string) => setToast({ text, tone: "error", nonce: Date.now() }),

@@ -1559,6 +1559,9 @@ export function AppShell({
                           initialView={route.params.view}
                           joined={route.params.joined}
                           arrival={route.params.notice}
+                          onArrivalShown={() =>
+                            navigation.setParams({ notice: undefined })
+                          }
                           onBack={() => navigation.goBack()}
                           backLabel={backLabelOf(
                             navigation.getState(),
