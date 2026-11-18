@@ -130,7 +130,9 @@ export function useListKeys(rootRef: RefObject<HTMLElement | null>) {
         const name = openOf(row)?.textContent ?? "";
         setTimeout(() =>
           announce(
-            `${tile.getAttribute("aria-checked") === "true" ? t`Selected` : t`Not selected`} ${name}`,
+            tile.getAttribute("aria-checked") === "true"
+              ? t`Selected ${name}`
+              : t`Not selected ${name}`,
           ),
         );
         return;

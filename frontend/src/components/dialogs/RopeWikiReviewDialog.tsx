@@ -7,10 +7,11 @@ import type {
 import { messageFromError } from "../../errors/messageFromError";
 import { useToast } from "../feedback/ToastProvider";
 import MatchReview from "./MatchReview";
+import { autoImportedLine, reviewAppliedToast } from "./ropeWikiCounts";
 import type { ReviewItem, ReviewDecision } from "./MatchReview";
 import { Button, Dialog, ErrorBanner } from "../../ui";
 import classes from "./RopeWikiReviewDialog.module.css";
-import { plural, t } from "@logjam/shared";
+import { t } from "@logjam/shared";
 
 // ── Adapter: RopeWikiCandidatePayload → ReviewItem ─────────────────────────
 
@@ -88,21 +89,13 @@ function RopeWikiReviewDialog({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const autoParts = [
-    autoImported && autoImported.added > 0
-      ? plural(autoImported.added, "# added", "# added")
-      : null,
-    autoImported && autoImported.autoLinked > 0
-      ? plural(
-          autoImported.autoLinked,
-          "# linked to existing",
-          "# linked to existing",
-        )
-      : null,
-    autoImported && autoImported.updated > 0
-      ? plural(autoImported.updated, "# updated", "# updated")
-      : null,
-  ].filter(Boolean);
+  const autoLine = autoImported
+    ? autoImportedLine(
+        autoImported.added,
+        autoImported.autoLinked,
+        autoImported.updated,
+      )
+    : "";
 
   // Each open, and each new review while open, starts the decisions afresh.
   const [reviewShown, setReviewShown] = useState({ open, review });
@@ -133,21 +126,8 @@ function RopeWikiReviewDialog({
         toApplyDecision(row, items[i]),
       );
       const result = await applyRopeWikiImport(regionId, payload);
-      const parts = [
-        result.created > 0
-          ? plural(result.created, "# created", "# created")
-          : null,
-        result.linked > 0
-          ? plural(result.linked, "# linked", "# linked")
-          : null,
-        result.skipped > 0
-          ? plural(result.skipped, "# skipped", "# skipped")
-          : null,
-      ].filter(Boolean);
       toast.done(
-        parts.length > 0
-          ? t`Review applied: ${parts.join(", ")}.`
-          : t`Review applied.`,
+        reviewAppliedToast(result.created, result.linked, result.skipped),
       );
       onApplied();
       onClose();
@@ -190,9 +170,10 @@ function RopeWikiReviewDialog({
         {/* What the refresh already did, before what it is asking about: a
             count of places that appeared without being asked about is the
             first thing to account for. */}
-        {autoParts.length > 0 && (
+        {autoLine && (
           <p className={classes.intro}>
-            {t`Already imported automatically: ${autoParts.join(", ")}. The ${review.length} below looked like places you may already have, so they were left alone.`}
+            {autoLine}{" "}
+            {t`The ${review.length} below looked like places you may already have, so they were left alone.`}
           </p>
         )}
         <p

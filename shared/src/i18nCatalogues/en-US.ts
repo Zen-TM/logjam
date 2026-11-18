@@ -27,6 +27,7 @@ export const enUS: Catalogue = {
   "A .zip of rasters in {0}, for QGIS or ArcGIS: heights in metres, slope in degrees, and hillshade.":
     "A .zip of rasters in {0}, for QGIS or ArcGIS: heights in meters, slope in degrees, and hillshade.",
   "A box to tick": "A box to check",
+  "Abseil count": "Rappel count",
   "A carpark, a campsite, the exit.": "A parking lot, a campsite, the exit.",
   "A suburb is enough.": "A town or neighborhood is enough.",
   "Allow on mobile data": "Allow on cellular data",
@@ -63,6 +64,7 @@ export const enUS: Catalogue = {
   "Land tenure couldn't be loaded — its map file is missing.":
     "Land ownership couldn't be loaded — its map file is missing.",
   "Last burnt": "Last burned",
+  "Longest abseil": "Longest rappel",
   "Mapped by NSW National Parks and Wildlife Service: a fire it didn't map, often on private land, has no colour.":
     "Mapped by NSW National Parks and Wildlife Service: a fire it didn't map, often on private land, has no color.",
   "Everyone you know is ticked.": "Everyone you know is checked.",
