@@ -54,7 +54,7 @@ import PlanPeople from "./PlanPeople";
 import PlanPlacePage from "./PlanPlacePage";
 import PlanSectionDialog from "./PlanSectionDialog";
 import PlanFormPage from "./PlanFormPage";
-import PlanAnswerDialog from "./PlanAnswerDialog";
+import PlanAnswerDialog, { PlanFormFields } from "./PlanAnswerDialog";
 import PlanFormBuilderDialog from "./PlanFormBuilderDialog";
 import PlanItemEditDialog from "./PlanItemEditDialog";
 import PlanAddCopyDialog from "./PlanAddCopyDialog";
@@ -367,6 +367,51 @@ describe("Edit form over another leader's save", () => {
     expect(
       screen.getByText(TRIP_PLAN_FORMS.copy.questionsChanged),
     ).toBeTruthy();
+  });
+});
+
+describe("answering a form's chip and tick-box questions", () => {
+  const question = (kind: "choice" | "multiChoice") =>
+    ({
+      id: "q1",
+      kind,
+      label: "Wetsuit size",
+      required: true,
+      options: [
+        { id: "a", label: "S" },
+        { id: "b", label: "M" },
+      ],
+    }) as never;
+
+  // Mutation: drop `named` from the choice question's FieldGroup, and a screen
+  // reader hears the question as a group and again as the radio group.
+  it("names a choice question once", () => {
+    render(
+      <PlanFormFields
+        form={{ ...contacts, questions: [question("choice")] }}
+        draft={{}}
+        onChange={() => {}}
+      />,
+    );
+    expect(
+      screen.getAllByRole("radiogroup", { name: "Wetsuit size" }),
+    ).toHaveLength(1);
+    expect(screen.queryByRole("group", { name: /Wetsuit size/ })).toBeNull();
+    // The star is still shown to the eye.
+    expect(screen.getByText("Wetsuit size *")).toBeTruthy();
+  });
+
+  // Mutation: draw the multiple-choice question without its fieldset, and its
+  // tick boxes have no group name.
+  it("names a multiple-choice question by its legend", () => {
+    render(
+      <PlanFormFields
+        form={{ ...contacts, questions: [question("multiChoice")] }}
+        draft={{}}
+        onChange={() => {}}
+      />,
+    );
+    expect(screen.getByRole("group", { name: "Wetsuit size *" })).toBeTruthy();
   });
 });
 

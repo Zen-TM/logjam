@@ -105,7 +105,7 @@ function QuestionField({
     case "yesNo": {
       const options = tripPlanQuestionChoices(question);
       return (
-        <FieldGroup label={label} hint={help} error={error}>
+        <FieldGroup label={label} hint={help} error={error} named>
           <ChipRail
             label={question.label}
             options={options}
