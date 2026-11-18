@@ -333,6 +333,19 @@ describe("list screens collapse their hero", () => {
     const source = readFileSync(new URL(file, import.meta.url), "utf8");
     expect(source).toContain("<HeroAdd");
   });
+  // Mutation: put Plans' add back in the hero's body as a `Button`, or draw
+  // `HeroAdd` only when `compact`, and the full hero has its add under the
+  // title instead of top right like the other lists.
+  it("draws Plans' add in the hero's actions, full and compact", () => {
+    const source = readFileSync(
+      new URL("../plans/PlansScreen.tsx", import.meta.url),
+      "utf8",
+    );
+    expect(source).toMatch(
+      /actions=\{\s*<HeroAdd\s+label=\{copy\.add\}\s+icon="add"\s+compact=\{compact\}/,
+    );
+    expect(source).not.toMatch(/<Button\s+label=\{copy\.add\}/);
+  });
   // Mutation: move Saved's ChipRail back inside its ScrollView, or add
   // "buckets" back to Inbox's list-header keys, and the filter rail scrolls
   // away with the rows.

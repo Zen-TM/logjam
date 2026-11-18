@@ -33,6 +33,10 @@ import {
   isValidLongitude,
   coordinateNumber,
   PLACE_PAGE,
+  cleanSources,
+  deleteSourceLabel,
+  sourceRows,
+  type SourceRow,
 } from "@logjam/shared";
 import type { NumericFieldConstraints } from "../../numberInput";
 import type { TPlace, TPlaceType } from "../../placeUtils";
@@ -42,7 +46,6 @@ import {
   deletePlace,
   getPlaceDetail,
   createCustomField,
-  isHttpUrl,
 } from "../../placeUtils";
 import { messageFromError } from "../../errors/messageFromError";
 import { useToast } from "../feedback/ToastProvider";
@@ -66,8 +69,6 @@ import {
   FieldBeside,
 } from "../../ui";
 import classes from "./PlaceDialog.module.css";
-
-type Source = { label: string; url: string };
 
 const LAT_CONSTRAINTS: NumericFieldConstraints = {
   min: LATITUDE_RANGE.min,
@@ -128,7 +129,7 @@ function PlaceDialog({
   const [latitude, setLatitude] = useState("");
   const [longitude, setLongitude] = useState("");
   const [notes, setNotes] = useState("");
-  const [sources, setSources] = useState<Source[]>([]);
+  const [sources, setSources] = useState<SourceRow[]>([]);
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
   // THE TYPE, chosen first. It decides which fields the form below has, so it
   // sits at the top of the dialog rather than among them.
@@ -228,7 +229,7 @@ function PlaceDialog({
     let initialLatitude: string;
     let initialLongitude: string;
     let initialNotes: string;
-    let initialSources: Source[];
+    let initialSources: SourceRow[];
     let initialFieldValues: Record<string, string>;
     // Editing keeps the place's own type; creating defaults to Canyon, which
     // is what Logjam is for. Retyping IS allowed on an edit: miscategorising
@@ -242,12 +243,7 @@ function PlaceDialog({
       initialLatitude = String(place.latitude);
       initialLongitude = String(place.longitude);
       initialNotes = place.notes ?? "";
-      const storedSources = place.fieldValues?.[SOURCES_FIELD_KEY];
-      initialSources = (
-        Array.isArray(storedSources)
-          ? (storedSources as [string, string][])
-          : []
-      ).map(([label, url]) => ({ label, url }));
+      initialSources = sourceRows(place.fieldValues);
       // Existing field values as strings — the grades among them, which is
       // what makes them ordinary. Reads the top level of fieldValues.
       const vals: Record<string, string> = {};
@@ -476,21 +472,14 @@ function PlaceDialog({
         return;
       }
 
-      // Reject non-http(s) source URLs (javascript:, data:, ...)
-      // rather than storing them verbatim to later render as a clickable href
-      // (see isHttpUrl.test.ts).
-      const invalidSourceUrl = sources.some(
-        (s) => s.url.trim() && !isHttpUrl(s.url.trim()),
-      );
-      if (invalidSourceUrl) {
-        setError("Source URLs must start with http:// or https://.");
+      // Non-http(s) links are refused rather than stored to later render as a
+      // clickable href (shared/src/placeSources.test.ts).
+      const cleaned = cleanSources(sources);
+      if ("error" in cleaned) {
+        setError(cleaned.error);
         setSaving(false);
         return;
       }
-
-      const cleanSources: [string, string][] = sources
-        .filter((s) => s.label.trim())
-        .map((s) => [s.label.trim(), s.url.trim()]);
 
       // ONLY THE FIELDS THIS FORM SHOWED. Iterating every definition wrote a
       // null for the ones scoped to other types — and `setFieldValues` treats a
@@ -520,7 +509,7 @@ function PlaceDialog({
         notes: notes || null,
         fieldValues: withFieldValues(place?.fieldValues ?? {}, {
           ...attributes,
-          [SOURCES_FIELD_KEY]: cleanSources.length > 0 ? cleanSources : null,
+          [SOURCES_FIELD_KEY]: cleaned.sources,
         }),
       };
 
@@ -821,7 +810,7 @@ function PlaceDialog({
           {sources.map((source, index) => (
             <div key={index} className={classes.source}>
               <TextField
-                label="Label"
+                label={PLACE_FORM.copy.sourceLabel}
                 className={classes.grow}
                 value={source.label}
                 onChange={(event) => {
@@ -831,10 +820,10 @@ function PlaceDialog({
                 }}
               />
               <TextField
-                label="Link"
+                label={PLACE_FORM.copy.sourceLink}
                 className={classes.grow}
                 value={source.url}
-                placeholder="https://"
+                placeholder={PLACE_FORM.copy.sourceLinkPlaceholder}
                 onChange={(event) => {
                   const next = [...sources];
                   next[index] = { ...next[index], url: event.target.value };
@@ -843,7 +832,7 @@ function PlaceDialog({
               />
               <IconButton
                 icon="delete"
-                label={`Delete the source ${source.label || index + 1}`}
+                label={deleteSourceLabel(source, index)}
                 tone="danger"
                 onClick={() =>
                   setSources(sources.filter((_, other) => other !== index))
@@ -857,7 +846,7 @@ function PlaceDialog({
             className={classes.addAttribute}
             onClick={() => setSources([...sources, { label: "", url: "" }])}
           >
-            Add a source
+            {PLACE_FORM.copy.addSource}
           </Button>
         </section>
       </>

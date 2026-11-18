@@ -630,28 +630,18 @@ export function PlansScreen({
             onBack={onBack}
             backLabel={backLabel}
             actions={
-              compact ? (
-                <HeroAdd
-                  label={copy.add}
-                  icon="add"
-                  compact
-                  disabled={!online}
-                  disabledReason={unavailableReasonText("needs-connection")}
-                  onPress={() => setNewOpen(true)}
-                />
-              ) : undefined
+              <HeroAdd
+                label={copy.add}
+                icon="add"
+                compact={compact}
+                disabled={!online}
+                disabledReason={unavailableReasonText("needs-connection")}
+                onPress={() => setNewOpen(true)}
+              />
             }
           >
             {compact ? undefined : (
               <View style={styles.pills}>
-                <Button
-                  label={copy.add}
-                  icon="add"
-                  compact
-                  disabled={!online}
-                  disabledReason={unavailableReasonText("needs-connection")}
-                  onPress={() => setNewOpen(true)}
-                />
                 <SyncStatusPills online={online} pendingCount={0} />
               </View>
             )}

@@ -33,8 +33,16 @@ describe("the tap sheet", () => {
   // `onCopy`, and a coordinates figure stops copying where it is pressed.
   it("copies every coordinates figure where it is pressed", () => {
     const sheet = read("MapPointSheet.tsx");
-    expect(sheet.match(/mapPointFacts\(/g)).toHaveLength(2);
-    expect(sheet.match(/fact\.copyable/g)).toHaveLength(2);
+    expect(sheet.match(/mapPointFacts\(/g)).toHaveLength(1);
+    expect(sheet.match(/fact\.copyable/g)).toHaveLength(1);
+  });
+
+  // Mutation: draw a second detail component for the viewer's own position,
+  // and its Options row and the facts drift from the tap sheet's.
+  it("draws the viewer's own position with the same detail as any point", () => {
+    const sheet = read("MapPointSheet.tsx");
+    expect(sheet.match(/<PointDetail/g)).toHaveLength(1);
+    expect(sheet).toContain('mapPointVerbs("gps", savedHereOnly, fix != null)');
   });
 
   // Mutation: give the sheet a plain `onClose={onClose}` again, and the back
