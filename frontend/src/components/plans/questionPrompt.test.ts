@@ -7,11 +7,11 @@ import { describe, expect, it } from "vitest";
  * Answering a plan's form, a question reads above its hint: the label takes
  * the `rowTitle` role in the text colour, the hint stays `detail` and muted.
  * The kit's field label is `detail` too, so each text-like question opts in
- * with `prominentLabel` and the chip and tick-box questions use
- * `questionPrompt`.
+ * with `prominentLabel` and the chip and tick-box questions are a `FieldGroup`,
+ * whose legend is the same prominent label.
  *
  * Mutation: delete `prominentLabel` from one question in PlanAnswerDialog, or
- * make `.questionPrompt` compose `detail`.
+ * make `.labelProminent` compose `detail`.
  */
 const DIR = dirname(fileURLToPath(import.meta.url));
 const read = (path: string) => readFileSync(join(DIR, path), "utf8");
@@ -25,7 +25,6 @@ describe("a plan form's question prompt", () => {
     const kit = read("../../ui/TextField.module.css");
     expect(roleOf(kit, "labelProminent")).toBe("rowTitle");
     expect(roleOf(kit, "hint")).toBe("detail");
-    expect(roleOf(read("plans.module.css"), "questionPrompt")).toBe("rowTitle");
   });
 
   it("is asked by every kind of question", () => {
@@ -33,6 +32,6 @@ describe("a plan form's question prompt", () => {
     // text and phone, long text, number
     expect(source.match(/\bprominentLabel\b/g)).toHaveLength(3);
     // choice and yes/no, multiple choice
-    expect(source.match(/classes\.questionPrompt/g)).toHaveLength(2);
+    expect(source.match(/<FieldGroup\b/g)).toHaveLength(2);
   });
 });

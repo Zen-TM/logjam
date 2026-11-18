@@ -135,14 +135,6 @@
   color: var(--color-text-muted);
 }
 
-/* A form's question as someone answers it: the kit's `prominentLabel`, above
-   its hint. */
-.questionPrompt {
-  composes: rowTitle from "../../textRoles.generated.module.css";
-  padding: 0;
-  color: var(--color-text);
-}
-
 /* One question in the builder: its fields, set apart by a hairline. */
 .questionEditor {
   display: flex;

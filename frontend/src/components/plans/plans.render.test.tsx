@@ -405,6 +405,27 @@ describe("a plan's page ends its views with their add buttons", () => {
     ).toHaveLength(1);
   });
 
+  // Mutation: drop the `<ListEnd>` under the forms, and a plan with forms has
+  // its add only in the hero's menu.
+  it("ends the Forms with Add a form", () => {
+    renderPanel({ view: { ...plan, forms: [contacts] } });
+    fireEvent.click(screen.getByRole("radio", { name: /^Forms/ }));
+    expect(
+      screen.getAllByRole("button", { name: planAddVerbLabel("form") }),
+    ).toHaveLength(1);
+  });
+
+  // A member's only add is Add a place or way, so the hero shows it as a plain
+  // button and the Map ends with the same one. Once a member has more adds the
+  // hero becomes the Add menu.
+  it("gives a member Add a place or way in the hero and at the Map's end", () => {
+    renderPanel({ view: { ...plan, myRole: "member", places: [place] } });
+    fireEvent.click(screen.getByRole("radio", { name: /^Map/ }));
+    expect(
+      screen.getAllByRole("button", { name: planAddVerbLabel("copy") }),
+    ).toHaveLength(2);
+  });
+
   // Mutation: draw the end button without the role check, and a member is
   // offered a section the API refuses.
   it("leaves a member without the write-up's add", () => {
