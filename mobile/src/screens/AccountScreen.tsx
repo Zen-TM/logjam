@@ -33,6 +33,10 @@ import {
   requestEmailChange,
   hasCognitoAccount,
   type SectionKeysOn,
+  formatDayMonth,
+  localDay,
+  rich,
+  t,
 } from "@logjam/shared";
 
 import type { SignOutHandler } from "../offline/signOutConfirm";
@@ -60,6 +64,7 @@ import {
   Hero,
   IconButton,
   LoadingState,
+  Rich,
   Row,
   ScreenScroll,
   SectionHeader,
@@ -113,9 +118,9 @@ function GuestAccountScreen({
       return;
     }
     const ok = await confirm({
-      confirmTitle: "Add this phone's data to an account?",
+      confirmTitle: t`Add this phone's data to an account?`,
       confirmBody: message,
-      confirmLabel: "Continue",
+      confirmLabel: t`Continue`,
       tone: "filled",
     });
     if (ok) linkAccount();
@@ -125,42 +130,41 @@ function GuestAccountScreen({
 
   return (
     <View style={styles.root}>
-      <Hero title="No account" onBack={onBack} backLabel={backLabel}>
+      <Hero title={t`No account`} onBack={onBack} backLabel={backLabel}>
         <Text style={styles.email}>
           {summary
-            ? `${summary} on this phone`
-            : "Everything you record stays on this phone"}
+            ? t`${summary} on this phone`
+            : t`Everything you record stays on this phone`}
         </Text>
       </Hero>
 
       <ScreenScroll padded={false} contentStyle={styles.body}>
-        <SectionHeader title="With an account" />
+        <SectionHeader title={t`With an account`} />
         <Row
           icon="sync"
-          title="Backed up"
-          subtitle="Your places and trips survive a lost phone"
+          title={t`Backed up`}
+          subtitle={t`Your places and trips survive a lost phone`}
         />
         <Row
           icon="friends"
-          title="Sharing"
-          subtitle="Share individual places with friends"
+          title={t`Sharing`}
+          subtitle={t`Share individual places with friends`}
         />
         <Row
           icon="lidar"
-          title="Sharpened areas"
-          subtitle="Save the areas you sharpen on Logjam Web"
+          title={t`Sharpened areas`}
+          subtitle={t`Save the areas you sharpen on Logjam Web`}
         />
 
-        <SectionHeader title="Get an account" />
+        <SectionHeader title={t`Get an account`} />
         <Button
-          label="Sign in or create an account"
+          label={t`Sign in or create an account`}
           icon="addFriend"
           onPress={startLinking}
         />
-        <Text style={styles.guestNote}>
-          What&apos;s on this phone comes with you. It can&apos;t be undone —
-          there&apos;s no way to un-upload it.
-        </Text>
+        <Text
+          style={styles.guestNote}
+        >{t`What's on this phone comes with you. It can't be undone — there's no way to un-upload it.`}</Text>
 
         <Text style={styles.version}>{CLIENT_VERSION_LABEL}</Text>
         <LegalLinks />
@@ -222,7 +226,7 @@ function LinkedAccountScreen({
   const { assetHue } = useHues();
   const styles = useStyles();
 
-  const query = useApiQuery(fetchCurrentUser, "Couldn't load your account.");
+  const query = useApiQuery(fetchCurrentUser, t`Couldn't load your account.`);
   const online = useConnectivity() === "online";
   const [sheet, setSheet] = useState<SheetMode>("closed");
   const [toast, setToast] = useState<ToastMessage | null>(null);
@@ -237,7 +241,7 @@ function LinkedAccountScreen({
   if (!query.data) {
     return (
       <ErrorState
-        message={query.error ?? "Couldn't load your account."}
+        message={query.error ?? t`Couldn't load your account.`}
         onRetry={query.refetch}
       />
     );
@@ -245,10 +249,7 @@ function LinkedAccountScreen({
   const user = query.data;
 
   const creditsResetLabel = user.monthlyComputeResetAt
-    ? new Date(user.monthlyComputeResetAt).toLocaleDateString(undefined, {
-        day: "numeric",
-        month: "short",
-      })
+    ? formatDayMonth(localDay(new Date(user.monthlyComputeResetAt)))
     : null;
 
   // Exhaustive by type: a section the contract names and this screen does not
@@ -283,7 +284,7 @@ function LinkedAccountScreen({
         <Meter
           segments={[
             {
-              label: "Used",
+              label: t`Used`,
               value: user.storageUsedBytes,
               hue: theme.accent,
               display: formatBytes(user.storageUsedBytes),
@@ -293,9 +294,12 @@ function LinkedAccountScreen({
           legend={false}
         />
         <Text style={styles.meterLabel}>
-          {formatBytes(user.storageUsedBytes)} of{" "}
-          {formatBytes(user.storageQuotaBytes)}
-          <Text style={styles.meterHint}> · {copy.storageHint}</Text>
+          <Rich
+            parts={rich`${formatBytes(user.storageUsedBytes)} of ${formatBytes(user.storageQuotaBytes)}<hint> · ${copy.storageHint}</hint>`}
+            tags={{
+              hint: (text) => <Text style={styles.meterHint}>{text}</Text>,
+            }}
+          />
         </Text>
       </>
     ),
@@ -305,7 +309,7 @@ function LinkedAccountScreen({
         <Meter
           segments={[
             {
-              label: "Used",
+              label: t`Used`,
               value: user.monthlyComputeUsage,
               hue: assetHue.overlay,
               display: formatCredits(user.monthlyComputeUsage),
@@ -315,14 +319,21 @@ function LinkedAccountScreen({
           legend={false}
         />
         <Text style={styles.meterLabel}>
-          {formatCreditsOf(
-            user.monthlyComputeUsage,
-            user.monthlyComputeCredits,
-          )}
           {creditsResetLabel ? (
-            <Text style={styles.meterHint}> · resets {creditsResetLabel}</Text>
-          ) : null}
-          <Text style={styles.meterHint}> · {copy.creditsHint}</Text>
+            <Rich
+              parts={rich`${formatCreditsOf(user.monthlyComputeUsage, user.monthlyComputeCredits)}<hint> · resets ${creditsResetLabel} · ${copy.creditsHint}</hint>`}
+              tags={{
+                hint: (text) => <Text style={styles.meterHint}>{text}</Text>,
+              }}
+            />
+          ) : (
+            <Rich
+              parts={rich`${formatCreditsOf(user.monthlyComputeUsage, user.monthlyComputeCredits)}<hint> · ${copy.creditsHint}</hint>`}
+              tags={{
+                hint: (text) => <Text style={styles.meterHint}>{text}</Text>,
+              }}
+            />
+          )}
         </Text>
       </>
     ),
@@ -356,7 +367,7 @@ function LinkedAccountScreen({
             variant="outlineAccent"
             icon="signOut"
             disabled={!online}
-            disabledReason="Needs a connection"
+            disabledReason={t`Needs a connection`}
             onPress={() => onSignOut({ everywhere: true })}
           />
         ) : null}
@@ -401,7 +412,7 @@ function LinkedAccountScreen({
             onSaved={() => {
               query.refetch();
               setSheet("closed");
-              notify("Username updated.");
+              notify(t`Username updated.`);
             }}
           />
         ) : null}
@@ -411,7 +422,7 @@ function LinkedAccountScreen({
             onSaved={() => {
               query.refetch();
               setSheet("closed");
-              notify("Email updated.");
+              notify(t`Email updated.`);
             }}
           />
         ) : null}
@@ -446,7 +457,7 @@ function UsernameForm({
     // Empty is a requirement, shown on submit (shared/DESIGN.md §11); unchanged is not
     // an error at all, just nothing to do.
     if (!trimmed) {
-      setError("Enter a username.");
+      setError(t`Enter a username.`);
       return;
     }
     if (trimmed === current) return;
@@ -460,7 +471,7 @@ function UsernameForm({
       // The server's own 409 text ("Username already taken") is worth showing,
       // which is what messageFromError prefers when the API supplies one —
       // and it's this one field's problem, so it renders under it (shared/DESIGN.md §11).
-      setError(messageFromError(err, "Couldn't save that username."));
+      setError(messageFromError(err, t`Couldn't save that username.`));
     } finally {
       setSaving(false);
     }
@@ -469,7 +480,7 @@ function UsernameForm({
   return (
     <View style={styles.form}>
       <TextField
-        label="Username"
+        label={t`Username`}
         value={value}
         onChangeText={(text) => {
           setValue(text);
@@ -478,11 +489,11 @@ function UsernameForm({
         autoCapitalize="none"
         error={error}
       />
-      <Text style={styles.formHint}>
-        Friends search this name when they share a place with you.
-      </Text>
+      <Text
+        style={styles.formHint}
+      >{t`Friends search this name when they share a place with you.`}</Text>
       <Button
-        label="Save username"
+        label={t`Save username`}
         icon="done"
         loading={saving}
         onPress={() => void save()}
@@ -522,7 +533,7 @@ function EmailForm({
   const request = useCallback(async () => {
     const trimmed = email.trim();
     if (!trimmed) {
-      setError("Enter a new email.");
+      setError(t`Enter a new email.`);
       return;
     }
     setBusy(true);
@@ -532,7 +543,7 @@ function EmailForm({
       setStep("confirm");
     } catch (err) {
       console.error(err);
-      setError(messageFromError(err, "Couldn't start the email change."));
+      setError(messageFromError(err, t`Couldn't start the email change.`));
     } finally {
       setBusy(false);
     }
@@ -541,7 +552,7 @@ function EmailForm({
   const confirm = useCallback(async () => {
     const trimmed = code.trim();
     if (!trimmed) {
-      setError("Enter the code we sent you.");
+      setError(t`Enter the code we sent you.`);
       return;
     }
     setBusy(true);
@@ -551,7 +562,7 @@ function EmailForm({
       onSaved();
     } catch (err) {
       console.error(err);
-      setError(messageFromError(err, "That code didn't work."));
+      setError(messageFromError(err, t`That code didn't work.`));
     } finally {
       setBusy(false);
     }
@@ -560,9 +571,9 @@ function EmailForm({
   if (step === "confirm") {
     return (
       <View style={styles.form}>
-        <Text style={styles.formHint}>
-          We sent a code to {email.trim()}. Enter it to finish the change.
-        </Text>
+        <Text
+          style={styles.formHint}
+        >{t`We sent a code to ${email.trim()}. Enter it to finish the change.`}</Text>
         <TextField
           label={copy.verificationCode}
           value={code}
@@ -585,7 +596,7 @@ function EmailForm({
 
   return (
     <View style={styles.form}>
-      <Text style={styles.formHint}>Signed in with {current}.</Text>
+      <Text style={styles.formHint}>{t`Signed in with ${current}.`}</Text>
       <TextField
         label={copy.newEmail}
         value={email}
@@ -638,7 +649,7 @@ function DeleteAccountForm({
       onDeleted();
     } catch (err) {
       console.error(err);
-      setError(messageFromError(err, "Couldn't delete your account."));
+      setError(messageFromError(err, t`Couldn't delete your account.`));
       setBusy(false);
     }
   }, [matches, onDeleted]);
@@ -654,12 +665,12 @@ function DeleteAccountForm({
       />
       {error ? <ErrorBanner message={error} /> : null}
       <Button
-        label="Delete my account"
+        label={t`Delete my account`}
         icon="delete"
         variant="outlineAccent"
         loading={busy}
         disabled={!matches}
-        disabledReason="Type the phrase above first"
+        disabledReason={t`Type the phrase above first`}
         onPress={() => void run()}
       />
     </View>

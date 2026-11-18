@@ -11,6 +11,7 @@ import {
 } from "../../../ui";
 import { MAP_IDENTITY, type MakingItem } from "./mapsModel";
 import classes from "./MapsPanel.module.css";
+import { t } from "@logjam/shared";
 
 /**
  * "Being made": every job the user is still waiting on, PINNED under the list
@@ -45,7 +46,7 @@ export function MakingFooter({
     <section
       className={classes.footer}
       data-expanded={expanded || undefined}
-      aria-label={`Being made, ${items.length}`}
+      aria-label={t`Being made, ${items.length}`}
     >
       <div className={classes.footerList}>
         {shown.map((item) => (
@@ -60,7 +61,7 @@ export function MakingFooter({
           onClick={() => setExpanded((open) => !open)}
           className={classes.footerMore}
         >
-          {expanded ? "Show fewer" : `${items.length - 1} more being made`}
+          {expanded ? t`Show fewer` : t`${items.length - 1} more being made`}
         </Button>
       )}
     </section>
@@ -94,10 +95,10 @@ function MakingRow({
       trailing={
         item.failed ? (
           <>
-            <StatusPill label="Failed" tone="warning" />
+            <StatusPill label={t`Failed`} tone="warning" />
             <IconButton
               icon="close"
-              label={`Dismiss ${item.title}`}
+              label={t`Dismiss ${item.title}`}
               onClick={() => onDismiss(item)}
             />
           </>

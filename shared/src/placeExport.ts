@@ -12,6 +12,7 @@ import {
   KML_MIME_TYPE,
 } from "./routeExport.js";
 import type { TripLogCustomFieldDef } from "./tripLogFields.js";
+import { t } from "./i18n.js";
 
 /**
  * The CSV column naming a place's type, which Logjam Web's importer reads back
@@ -30,10 +31,10 @@ export type TExportFormat = "gpx" | "kml" | "geojson" | "csv";
 
 /** The formats a place leaves in, in menu order, with the words for them. */
 export const PLACE_EXPORT_FORMATS: { value: TExportFormat; label: string }[] = [
-  { value: "gpx", label: "GPX" },
-  { value: "kml", label: "KML" },
-  { value: "geojson", label: "GeoJSON" },
-  { value: "csv", label: "CSV" },
+  { value: "gpx", label: t`GPX` },
+  { value: "kml", label: t`KML` },
+  { value: "geojson", label: t`GeoJSON` },
+  { value: "csv", label: t`CSV` },
 ];
 
 export type PlaceExportFile = {
@@ -109,9 +110,9 @@ function fieldLabel(key: string, defs: ExportFieldLabel[]): string {
 function descriptionText(c: TPlace, defs: ExportFieldLabel[]): string {
   const parts: string[] = [];
   if (c.altNames.length > 0)
-    parts.push(`Also known as: ${c.altNames.join(", ")}`);
+    parts.push(t`Also known as: ${c.altNames.join(", ")}`);
   const grade = formatCanyonGrade(placeFieldValues(c));
-  if (grade) parts.push(`Canyon grade: ${grade}`);
+  if (grade) parts.push(t`Canyon grade: ${grade}`);
   // Whatever the place's type carries, in the order the values are stored. The
   // labels a UI would show live on the definitions, which this module does not
   // have; the KEY is what a third-party reader gets, which is the same thing
@@ -121,14 +122,13 @@ function descriptionText(c: TPlace, defs: ExportFieldLabel[]): string {
     if (isCanyonGradeKey(key)) continue;
     parts.push(`${fieldLabel(key, defs)}: ${String(value)}`);
   }
-  if (c.notes) parts.push(`Notes: ${c.notes}`);
+  if (c.notes) parts.push(t`Notes: ${c.notes}`);
   const sources = placeSources(c);
   if (sources.length > 0) {
-    parts.push(
-      `Sources: ${sources
-        .map(([label, url]) => (url ? `${label} (${url})` : label))
-        .join(", ")}`,
-    );
+    const list = sources
+      .map(([label, url]) => (url ? `${label} (${url})` : label))
+      .join(", ");
+    parts.push(t`Sources: ${list}`);
   }
   return parts.join("\n");
 }

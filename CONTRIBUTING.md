@@ -138,7 +138,7 @@ there, not in committed files.
   | `api` | `cd api && npm run test:unit` |
   | `frontend` | `cd frontend && npm test` |
   | `mobile` | `cd mobile && npm test` |
-  | `topo` | `cd topo && python -m unittest discover -s tests` |
+  | `topo` | `make topo-test` |
 
 - CI runs the rest: the API integration suite against a live stack, the
   migration checks, the mobile export, the secret scan, the Terraform checks

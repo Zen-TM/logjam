@@ -3,6 +3,7 @@ import type { ReactNode, PointerEvent as ReactPointerEvent } from "react";
 import classes from "./BottomSheet.module.css";
 import { BOTTOM_SHEET_ATTR, SheetSnapContext } from "./sheetSnap";
 import { useViewport, type Viewport } from "./useViewport";
+import { t } from "@logjam/shared";
 
 export type SheetSnap = "peek" | "half" | "full";
 
@@ -11,9 +12,9 @@ export type SheetSnap = "peek" | "half" | "full";
 type Stop = SheetSnap | "closed";
 
 const SNAP_LABELS: Record<SheetSnap, string> = {
-  peek: "Peek",
-  half: "Half height",
-  full: "Full height",
+  peek: t`Peek`,
+  half: t`Half height`,
+  full: t`Full height`,
 };
 
 const PEEK_REVEAL_PX = 96;
@@ -356,7 +357,7 @@ function BottomSheet({
       {snap === "full" && dragTranslate === null && (
         <button
           className={classes.backdrop}
-          aria-label="Collapse panel"
+          aria-label={t`Collapse panel`}
           onClick={() => onSnapChange("half")}
         />
       )}
@@ -377,7 +378,7 @@ function BottomSheet({
           className={classes.handle}
           role="slider"
           tabIndex={0}
-          aria-label="Panel height"
+          aria-label={t`Panel height`}
           aria-valuemin={0}
           aria-valuemax={heights.length - 1}
           aria-valuenow={heights.indexOf(snap)}

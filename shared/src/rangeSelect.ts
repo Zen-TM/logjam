@@ -1,3 +1,5 @@
+import { t } from "./i18n.js";
+
 /**
  * Range selection by tapping numbered pills (a 7-stop slider inside a scrolling
  * sheet is a gesture fight with the sheet's own drag, and its thumbs are smaller
@@ -42,7 +44,7 @@ export function formatRange(
   prefix = "",
   word: (stop: number) => string = String,
 ): string {
-  if (isFullRange(range, bounds)) return "Any";
+  if (isFullRange(range, bounds)) return t`Any`;
   const [low, high] = range as NumberRange;
   return low === high
     ? `${prefix}${word(low)}`

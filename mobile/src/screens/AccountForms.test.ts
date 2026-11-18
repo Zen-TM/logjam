@@ -8,7 +8,10 @@ import { describe, expect, it } from "vitest";
 
 const source = readFileSync(join(__dirname, "AccountForms.tsx"), "utf8");
 const fields = [...source.matchAll(/<TextField\b[\s\S]*?\/>/g)].map(([m]) => m);
-const label = (field: string) => /label="([^"]+)"/.exec(field)?.[1] ?? "";
+const label = (field: string) => {
+  const m = /label=(?:"([^"]+)"|\{t`([^`]+)`\})/.exec(field);
+  return m?.[1] ?? m?.[2] ?? "";
+};
 
 describe("AccountForms", () => {
   it("reads its fields at all", () => {

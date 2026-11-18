@@ -16,6 +16,7 @@ import {
   tripPlanInPlanNow,
   tripPlanSetAsideRows,
   type TripPlanItem,
+  t,
 } from "@logjam/shared";
 import {
   Button,
@@ -157,10 +158,8 @@ export default function PlanItemEditDialog({
             <Button
               onClick={requestClose}
               disabled={busy}
-              disabledReason="Saving…"
-            >
-              Cancel
-            </Button>
+              disabledReason={t`Saving…`}
+            >{t`Cancel`}</Button>
             <Button type="submit" form={formId} variant="filled" busy={busy}>
               {copy.sectionSave}
             </Button>

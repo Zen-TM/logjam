@@ -15,6 +15,7 @@
 // Shared by both inboxes, so the two clients' bars cannot disagree about which
 // way the button goes.
 
+import { t } from "./i18n.js";
 export type BulkReadAction = {
   /** The read flag to write on the affected rows. */
   read: boolean;
@@ -42,8 +43,8 @@ export function bulkReadAction(
       read: false,
       ids: selected.map((notification) => notification.id),
       icon: "hide",
-      label: "Mark as unread",
-      success: "Marked as unread.",
+      label: t`Mark as unread`,
+      success: t`Marked as unread.`,
     };
   }
   return {
@@ -52,9 +53,9 @@ export function bulkReadAction(
     icon: "show",
     label:
       unread.length === selected.length
-        ? "Mark as read"
-        : "Mark the unread ones as read",
-    success: "Marked as read.",
+        ? t`Mark as read`
+        : t`Mark the unread ones as read`,
+    success: t`Marked as read.`,
   };
 }
 
@@ -68,6 +69,6 @@ export function selectionCountLabel(selected: { read: boolean }[]): string {
   const unread = selected.filter((notification) => !notification.read).length;
   // "N selected" in both forms — the tally is an addition to the count, not a
   // replacement for it; keeping "selected" ensures consistent phrasing.
-  const base = `${selected.length} selected`;
-  return unread === 0 ? base : `${base} · ${unread} unread`;
+  const n = selected.length;
+  return unread === 0 ? t`${n} selected` : t`${n} selected · ${unread} unread`;
 }

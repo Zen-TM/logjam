@@ -7,6 +7,7 @@
 // and what a panel closes back to on Logjam Web, which has no Map tab.
 import type { IconIdea } from "../icons.js";
 import type { ContractPlatform } from "./types.js";
+import { t } from "../i18n.js";
 
 type NavDeclaration = {
   /** Logjam Web's panel id and Logjam GPS's route name, lower-cased. */
@@ -33,57 +34,53 @@ type NavDeclaration = {
  * desktop rail takes the `page` group, a spacer, then the `personal` group.
  */
 export const NAV = [
-  { id: "places", label: "Places", icon: "place", group: "page", tab: true },
+  { id: "places", label: t`Places`, icon: "place", group: "page", tab: true },
   // The tab's word. The panel and route ids stay `logs`.
-  { id: "logs", label: "Trips", icon: "trip", group: "page", tab: true },
+  { id: "logs", label: t`Trips`, icon: "trip", group: "page", tab: true },
   {
     id: "ways",
-    label: "Ways",
+    label: t`Ways`,
     // The umbrella for routes, recorded tracks and imports. "Routes" would name
     // one of its own three kinds.
     icon: "route",
     group: "page",
     tab: true,
     on: "web",
-    reason:
-      "Logjam GPS keeps its lines on Saved, beside the offline maps, sharpened areas and GeoPDFs a phone also manages.",
+    reason: t`Logjam GPS keeps its lines on Saved, beside the offline maps, sharpened areas and GeoPDFs a phone also manages.`,
   },
   {
     id: "saved",
-    label: "Saved",
+    label: t`Saved`,
     icon: "saved",
     group: "page",
     tab: true,
     on: "gps",
-    reason:
-      "A browser keeps no offline copies to manage; its lines are the Ways page.",
+    reason: t`A browser keeps no offline copies to manage; its lines are the Ways page.`,
   },
-  { id: "inbox", label: "Inbox", icon: "notifications", group: "personal" },
+  { id: "inbox", label: t`Inbox`, icon: "notifications", group: "personal" },
   // An invite waiting on the user is what its badge counts. A tab on narrow
   // Logjam Web, in More on Logjam GPS.
   {
     id: "plans",
-    label: "Plans",
+    label: t`Plans`,
     icon: "plan",
     group: "page",
     badgeNoun: "invited",
     tab: "web",
-    tabReason:
-      "Logjam GPS keeps a Map tab because its pages are full screen. Logjam Web's panels open over the map and close back to it, so the tab goes to the next page a user reaches for.",
+    tabReason: t`Logjam GPS keeps a Map tab because its pages are full screen. Logjam Web's panels open over the map and close back to it, so the tab goes to the next page a user reaches for.`,
   },
-  { id: "friends", label: "Friends", icon: "friends", group: "page" },
+  { id: "friends", label: t`Friends`, icon: "friends", group: "page" },
   {
     id: "syncIssues",
-    label: "Sync issues",
+    label: t`Sync issues`,
     icon: "warning",
     group: "personal",
-    badgeNoun: "need you",
+    badgeNoun: t`need you`,
     on: "gps",
-    reason:
-      "Logjam Web writes straight to the server, so nothing waits to sync there.",
+    reason: t`Logjam Web writes straight to the server, so nothing waits to sync there.`,
   },
-  { id: "settings", label: "Settings", icon: "settings", group: "personal" },
-  { id: "account", label: "Account", icon: "account", group: "personal" },
+  { id: "settings", label: t`Settings`, icon: "settings", group: "personal" },
+  { id: "account", label: t`Account`, icon: "account", group: "personal" },
 ] as const satisfies readonly NavDeclaration[];
 
 export type NavId = (typeof NAV)[number]["id"];

@@ -6,7 +6,8 @@ import {
   incomingLabel,
   LIDAR_JOB_COPY,
   lidarJobSharePromise,
-  removeShareConfirm,
+  removeSharedAreaConfirm,
+  plural,
   t,
   type SharePromiseKind,
   type SharpenUnavailable,
@@ -99,7 +100,7 @@ export default function SharpenedAreasView({
       ? [
           {
             id: "export",
-            label: "Make a map…",
+            label: t`Make a map…`,
             icon: "export",
             onSelect: () => onExportArea(job),
           },
@@ -110,7 +111,7 @@ export default function SharpenedAreasView({
         ...exportEntry,
         {
           id: "share",
-          label: "Share…",
+          label: t`Share…`,
           icon: "shareFriend",
           onSelect: () =>
             setShareJob({
@@ -122,16 +123,15 @@ export default function SharpenedAreasView({
         { id: "delete-sep", separator: true },
         {
           id: "delete",
-          label: "Delete",
+          label: t`Delete`,
           icon: "delete",
           danger: true,
           onSelect: () =>
             ask({
               copy: {
-                confirmTitle: `Delete ${label}?`,
-                confirmBody:
-                  "The sharpened area is deleted from your account, and friends you shared it with lose it too. Map files already made from it stay until they expire; one still waiting to start is cancelled.",
-                confirmLabel: "Delete",
+                confirmTitle: t`Delete ${label}?`,
+                confirmBody: t`The sharpened area is deleted from your account, and friends you shared it with lose it too. Map files already made from it stay until they expire; one still waiting to start is cancelled.`,
+                confirmLabel: t`Delete`,
                 tone: "destructive",
               },
               run: async () => {
@@ -146,7 +146,7 @@ export default function SharpenedAreasView({
                   toast.error(
                     messageFromError(
                       err,
-                      "Couldn't delete the sharpened area. Try again.",
+                      t`Couldn't delete the sharpened area. Try again.`,
                     ),
                   );
                 }
@@ -158,8 +158,7 @@ export default function SharpenedAreasView({
     // A topo is only ever shared DIRECTLY — it has no place to inherit
     // visibility from — so a shared row always has a share of its own to drop
     // (api/src/lib/shareAccess.unit.test.ts).
-    const confirm = removeShareConfirm({
-      kindLabel: "sharpened area",
+    const confirm = removeSharedAreaConfirm({
       itemName: label,
     });
     return [
@@ -167,25 +166,28 @@ export default function SharpenedAreasView({
       { id: "remove-sep", separator: true },
       {
         id: "removeShare",
-        label: "Remove",
+        label: t`Remove`,
         icon: "close",
         onSelect: () =>
           ask({
             copy: {
               confirmTitle: confirm.title,
               confirmBody: confirm.body,
-              confirmLabel: "Remove",
+              confirmLabel: t`Remove`,
               tone: "filled",
             },
             run: async () => {
               try {
                 await unshareEntityWith("topoJob", job.jobId, "me");
-                toast.done(`${label} removed.`);
+                toast.done(t`${label} removed.`);
                 onRefetchCompletedTopoJobs();
               } catch (err) {
                 console.error(err);
                 toast.error(
-                  messageFromError(err, "Couldn't remove that sharpened area."),
+                  messageFromError(
+                    err,
+                    t`Couldn't remove that sharpened area.`,
+                  ),
                 );
               }
             },
@@ -197,14 +199,12 @@ export default function SharpenedAreasView({
   return (
     <>
       <div className={classes.head}>
-        <IconButton icon="back" label="Back to terrain" onClick={onBack} />
+        <IconButton icon="back" label={t`Back to terrain`} onClick={onBack} />
         <div className={classes.titleBlock}>
-          <span className={classes.title}>Sharpened areas</span>
+          <span className={classes.title}>{t`Sharpened areas`}</span>
           {loaded && (
             <span className={classes.subtitle}>
-              {completedTopoJobs.length === 1
-                ? "1 area"
-                : `${completedTopoJobs.length} areas`}
+              {plural(completedTopoJobs.length, "# area", "# areas")}
             </span>
           )}
         </div>
@@ -220,13 +220,13 @@ export default function SharpenedAreasView({
         >
           {LIDAR_JOB_COPY.make}
         </Button>
-        <IconButton icon="close" label="Close" onClick={onClose} />
+        <IconButton icon="close" label={t`Close`} onClick={onClose} />
       </div>
       <div className={classes.body}>
-        {!loaded && <LoadingState label="Loading your sharpened areas…" />}
+        {!loaded && <LoadingState label={t`Loading your sharpened areas…`} />}
         {loaded && completedTopoJobs.length === 0 && beingMade.length === 0 && (
           <div className={classes.emptyLine}>
-            <span>None yet. Pick an area and sharpen it.</span>
+            <span>{t`None yet. Pick an area and sharpen it.`}</span>
           </div>
         )}
         {completedTopoJobs.map((job) => {
@@ -252,7 +252,7 @@ export default function SharpenedAreasView({
                     <StatusPill label={incomingLabel(null)} tone="outline" />
                   )}
                   <Menu
-                    label={`Actions for ${label}`}
+                    label={t`Actions for ${label}`}
                     title={label}
                     placement="right-start"
                     entries={topoEntries(job)}
@@ -260,7 +260,7 @@ export default function SharpenedAreasView({
                       <IconButton
                         {...props}
                         icon="overflow"
-                        label={`Actions for ${label}`}
+                        label={t`Actions for ${label}`}
                       />
                     )}
                   />
@@ -277,7 +277,7 @@ export default function SharpenedAreasView({
 
       {shareJob && (
         <ShareDialog
-          title={`Share ${shareJob.label}`}
+          title={t`Share ${shareJob.label}`}
           kind={shareJob.promise}
           friends={friends}
           open

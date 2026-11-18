@@ -140,7 +140,7 @@ class AreaOutsideTerrain(AreaExportError):
     """No tiles of the region's archives in the box: the API checks the box
     against the regions' borders, drawn a little outside the real ones, so a
     box just over one gets this far. `SENTENCE` is what the owner reads, the
-    API's AREA_EXPORT_OUTSIDE_TERRAIN (tests/test_area_export.py)."""
+    API's areaExportOutsideTerrain() (tests/test_area_export.py)."""
 
     SENTENCE = "Terrain isn't available for that area. Choose an area where it is."
 

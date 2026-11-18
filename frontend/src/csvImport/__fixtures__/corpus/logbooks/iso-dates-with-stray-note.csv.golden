@@ -40,8 +40,15 @@
       "customFields": {}
     }
   ],
-  "warnings": [
-    "Row 4: date \"sometime in March\" couldn't be read — skipped"
+  "warnings": [],
+  "skippedRows": [
+    {
+      "line": 4,
+      "reason": {
+        "kind": "date",
+        "raw": "sometime in March"
+      }
+    }
   ],
   "droppedRows": 1,
   "matches": [

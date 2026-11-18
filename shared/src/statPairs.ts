@@ -4,20 +4,22 @@
 // surface takes the full width, so a pair is never split across two rows and a
 // lone figure never hangs off the end of one.
 
+import { t } from "./i18n.js";
+
 /** The words both clients put on these stats. */
 export const PAIRED_STAT_LABELS = {
-  time: "Time",
-  distance: "Distance",
-  ascent: "Ascent",
-  descent: "Descent",
-  highPoint: "High point",
-  lowPoint: "Low point",
-  moving: "Moving",
-  stopped: "Stopped",
-  avgSpeed: "Avg speed",
-  avgMovingSpeed: "Avg moving speed",
-  level: "Level",
-  flow: "Flow",
+  time: t`Time`,
+  distance: t`Distance`,
+  ascent: t`Ascent`,
+  descent: t`Descent`,
+  highPoint: t`High point`,
+  lowPoint: t`Low point`,
+  moving: t`Moving`,
+  stopped: t`Stopped`,
+  avgSpeed: t`Avg speed`,
+  avgMovingSpeed: t`Avg moving speed`,
+  level: t`Level`,
+  flow: t`Flow`,
 } as const;
 
 const L = PAIRED_STAT_LABELS;
@@ -31,6 +33,11 @@ export const STAT_PAIRS: readonly (readonly [string, string])[] = [
   [L.avgSpeed, L.avgMovingSpeed],
   [L.level, L.flow],
 ];
+
+/** Time and distance are the two a live recording reads off the wall clock and the walk, not off the points. */
+export function isLiveReadStat(label: string): boolean {
+  return label === L.time || label === L.distance;
+}
 
 /**
  * A grid's stats laid out by the pairs: a stat whose partner is on the grid

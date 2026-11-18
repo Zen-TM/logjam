@@ -14,12 +14,13 @@ import { formatHeight, formatHeightRange } from "../units.js";
 import type { IconIdea } from "../icons.js";
 import type { SnapMode } from "../snapToPath.js";
 import type { ContractPlatform, ScreenContract } from "./types.js";
+import { plural, t } from "../i18n.js";
 
 export const MAP_MEASURE = {
   id: "map.measure",
-  question: "How far is it along this line?",
+  question: t`How far is it along this line?`,
   /** The tool's name: its button in the tools tray and its page's title. */
-  title: "Measure distance",
+  title: t`Measure distance`,
   sections: [
     { key: "distance" },
     // Both read the terrain, so both are absent until it has been read:
@@ -28,14 +29,14 @@ export const MAP_MEASURE = {
     { key: "descent" },
   ],
   copy: {
-    distance: "Distance",
+    distance: t`Distance`,
     ascent: PAIRED_STAT_LABELS.ascent,
     descent: PAIRED_STAT_LABELS.descent,
     /** After the lowest–highest range: "412–655 m above sea level". */
-    aboveSeaLevel: "above sea level",
-    readingTerrain: "Reading the terrain…",
-    snap: "Snap to",
-    fromHere: "Measure from here",
+    aboveSeaLevel: t`above sea level`,
+    readingTerrain: t`Reading the terrain…`,
+    snap: t`Snap to`,
+    fromHere: t`Measure from here`,
   },
 } as const satisfies ScreenContract;
 
@@ -47,16 +48,16 @@ export const MAP_MEASURE_ICON: IconIdea = "measure";
  * it: the measure tool's and the route tool's setting, so one set of words.
  */
 export const MAP_SNAP_OPTIONS: readonly { value: SnapMode; label: string }[] = [
-  { value: "off", label: "Nothing (straight lines)" },
-  { value: "trails", label: "Trails" },
-  { value: "waterways", label: "Creeks & rivers" },
-  { value: "both", label: "Trails, creeks & rivers" },
+  { value: "off", label: t`Nothing (straight lines)` },
+  { value: "trails", label: t`Trails` },
+  { value: "waterways", label: t`Creeks & rivers` },
+  { value: "both", label: t`Trails, creeks & rivers` },
 ];
 
 /** Shown until the first point lands. Differs only by how each medium presses. */
 export const MAP_MEASURE_START_NOTE: Record<ContractPlatform, string> = {
-  web: "Click the map to measure",
-  gps: "Tap the map to measure",
+  web: t`Click the map to measure`,
+  gps: t`Tap the map to measure`,
 };
 
 type MeasureVerbDeclaration = {
@@ -71,17 +72,16 @@ type MeasureVerbDeclaration = {
 
 /** In the order each client draws them. */
 export const MAP_MEASURE_VERBS = [
-  { id: "undo", icon: "undo", label: "Undo the last change" },
+  { id: "undo", icon: "undo", label: t`Undo the last change` },
   // Empties the points and stays in the tool; undoable. The trash glyph means
   // this and only this on both clients.
-  { id: "clear", icon: "delete", label: "Clear all points" },
+  { id: "clear", icon: "delete", label: t`Clear all points` },
   {
     id: "leave",
     icon: "close",
-    label: "Close the tool",
+    label: t`Close the tool`,
     on: "gps",
-    reason:
-      "Logjam Web's tool is a page in the panel, and a page is left by the × its hero draws.",
+    reason: t`Logjam Web's tool is a page in the panel, and a page is left by the × its hero draws.`,
   },
 ] as const satisfies readonly MeasureVerbDeclaration[];
 
@@ -106,7 +106,7 @@ export function mapMeasureVerbs(platform: ContractPlatform): MapMeasureVerb[] {
 
 /** "1 point", "3 points": the user's own presses, never snapped filler. */
 export function mapMeasurePointsLabel(anchorCount: number): string {
-  return `${anchorCount} point${anchorCount === 1 ? "" : "s"}`;
+  return plural(anchorCount, "# point", "# points");
 }
 
 /** What the terrain under the line said, as either client's profile holds it. */

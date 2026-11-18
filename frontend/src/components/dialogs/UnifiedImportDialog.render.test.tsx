@@ -244,6 +244,22 @@ describe("UnifiedImportDialog, confirm step", () => {
   });
 });
 
+describe("UnifiedImportDialog, the Merge settings row", () => {
+  // Mutation: write the first form of that plural in UnifiedImportDialog.tsx
+  // as "# fields" again.
+  it("says '1 of 1 field' for a type with one mergeable field", async () => {
+    render(dialog(user({ importMergePolicy: { notes: "useIncoming" } })));
+    await loadCsv(
+      "name,latitude,longitude\nTest Alpha Gorge,-33.7401,150.3102\n",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    await screen.findByText(/ready to import/);
+    const text = document.querySelector("dialog")!.textContent!;
+    expect(text).toContain("Uses the value from your file for 1 of 1 field");
+    expect(text).not.toContain("1 of 1 fields");
+  });
+});
+
 // The columns a Canyon list maps onto are the definitions of the Canyon type
 // as the server sends them: the French three and the ACA four.
 const BUILT_IN = SYSTEM_FIELD_DEFS.map((def) => ({

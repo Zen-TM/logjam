@@ -7,6 +7,7 @@
 // gloves, and the count in its label is the confirmation that the tap landed.
 import { useState, useSyncExternalStore } from "react";
 
+import { t } from "@logjam/shared";
 import { Button } from "../ui";
 import {
   markSensorLog,
@@ -25,7 +26,7 @@ export function SensorMarkButton({ trackId }: { trackId: string }) {
   if (!running) return null;
   return (
     <Button
-      label={count === 0 ? "Mark" : `Mark (${count})`}
+      label={count === 0 ? t`Mark` : t`Mark (${count})`}
       icon="flag"
       onPress={() => {
         const n = markSensorLog(trackId);

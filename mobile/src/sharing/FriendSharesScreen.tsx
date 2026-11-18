@@ -57,7 +57,7 @@ import {
   friendShareVerb,
   messageFromError,
   removeRowSubtitle,
-  SHARE_KIND_LABEL,
+  type BulkShareItemType,
   type FriendShareCard,
   type FriendShareDirection,
   type FriendShareRow,
@@ -65,6 +65,8 @@ import {
   type IconIdea,
   type SectionKeysOn,
   friendSeesUnit,
+  shareKindLabel,
+  t,
 } from "@logjam/shared";
 
 import { getFriendShares, unshareWithFriend } from "../api/friends";
@@ -268,7 +270,7 @@ export function FriendSharesScreen({
       const ok = await confirm({
         confirmTitle: ask.title,
         confirmBody: ask.body,
-        confirmLabel: "Stop sharing",
+        confirmLabel: t`Stop sharing`,
         tone: "destructive",
       });
       if (!ok) return;
@@ -384,7 +386,7 @@ export function FriendSharesScreen({
       const ok = await confirm({
         confirmTitle: ask.title,
         confirmBody: ask.body,
-        confirmLabel: "Remove",
+        confirmLabel: t`Remove`,
         tone: "filled",
       });
       if (!ok) return;
@@ -488,12 +490,12 @@ export function FriendSharesScreen({
               ) : copyable.length > 0 ? (
                 <IconButton
                   icon="copy"
-                  accessibilityLabel={`Save a copy of ${copyable.length} selected items`}
+                  accessibilityLabel={t`Save a copy of ${copyable.length} selected items`}
                   color={online ? theme.accent : theme.textMuted}
                   onPress={() =>
                     online
                       ? requestCopy(copyable, "copy")
-                      : notify("Saving a copy needs a connection.", "error")
+                      : notify(t`Saving a copy needs a connection.`, "error")
                   }
                 />
               ) : null
@@ -511,7 +513,7 @@ export function FriendSharesScreen({
             }
             onDelete={() => {
               if (!online) {
-                notify("Changing sharing needs a connection.", "error");
+                notify(t`Changing sharing needs a connection.`, "error");
                 return;
               }
               if (direction === "theySee") {
@@ -520,7 +522,7 @@ export function FriendSharesScreen({
               }
               if (removable.length === 0) {
                 notify(
-                  "Nothing in this selection can be removed here.",
+                  t`Nothing in this selection can be removed here.`,
                   "error",
                 );
                 return;
@@ -705,7 +707,7 @@ function ShareCardRow({
         ) : (
           <IconButton
             icon="overflow"
-            accessibilityLabel="What can I do with this?"
+            accessibilityLabel={t`What can I do with this?`}
             onPress={() => onOpen(card)}
           />
         )
@@ -740,11 +742,12 @@ function ShareCardMenu({
   const theme = useTheme();
   const styles = useStyles();
 
-  const kind = SHARE_KIND_LABEL[card.row.entityType];
+  const kind = shareKindLabel(card.row.entityType);
+
   // Dimmed with the reason, never hidden: sharing is the one thing on this
   // screen that needs the network, so it is the row a user would go looking
   // for and not find (DESIGN.md, `useShareRowProps`'s rule).
-  const offline = { disabled: true, subtitle: "Needs a connection" } as const;
+  const offline = { disabled: true, subtitle: t`Needs a connection` } as const;
   const live = { disabled: busy };
   return (
     <View style={styles.menuBody}>
@@ -762,7 +765,9 @@ function ShareCardMenu({
           hue={theme.warning}
           title={friendShareVerb("unshare").label}
           subtitle={
-            online ? `${username} stops seeing this ${kind}.` : undefined
+            online
+              ? stopsSeeingSubtitle(card.row.entityType, username)
+              : undefined
           }
           {...(online ? live : offline)}
           onPress={() => onUnshare(card)}
@@ -776,8 +781,8 @@ function ShareCardMenu({
           subtitle={
             online
               ? card.row.entityType === "place"
-                ? "Copies it into your own places, with its route. Yours to edit."
-                : "Copies it into your own routes, unlinked. Yours to edit."
+                ? t`Copies it into your own places, with its route. Yours to edit.`
+                : t`Copies it into your own routes, unlinked. Yours to edit.`
               : undefined
           }
           {...(online ? live : offline)}
@@ -804,7 +809,7 @@ function ShareCardMenu({
           title={friendShareVerb("copyAndRemove").label}
           subtitle={
             online
-              ? `Keeps a copy of your own, then stops ${username} sharing this one with you.`
+              ? t`Keeps a copy of your own, then stops ${username} sharing this one with you.`
               : undefined
           }
           subtitleNumberOfLines={2}
@@ -837,6 +842,20 @@ function ShareCardMenu({
       ) : null}
     </View>
   );
+}
+
+function stopsSeeingSubtitle(
+  entityType: BulkShareItemType,
+  username: string,
+): string {
+  switch (entityType) {
+    case "place":
+      return t`${username} stops seeing this place.`;
+    case "route":
+      return t`${username} stops seeing this route.`;
+    case "topoJob":
+      return t`${username} stops seeing this sharpened area.`;
+  }
 }
 
 const useStyles = makeStyles((theme, textRole) => ({

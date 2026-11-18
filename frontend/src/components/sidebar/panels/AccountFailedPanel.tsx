@@ -1,8 +1,9 @@
 import { ErrorState, Hero } from "../../../ui";
 import { PANEL_TITLES, type PanelId } from "../panels";
+import { t } from "@logjam/shared";
 
 // Our words: the server's ("User not found") says nothing a user can act on.
-const ACCOUNT_LOAD_FAILED = "Couldn't load your account.";
+const ACCOUNT_LOAD_FAILED = t`Couldn't load your account.`;
 
 export default function AccountFailedPanel({
   panel,

@@ -14,7 +14,7 @@
 //               of the time, and a repeated word down a list stops being read
 //               while eating the width the title needs (shared/DESIGN.md §11).
 
-import { incomingLabel } from "@logjam/shared";
+import { incomingLabel, plural } from "@logjam/shared";
 
 export type ShareMark = {
   /** Trailing pill for a row shared WITH the viewer. Absent on owned rows. */
@@ -61,5 +61,5 @@ export function shareMark(input: {
 
 /** Screen-reader text for the fan-out glyph. */
 export function sharedWithLabel(count: number): string {
-  return `Shared with ${count} ${count === 1 ? "person" : "people"}`;
+  return plural(count, "Shared with # person", "Shared with # people");
 }

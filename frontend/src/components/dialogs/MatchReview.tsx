@@ -5,9 +5,10 @@
 // live in the card rather than in a dialog raised from it. They are native
 // radios in a real `radiogroup` labelled by the incoming name so a screen
 // reader announces which place each option refers to.
-import { formatDistanceM } from "@logjam/shared";
+import { formatDistanceM, rich, t } from "@logjam/shared";
 import { useId } from "react";
 import { Button, StatusPill } from "../../ui";
+import { Rich } from "../../ui/rich";
 import classes from "./MatchReview.module.css";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -106,23 +107,25 @@ function MatchReview({
       {(hasAnyGuess || hasAnyNoPlace || hasAnySkip) && (
         <div className={classes.bulkActions}>
           {hasAnyGuess && (
-            <Button variant="outline" compact onClick={handleAcceptAllGuesses}>
-              Accept all guesses
-            </Button>
+            <Button
+              variant="outline"
+              compact
+              onClick={handleAcceptAllGuesses}
+            >{t`Accept all guesses`}</Button>
           )}
           {hasAnyNoPlace && (
             <Button
               variant="plain"
               compact
               onClick={handleSetAllRemainingNoPlace}
-            >
-              Set all remaining to No place
-            </Button>
+            >{t`Set all remaining to No place`}</Button>
           )}
           {hasAnySkip && (
-            <Button variant="plain" compact onClick={handleDiscardAllRemaining}>
-              Discard all remaining
-            </Button>
+            <Button
+              variant="plain"
+              compact
+              onClick={handleDiscardAllRemaining}
+            >{t`Discard all remaining`}</Button>
           )}
         </div>
       )}
@@ -161,14 +164,17 @@ function MatchReview({
                       }
                     />
                     <span className={classes.optionLabel}>
-                      Link to <strong>{option.label}</strong>
+                      <Rich
+                        parts={rich`Link to <strong>${option.label}</strong>`}
+                        tags={{ strong: (text) => <strong>{text}</strong> }}
+                      />
                     </span>
                     {option.distanceMeters !== undefined && (
                       <span className={classes.optionMeta}>
                         {formatDistanceM(option.distanceMeters)}
                       </span>
                     )}
-                    {option.isGuess && <StatusPill label="best guess" />}
+                    {option.isGuess && <StatusPill label={t`best guess`} />}
                   </label>
                 );
               })}
@@ -186,9 +192,9 @@ function MatchReview({
                     checked={item.decision.kind === "create"}
                     onChange={() => onChange(index, { kind: "create" })}
                   />
-                  <span className={classes.optionLabel}>
-                    Create as new place
-                  </span>
+                  <span
+                    className={classes.optionLabel}
+                  >{t`Create as new place`}</span>
                 </label>
               )}
 
@@ -205,7 +211,7 @@ function MatchReview({
                     checked={item.decision.kind === "noPlace"}
                     onChange={() => onChange(index, { kind: "noPlace" })}
                   />
-                  <span className={classes.optionLabel}>No place</span>
+                  <span className={classes.optionLabel}>{t`No place`}</span>
                 </label>
               )}
 
@@ -222,7 +228,7 @@ function MatchReview({
                     checked={item.decision.kind === "skip"}
                     onChange={() => onChange(index, { kind: "skip" })}
                   />
-                  <span className={classes.optionLabel}>Discard</span>
+                  <span className={classes.optionLabel}>{t`Discard`}</span>
                 </label>
               )}
             </div>

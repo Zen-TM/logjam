@@ -32,17 +32,30 @@ export function regionNameFromSurvey(survey: string): string {
 }
 
 import { say, type UserSentence } from "./userSentence.js";
+import { t } from "./i18n.js";
 
 // Said before anyone knows where the ZIP's ground is, so no sentence here
 // names a region or the portal a survey came from (elvisZip.test.ts, "names no
 // region and no portal").
-const NOT_A_ZIP = say`That file isn't a ZIP. Choose the ZIP with the LiDAR data in it.`;
-const TRUNCATED = say`Logjam couldn't read that ZIP. It may be damaged, so download it again.`;
-const TOO_MANY_FILES = say`That ZIP lists more files than Logjam can check. Choose a smaller area.`;
-const UNSAFE_PATH = say`That ZIP has a file path Logjam won't open. Download it again.`;
-const NO_USABLE_FILES = say`That ZIP has no point clouds or elevation rasters in it.`;
+function notAZip(): UserSentence {
+  return say`That file isn't a ZIP. Choose the ZIP with the LiDAR data in it.`;
+}
+function truncatedZip(): UserSentence {
+  return say`Logjam couldn't read that ZIP. It may be damaged, so download it again.`;
+}
+function tooManyFiles(): UserSentence {
+  return say`That ZIP lists more files than Logjam can check. Choose a smaller area.`;
+}
+function unsafePath(): UserSentence {
+  return say`That ZIP has a file path Logjam won't open. Download it again.`;
+}
+function noUsableFiles(): UserSentence {
+  return say`That ZIP has no point clouds or elevation rasters in it.`;
+}
 /** topo/sharpen.py's ONLY_5M, word for word (elvisZip.test.ts holds them equal). */
-const ONLY_5M = say`This ZIP holds only DEMs too coarse to sharpen an area. Choose a 1 m or 2 m DEM, or the point clouds.`;
+function only5mDems(): UserSentence {
+  return say`This ZIP holds only DEMs too coarse to sharpen an area. Choose a 1 m or 2 m DEM, or the point clouds.`;
+}
 /**
  * The coarsest DEM cell a sharpened job uses as ground (sharpen.py
  * `zoom_for_cell`; elvisZip.test.ts holds them equal).
@@ -63,7 +76,7 @@ export class ElvisZipError extends Error {
 
 /** The error for a ZIP that cannot be read as it stands, for a caller whose read came back wrong. */
 export function truncatedZipError(): ElvisZipError {
-  return new ElvisZipError("TRUNCATED", TRUNCATED);
+  return new ElvisZipError("TRUNCATED", truncatedZip());
 }
 
 export interface ZipEntry {
@@ -147,7 +160,7 @@ interface ZipDirectoryLocation {
 /** A 64-bit little-endian field as a number; a value past 2^53 is not a real ZIP. */
 function readUint64(view: DataView, pos: number): number {
   const high = view.getUint32(pos + 4, true);
-  if (high > 0x1fffff) throw new ElvisZipError("TRUNCATED", TRUNCATED);
+  if (high > 0x1fffff) throw new ElvisZipError("TRUNCATED", truncatedZip());
   return high * 2 ** 32 + view.getUint32(pos, true);
 }
 
@@ -165,7 +178,7 @@ function locateZipCentralDirectory(
   totalFileSize: number,
 ): ZipDirectoryLocation {
   if (tailBytes.length < EOCD_BYTES) {
-    throw new ElvisZipError("NOT_A_ZIP", NOT_A_ZIP);
+    throw new ElvisZipError("NOT_A_ZIP", notAZip());
   }
 
   // Search backward for EOCD signature — handles zip comments up to tail length
@@ -182,7 +195,7 @@ function locateZipCentralDirectory(
     }
   }
   if (eocdPos === -1) {
-    throw new ElvisZipError("NOT_A_ZIP", NOT_A_ZIP);
+    throw new ElvisZipError("NOT_A_ZIP", notAZip());
   }
 
   let count = view.getUint16(eocdPos + 10, true);
@@ -207,7 +220,7 @@ function locateZipCentralDirectory(
       view.getUint32(locatorPos + 4, true) !== 0 ||
       view.getUint32(locatorPos + 16, true) > 1
     ) {
-      throw new ElvisZipError("TRUNCATED", TRUNCATED);
+      throw new ElvisZipError("TRUNCATED", truncatedZip());
     }
     // The Zip64 end record must sit directly before its locator. Some Pythons
     // read it at that fixed spot and others at the locator's stored offset, so
@@ -220,7 +233,7 @@ function locateZipCentralDirectory(
       recordPos + ZIP64_EOCD_BYTES !== locatorPos ||
       view.getUint32(recordPos, true) !== ZIP64_EOCD_SIGNATURE
     ) {
-      throw new ElvisZipError("TRUNCATED", TRUNCATED);
+      throw new ElvisZipError("TRUNCATED", truncatedZip());
     }
     endStart = tailStart + recordPos;
     count = readUint64(view, recordPos + 32);
@@ -229,7 +242,7 @@ function locateZipCentralDirectory(
   }
 
   if (offset + size !== endStart) {
-    throw new ElvisZipError("TRUNCATED", TRUNCATED);
+    throw new ElvisZipError("TRUNCATED", truncatedZip());
   }
   return { offset, size, count };
 }
@@ -257,7 +270,7 @@ function parseDirectoryEntries(
       pos + CENTRAL_ENTRY_BYTES > directory.length ||
       view.getUint32(pos, true) !== CENTRAL_ENTRY_SIGNATURE
     ) {
-      throw new ElvisZipError("TRUNCATED", TRUNCATED);
+      throw new ElvisZipError("TRUNCATED", truncatedZip());
     }
 
     let compressedSize = view.getUint32(pos + 20, true);
@@ -268,7 +281,7 @@ function parseDirectoryEntries(
     const nameEnd = pos + CENTRAL_ENTRY_BYTES + nameLen;
     const entryEnd = nameEnd + extraLen + commentLen;
     if (entryEnd > directory.length) {
-      throw new ElvisZipError("TRUNCATED", TRUNCATED);
+      throw new ElvisZipError("TRUNCATED", truncatedZip());
     }
 
     if (uncompressedSize === SATURATED_32 || compressedSize === SATURATED_32) {
@@ -279,12 +292,12 @@ function parseDirectoryEntries(
         const length = view.getUint16(x + 2, true);
         const data = x + 4;
         x = data + length;
-        if (x > extraEnd) throw new ElvisZipError("TRUNCATED", TRUNCATED);
+        if (x > extraEnd) throw new ElvisZipError("TRUNCATED", truncatedZip());
         if (id !== ZIP64_EXTRA_ID) continue;
         let at = data;
         const take = () => {
           if (at + 8 > data + length) {
-            throw new ElvisZipError("TRUNCATED", TRUNCATED);
+            throw new ElvisZipError("TRUNCATED", truncatedZip());
           }
           at += 8;
           return readUint64(view, at - 8);
@@ -294,7 +307,7 @@ function parseDirectoryEntries(
         found = true;
         break;
       }
-      if (!found) throw new ElvisZipError("TRUNCATED", TRUNCATED);
+      if (!found) throw new ElvisZipError("TRUNCATED", truncatedZip());
     }
 
     const filename = dec.decode(
@@ -313,7 +326,7 @@ function parseDirectoryEntries(
     pos + 4 <= directory.length &&
     view.getUint32(pos, true) === CENTRAL_ENTRY_SIGNATURE
   ) {
-    throw new ElvisZipError("TRUNCATED", TRUNCATED);
+    throw new ElvisZipError("TRUNCATED", truncatedZip());
   }
 
   return entries;
@@ -330,12 +343,12 @@ export async function readZipEntries(
   readRange: (start: number, end: number) => Promise<Uint8Array>,
 ): Promise<ZipEntry[]> {
   if (totalFileSize < EOCD_BYTES) {
-    throw new ElvisZipError("NOT_A_ZIP", NOT_A_ZIP);
+    throw new ElvisZipError("NOT_A_ZIP", notAZip());
   }
   const read = async (start: number, end: number) => {
     const bytes = await readRange(start, end);
     if (bytes.length !== end - start) {
-      throw new ElvisZipError("TRUNCATED", TRUNCATED);
+      throw new ElvisZipError("TRUNCATED", truncatedZip());
     }
     return bytes;
   };
@@ -353,7 +366,7 @@ export async function readZipEntries(
   // The directory ends inside the tail, so one that starts before it has size
   // above 0: this is never a range with end <= start.
   if (size > MAX_ZIP_DIRECTORY_BYTES) {
-    throw new ElvisZipError("TOO_MANY_FILES", TOO_MANY_FILES);
+    throw new ElvisZipError("TOO_MANY_FILES", tooManyFiles());
   }
   return parseDirectoryEntries(await read(offset, offset + size), count);
 }
@@ -386,7 +399,7 @@ export function classifyElvisEntries(entries: ZipEntry[]): ElvisStats {
 
   for (const entry of entries) {
     if (isUnsafeZipEntryName(entry.filename)) {
-      throw new ElvisZipError("UNSAFE_PATH", UNSAFE_PATH);
+      throw new ElvisZipError("UNSAFE_PATH", unsafePath());
     }
     uncompressedBytes += entry.uncompressedSize;
     compressedBytes += entry.compressedSize;
@@ -441,10 +454,10 @@ export function classifyElvisEntries(entries: ZipEntry[]): ElvisStats {
     throw new ElvisZipError(
       "NO_USABLE_FILES",
       derivativeTifCount === 0
-        ? NO_USABLE_FILES
+        ? noUsableFiles()
         : derivativeTifCount === 1
-          ? say`${NO_USABLE_FILES} It has 1 derivative raster, such as a hillshade, which Logjam can't use.`
-          : say`${NO_USABLE_FILES} It has ${derivativeTifCount} derivative rasters, such as hillshades, which Logjam can't use.`,
+          ? say`${noUsableFiles()} It has 1 derivative raster, such as a hillshade, which Logjam can't use.`
+          : say`${noUsableFiles()} It has ${derivativeTifCount} derivative rasters, such as hillshades, which Logjam can't use.`,
     );
   }
 
@@ -453,14 +466,14 @@ export function classifyElvisEntries(entries: ZipEntry[]): ElvisStats {
   // an area from (topo/sharpen.py `dem_plan`). Said before the upload, as the
   // worker would.
   if (lazCount === 0 && !groundDem) {
-    throw new ElvisZipError("ONLY_5M", ONLY_5M);
+    throw new ElvisZipError("ONLY_5M", only5mDems());
   }
 
   const mode: ElvisStats["mode"] = lazCount > 0 ? "LAZ_ONLY" : "DEM_ONLY";
   // Vegetation is the form's own choice, so the label says only the ground.
   const modeLabel = groundDem
-    ? "Ground from the DEM"
-    : "Ground from the point clouds";
+    ? t`Ground from the DEM`
+    : t`Ground from the point clouds`;
 
   // Fall back to file count if no tile IDs parsed
   const tileCount = tileIds.size > 0 ? tileIds.size : lazCount + demCount;

@@ -43,6 +43,7 @@ import {
   routesMatching,
   TRIP_FORM,
   wayFailureMessage,
+  t,
 } from "@logjam/shared";
 
 import { spacing, makeStyles, useTheme, useHues, muted } from "../theme";
@@ -351,7 +352,7 @@ export function AddWaySheet({
         void job()
           .catch((err: unknown) => {
             console.error(err);
-            onError("Couldn't finish that. Try again.");
+            onError(t`Couldn't finish that. Try again.`);
           })
           .finally(() => onClosed?.());
       }}
@@ -529,7 +530,9 @@ export function AddWaySheet({
           ) : (
             <>
               {convertibleTracks.length > 0 ? (
-                <SectionHeader title={`${convertibleTracks.length} finished`} />
+                <SectionHeader
+                  title={t`${convertibleTracks.length} finished`}
+                />
               ) : null}
               {convertibleTracks.map((track) => (
                 <Row
@@ -551,7 +554,7 @@ export function AddWaySheet({
                             // RDP always throws points away; saying how many
                             // survived is what stops the user concluding Logjam
                             // GPS lost their recording.
-                            return `Saved “${name}” — ${pointCount} points — as this place's route.`;
+                            return t`Saved “${name}” — ${pointCount} points — as this place's route.`;
                           },
                     )
                   }
@@ -559,7 +562,7 @@ export function AddWaySheet({
               ))}
               {forTrip && otherDeviceTracks.length > 0 ? (
                 <>
-                  <SectionHeader title="From your other devices" />
+                  <SectionHeader title={t`From your other devices`} />
                   {otherDeviceTracks.map((file) => (
                     <Row
                       key={file.id}
@@ -568,7 +571,7 @@ export function AddWaySheet({
                       title={mediaDisplayName(file)}
                       subtitle={
                         file.localDisplayPath === null
-                          ? "Needs a connection to copy"
+                          ? t`Needs a connection to copy`
                           : undefined
                       }
                       disabled={busy}

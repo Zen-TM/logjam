@@ -1,3 +1,4 @@
+import { t } from "@logjam/shared";
 import { Pressable, StyleSheet } from "react-native";
 
 import {
@@ -53,7 +54,7 @@ export function IconButton({
       // Not `disabled` in the state: TalkBack may then refuse the double-tap
       // that asks why, so the hint says it is unavailable instead.
       accessibilityHint={
-        disabled ? `Unavailable. ${disabledReason}` : undefined
+        disabled ? `${t`Unavailable.`} ${disabledReason}` : undefined
       }
       // Stays pressable, and says why (shared/DESIGN.md §5).
       onPress={

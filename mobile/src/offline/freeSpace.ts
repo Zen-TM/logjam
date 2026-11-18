@@ -10,6 +10,7 @@
 //
 // PRIVACY: byte counts about this handset. Nothing here names a file.
 import * as FileSystem from "expo-file-system/legacy";
+import { t } from "@logjam/shared";
 
 /**
  * Headroom the write must leave. A phone at literally zero free bytes cannot
@@ -33,7 +34,7 @@ export function notEnoughSpaceMessage(
 ): string {
   const mb = (bytes: number) =>
     `${Math.max(1, Math.round(bytes / 1024 / 1024))} MB`;
-  return `Needs about ${mb(neededBytes)}; the phone has ${mb(freeBytes)} free. Free some space and try again.`;
+  return t`Needs about ${mb(neededBytes)}; the phone has ${mb(freeBytes)} free. Free some space and try again.`;
 }
 
 export class NotEnoughSpaceError extends Error {

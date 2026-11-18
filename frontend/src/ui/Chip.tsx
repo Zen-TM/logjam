@@ -15,7 +15,7 @@ import {
 import { nextEnabledIndex } from "./rovingFocus";
 import classes from "./Chip.module.css";
 import { Icon, type Glyph } from "./Icon";
-import { chipFill } from "@logjam/shared";
+import { chipFill, t } from "@logjam/shared";
 import { useSchemeTokens } from "../themePreferences";
 
 /** A `var(--hue-x)` hue as the hex it names (they sit on `:root`, whatever the
@@ -118,7 +118,7 @@ export function ChipPicker({
   selected,
   onToggle,
   onAdd,
-  addLabel = "Add",
+  addLabel = t`Add`,
   lockedValues,
   primaryValue,
   hint,
@@ -182,7 +182,7 @@ export function ChipPicker({
             starred={option.value === primaryValue}
             aria-label={
               option.value === primaryValue
-                ? `${option.label}, starred`
+                ? t`${option.label}, starred`
                 : undefined
             }
             onClick={() => onToggle(option.value)}

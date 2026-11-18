@@ -1,4 +1,5 @@
 import type { ConfirmCopy } from "@logjam/shared";
+import { t } from "@logjam/shared";
 
 type Pending = {
   copy: ConfirmCopy;
@@ -30,7 +31,7 @@ export function confirm(
   return new Promise((resolve) => {
     queue.push({
       copy,
-      cancelLabel: options?.cancelLabel ?? "Cancel",
+      cancelLabel: options?.cancelLabel ?? t`Cancel`,
       resolve,
     });
     emit();

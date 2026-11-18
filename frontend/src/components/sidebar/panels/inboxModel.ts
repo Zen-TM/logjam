@@ -5,6 +5,7 @@ import {
   notificationWayTarget,
   type NotificationPlanTarget,
   type TNotification,
+  t,
 } from "@logjam/shared";
 import type { PanelId } from "../panels";
 
@@ -26,7 +27,7 @@ export type InboxDestination =
   /** Layers → Terrain → Sharpened areas, over the map. */
   | { kind: "sharpened"; label: string };
 
-const SHARPENED: InboxDestination = { kind: "sharpened", label: "Show" };
+const SHARPENED: InboxDestination = { kind: "sharpened", label: t`Show` };
 
 export function inboxDestination(n: TNotification): InboxDestination | null {
   const placeId = notificationPlaceId(n);
@@ -40,12 +41,12 @@ export function inboxDestination(n: TNotification): InboxDestination | null {
       target: plan,
     };
   const routeId = notificationWayTarget(n);
-  if (routeId) return { kind: "way", label: "View in Ways", routeId };
+  if (routeId) return { kind: "way", label: t`View in Ways`, routeId };
   const failed = n.payload.status === "failed";
   switch (n.type) {
     case "friend_request":
     case "friend_request_accepted":
-      return { kind: "page", label: "View in Friends", panel: "friends" };
+      return { kind: "page", label: t`View in Friends`, panel: "friends" };
     case "topo_complete":
       return failed ? null : SHARPENED;
     case "topo_export_complete":

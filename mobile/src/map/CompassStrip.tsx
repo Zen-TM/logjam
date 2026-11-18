@@ -25,7 +25,7 @@
 // carries a single "M", because a tape that silently reads 12° low is worth
 // declaring.
 import { StyleSheet, Text, useWindowDimensions, View } from "react-native";
-import { compassPointFor } from "@logjam/shared";
+import { compassPointFor, t } from "@logjam/shared";
 
 import {
   radius,
@@ -101,7 +101,11 @@ export function CompassStrip({
       style={[styles.frame, { width, height: stripHeight(fontScale) }]}
       pointerEvents="none"
       accessibilityRole="image"
-      accessibilityLabel={`Facing ${compassPointFor(shown)}, ${rounded} degrees ${reference}`}
+      accessibilityLabel={
+        reference === "true"
+          ? t`Facing ${compassPointFor(shown)}, ${rounded} degrees true`
+          : t`Facing ${compassPointFor(shown)}, ${rounded} degrees magnetic`
+      }
     >
       <View style={styles.tape}>
         {ticks.map((tick) => (
@@ -128,7 +132,7 @@ export function CompassStrip({
           on this screen is true north, so a tape quietly reading 12° lower is
           the one state worth spending eight pixels of map to declare. */}
       {reference === "magnetic" ? (
-        <Text style={styles.reference}>M</Text>
+        <Text style={styles.reference}>{t`M`}</Text>
       ) : null}
     </View>
   );

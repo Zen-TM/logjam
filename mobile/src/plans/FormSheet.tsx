@@ -31,7 +31,7 @@ import {
   tripPlanSeesAnswers,
   tripPlanVisibilityLine,
   TRIP_PLAN_FORMS,
-  TRIP_PLAN_VISIBILITY_CHANGED_SENTENCE,
+  tripPlanVisibilityChangedSentence,
   type SectionKeysOn,
   type TripPlanAnswerDraft,
   type TripPlanAnswers,
@@ -346,7 +346,7 @@ export function FormSheet({
           <View style={styles.footer}>
             {changed ? (
               <Text style={styles.changed}>
-                {TRIP_PLAN_VISIBILITY_CHANGED_SENTENCE}
+                {tripPlanVisibilityChangedSentence()}
               </Text>
             ) : null}
             {error ? <ErrorBanner message={error} /> : null}

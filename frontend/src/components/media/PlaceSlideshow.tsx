@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { mediaCategory, type MediaItem } from "@logjam/shared";
+import { mediaCategory, type MediaItem, t } from "@logjam/shared";
 import Lightbox from "./Lightbox";
 import { slideshowDots } from "./slideshowDots";
 import classes from "./PlaceSlideshow.module.css";
@@ -49,7 +49,11 @@ export default function PlaceSlideshow({
         <button
           className={classes.slide}
           onClick={() => setLightbox(current)}
-          aria-label={`${isVideo ? "Play video" : "View"} ${current.filename}`}
+          aria-label={
+            isVideo
+              ? t`Play video ${current.filename}`
+              : t`View ${current.filename}`
+          }
         >
           {slideSrc && !slideFailed ? (
             <img
@@ -77,14 +81,14 @@ export default function PlaceSlideshow({
             <button
               className={`${classes.arrow} ${classes.arrowLeft}`}
               onClick={() => step(-1)}
-              aria-label="Previous photo"
+              aria-label={t`Previous photo`}
             >
               <Icon idea="back" size={20} />
             </button>
             <button
               className={`${classes.arrow} ${classes.arrowRight}`}
               onClick={() => step(1)}
-              aria-label="Next photo"
+              aria-label={t`Next photo`}
             >
               <Icon idea="disclosure" size={20} />
             </button>
@@ -105,7 +109,7 @@ export default function PlaceSlideshow({
                 .filter(Boolean)
                 .join(" ")}
               onClick={() => setIndex(dot.index)}
-              aria-label={`Go to photo ${dot.index + 1}`}
+              aria-label={t`Go to photo ${dot.index + 1}`}
               aria-current={dot.index === safeIndex}
             />
           ))}
@@ -113,9 +117,11 @@ export default function PlaceSlideshow({
       )}
 
       {onDelete && (
-        <Button compact icon="delete" onClick={() => onDelete(current)}>
-          Delete this photo
-        </Button>
+        <Button
+          compact
+          icon="delete"
+          onClick={() => onDelete(current)}
+        >{t`Delete this photo`}</Button>
       )}
 
       {lightbox && (

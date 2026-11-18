@@ -26,6 +26,7 @@ import {
   sharePromise,
   type SharePromiseKind,
   type SectionKeysOn,
+  t,
 } from "@logjam/shared";
 import { useCallback, useEffect, useState } from "react";
 import { friendMatches } from "@logjam/shared";
@@ -96,7 +97,7 @@ function ShareDialog({
       .then(setShares)
       .catch((err) => {
         console.error(err);
-        toast.error(messageFromError(err, "Couldn't load shares."));
+        toast.error(messageFromError(err, t`Couldn't load shares.`));
       });
     // `listShares` is a fresh closure each render; depending on it would refetch
     // forever. Open/close is the real trigger.
@@ -126,7 +127,7 @@ function ShareDialog({
       refresh();
     } catch (err) {
       console.error(err);
-      toast.error(messageFromError(err, "Couldn't share. Please try again."));
+      toast.error(messageFromError(err, t`Couldn't share. Try again.`));
     } finally {
       setBusyId(null);
     }
@@ -142,9 +143,7 @@ function ShareDialog({
       refresh();
     } catch (err) {
       console.error(err);
-      toast.error(
-        messageFromError(err, "Couldn't remove share. Please try again."),
-      );
+      toast.error(messageFromError(err, t`Couldn't remove share. Try again.`));
     } finally {
       setBusyId(null);
     }
@@ -199,9 +198,9 @@ function ShareDialog({
                 trailing={
                   <IconButton
                     icon="unshare"
-                    label={`Stop sharing with ${row.sharedWith.username}`}
+                    label={t`Stop sharing with ${row.sharedWith.username}`}
                     disabled={busyId !== null}
-                    disabledReason="Working…"
+                    disabledReason={t`Working…`}
                     onClick={() => void handleUnshare(row)}
                   />
                 }
@@ -220,14 +219,16 @@ function ShareDialog({
           ) : shown.length === 0 ? (
             // A different dead end from the one above, and it backs out by
             // clearing the box rather than by adding a friend.
-            <p className={classes.note}>No friends match “{query.trim()}”.</p>
+            <p
+              className={classes.note}
+            >{t`No friends match “${query.trim()}”.`}</p>
           ) : (
             shown.map((friend) => (
               <Row
                 key={friend.id}
                 leading={<Avatar username={friend.username} />}
                 title={friend.username}
-                description="Press to share"
+                description={t`Press to share`}
                 onOpen={() => void handleShare(friend)}
                 disabled={busyId !== null}
                 trailing={
@@ -253,7 +254,7 @@ function ShareDialog({
       title={title}
       onClose={onClose}
       dismissible={busyId === null}
-      footer={<Button onClick={onClose}>Close</Button>}
+      footer={<Button onClick={onClose}>{t`Close`}</Button>}
     >
       {friends.length === 0 ? (
         <EmptyState

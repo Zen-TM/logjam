@@ -1,5 +1,6 @@
 import { INK } from "./designTokens.js";
 import { normalizeRegionIds } from "./regions.js";
+import { isLanguage, type Language, t } from "./i18n.js";
 import { isUnits, type Units } from "./units.js";
 import {
   parseSlopeBands,
@@ -134,6 +135,13 @@ export type UserUiPreferences = {
    */
   regions: string[];
   /**
+   * The language the account's client last ran in, written by that client when
+   * it differs from this. Only what a message sent while nobody is asking (a
+   * push title, a mail) reads; the setting itself is per device. Absent until a
+   * client writes one.
+   */
+  language?: Language;
+  /**
    * How distances and heights are written, when the user chose: absent until
    * then, when the home region's units apply (`unitsOf`, units.ts, which reads
    * it only while a choice is offered). Chosen in Settings once a region uses
@@ -202,8 +210,8 @@ export function schemeForOs(prefersDark: boolean): ThemeSchemeId {
 export const THEME_SCHEMES: Record<ThemeSchemeId, ThemeScheme> = {
   sandstone: {
     id: "sandstone",
-    name: "Sandstone",
-    description: "Warm weathered sandstone with iron-rich accents.",
+    name: t`Sandstone`,
+    description: t`Warm weathered sandstone with iron-rich accents.`,
     mode: "dark",
     tokens: {
       page: "#4E4944",
@@ -225,8 +233,8 @@ export const THEME_SCHEMES: Record<ThemeSchemeId, ThemeScheme> = {
   },
   basalt: {
     id: "basalt",
-    name: "Basalt",
-    description: "Cool plunge-water blues against dark gorge rock.",
+    name: t`Basalt`,
+    description: t`Cool plunge-water blues against dark gorge rock.`,
     mode: "dark",
     tokens: {
       page: "#26394B",
@@ -248,9 +256,8 @@ export const THEME_SCHEMES: Record<ThemeSchemeId, ThemeScheme> = {
   },
   scribblyGum: {
     id: "scribblyGum",
-    name: "Scribbly Gum",
-    description:
-      "Bushland greys with a hint of green, and fog-softened neutrals.",
+    name: t`Scribbly Gum`,
+    description: t`Bushland greys with a hint of green, and fog-softened neutrals.`,
     mode: "dark",
     tokens: {
       page: "#2D3E38",
@@ -276,9 +283,8 @@ export const THEME_SCHEMES: Record<ThemeSchemeId, ThemeScheme> = {
   // where they clear 4.5:1 under the dark `onFill` AND 3:1 on the pale page.
   ghostGum: {
     id: "ghostGum",
-    name: "Ghost Gum",
-    description:
-      "Pale smooth bark and grey-green leaves, for reading in full sun.",
+    name: t`Ghost Gum`,
+    description: t`Pale smooth bark and grey-green leaves, for reading in full sun.`,
     mode: "light",
     tokens: {
       page: "#ECEEE8",
@@ -444,6 +450,7 @@ export function normalizeUserUiPreferences(value: unknown): UserUiPreferences {
       regions: normalizeRegionIds(prefs.regions),
     };
     if (importMergePolicy) result.importMergePolicy = importMergePolicy;
+    if (isLanguage(prefs.language)) result.language = prefs.language;
     if (isUnits(prefs.units)) result.units = prefs.units;
     return result;
   }

@@ -1,3 +1,4 @@
+import { t } from "@logjam/shared";
 import { unavailableReasonText } from "../auth/capabilities";
 
 /**
@@ -8,10 +9,11 @@ export function coverageSubtitle(
   online: boolean,
   basemapName: string | undefined,
 ): string {
-  const missing = "No offline map for this area";
-  return online
-    ? basemapName
-      ? `${missing} · ${basemapName}`
-      : missing
-    : `${missing} · ${unavailableReasonText("needs-connection")}`;
+  if (!online) {
+    const reason = unavailableReasonText("needs-connection");
+    return t`No offline map for this area · ${reason}`;
+  }
+  return basemapName
+    ? t`No offline map for this area · ${basemapName}`
+    : t`No offline map for this area`;
 }

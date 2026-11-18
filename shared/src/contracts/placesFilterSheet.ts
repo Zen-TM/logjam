@@ -11,10 +11,11 @@ import { regionEdgesKm } from "../mapRegionEstimate.js";
 import { formatBoxSize } from "../units.js";
 import type { RegionBbox } from "../mapRegionEstimate.js";
 import type { ScreenContract } from "./types.js";
+import { t } from "../i18n.js";
 
 export const PLACES_FILTER_SHEET = {
   id: "places.filterSheet",
-  title: "Sort and filter",
+  title: t`Sort and filter`,
   sections: [
     // The options are `PLACE_SORT_OPTIONS`.
     { key: "sort" },
@@ -32,35 +33,36 @@ export const PLACES_FILTER_SHEET = {
     {
       key: "onMap",
       on: "gps",
-      reason:
-        "Logjam Web's list sits beside its map, which always draws what the list shows. On Logjam GPS the map is another tab, so narrowing it is a choice the user makes here and can see.",
+      reason: t`Logjam Web's list sits beside its map, which always draws what the list shows. On Logjam GPS the map is another tab, so narrowing it is a choice the user makes here and can see.`,
     },
   ],
   copy: {
     // A section's title is the copy under its own key.
-    sort: "Sort",
-    status: "Status",
-    attributes: "Attributes",
-    location: "Location",
-    source: "Source",
-    dates: "Dates",
-    onMap: "On the map",
+    sort: t`Sort`,
+    status: t`Status`,
+    attributes: t`Attributes`,
+    location: t`Location`,
+    source: t`Source`,
+    dates: t`Dates`,
+    onMap: t`On the map`,
 
-    allStatuses: "All",
-    includeMissing: "Include if not set",
-    includeMissingHint: "Also show ones with no value",
-    drawArea: "Draw on map",
+    allStatuses: t`All`,
+    // Each client's `switchCopy.test.ts` ("keeps to the limit") holds a switch's
+    // label and hint to `SWITCH_COPY_MAX`.
+    includeMissing: t`Include if not set`,
+    includeMissingHint: t`Also show ones with no value`,
+    drawArea: t`Draw on map`,
     /** Logjam Web only: the map is in view beside the sheet. */
-    areaToView: "This view",
-    clear: "Clear",
-    sharedByMe: "Shared by me",
-    added: "Added",
-    updated: "Updated",
-    dateFrom: "From",
-    dateTo: "To",
-    showOnMap: "Only filtered places",
-    reset: "Reset",
-    done: "Done",
+    areaToView: t`This view`,
+    clear: t`Clear`,
+    sharedByMe: t`Shared by me`,
+    added: t`Added`,
+    updated: t`Updated`,
+    dateFrom: t`From`,
+    dateTo: t`To`,
+    showOnMap: t`Only filtered places`,
+    reset: t`Reset`,
+    done: t`Done`,
   },
 } as const satisfies ScreenContract;
 
@@ -125,10 +127,10 @@ export function placesOnMapSummary(
   filteredCount: number,
   totalCount: number,
 ): string {
-  if (!enabled) return "The map shows every place";
+  if (!enabled) return t`The map shows every place`;
   // Nothing is being narrowed: say so rather than print a fraction that reads
   // as "one place is missing".
   return filteredCount >= totalCount
-    ? `All ${totalCount} places`
-    : `${filteredCount} of ${totalCount} places`;
+    ? t`All ${totalCount} places`
+    : t`${filteredCount} of ${totalCount} places`;
 }

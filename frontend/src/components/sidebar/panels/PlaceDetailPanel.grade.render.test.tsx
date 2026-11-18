@@ -163,8 +163,8 @@ describe("the place page's attribute table", () => {
 
   // A date-only value is UTC midnight; vitest.config.ts runs the suite in a
   // zone eleven hours behind UTC, where a local format shows the day before.
-  // Mutation: drop `timeZone: "UTC"` from formatCustomFieldValue in
-  // PlaceDetailPanel.tsx and this shows "13 March 2026".
+  // Mutation: read the date in formatCustomFieldValue (PlaceDetailPanel.tsx)
+  // with `localDay` for `utcDay` and this shows "13 March 2026".
   it("shows a date attribute as the day it was stored, in any zone", async () => {
     const lastTrip = {
       key: "last_trip",

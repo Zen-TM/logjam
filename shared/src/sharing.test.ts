@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
 import {
   BULK_SHARE_ITEM_TYPES,
@@ -6,8 +6,29 @@ import {
   isCopyableSharedRow,
   isSharableEntityType,
   removeShareConfirm,
+  removeSharedAreaConfirm,
+  shareKindLabel,
   sharedRowVisibility,
 } from "./sharing";
+
+describe("shareKindLabel", () => {
+  afterEach(() => {
+    delete (globalThis as { LOGJAM_LANGUAGE?: string }).LOGJAM_LANGUAGE;
+  });
+
+  // Mutation: make `topoJob` read "topo" again in `shareKindLabel`.
+  it("names each kind as the screens say it", () => {
+    expect(shareKindLabel("place")).toBe("place");
+    expect(shareKindLabel("route")).toBe("route");
+    expect(shareKindLabel("topoJob")).toBe("sharpened area");
+  });
+
+  // Mutation: write `shareKindLabel` as a constant object read at import.
+  it("follows the language in force when it is called", () => {
+    (globalThis as { LOGJAM_LANGUAGE?: string }).LOGJAM_LANGUAGE = "en-XA";
+    expect(shareKindLabel("topoJob")).toMatch(/^⟦.*⟧$/u);
+  });
+});
 
 // The rule these pin is the reason the helper exists: a row that is visible
 // BOTH ways must not offer a Remove, because revoking the direct share leaves
@@ -60,6 +81,18 @@ describe("removeShareConfirm", () => {
     expect(
       removeShareConfirm({ kindLabel: "waypoint", itemName: "Carpark" }).body,
     ).toContain("The owner keeps the original");
+  });
+});
+
+describe("removeSharedAreaConfirm", () => {
+  it("says what removeShareConfirm says of a sharpened area", () => {
+    const confirm = removeSharedAreaConfirm({ itemName: "Claustral" });
+    const same = removeShareConfirm({
+      kindLabel: "sharpened area",
+      itemName: "Claustral",
+    });
+    expect(confirm).toEqual(same);
+    expect(confirm.title).toBe("Remove shared sharpened area?");
   });
 });
 

@@ -1,5 +1,5 @@
 import type { TripLogCustomFieldType } from "@logjam/shared";
-import { CUSTOM_FIELD_TYPES } from "@logjam/shared";
+import { CUSTOM_FIELD_TYPES, t } from "@logjam/shared";
 import { sanitizeNumericInput } from "../../numberInput";
 import {
   Button,
@@ -105,16 +105,16 @@ function AddCustomFieldForm({
 
   return (
     <div className={asDialogBody ? classes.dialogBody : classes.addFieldForm}>
-      {!asDialogBody && <SectionHeader title="New attribute" />}
+      {!asDialogBody && <SectionHeader title={t`New attribute`} />}
       {/* WHAT it is, then WHERE it appears: the name is the decision being
           made, and a list of types above an empty label field asks the second
           question first. */}
       <TextField
-        label="Label"
+        label={t`Label`}
         value={label}
         onChange={(event) => onLabelChange(event.target.value)}
         onKeyDown={handleFieldKeyDown}
-        placeholder="e.g. Group size"
+        placeholder={t`e.g. Group size`}
         data-autofocus={asDialogBody || undefined}
       />
       {typeLocked ? (
@@ -122,17 +122,17 @@ function AddCustomFieldForm({
            FACT about an attribute that already has answers stored in its
            shape, so it reads as one — the same call the built-in rows make. */
         <div className={classes.staticField}>
-          <span className={classes.groupLabel}>Type</span>
+          <span className={classes.groupLabel}>{t`Type`}</span>
           <span>{customFieldTypeName(type)}</span>
-          <p className={classes.note}>
-            You can't change an attribute's type after it's been created.
-          </p>
+          <p
+            className={classes.note}
+          >{t`You can't change an attribute's type after it's been created.`}</p>
         </div>
       ) : (
         <div className={classes.typeField}>
-          <span className={classes.groupLabel}>Type</span>
+          <span className={classes.groupLabel}>{t`Type`}</span>
           <ChipRail
-            label="Type"
+            label={t`Type`}
             options={CUSTOM_FIELD_TYPES.map((option) => ({
               value: option.value,
               label: option.label,
@@ -145,12 +145,12 @@ function AddCustomFieldForm({
       {showBounds && (
         <div className={classes.boundsRow}>
           <Checkbox
-            label="Bounded"
+            label={t`Bounded`}
             checked={bounds.bounded}
             onChange={bounds.onBoundedChange}
           />
           <TextField
-            label="Min"
+            label={t`Min`}
             className={classes.grow}
             value={bounds.min}
             onChange={(event) =>
@@ -166,7 +166,7 @@ function AddCustomFieldForm({
             inputMode={type === "integer" ? "numeric" : "decimal"}
           />
           <TextField
-            label="Max"
+            label={t`Max`}
             className={classes.grow}
             value={bounds.max}
             onChange={(event) =>
@@ -186,12 +186,12 @@ function AddCustomFieldForm({
       {scope && (
         <div
           role="group"
-          aria-label="Where it appears"
+          aria-label={t`Where it appears`}
           className={classes.scope}
         >
-          <span className={classes.groupLabel}>Where it appears</span>
+          <span className={classes.groupLabel}>{t`Where it appears`}</span>
           <Checkbox
-            label="All types, including ones I add later"
+            label={t`All types, including ones I add later`}
             checked={scope.appliesToAllTypes}
             onChange={scope.onAppliesToAllTypesChange}
           />
@@ -221,13 +221,14 @@ function AddCustomFieldForm({
             compact
             onClick={onCancel}
             disabled={adding}
-            disabledReason="Adding…"
-          >
-            Cancel
-          </Button>
-          <Button compact variant="filled" busy={adding} onClick={onAdd}>
-            Add attribute
-          </Button>
+            disabledReason={t`Adding…`}
+          >{t`Cancel`}</Button>
+          <Button
+            compact
+            variant="filled"
+            busy={adding}
+            onClick={onAdd}
+          >{t`Add attribute`}</Button>
         </div>
       )}
     </div>

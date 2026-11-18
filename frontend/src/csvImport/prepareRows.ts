@@ -9,6 +9,7 @@ import {
   coerceFieldValueStrict,
   fieldValueOfLabel,
   systemFieldDef,
+  plural,
   t,
   type MatchResult,
   type TripLogCustomFieldDef,
@@ -19,7 +20,16 @@ import { ROLE_LABELS, GRADE_RANGES, type PlaceFieldRole } from "./placeColumns";
 import type { ColumnRole } from "./detectColumns";
 import { toIsoDate, type DateFormat } from "./detectDateFormat";
 import { parseByRole, type MismatchKind } from "./placeValueParsers";
-import { describeDroppedPlaceRow, describeDroppedTripRow } from "./rowSkip";
+import {
+  describeDroppedPlaceRow,
+  describeDroppedTripRow,
+  skippedRowLine as droppedRowLine,
+  type DropReason,
+} from "./rowSkip";
+
+/** A source row the importer dropped: the file line and why, kept as data so
+ *  nothing reads it back out of a sentence. */
+export type SkippedRow = { line: number; reason: DropReason };
 
 // Per-place-row prepared input, plus the raw file name string used as the
 // match key and stable provenance.
@@ -80,23 +90,29 @@ const NUMERIC_WARN_ROLES = new Set<PlaceFieldRole>([
 // to choose, not this map's.
 const MISMATCH_EXPLANATIONS: Record<
   MismatchKind,
-  (range: [number, number] | undefined) => string
+  (label: string, raw: string, range: [number, number] | undefined) => string
 > = {
-  nonNumeric: () => "isn't a number",
-  booleanish: () => "is a yes/no value, not a number",
-  decimalInInt: () => "isn't a whole number",
-  outOfRange: (range) =>
+  nonNumeric: (label, raw) => t`${label} "${raw}" isn't a number — left empty`,
+  booleanish: (label, raw) =>
+    t`${label} "${raw}" is a yes/no value, not a number — left empty`,
+  decimalInInt: (label, raw) =>
+    t`${label} "${raw}" isn't a whole number — left empty`,
+  outOfRange: (label, raw, range) =>
     range
-      ? `is outside the accepted range ${range[0]}–${range[1]}`
-      : "is outside the accepted range",
-  scaleMismatch: (range) =>
+      ? t`${label} "${raw}" is outside the accepted range ${range[0]}–${range[1]} — left empty`
+      : t`${label} "${raw}" is outside the accepted range — left empty`,
+  scaleMismatch: (label, raw, range) =>
     range
-      ? `is above the accepted range ${range[0]}–${range[1]} — the file may use a different scale`
-      : "is above the accepted range — the file may use a different scale",
-  unparsableJson: () => "isn't valid JSON",
-  unparsableArray: () => "isn't a valid list",
-  mixedTypes: () => "doesn't match the other values in this column",
-  emptyDominant: () => "couldn't be read",
+      ? t`${label} "${raw}" is above the accepted range ${range[0]}–${range[1]} — the file may use a different scale — left empty`
+      : t`${label} "${raw}" is above the accepted range — the file may use a different scale — left empty`,
+  unparsableJson: (label, raw) =>
+    t`${label} "${raw}" isn't valid JSON — left empty`,
+  unparsableArray: (label, raw) =>
+    t`${label} "${raw}" isn't a valid list — left empty`,
+  mixedTypes: (label, raw) =>
+    t`${label} "${raw}" doesn't match the other values in this column — left empty`,
+  emptyDominant: (label, raw) =>
+    t`${label} "${raw}" couldn't be read — left empty`,
 };
 
 function coercionWarning(
@@ -105,8 +121,7 @@ function coercionWarning(
   reason: MismatchKind,
 ): string {
   const label = ROLE_LABELS[role] ?? role;
-  const explanation = MISMATCH_EXPLANATIONS[reason](GRADE_RANGES[role]);
-  return `${label} "${raw}" ${explanation} — left empty`;
+  return MISMATCH_EXPLANATIONS[reason](label, raw, GRADE_RANGES[role]);
 }
 
 // Values that don't parse are dropped (left null) — the importer is additive and
@@ -239,6 +254,7 @@ export function preparePlaceRows(
 ): {
   rows: PreparedPlaceRow[];
   warnings: string[];
+  skippedRows: SkippedRow[];
   droppedRows: number;
 } {
   // Raw source value for a row dropped on a missing/unreadable required field
@@ -251,6 +267,7 @@ export function preparePlaceRows(
   )?.[0];
   const out: PreparedPlaceRow[] = [];
   const warnings: string[] = [];
+  const skippedRows: SkippedRow[] = [];
   let droppedRows = 0;
   rows.forEach((row, rowIndex) => {
     const { input, warnings: rowWarnings } = buildPlaceInput(
@@ -269,13 +286,14 @@ export function preparePlaceRows(
     });
     if (dropReason) {
       droppedRows += 1;
-      warnings.push(`Row ${line}: ${dropReason}${SKIPPED_ROW_SUFFIX}`);
+      skippedRows.push({ line, reason: dropReason });
       return;
     }
-    for (const warning of rowWarnings) warnings.push(`Row ${line}: ${warning}`);
+    for (const warning of rowWarnings)
+      warnings.push(t`Row ${line}: ${warning}`);
     out.push({ rowIndex, sourceName: input.name, input });
   });
-  return { rows: out, warnings, droppedRows };
+  return { rows: out, warnings, skippedRows, droppedRows };
 }
 
 // The notes cell, then each "append to notes" column as a "Header: value" line
@@ -308,6 +326,7 @@ export function prepareTripRows(args: {
 }): {
   rows: PreparedTripRow[];
   warnings: string[];
+  skippedRows: SkippedRow[];
   droppedRows: number;
 } {
   const {
@@ -326,7 +345,8 @@ export function prepareTripRows(args: {
   const appendCols = headers.filter(
     (h) => tripAssignments[h] === "appendNotes",
   );
-  if (!nameCol || !dateCol) return { rows: [], warnings: [], droppedRows: 0 };
+  if (!nameCol || !dateCol)
+    return { rows: [], warnings: [], skippedRows: [], droppedRows: 0 };
 
   // Custom-field columns: existing cf:<key> plus any new fields the user named.
   const cfCols: {
@@ -365,6 +385,7 @@ export function prepareTripRows(args: {
   // numeric coercion warnings) — a lenient coerce would silently store "5.5"
   // as 5 or "abc" as null.
   const warnings: string[] = [];
+  const skippedRows: SkippedRow[] = [];
   let droppedRows = 0;
   rows.forEach((row, rowIndex) => {
     const sourcePlaceName = (row[nameCol] ?? "").trim();
@@ -372,9 +393,14 @@ export function prepareTripRows(args: {
     const isoDate = toIsoDate(rawDate, dateFormat);
     if (!isoDate) {
       droppedRows += 1;
-      warnings.push(
-        `Row ${lines?.[rowIndex] ?? rowIndex + 2}: ${describeDroppedTripRow(null, rawDate)}${SKIPPED_ROW_SUFFIX}`,
-      );
+      const line = lines?.[rowIndex] ?? rowIndex + 2;
+      skippedRows.push({
+        line,
+        reason: describeDroppedTripRow(null, rawDate) ?? {
+          kind: "date",
+          raw: "",
+        },
+      });
       return;
     }
     const customFields: Record<string, unknown> = {};
@@ -384,9 +410,12 @@ export function prepareTripRows(args: {
       if (coerced.ok) {
         customFields[cf.key] = coerced.value;
       } else {
-        const typeWord = cf.type === "integer" ? "whole number" : "number";
+        const line = lines?.[rowIndex] ?? rowIndex + 2;
+        const cell = rawCell.trim();
         warnings.push(
-          `Row ${lines?.[rowIndex] ?? rowIndex + 2}: ${cf.label} "${rawCell.trim()}" isn't a valid ${typeWord} — left empty`,
+          cf.type === "integer"
+            ? t`Row ${line}: ${cf.label} "${cell}" isn't a valid whole number — left empty`
+            : t`Row ${line}: ${cf.label} "${cell}" isn't a valid number — left empty`,
         );
       }
     }
@@ -399,14 +428,11 @@ export function prepareTripRows(args: {
       customFields,
     });
   });
-  return { rows: out, warnings, droppedRows };
+  return { rows: out, warnings, skippedRows, droppedRows };
 }
 
-export const NO_PLACE_ROWS_ERROR =
-  "No valid place rows found (each needs a name, latitude and longitude).";
-export const NO_TRIP_ROWS_ERROR =
-  "No valid trip rows found — each row needs a place name and a date we could read. " +
-  "If your dates look right, check the “Date format” selector on the previous step matches your file (ISO 8601 like 2023-06-15, or day-first like 15/06/2023).";
+export const NO_PLACE_ROWS_ERROR = t`No valid place rows found (each needs a name, latitude and longitude).`;
+export const NO_TRIP_ROWS_ERROR = t`No valid trip rows found — each row needs a place name and a date we could read. If your dates look right, check the “Date format” selector on the previous step matches your file (ISO 8601 like 2023-06-15, or day-first like 15/06/2023).`;
 
 // The first ten non-empty cells of the date column: what detectDateFormat reads.
 export function dateSamples(
@@ -433,32 +459,27 @@ export function tripRowDecision(result: MatchResult): "link" | "review" {
   return result.confidence === "auto" && result.best ? "link" : "review";
 }
 
-/** What a dropped row's line ends with, so the result can list those lines
- *  apart from the fields that were only left empty. */
-export const SKIPPED_ROW_SUFFIX = " — skipped";
-
-/** Splits the preparation warnings into dropped rows and left-empty fields. */
-export function splitSkippedRows(warnings: string[]): {
-  skipped: string[];
-  leftEmpty: string[];
-} {
-  const skipped = warnings.filter((w) => w.endsWith(SKIPPED_ROW_SUFFIX));
-  return {
-    skipped,
-    leftEmpty: warnings.filter((w) => !w.endsWith(SKIPPED_ROW_SUFFIX)),
-  };
+/** A dropped row as the result lists it. */
+export function skippedRowLine({ line, reason }: SkippedRow): string {
+  return droppedRowLine(line, reason);
 }
 
 /** The confirm step's line about dropped rows: "1 row can't be read and will
  *  be skipped (row 4)." Empty when none were dropped. */
-export function skippedRowsNote(skipped: string[]): string {
+export function skippedRowsNote(skipped: SkippedRow[]): string {
   if (skipped.length === 0) return "";
-  const rows = skipped.map((w) => /^Row (\d+)/.exec(w)?.[1]).filter(Boolean);
-  const where =
-    rows.length === 0
-      ? ""
-      : ` (${rows.length === 1 ? "row" : "rows"} ${rows.join(", ")})`;
+  const rowList = skipped.map((r) => r.line).join(", ");
   return skipped.length === 1
-    ? `1 row can't be read and will be skipped${where}.`
-    : `${skipped.length} rows can't be read and will be skipped${where}.`;
+    ? plural(
+        skipped.length,
+        "# row can't be read and will be skipped (row {0}).",
+        "# rows can't be read and will be skipped (row {0}).",
+        rowList,
+      )
+    : plural(
+        skipped.length,
+        "# row can't be read and will be skipped (rows {0}).",
+        "# rows can't be read and will be skipped (rows {0}).",
+        rowList,
+      );
 }

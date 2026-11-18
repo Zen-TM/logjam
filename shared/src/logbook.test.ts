@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { setDisplayUnits } from "./units.js";
 
 import {
@@ -13,6 +13,7 @@ import {
   formatTripDate,
   groupTripsByYear,
   logbookActivityLabel,
+  logbookRangeById,
   logbookRanges,
   monthBucketsForYear,
   monthlyTripCounts,
@@ -27,17 +28,29 @@ import {
   yearBuckets,
 } from "./logbook.js";
 import { computeLogbookStats, UNTAGGED_ACTIVITY } from "./logbookStats.js";
+import { inTimeZone } from "./timeZone.testHelper.js";
 import type { TripLogCustomFieldDef } from "./tripLogFields.js";
 
 /** UTC midnight of a "YYYY-MM-DD" key — the instant the API stores. */
 const fromDateKey = (key: string) => new Date(`${key}T00:00:00.000Z`);
 
 describe("date handling", () => {
+  // Mutation: write `formatTripDate` without the weekday, or with the month in full.
   it("reads a UTC-midnight date as its own calendar day", () => {
     // In AEST, a local-time read of this instant is 14 March.
     expect(tripYear("2026-01-01T00:00:00.000Z")).toBe(2026);
-    expect(formatTripDate("2026-03-15T00:00:00.000Z")).toContain("15");
-    expect(formatTripDate("2026-03-15T00:00:00.000Z")).toContain("2026");
+    expect(formatTripDate("2026-03-15T00:00:00.000Z")).toBe("Sun, 15 Mar 2026");
+  });
+
+  // Mutation: write `formatDateKey` with `localDay` for `utcDay`, and a
+  // UTC-midnight date reads as the 14th in Los Angeles.
+  it("writes a date-only value as its own day in a zone behind UTC", () => {
+    inTimeZone("America/Los_Angeles", () => {
+      expect(formatDateKey("2026-03-15T00:00:00.000Z")).toBe("15 Mar 2026");
+      expect(formatTripDate("2026-03-15T00:00:00.000Z")).toBe(
+        "Sun, 15 Mar 2026",
+      );
+    });
   });
 });
 
@@ -160,16 +173,6 @@ describe("countTripsInLastMonths", () => {
 // is the users' timezone too — so a bug that only shows east of Greenwich is
 // invisible in all of them. These run the same maths under a fixed non-UTC zone
 // at the hour of day where local and UTC disagree about the calendar month.
-function inTimeZone<T>(timeZone: string, run: () => T): T {
-  const previous = process.env.TZ;
-  process.env.TZ = timeZone;
-  try {
-    return run();
-  } finally {
-    process.env.TZ = previous;
-  }
-}
-
 describe("todayDateKey", () => {
   it("is the LOCAL calendar day, not the UTC one", () => {
     // 07:00 on 15 March in Sydney is still 14 March in UTC.
@@ -275,6 +278,7 @@ describe("logbookRanges", () => {
 
   it("bounds a year pill to that calendar year", () => {
     expect(logbookRanges([2023], "2026-09-13").at(-1)).toEqual({
+      id: "2023",
       label: "2023",
       from: "2023-01-01",
       to: "2023-12-31",
@@ -377,11 +381,12 @@ describe("stats presentation", () => {
     placeDefs: [],
     placeTypes: [{ id: "t", name: "Canyon", color: "#000000" }],
   });
-  const allTime = { label: "All time", from: null, to: null };
+  const allTime = { id: "all", label: "All time", from: null, to: null };
 
   it("draws years for a multi-year all-time range, and a year pill's months", () => {
     expect(statsSpark(base, allTime).axis).toBe("year");
     const pill = statsSpark(base, {
+      id: "2024",
       label: "2024",
       from: "2024-01-01",
       to: "2024-12-31",
@@ -392,7 +397,7 @@ describe("stats presentation", () => {
 
   it("names the busiest month and states the cadence in words", () => {
     const { busiest, lines } = statsCadence(base, null);
-    expect(busiest).toMatch(/^busiest .*2026 · 2 trips$/);
+    expect(busiest).toBe("busiest Mar 2026 · 2 trips");
     expect(lines[0]).toMatch(/^first trip /);
     // 2 Mar 2024, 7 Mar 2026 and 8 Mar 2026: a Saturday, a Saturday, a Sunday.
     expect(lines).toContain("3 of 3 trips fell on a weekend");
@@ -599,5 +604,38 @@ describe("defaultTrackName", () => {
         `Track ${formatDateKey("2026-11-03")}`,
       );
     });
+  });
+});
+
+describe("logbookRangeById", () => {
+  afterEach(() => {
+    delete (globalThis as { LOGJAM_LANGUAGE?: string }).LOGJAM_LANGUAGE;
+  });
+
+  // Mutation: key the choice by `label` again (`ranges.find((r) => r.label === id)`),
+  // or let a range's `id` come from `t`: the pseudo-language's ids move and a
+  // choice saved in English is lost.
+  it("names a range by an id that is the same in every language", () => {
+    const english = logbookRanges([2023], "2026-09-13");
+    (globalThis as { LOGJAM_LANGUAGE?: string }).LOGJAM_LANGUAGE = "en-XA";
+    const pseudo = logbookRanges([2023], "2026-09-13");
+    expect(pseudo.map((r) => r.label)).not.toEqual(english.map((r) => r.label));
+    expect(pseudo.map((r) => r.id)).toEqual([
+      "all",
+      "year",
+      "12m",
+      "2025",
+      "2023",
+    ]);
+    expect(english.map((r) => r.id)).toEqual(pseudo.map((r) => r.id));
+    expect(logbookRangeById(pseudo, "12m").from).toBe("2025-10-01");
+  });
+
+  // Mutation: return `undefined` or throw when nothing matches.
+  it("reads a stored translated label, a missing id or a dropped year as all time", () => {
+    const ranges = logbookRanges([], "2026-09-13");
+    for (const stored of ["Last 12 months", "2019", "", null, undefined]) {
+      expect(logbookRangeById(ranges, stored).id).toBe("all");
+    }
   });
 });

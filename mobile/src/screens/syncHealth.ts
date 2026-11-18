@@ -9,7 +9,13 @@
 // PRIVACY: counts and timestamps only. Never a row's contents, never a server
 // error message (shared/DESIGN.md §11 — failure copy is ours, not the error's).
 
-import { LONG_MONTHS } from "@logjam/shared";
+import {
+  formatDayLongMonth,
+  localDay,
+  longWeekday,
+  plural,
+  t,
+} from "@logjam/shared";
 
 export type SyncTone = "ok" | "info" | "pending" | "problem";
 
@@ -76,34 +82,24 @@ const DAY_MS = 24 * HOUR_MS;
  */
 export function relativeTime(iso: string, now: number): string {
   const then = Date.parse(iso);
-  if (Number.isNaN(then)) return "at an unknown time";
+  if (Number.isNaN(then)) return t`at an unknown time`;
   const elapsed = now - then;
   // A clock that jumped (timezone change, NTP correction) must not produce
   // "in -3 minutes" (guard: mobile/src/screens/syncHealth.test.ts); treat any
   // future stamp as just now.
-  if (elapsed < MINUTE_MS) return "just now";
+  if (elapsed < MINUTE_MS) return t`just now`;
   if (elapsed < HOUR_MS) {
     const minutes = Math.floor(elapsed / MINUTE_MS);
-    return `${minutes} min ago`;
+    return t`${minutes} min ago`;
   }
   if (elapsed < DAY_MS) {
     const hours = Math.floor(elapsed / HOUR_MS);
-    return `${hours} ${hours === 1 ? "hour" : "hours"} ago`;
+    return plural(hours, "# hour ago", "# hours ago");
   }
   const days = Math.floor(elapsed / DAY_MS);
-  if (days === 1) return "yesterday";
-  return `${days} days ago`;
+  if (days === 1) return t`yesterday`;
+  return t`${days} days ago`;
 }
-
-const WEEKDAYS = [
-  "Sunday",
-  "Monday",
-  "Tuesday",
-  "Wednesday",
-  "Thursday",
-  "Friday",
-  "Saturday",
-];
 
 /**
  * The day something started, as someone would say it: "yesterday", "Tuesday",
@@ -113,23 +109,19 @@ const WEEKDAYS = [
  */
 function sinceDay(iso: string, now: number): string {
   const then = new Date(iso);
-  if (Number.isNaN(then.getTime())) return "some time ago";
+  if (Number.isNaN(then.getTime())) return t`some time ago`;
   const midnight = (date: Date) =>
     new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
   const days = Math.round((midnight(new Date(now)) - midnight(then)) / DAY_MS);
-  if (days <= 0) return "today";
-  if (days === 1) return "yesterday";
-  if (days < 7) return WEEKDAYS[then.getDay()];
-  return `${then.getDate()} ${LONG_MONTHS[then.getMonth()]}`;
-}
-
-function plural(count: number, singular: string, pluralForm: string): string {
-  return `${count} ${count === 1 ? singular : pluralForm}`;
+  if (days <= 0) return t`today`;
+  if (days === 1) return t`yesterday`;
+  if (days < 7) return longWeekday(then.getDay());
+  return formatDayLongMonth(localDay(then));
 }
 
 function lastSyncDetail(lastSyncAt: string | null, now: number): string {
-  if (!lastSyncAt) return "Nothing has reached your account yet.";
-  return `Last synced ${relativeTime(lastSyncAt, now)}.`;
+  if (!lastSyncAt) return t`Nothing has reached your account yet.`;
+  return t`Last synced ${relativeTime(lastSyncAt, now)}.`;
 }
 
 /**
@@ -141,8 +133,8 @@ function lastSyncDetail(lastSyncAt: string | null, now: number): string {
  */
 export function syncIssuesSubtitle(issueCount: number): string {
   return issueCount > 0
-    ? `${plural(issueCount, "change needs", "changes need")} you`
-    : "Nothing needs you";
+    ? plural(issueCount, "# change needs you", "# changes need you")
+    : t`Nothing needs you`;
 }
 
 /**
@@ -152,7 +144,7 @@ export function syncIssuesSubtitle(issueCount: number): string {
  */
 export function syncIssuesTitle(issueCount: number): string {
   if (issueCount === 0) return syncIssuesSubtitle(0);
-  return issueCount === 1 ? "A change needs you" : "Some changes need you";
+  return issueCount === 1 ? t`A change needs you` : t`Some changes need you`;
 }
 
 export function syncHealth(input: SyncHealthInput): SyncHealth {
@@ -166,8 +158,8 @@ export function syncHealth(input: SyncHealthInput): SyncHealth {
   //    worth saying is where the data lives, and that nothing else holds a copy.
   if (input.accountState === "guest") {
     return {
-      headline: "Saved on this phone",
-      detail: "You don't have an account, so nothing is uploaded or backed up.",
+      headline: t`Saved on this phone`,
+      detail: t`You don't have an account, so nothing is uploaded or backed up.`,
       // Not "ok": a check beside "nothing is backed up" says done to a user who
       // has a risk to know about.
       tone: "info",
@@ -185,9 +177,8 @@ export function syncHealth(input: SyncHealthInput): SyncHealth {
   //      full bars to go looking for signal.
   if (input.errorKind === "applyFailed") {
     return {
-      headline: "Couldn't download new data on this phone",
-      detail:
-        "Retrying won't fix it. Open Account sync issues to download a fresh copy.",
+      headline: t`Couldn't download new data on this phone`,
+      detail: t`Retrying won't fix it. Open Account sync issues to download a fresh copy.`,
       tone: "problem",
     };
   }
@@ -199,8 +190,8 @@ export function syncHealth(input: SyncHealthInput): SyncHealth {
   //      everything else because a queue that cannot drain is not "queued".
   if (input.errorKind === "unsupported") {
     return {
-      headline: "The server isn't ready to sync",
-      detail: "Your changes are safe on this phone and will upload once it is.",
+      headline: t`Logjam isn't ready to sync`,
+      detail: t`Your changes are safe on this phone and will upload once it is.`,
       tone: "problem",
     };
   }
@@ -209,11 +200,15 @@ export function syncHealth(input: SyncHealthInput): SyncHealth {
   //    everything because retrying will never clear it.
   if (issueCount > 0) {
     return {
-      headline: `${plural(issueCount, "change needs", "changes need")} you`,
+      headline: plural(issueCount, "# change needs you", "# changes need you"),
       detail:
         pendingCount > 0
-          ? `${plural(pendingCount, "other change is", "other changes are")} still queued.`
-          : "Everything else is synced.",
+          ? plural(
+              pendingCount,
+              "# other change is still queued.",
+              "# other changes are still queued.",
+            )
+          : t`Everything else is synced.`,
       tone: "problem",
     };
   }
@@ -226,8 +221,13 @@ export function syncHealth(input: SyncHealthInput): SyncHealth {
   //      there is nothing for the reader to do.
   if (input.waitingSince && pendingCount > 0 && online) {
     return {
-      headline: `${plural(pendingCount, "change has", "changes have")} been waiting since ${sinceDay(input.waitingSince, now)}`,
-      detail: "Logjam GPS keeps trying.",
+      headline: plural(
+        pendingCount,
+        "# change has been waiting since {0}",
+        "# changes have been waiting since {0}",
+        sinceDay(input.waitingSince, now),
+      ),
+      detail: t`Logjam GPS keeps trying.`,
       tone: "pending",
     };
   }
@@ -238,17 +238,20 @@ export function syncHealth(input: SyncHealthInput): SyncHealth {
   if (state === "syncing" && online) {
     if (bulk) {
       return {
-        headline: `Uploading ${plural(pendingCount, "change", "changes")}…`,
-        detail:
-          "This can take a while, and photos are the slow part. You can keep using Logjam GPS.",
+        headline: plural(
+          pendingCount,
+          "Uploading # change…",
+          "Uploading # changes…",
+        ),
+        detail: t`This can take a while, and photos are the slow part. You can keep using Logjam GPS.`,
         tone: "pending",
       };
     }
     return {
       headline:
         pendingCount > 0
-          ? `Sending ${plural(pendingCount, "change", "changes")}…`
-          : "Syncing…",
+          ? plural(pendingCount, "Sending # change…", "Sending # changes…")
+          : t`Syncing…`,
       detail: lastSyncDetail(lastSyncAt, now),
       tone: "pending",
     };
@@ -258,16 +261,24 @@ export function syncHealth(input: SyncHealthInput): SyncHealth {
   if (pendingCount > 0) {
     if (bulk && online) {
       return {
-        headline: `${plural(pendingCount, "change", "changes")} to upload`,
-        detail: "They upload in batches. This can take a while.",
+        headline: plural(
+          pendingCount,
+          "# change to upload",
+          "# changes to upload",
+        ),
+        detail: t`They upload in batches. This can take a while.`,
         tone: "pending",
       };
     }
     return {
-      headline: `${plural(pendingCount, "change", "changes")} waiting to sync`,
+      headline: plural(
+        pendingCount,
+        "# change waiting to sync",
+        "# changes waiting to sync",
+      ),
       detail: online
-        ? "It will go up on the next sync."
-        : "Saved on this phone. It goes up when you have signal.",
+        ? t`It will go up on the next sync.`
+        : t`Saved on this phone. It goes up when you have signal.`,
       tone: "pending",
     };
   }
@@ -277,8 +288,8 @@ export function syncHealth(input: SyncHealthInput): SyncHealth {
   //    the answer is "yes, and then the connection went".
   if (state === "error") {
     return {
-      headline: "Can't reach your account",
-      detail: `${lastSyncDetail(lastSyncAt, now)} It will keep retrying.`,
+      headline: t`Can't reach your account`,
+      detail: `${lastSyncDetail(lastSyncAt, now)} ${t`It will keep retrying.`}`,
       tone: "problem",
     };
   }
@@ -286,10 +297,10 @@ export function syncHealth(input: SyncHealthInput): SyncHealth {
   // 5. Genuinely clean. Offline with an empty outbox is a fine state, not a
   //    warning — the whole app is built to work this way.
   return {
-    headline: "Everything's synced",
+    headline: t`Everything's synced`,
     detail: online
       ? lastSyncDetail(lastSyncAt, now)
-      : "You're offline, and nothing is waiting.",
+      : t`You're offline, and nothing is waiting.`,
     tone: "ok",
   };
 }

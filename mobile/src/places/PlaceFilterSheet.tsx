@@ -17,6 +17,7 @@ import {
   type PlaceStatusFilterValue,
   type ScopedCustomFieldDef,
   type SectionKeysOn,
+  t,
 } from "@logjam/shared";
 
 import { spacing } from "../theme";
@@ -346,7 +347,9 @@ export function PlaceFilterSheet(props: Props) {
           : copy.updated;
   const title =
     mode.kind === "date"
-      ? `${dateLabel} · ${(mode.bound === 0 ? copy.dateFrom : copy.dateTo).toLowerCase()}`
+      ? mode.bound === 0
+        ? t`${dateLabel} · from`
+        : t`${dateLabel} · to`
       : PLACES_FILTER_SHEET.title;
 
   return (
@@ -388,14 +391,14 @@ export function PlaceFilterSheet(props: Props) {
           <View style={styles.actions}>
             <View style={styles.action}>
               <Button
-                label="Cancel"
+                label={t`Cancel`}
                 variant="ghost"
                 onPress={() => setMode({ kind: "main" })}
               />
             </View>
             <View style={styles.action}>
               <Button
-                label="Clear this bound"
+                label={t`Clear this bound`}
                 variant="outlineAccent"
                 onPress={() => {
                   setDateBound(mode.target, mode.bound, null);

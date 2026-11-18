@@ -9,6 +9,7 @@ import {
   type PlanVerb,
 } from "./planVerbs.js";
 import type { TripPlanRole } from "../tripPlans.js";
+import { t } from "../i18n.js";
 
 /** A section's ⋯: no Move up for the first, no Move down for the last. */
 export function planSectionVerbs(
@@ -39,5 +40,5 @@ export function planSectionsMoved(
 /** A limit shows live near it (shared/DESIGN.md §11): "18200 of 20000
  *  characters" past 90 %, nothing before. */
 export function limitHint(length: number, max: number): string | undefined {
-  return length > max * 0.9 ? `${length} of ${max} characters` : undefined;
+  return length > max * 0.9 ? t`${length} of ${max} characters` : undefined;
 }

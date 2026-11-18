@@ -19,6 +19,7 @@
 // used here at all — the sentence counts rows, it never lists them — and
 // nothing in this module is logged.
 import type { BulkShareItem, BulkShareItemType } from "@logjam/shared";
+import { plural, t } from "@logjam/shared";
 
 /**
  * The `sendCopy` descriptor, structurally typed so this module never imports
@@ -174,14 +175,21 @@ export function bulkShareTriageLine(plan: BulkSharePlan): string | null {
   // remedies — one is permanent, one usually means "wait for it to finish", and
   // the third clears itself as soon as the queue drains.
   const reasons = [
-    notMine > 0 ? `${notMine} shared with you` : null,
-    waiting > 0 ? `${waiting} not synced yet` : null,
-    cannot > 0 ? `${cannot} can't be shared` : null,
+    notMine > 0
+      ? plural(notMine, "# shared with you", "# shared with you")
+      : null,
+    waiting > 0
+      ? plural(waiting, "# not synced yet", "# not synced yet")
+      : null,
+    cannot > 0
+      ? plural(cannot, "# can't be shared", "# can't be shared")
+      : null,
   ].filter((part): part is string => part !== null);
+  const joined = joinReasons(reasons);
   if (plan.actionableCount === 0) {
-    return `None of these ${total} can be shared — ${joinReasons(reasons)}.`;
+    return t`None of these ${total} can be shared — ${joined}.`;
   }
-  return `${plan.actionableCount} of ${total} can be shared — skipping ${joinReasons(reasons)}.`;
+  return t`${plan.actionableCount} of ${total} can be shared — skipping ${joined}.`;
 }
 
 /**
@@ -195,8 +203,9 @@ export function bulkShareTriageLine(plan: BulkSharePlan): string | null {
  * numbers wrong.
  */
 export function bulkShareTitle(plan: BulkSharePlan): string {
-  const noun = countOf(plan.actionableCount, "item");
-  return plan.copies.length > 0 ? `Send ${noun}` : `Share ${noun}`;
+  return plan.copies.length > 0
+    ? plural(plan.actionableCount, "Send # item", "Send # items")
+    : plural(plan.actionableCount, "Share # item", "Share # items");
 }
 
 /**
@@ -216,24 +225,31 @@ export function bulkShareConfirm(
   recipientCount: number,
 ): { title: string; body: string; confirmLabel: string } | null {
   if (plan.actionableCount === 0 || recipientCount === 0) return null;
-  const friends = countOf(recipientCount, "friend");
   const lines: string[] = [];
   if (plan.shares.length > 0) {
     lines.push(
-      `${countOf(plan.shares.length, "item")} will be shared — they can view and export, and you can stop sharing whenever you like.`,
+      plural(
+        plan.shares.length,
+        "# item will be shared — they can view and export, and you can stop sharing whenever you like.",
+        "# items will be shared — they can view and export, and you can stop sharing whenever you like.",
+      ),
     );
   }
   if (plan.copies.length > 0) {
     lines.push(
-      `${countOf(plan.copies.length, "item")} will be sent as a copy — those become theirs to keep, and you can't take them back.`,
+      plural(
+        plan.copies.length,
+        "# item will be sent as a copy — those become theirs to keep, and you can't take them back.",
+        "# items will be sent as a copy — those become theirs to keep, and you can't take them back.",
+      ),
     );
   }
   return {
-    title: `Send to ${friends}?`,
+    title: plural(recipientCount, "Send to # friend?", "Send to # friends?"),
     body: lines.join("\n\n"),
     // Never "Share": half of what is about to happen is not a share, and the
     // button is the last word the user reads.
-    confirmLabel: plan.copies.length > 0 ? "Send" : "Share",
+    confirmLabel: plan.copies.length > 0 ? t`Send` : t`Share`,
   };
 }
 /**
@@ -251,13 +267,17 @@ export function bulkShareButtonLabel(
   progress: BulkShareProgress | null,
 ): string {
   if (progress?.phase === "copies") {
-    return `Sending ${progress.done + 1} of ${progress.total} — ${progress.filename}`;
+    return t`Sending ${progress.done + 1} of ${progress.total} — ${progress.filename}`;
   }
-  if (progress?.phase === "shares") return "Sharing…";
-  const verb = plan.copies.length > 0 ? "Send" : "Share";
+  if (progress?.phase === "shares") return t`Sharing…`;
+  if (plan.copies.length > 0) {
+    return recipientCount === 0
+      ? t`Send with friends`
+      : plural(recipientCount, "Send with # friend", "Send with # friends");
+  }
   return recipientCount === 0
-    ? `${verb} with friends`
-    : `${verb} with ${countOf(recipientCount, "friend")}`;
+    ? t`Share with friends`
+    : plural(recipientCount, "Share with # friend", "Share with # friends");
 }
 
 /**
@@ -277,35 +297,32 @@ export function bulkShareOutcomeMessage(outcome: BulkShareOutcome): {
   tone: "done" | "error";
 } {
   const failed = outcome.copiesFailed.length;
-  const parts: string[] = [];
-  if (outcome.granted > 0)
-    parts.push(`Shared ${countOf(outcome.granted, "item")}`);
-  if (outcome.copiesSent > 0)
-    parts.push(`sent ${countOf(outcome.copiesSent, "copy", "copies")}`);
-
-  if (parts.length === 0) {
+  if (outcome.granted === 0 && outcome.copiesSent === 0) {
     // Nothing landed. The share leg's own message beats a generic one; the copy
     // leg has no single error to quote, so it names the count.
     if (outcome.shareError) return { text: outcome.shareError, tone: "error" };
     if (failed > 0) {
       return {
-        text: `Couldn't send ${countOf(failed, "file")}.`,
+        text: plural(failed, "Couldn't send # file.", "Couldn't send # files."),
         tone: "error",
       };
     }
-    return { text: "Nothing to share.", tone: "error" };
+    return { text: t`Nothing to share.`, tone: "error" };
   }
 
-  // The copy clause is written lower-case to follow "Shared 6 items and …",
-  // so a copy-ONLY run has to capitalise whichever clause ended up first.
-  const joined = parts.join(" and ");
-  const done = `${joined[0].toUpperCase()}${joined.slice(1)}.`;
+  const done =
+    outcome.granted > 0 && outcome.copiesSent > 0
+      ? t`Shared ${plural(outcome.granted, "# item", "# items")} and sent ${plural(outcome.copiesSent, "# copy", "# copies")}.`
+      : outcome.granted > 0
+        ? plural(outcome.granted, "Shared # item.", "Shared # items.")
+        : plural(outcome.copiesSent, "Sent # copy.", "Sent # copies.");
+
   // A partial run reports as an ERROR even though most of it worked: the half
   // that did not is the half the user has to do something about, and an
   // info-toned toast is the one people scroll past.
   if (failed > 0) {
     return {
-      text: `${done} Couldn't send ${outcome.copiesFailed.join(", ")}.`,
+      text: `${done} ${t`Couldn't send ${outcome.copiesFailed.join(", ")}.`}`,
       tone: "error",
     };
   }
@@ -317,10 +334,7 @@ export function bulkShareOutcomeMessage(outcome: BulkShareOutcome): {
 
 /** "a", "a and b", "a, b and c" — joins reasons grammatically when multiple are present. */
 function joinReasons(parts: string[]): string {
-  if (parts.length < 2) return parts.join("");
-  return `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`;
-}
-
-function countOf(count: number, noun: string, plural = `${noun}s`): string {
-  return `${count} ${count === 1 ? noun : plural}`;
+  if (parts.length <= 1) return parts[0] ?? "";
+  if (parts.length === 2) return t`${parts[0]} and ${parts[1]}`;
+  return t`${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`;
 }

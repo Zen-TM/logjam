@@ -7,7 +7,7 @@ import {
   currentTripPlanAnswers,
   TRIP_PLAN_INVITE_TTL_DAYS,
   TRIP_PLAN_ROLES,
-  TRIP_PLAN_VISIBILITY_LOCKED_SENTENCE,
+  tripPlanVisibilityLockedSentence,
   type DateOnly,
   type TripPlanAnswerValue,
   type TripPlanAnswerView,
@@ -33,12 +33,19 @@ import { mediaSkippedSentence } from "../friendShareRows.js";
 import { todayDateKey, type AttributeRow } from "../logbook.js";
 import { withRowUnit } from "./placePage.js";
 import { PLACE_FORM } from "./placeForm.js";
-import { SHORT_MONTHS, SHORT_WEEKDAYS } from "../dateNames.js";
+import {
+  type Day,
+  dayOfKey,
+  formatWeekdayDay,
+  formatWeekdayDayMonth,
+  formatWeekdayDayMonthYear,
+} from "../dateFormat.js";
+import { plural, t } from "../i18n.js";
 
 export const TRIP_PLANS_LIST = {
   id: "plans.list",
-  question: "What trips am I getting ready for?",
-  title: "Plans",
+  question: t`What trips am I getting ready for?`,
+  title: t`Plans`,
   sections: [
     { key: "hero" },
     // One rail, a true partition: a plan is upcoming, over, or put away.
@@ -46,60 +53,60 @@ export const TRIP_PLANS_LIST = {
     { key: "list" },
   ],
   copy: {
-    add: "New plan",
-    buckets: "Plans",
-    bucketUpcoming: "Upcoming",
-    bucketPast: "Past",
-    bucketArchived: "Archived",
+    add: t`New plan`,
+    buckets: t`Plans`,
+    bucketUpcoming: t`Upcoming`,
+    bucketPast: t`Past`,
+    bucketArchived: t`Archived`,
 
-    loading: "Loading your plans…",
-    loadFailed: "Couldn't load your plans.",
-    firstRunTitle: "No plans yet",
-    firstRunBody:
-      "A plan is where a group gets ready for a trip: the write-up, the places and ways, who's coming and their details.",
-    noUpcomingTitle: "Nothing coming up",
-    noPastTitle: "No past plans",
-    noPastBody: "A plan moves here once its dates have passed.",
-    noArchivedTitle: "Nothing archived",
+    loading: t`Loading your plans…`,
+    loadFailed: t`Couldn't load your plans.`,
+    firstRunTitle: t`No plans yet`,
+    firstRunBody: t`A plan is where a group gets ready for a trip: the write-up, the places and ways, who's coming and their details.`,
+    noUpcomingTitle: t`Nothing coming up`,
+    noPastTitle: t`No past plans`,
+    noPastBody: t`A plan moves here once its dates have passed.`,
+    noArchivedTitle: t`Nothing archived`,
     // The hero's line and Logjam GPS's More row, when nothing is coming up.
-    nothingPlanned: "Nothing planned",
+    nothingPlanned: t`Nothing planned`,
 
-    noDates: "No dates yet",
-    pillLeader: "Leader",
-    pillEditor: "Editor",
+    noDates: t`No dates yet`,
+    pillLeader: t`Leader`,
+    pillEditor: t`Editor`,
     // Never a pill on a row (a member's own role says nothing); a word where
     // every role is named, such as the invite's role picker and a printout.
     // Guard: plans.test.ts (a member's row says nothing).
-    roleMember: "Member",
-    pillInvited: "Invited",
-    pillWaiting: "Waiting",
-    open: "Open",
-    decline: "Decline",
-    declined: "Invite declined.",
-    declineFailed: "Couldn't decline the invite.",
-    withdrawn: "Request withdrawn.",
-    withdrawFailed: "Couldn't withdraw the request.",
+    roleMember: t`Member`,
+    pillInvited: t`Invited`,
+    pillWaiting: t`Waiting`,
+    open: t`Open`,
+    decline: t`Decline`,
+    declined: t`Invite declined.`,
+    declineFailed: t`Couldn't decline the invite.`,
+    withdrawn: t`Request withdrawn.`,
+    withdrawFailed: t`Couldn't withdraw the request.`,
 
     // The one form for a plan's name, dates and types: New plan, and Edit.
-    newTitle: "New plan",
-    editTitle: "Edit plan",
-    name: "Name",
-    namePlaceholder: "For example, Kanangra weekend",
-    nameRequired: "Give the plan a name.",
-    tripTypes: "Trip types",
-    addTripType: "Add a type",
-    make: "Make plan",
-    save: "Save",
-    makeFailed: "Couldn't make the plan.",
-    saveFailed: "Couldn't save the plan.",
+    newTitle: t`New plan`,
+    editTitle: t`Edit plan`,
+    name: t`Name`,
+    namePlaceholder: t`For example, Kanangra weekend`,
+    nameRequired: t`Give the plan a name.`,
+    tripTypes: t`Trip types`,
+    addTripType: t`Add a type`,
+    make: t`Make plan`,
+    save: t`Save`,
+    makeFailed: t`Couldn't make the plan.`,
+    saveFailed: t`Couldn't save the plan.`,
 
-    archiveSelected: "Archive the selected plans",
-    unarchiveSelected: "Bring back the selected plans",
+    archiveSelected: t`Archive the selected plans`,
+    unarchiveSelected: t`Bring back the selected plans`,
   },
 } as const satisfies ScreenContract;
 
 /** A plan card's ⋯ label. */
-export const tripPlanCardActionsLabel = (name: string) => `Actions for ${name}`;
+export const tripPlanCardActionsLabel = (name: string) =>
+  t`Actions for ${name}`;
 
 export type TripPlanBucket = "upcoming" | "past" | "archived";
 
@@ -191,21 +198,10 @@ export function tripPlansEmpty(
   };
 }
 
-function dayParts(date: DateOnly) {
-  const [year, month, day] = date.split("-").map(Number);
-  const weekday = new Date(Date.UTC(year, month - 1, day)).getUTCDay();
-  return {
-    year,
-    month: SHORT_MONTHS[month - 1],
-    day,
-    weekday: SHORT_WEEKDAYS[weekday],
-  };
-}
-
 /**
  * "Sat 8 – Sun 9 Nov", "Fri 31 Oct – Sun 2 Nov", "Sat 8 Nov", "No dates yet".
  * The year shows only when it is not this year's. A date-only value is a
- * calendar day, so no time zone touches it. English words: the copy is.
+ * calendar day, so no time zone touches it.
  */
 export function tripPlanDatesLabel(
   startDate: DateOnly | null,
@@ -213,19 +209,19 @@ export function tripPlanDatesLabel(
   thisYear: number = new Date().getFullYear(),
 ): string {
   if (startDate == null && endDate == null) return TRIP_PLANS_LIST.copy.noDates;
-  if (startDate == null) return `Until ${tripPlanDayLabel(endDate!, thisYear)}`;
+  if (startDate == null)
+    return t`Until ${tripPlanDayLabel(endDate!, thisYear)}`;
   if (endDate == null || endDate === startDate)
     return tripPlanDayLabel(startDate, thisYear);
-  const start = dayParts(startDate);
-  const end = dayParts(endDate);
-  const year = (y: number) => (y === thisYear ? "" : ` ${y}`);
+  const start = dayOfKey(startDate);
+  const end = dayOfKey(endDate);
   const startText =
     start.year !== end.year
-      ? `${start.weekday} ${start.day} ${start.month}${year(start.year)}`
+      ? dayLabel(start, thisYear)
       : start.month !== end.month
-        ? `${start.weekday} ${start.day} ${start.month}`
-        : `${start.weekday} ${start.day}`;
-  return `${startText} – ${end.weekday} ${end.day} ${end.month}${year(end.year)}`;
+        ? formatWeekdayDayMonth(start)
+        : formatWeekdayDay(start);
+  return t`${startText} – ${dayLabel(end, thisYear)}`;
 }
 
 /** "Sat 8 Nov", or "Sat 8 Nov 2025" in another year. */
@@ -233,8 +229,13 @@ export function tripPlanDayLabel(
   date: DateOnly,
   thisYear: number = new Date().getFullYear(),
 ): string {
-  const parts = dayParts(date);
-  return `${parts.weekday} ${parts.day} ${parts.month}${parts.year === thisYear ? "" : ` ${parts.year}`}`;
+  return dayLabel(dayOfKey(date), thisYear);
+}
+
+function dayLabel(day: Day, thisYear: number): string {
+  return day.year === thisYear
+    ? formatWeekdayDayMonth(day)
+    : formatWeekdayDayMonthYear(day);
 }
 
 /** A list row's status, as a word: an invite and a request outrank a role,
@@ -250,14 +251,16 @@ export function tripPlanRowPill(
 
 /** The printed summary's last line, `printed` being the day it was printed. */
 export function tripPlanPrintFooter(printed: string): string {
-  return `From Logjam Web, ${printed}. Correct when printed; the plan may have changed since.`;
+  return t`From Logjam Web, ${printed}. Correct when printed; the plan may have changed since.`;
 }
 
 /** Above Send when required questions are empty: how many are owed. */
 export function tripPlanRequiredSummary(count: number): string {
-  return count === 1
-    ? "Answer the question marked required."
-    : `Answer the ${count} questions marked required.`;
+  return plural(
+    count,
+    "Answer the question marked required.",
+    "Answer the # questions marked required.",
+  );
 }
 
 /** A role, as a word: "Leader", "Editor", "Member". */
@@ -278,12 +281,12 @@ export function tripPlanRowSubtitle(
   if (plan.status === "requested" && plan.waitingFor)
     return tripPlanWaitingLine(plan.waitingFor.username);
   if (plan.status === "invited" && plan.invitedBy)
-    return `${tripPlanDatesLabel(plan.startDate, plan.endDate, thisYear)} · From ${plan.invitedBy.username}`;
+    return t`${tripPlanDatesLabel(plan.startDate, plan.endDate, thisYear)} · From ${plan.invitedBy.username}`;
   return tripPlanDatesLabel(plan.startDate, plan.endDate, thisYear);
 }
 
 export function tripPlanWaitingLine(username: string): string {
-  return `Waiting for ${username} to accept you`;
+  return t`Waiting for ${username} to accept you`;
 }
 
 /** How many plans wait on the caller: invites they have not answered. Drives
@@ -316,13 +319,13 @@ export function tripPlansHeroTitle(
     "upcoming",
   );
   const now = coming.find((plan) => firstDay(plan)! <= today);
-  if (now) return `On now: ${now.name}`;
+  if (now) return t`On now: ${now.name}`;
   const next = coming[0];
   if (!next) return TRIP_PLANS_LIST.copy.nothingPlanned;
-  return `Next: ${next.name}, ${
+  return t`Next: ${next.name}, ${
     next.startDate
       ? tripPlanDayLabel(next.startDate, thisYear)
-      : `until ${tripPlanDayLabel(next.endDate!, thisYear)}`
+      : t`until ${tripPlanDayLabel(next.endDate!, thisYear)}`
   }`;
 }
 
@@ -330,7 +333,7 @@ export function tripPlansHeroTitle(
 
 export const TRIP_PLAN_PAGE = {
   id: "plans.page",
-  question: "What do I need to know and do for this trip?",
+  question: t`What do I need to know and do for this trip?`,
   sections: [
     // The name, the way back to Plans, Add ▾ and the plan's ⋯.
     { key: "hero" },
@@ -347,8 +350,7 @@ export const TRIP_PLAN_PAGE = {
     {
       key: "showOnMap",
       on: "gps",
-      reason:
-        "On Logjam Web the map sits beside the plan's page and already shows only the plan's items while it is open. On Logjam GPS the page covers the map.",
+      reason: t`On Logjam Web the map sits beside the plan's page and already shows only the plan's items while it is open. On Logjam GPS the page covers the map.`,
     },
     // On Logjam GPS a place row, and its pin in plan mode, opens a read-only
     // sheet; Logjam Web fits its map to the place instead, the map beside
@@ -358,150 +360,142 @@ export const TRIP_PLAN_PAGE = {
     { key: "people" },
   ],
   copy: {
-    back: "Back to plans",
-    showOnMap: "Show on map",
-    add: "Add",
-    addMenu: "Add to this plan",
-    actions: "Plan actions",
+    back: t`Back to plans`,
+    showOnMap: t`Show on map`,
+    add: t`Add`,
+    addMenu: t`Add to this plan`,
+    actions: t`Plan actions`,
 
     // The map while a plan is open.
-    barPrefix: "Plan:",
-    backToMap: "Back to my map",
+    barPrefix: t`Plan:`,
+    backToMap: t`Back to my map`,
 
-    noticeArchived: "Archived. A leader can bring it back to change it.",
-    noticeOver: "This trip is over.",
-    roleLeader: "You're a leader",
-    roleEditor: "You're an editor",
+    noticeArchived: t`Archived. A leader can bring it back to change it.`,
+    noticeOver: t`This trip is over.`,
+    roleLeader: t`You're a leader`,
+    roleEditor: t`You're an editor`,
 
     // The one-calendar date range field.
-    datesField: "Dates",
-    datesNone: "No dates yet",
-    datesPrevMonth: "Previous month",
-    datesNextMonth: "Next month",
-    datesClear: "Clear dates",
+    datesField: t`Dates`,
+    datesNone: t`No dates yet`,
+    datesPrevMonth: t`Previous month`,
+    datesNextMonth: t`Next month`,
+    datesClear: t`Clear dates`,
 
-    views: "Plan view",
-    viewWriteUp: "Write-up",
-    viewItems: "Map",
-    viewForms: "Forms",
-    viewPeople: "People",
+    views: t`Plan view`,
+    viewWriteUp: t`Write-up`,
+    viewItems: t`Map`,
+    viewForms: t`Forms`,
+    viewPeople: t`People`,
 
-    loading: "Loading the plan…",
-    loadFailed: "Couldn't load the plan.",
+    loading: t`Loading the plan…`,
+    loadFailed: t`Couldn't load the plan.`,
 
     // The write-up.
-    writeUpEmpty: "Nothing written yet.",
-    writeUpEmptyTitle: "No write-up yet",
-    writeUpEmptyBody:
-      "Sections for the route, the meeting point and what to bring go here.",
-    sectionTitle: "Write-up section",
-    sectionNewTitle: "New write-up section",
-    sectionTitleField: "Title",
-    sectionBody: "Text",
-    sectionBodyHint:
-      "Markdown works: **bold**, - lists, [links](https://example.com).",
-    sectionTitlePlaceholder: "For example, Overview, Gear or Access",
-    sectionSave: "Save",
-    sectionSaveFailed: "Couldn't save the section.",
-    sectionGone: "This section was deleted.",
+    writeUpEmpty: t`Nothing written yet.`,
+    writeUpEmptyTitle: t`No write-up yet`,
+    writeUpEmptyBody: t`Sections for the route, the meeting point and what to bring go here.`,
+    sectionTitle: t`Write-up section`,
+    sectionNewTitle: t`New write-up section`,
+    sectionTitleField: t`Title`,
+    sectionBody: t`Text`,
+    sectionBodyHint: t`Markdown works: **bold**, - lists, [links](https://example.com).`,
+    sectionTitlePlaceholder: t`For example, Overview, Gear or Access`,
+    sectionSave: t`Save`,
+    sectionSaveFailed: t`Couldn't save the section.`,
+    sectionGone: t`This section was deleted.`,
     // After the plan changed under an open form: under the field it changed.
-    inPlanNow: "In the plan now:",
-    inPlanNowEmpty: "nothing",
-    sectionMoveFailed: "Couldn't move the section.",
-    sectionDeleteFailed: "Couldn't delete the section.",
-    sectionDeleted: "Section deleted.",
+    inPlanNow: t`In the plan now:`,
+    inPlanNowEmpty: t`nothing`,
+    sectionMoveFailed: t`Couldn't move the section.`,
+    sectionDeleteFailed: t`Couldn't delete the section.`,
+    sectionDeleted: t`Section deleted.`,
 
     // The things on the map.
-    itemsPlaces: "Places",
-    itemsWays: "Ways",
-    itemsEmpty: "Places and ways you add show up here.",
-    addCopyLine:
-      "Everyone in this plan, including people who join later, can see and copy what you add to it.",
-    searchByName: "Search by name",
-    searchNoMatch: "Nothing matches that name.",
-    photosCountToo: "Photos count too.",
-    addCopyFailed: "Couldn't add that.",
-    nothingToAdd: "Nothing of yours here yet.",
-    nothingTicked: "Tick something to add.",
-    saveCopyLine:
-      "The copy is yours. Changes to it stay with you, and changes in the plan don't reach it.",
-    saveCopyFailed: "Couldn't save a copy.",
-    itemDeleteFailed: "Couldn't delete that.",
-    itemDeleted: "Deleted from the plan.",
-    itemEdit: "Edit",
-    itemEditPlace: "Edit place",
-    itemEditWay: "Edit way",
-    inPlan: "In the plan",
-    sectionEmpty: "No text yet.",
-    printFormsNote:
-      "Only the Carpooling and Safety contacts forms can be printed, and only when everyone in the plan sees the answers.",
-    printIntro:
-      "For someone not on the trip, such as a parent. It's a file you keep or send, not a link.",
-    printGoing: "Who's going",
-    printSubmit: "Print or save as PDF",
-    printLeaders: "Leaders:",
-    itemName: "Name",
-    itemNotes: "Notes",
-    itemSaveFailed: "Couldn't save that.",
-    itemGone: "This was deleted from the plan.",
+    itemsPlaces: t`Places`,
+    itemsWays: t`Ways`,
+    itemsEmpty: t`Places and ways you add show up here.`,
+    addCopyLine: t`Everyone in this plan, including people who join later, can see and copy what you add to it.`,
+    searchByName: t`Search by name`,
+    searchNoMatch: t`Nothing matches that name.`,
+    photosCountToo: t`Photos count too.`,
+    addCopyFailed: t`Couldn't add that.`,
+    nothingToAdd: t`Nothing of yours here yet.`,
+    nothingTicked: t`Tick something to add.`,
+    saveCopyLine: t`The copy is yours. Changes to it stay with you, and changes in the plan don't reach it.`,
+    saveCopyFailed: t`Couldn't save a copy.`,
+    itemDeleteFailed: t`Couldn't delete that.`,
+    itemDeleted: t`Deleted from the plan.`,
+    itemEdit: t`Edit`,
+    itemEditPlace: t`Edit place`,
+    itemEditWay: t`Edit way`,
+    inPlan: t`In the plan`,
+    sectionEmpty: t`No text yet.`,
+    printFormsNote: t`Only the Carpooling and Safety contacts forms can be printed, and only when everyone in the plan sees the answers.`,
+    printIntro: t`For someone not on the trip, such as a parent. It's a file you keep or send, not a link.`,
+    printGoing: t`Who's going`,
+    printSubmit: t`Print or save as PDF`,
+    printLeaders: t`Leaders:`,
+    itemName: t`Name`,
+    itemNotes: t`Notes`,
+    itemSaveFailed: t`Couldn't save that.`,
+    itemGone: t`This was deleted from the plan.`,
     itemAlsoKnownAs: PLACE_FORM.copy.alsoKnownAs,
     itemAlsoKnownAsHint: PLACE_FORM.copy.alsoKnownAsHint,
-    itemLatitude: "Latitude",
-    itemLongitude: "Longitude",
-    itemAttributes: "Attributes",
-    itemDownloadHint: "Click to download",
-    placeTypeFallback: "Place",
-    placeSetAside: "Set aside",
-    placeSetAsideHint:
-      "The person who added this place had these attributes, and its type here doesn't have them. Save a copy to keep them.",
-    placeCopyFailed: "Couldn't copy the coordinates.",
-    tripLogPlaces: "Places on this trip",
-    tripLogNext: "Next",
+    itemLatitude: t`Latitude`,
+    itemLongitude: t`Longitude`,
+    itemAttributes: t`Attributes`,
+    itemDownloadHint: t`Click to download`,
+    placeTypeFallback: t`Place`,
+    placeSetAside: t`Set aside`,
+    placeSetAsideHint: t`The person who added this place had these attributes, and its type here doesn't have them. Save a copy to keep them.`,
+    placeCopyFailed: t`Couldn't copy the coordinates.`,
+    tripLogPlaces: t`Places on this trip`,
+    tripLogNext: t`Next`,
 
     // Forms.
-    formsEmpty: "No forms yet",
-    formsEmptyBodyLeader:
-      "Start from gear, carpooling, experience, first aid, safety contacts or trip rules.",
-    formsEmptyBody: "A leader adds forms for everyone to fill in.",
-    pillNotAnswered: "Not answered",
-    seenByLeaders: "Leaders see answers",
-    seenByMembers: "Everyone sees answers",
-    answer: "Answer",
-    changeAnswer: "Change my answer",
-    myAnswer: "Your answer",
-    everyonesAnswers: "Answers",
-    noAnswerYet: "No answer yet",
+    formsEmpty: t`No forms yet`,
+    formsEmptyBodyLeader: t`Start from gear, carpooling, experience, first aid, safety contacts or trip rules.`,
+    formsEmptyBody: t`A leader adds forms for everyone to fill in.`,
+    pillNotAnswered: t`Not answered`,
+    seenByLeaders: t`Leaders see answers`,
+    seenByMembers: t`Everyone sees answers`,
+    answer: t`Answer`,
+    changeAnswer: t`Change my answer`,
+    myAnswer: t`Your answer`,
+    everyonesAnswers: t`Answers`,
+    noAnswerYet: t`No answer yet`,
 
     // People.
-    peopleAsking: "Asking to join",
-    peopleGoing: "Going",
-    peopleInvited: "Invited",
-    letIn: "Accept",
-    turnDown: "Decline",
-    roleFailed: "Couldn't change their role.",
-    letInFailed: "Couldn't accept them.",
-    turnDownFailed: "Couldn't decline them.",
-    turnedDown: "Request declined.",
-    removeFailed: "Couldn't remove them.",
-    cancelInvite: "Cancel invite",
-    personUnanswered: "Hasn't answered",
-    cancelInviteFailed: "Couldn't cancel the invite.",
-    inviteCancelled: "Invite cancelled.",
+    peopleAsking: t`Asking to join`,
+    peopleGoing: t`Going`,
+    peopleInvited: t`Invited`,
+    letIn: t`Accept`,
+    turnDown: t`Decline`,
+    roleFailed: t`Couldn't change their role.`,
+    letInFailed: t`Couldn't accept them.`,
+    turnDownFailed: t`Couldn't decline them.`,
+    turnedDown: t`Request declined.`,
+    removeFailed: t`Couldn't remove them.`,
+    cancelInvite: t`Cancel invite`,
+    personUnanswered: t`Hasn't answered`,
+    cancelInviteFailed: t`Couldn't cancel the invite.`,
+    inviteCancelled: t`Invite cancelled.`,
 
-    archived: "Archived. It's under Archived in Plans.",
-    unarchived: "Brought back.",
-    archiveFailed: "Couldn't archive the plan.",
-    deleted: "Plan deleted.",
-    deleteFailed: "Couldn't delete the plan.",
-    left: "You left the plan.",
-    leaveFailed: "Couldn't leave the plan.",
+    archived: t`Archived. It's under Archived in Plans.`,
+    unarchived: t`Brought back.`,
+    archiveFailed: t`Couldn't archive the plan.`,
+    deleted: t`Plan deleted.`,
+    deleteFailed: t`Couldn't delete the plan.`,
+    left: t`You left the plan.`,
+    leaveFailed: t`Couldn't leave the plan.`,
   },
 } as const satisfies ScreenContract;
 
 /** The place dialog's copy-the-coordinates button, named for its place
  *  (`TRIP_PLAN_PAGE.copy.placeCopyFailed` is its failure). */
 export function tripPlanCopyCoordinatesLabel(name: string): string {
-  return `Copy the coordinates of ${name}`;
+  return t`Copy the coordinates of ${name}`;
 }
 
 export type TripPlanPageView = "writeUp" | "items" | "forms" | "people";
@@ -527,11 +521,10 @@ export function tripPlanVisibilityLine(
   preset: TripPlanFormPresetId | null = null,
 ): string {
   if (visibleTo === "leaders")
-    return "Only the plan's leaders see your answers.";
-  const line =
-    "Everyone in this plan sees your answers, including people who join later.";
+    return t`Only the plan's leaders see your answers.`;
+  const line = t`Everyone in this plan sees your answers, including people who join later.`;
   return preset && TRIP_PLAN_PRINTED_PRESETS.includes(preset)
-    ? `${line} Members may print them for someone not on the trip, such as a parent.`
+    ? t`${line} Members may print them for someone not on the trip, such as a parent.`
     : line;
 }
 
@@ -610,7 +603,7 @@ export function tripPlanSetAsideRows(
 export function tripPlanAddedByLine(
   addedBy: { username: string } | null,
 ): string | undefined {
-  return addedBy ? `Added by ${addedBy.username}` : undefined;
+  return addedBy ? t`Added by ${addedBy.username}` : undefined;
 }
 
 /** The dates line: dates · trip types · the caller's role (a member's says nothing). */
@@ -642,26 +635,25 @@ export function tripPlanDatesLine(
 
 export const TRIP_PLAN_JOIN = {
   id: "plans.join",
-  question: "Do I want to join this trip, and what do they need from me?",
+  question: t`Do I want to join this trip, and what do they need from me?`,
   sections: [
     // The name, the dates and who leads it.
     { key: "hero" },
   ],
   copy: {
-    leader: "Leader:",
-    invitedBy: "Invited by",
-    askToJoin: "Ask to join",
-    join: "Join",
-    decline: "Decline",
-    joinFailed: "Couldn't join the plan.",
-    joined: "You joined the plan.",
-    joining: "Joining…",
-    cancel: "Cancel",
-    declineTitle: "Decline this invite?",
-    declineBody:
-      "The invite goes away. A leader would have to invite you again.",
-    linkFailed: "This invite link no longer works. Ask for a new one.",
-    signIn: "A trip invite is waiting. Create an account or sign in to see it.",
+    leader: t`Leader:`,
+    invitedBy: t`Invited by`,
+    askToJoin: t`Ask to join`,
+    join: t`Join`,
+    decline: t`Decline`,
+    joinFailed: t`Couldn't join the plan.`,
+    joined: t`You joined the plan.`,
+    joining: t`Joining…`,
+    cancel: t`Cancel`,
+    declineTitle: t`Decline this invite?`,
+    declineBody: t`The invite goes away. A leader would have to invite you again.`,
+    linkFailed: t`This invite link no longer works. Ask for a new one.`,
+    signIn: t`A trip invite is waiting. Create an account or sign in to see it.`,
   },
 } as const satisfies ScreenContract;
 
@@ -672,7 +664,7 @@ export const TRIP_PLAN_JOIN = {
  */
 export const TRIP_PLAN_PREVIEW = {
   id: "plans.preview",
-  question: "What would I be joining, and what does it ask first?",
+  question: t`What would I be joining, and what does it ask first?`,
   sections: [
     // The name, then "dates · trip types" (`tripPlanInvitePage`).
     { key: "hero" },
@@ -685,10 +677,10 @@ export const TRIP_PLAN_PREVIEW = {
   ],
   // The join dialog's and the plan page's words, not a second copy.
   copy: {
-    invited: "You're invited",
-    joinHint: "Joining lets everyone in the plan see you're going.",
+    invited: t`You're invited`,
+    joinHint: t`Joining lets everyone in the plan see you're going.`,
     writeUpEmpty: TRIP_PLAN_PAGE.copy.writeUpEmpty,
-    gone: "This invite is gone: it was withdrawn, or the plan was deleted.",
+    gone: t`This invite is gone: it was withdrawn, or the plan was deleted.`,
     join: TRIP_PLAN_JOIN.copy.join,
     decline: TRIP_PLAN_JOIN.copy.decline,
     declined: TRIP_PLANS_LIST.copy.declined,
@@ -719,7 +711,7 @@ export function tripPlanInvitePage(
       ...preview.tripTypes.map(typeLabel),
     ].join(" · "),
     inviteTitle: preview.invitedBy
-      ? `${preview.invitedBy.username} invited you`
+      ? t`${preview.invitedBy.username} invited you`
       : copy.invited,
     inviteHint: copy.joinHint,
     sections: preview.sections,
@@ -730,7 +722,7 @@ export function tripPlanInvitePage(
 
 /** The join dialog's title. */
 export function tripPlanJoinTitle(planName: string): string {
-  return `Join ${planName}`;
+  return t`Join ${planName}`;
 }
 
 /** Whether a plan opens as an invite's preview: as its opener said, unless
@@ -748,8 +740,8 @@ export function opensPreview(
  *  off. A step inside the plan page's People. */
 export const TRIP_PLAN_INVITE = {
   id: "plans.invite",
-  title: "Invite people",
-  question: "Who else should come, and how do they get in?",
+  title: t`Invite people`,
+  question: t`Who else should come, and how do they get in?`,
   sections: [
     // The username search and the role they will get.
     { key: "search" },
@@ -757,38 +749,36 @@ export const TRIP_PLAN_INVITE = {
     { key: "link" },
   ],
   copy: {
-    back: "Back to people",
-    searchField: "Search friends or usernames",
-    friends: "Friends",
-    others: "Other people",
-    othersHint:
-      "Not a friend yet? Type their username to find them. People you invite need not be friends.",
-    role: "Role",
-    inviteSend: "Invite",
-    invited: "Invited.",
-    inviteFailed: "Couldn't invite them.",
-    linkHint: `Or send a link. Anyone with the link can ask to join. A leader lets each person in. It works for ${TRIP_PLAN_INVITE_TTL_DAYS} days.`,
-    linkCopy: "Copy invite link",
-    linkShare: "Share invite link",
-    linkCopied: "Invite link copied.",
-    linkMakeFailed: "Couldn't make an invite link.",
-    linkCopyFailed: "Couldn't copy the invite link.",
-    linkRevoke: "Turn off",
-    linkRevoked: "That link no longer works.",
-    linkRevokeFailed: "Couldn't turn off the link.",
-    linksLive: "Links that work",
-    inPlan: "In this plan",
-    searchFailed: "Couldn't search users.",
+    back: t`Back to people`,
+    searchField: t`Search friends or usernames`,
+    friends: t`Friends`,
+    others: t`Other people`,
+    othersHint: t`Not a friend yet? Type their username to find them. People you invite need not be friends.`,
+    role: t`Role`,
+    inviteSend: t`Invite`,
+    invited: t`Invited.`,
+    inviteFailed: t`Couldn't invite them.`,
+    linkHint: t`Or send a link. Anyone with the link can ask to join. A leader lets each person in. It works for ${TRIP_PLAN_INVITE_TTL_DAYS} days.`,
+    linkCopy: t`Copy invite link`,
+    linkShare: t`Share invite link`,
+    linkCopied: t`Invite link copied.`,
+    linkMakeFailed: t`Couldn't make an invite link.`,
+    linkCopyFailed: t`Couldn't copy the invite link.`,
+    linkRevoke: t`Turn off`,
+    linkRevoked: t`That link no longer works.`,
+    linkRevokeFailed: t`Couldn't turn off the link.`,
+    linksLive: t`Links that work`,
+    inPlan: t`In this plan`,
+    searchFailed: t`Couldn't search users.`,
   },
 } as const satisfies ScreenContract;
 
 /** What each role can do, as Invite people tells it before a leader picks.
  *  Which verbs a role runs is `PLAN_VERBS` and the lists beside it. */
 export const TRIP_PLAN_ROLE_ABOUT: Record<TripPlanRole, string> = {
-  member: "sees the plan, adds places and ways, answers forms and can leave.",
-  editor: "also edits the plan and its write-up.",
-  leader:
-    "also invites people, sets roles, runs forms, archives and deletes the plan.",
+  member: t`sees the plan, adds places and ways, answers forms and can leave.`,
+  editor: t`also edits the plan and its write-up.`,
+  leader: t`also invites people, sets roles, runs forms, archives and deletes the plan.`,
 };
 
 /** Invite people's two lists: friends matching what is typed (all of them
@@ -814,7 +804,7 @@ export function tripPlanInviteLinkLine(
 ): string {
   const day = (instant: string) =>
     tripPlanDayLabel(todayDateKey(new Date(instant)), thisYear);
-  return `Made ${day(link.createdAt)}, works until ${day(link.expiresAt)}`;
+  return t`Made ${day(link.createdAt)}, works until ${day(link.expiresAt)}`;
 }
 
 /** A person found in Invite people's search, as the plan has them now. */
@@ -835,12 +825,12 @@ export function tripPlanInPlanNow(words: string): string {
 
 /** The toast after asking to join through a link. */
 export function tripPlanAskedMessage(leader: string): string {
-  return `Asked to join. ${leader} will accept you.`;
+  return t`Asked to join. ${leader} will accept you.`;
 }
 
 /** What goes in the message a plan link is sent with. */
 export function tripPlanInviteMessage(planName: string, url: string): string {
-  return `Join ${planName} on Logjam: ${url}`;
+  return t`Join ${planName} on Logjam: ${url}`;
 }
 
 /**
@@ -880,7 +870,7 @@ export type TripPlanTripLogPrefill = ReturnType<typeof tripPlanTripLogPrefill>;
 
 export const TRIP_PLAN_FORMS = {
   id: "plans.form",
-  question: "What does this form ask, and what did people answer?",
+  question: t`What does this form ask, and what did people answer?`,
   sections: [
     // The title, back to the plan, the form's ⋯.
     { key: "hero" },
@@ -892,81 +882,81 @@ export const TRIP_PLAN_FORMS = {
     {
       key: "table",
       on: "web",
-      reason:
-        "A table a column per question needs a desk's width; Logjam GPS lists each person's answers under their name.",
+      reason: t`A table a column per question needs a desk's width; Logjam GPS lists each person's answers under their name.`,
     },
     {
       key: "list",
       on: "gps",
-      reason:
-        "A phone is too narrow for a column per question, so each person's answers stack under their name.",
+      reason: t`A phone is too narrow for a column per question, so each person's answers stack under their name.`,
     },
   ],
   copy: {
-    back: "Back to the plan",
-    actions: "Form actions",
-    mine: "Your answer",
-    answers: "Answers",
-    answer: "Answer",
-    change: "Change my answer",
-    noAnswer: "You haven't answered yet.",
-    noAnswerYet: "No answer yet",
-    member: "Member",
-    asking: "Asking to join",
-    save: "Send",
-    saveFailed: "Couldn't send your answer.",
+    back: t`Back to the plan`,
+    actions: t`Form actions`,
+    mine: t`Your answer`,
+    answers: t`Answers`,
+    answer: t`Answer`,
+    change: t`Change my answer`,
+    noAnswer: t`You haven't answered yet.`,
+    noAnswerYet: t`No answer yet`,
+    member: t`Member`,
+    asking: t`Asking to join`,
+    save: t`Send`,
+    saveFailed: t`Couldn't send your answer.`,
     // Under one empty required question; `tripPlanRequiredSummary` is above Send.
-    required: "Required.",
-    saved: "Answer sent.",
-    deleteFailed: "Couldn't delete the form.",
-    deleted: "Form deleted.",
+    required: t`Required.`,
+    saved: t`Answer sent.`,
+    deleteFailed: t`Couldn't delete the form.`,
+    deleted: t`Form deleted.`,
 
     // The builder, on both clients (`PLAN_FORM_VERBS`).
-    newTitle: "New form",
-    editTitle: "Edit form",
-    startFrom: "Start from",
-    blank: "A blank form",
-    title: "Title",
-    titlePlaceholder: "For example, Gear to borrow",
-    questionPlaceholder: "For example, What size wetsuit do you wear?",
-    visibleTo: "Who sees the answers",
-    visibleToLeaders: "Leaders",
-    visibleToMembers: "Everyone in the plan",
-    // The API's refusal, said before Save.
-    visibleToLocked: TRIP_PLAN_VISIBILITY_LOCKED_SENTENCE,
-    questions: "Questions",
+    newTitle: t`New form`,
+    editTitle: t`Edit form`,
+    startFrom: t`Start from`,
+    blank: t`A blank form`,
+    title: t`Title`,
+    titlePlaceholder: t`For example, Gear to borrow`,
+    questionPlaceholder: t`For example, What size wetsuit do you wear?`,
+    visibleTo: t`Who sees the answers`,
+    visibleToLeaders: t`Leaders`,
+    visibleToMembers: t`Everyone in the plan`,
+    // The API's refusal, said before Save. A getter, so it is written when read
+    // and not when this module loads (contractLanguage.test.ts).
+    get visibleToLocked() {
+      return tripPlanVisibilityLockedSentence();
+    },
+    questions: t`Questions`,
     // After a 409, over questions another leader saved meanwhile.
-    questionsChanged:
-      "Another leader changed these questions since you opened the form. Saving keeps yours.",
-    questionLabel: "Question",
-    questionKind: "Kind",
-    questionHelp: "Hint",
-    questionRequired: "Required",
-    options: "Options",
-    optionLabel: "Option",
-    addOption: "Add an option",
-    removeOption: "Remove option",
-    addQuestion: "Add a question",
-    removeQuestion: "Remove question",
-    moveUp: "Move up",
-    moveDown: "Move down",
-    add: "Add form",
-    saveForm: "Save",
-    formSaveFailed: "Couldn't save the form.",
-    titleNeeded: "Give the form a title.",
+    questionsChanged: t`Another leader changed these questions since you opened the form. Saving keeps yours.`,
+    questionLabel: t`Question`,
+    questionKind: t`Kind`,
+    questionHelp: t`Hint`,
+    questionRequired: t`Required`,
+    options: t`Options`,
+    optionLabel: t`Option`,
+    addOption: t`Add an option`,
+    removeOption: t`Remove option`,
+    addQuestion: t`Add a question`,
+    removeQuestion: t`Remove question`,
+    moveUp: t`Move up`,
+    moveDown: t`Move down`,
+    add: t`Add form`,
+    saveForm: t`Save`,
+    formSaveFailed: t`Couldn't save the form.`,
+    titleNeeded: t`Give the form a title.`,
     // The chooser a new form starts from.
-    chooseTemplates: "Templates",
-    chooseMine: "From your other plans",
-    chooseBlankHint: "Write your own questions.",
-    chooseBack: "Back",
-    chooseFrom: "From",
-    chooseMineLoading: "Loading your forms…",
-    chooseMineFailed: "Couldn't load your forms from other plans.",
-    chooseMineEmpty: "Forms you make in other plans you lead show up here.",
-    formSaved: "Form saved.",
-    yes: "Yes",
-    no: "No",
-    agreed: "Agreed",
+    chooseTemplates: t`Templates`,
+    chooseMine: t`From your other plans`,
+    chooseBlankHint: t`Write your own questions.`,
+    chooseBack: t`Back`,
+    chooseFrom: t`From`,
+    chooseMineLoading: t`Loading your forms…`,
+    chooseMineFailed: t`Couldn't load your forms from other plans.`,
+    chooseMineEmpty: t`Forms you make in other plans you lead show up here.`,
+    formSaved: t`Form saved.`,
+    yes: t`Yes`,
+    no: t`No`,
+    agreed: t`Agreed`,
   },
 } as const satisfies ScreenContract;
 
@@ -975,13 +965,12 @@ export const TRIP_PLAN_FORM_PRESET_BLURBS: Record<
   TripPlanFormPresetId,
   string
 > = {
-  gear: "Who needs to borrow what, and wetsuit sizes.",
-  carpool: "Who can drive, who needs a lift, and from where.",
-  experience: "How much canyoning and abseiling people have done.",
-  firstAid: "First aid training and what people carry.",
-  safetyContacts:
-    "Someone to call, and medical details people choose to share.",
-  rules: "The trip's ground rules, for each person to agree to.",
+  gear: t`Who needs to borrow what, and wetsuit sizes.`,
+  carpool: t`Who can drive, who needs a lift, and from where.`,
+  experience: t`How much canyoning and abseiling people have done.`,
+  firstAid: t`First aid training and what people carry.`,
+  safetyContacts: t`Someone to call, and medical details people choose to share.`,
+  rules: t`The trip's ground rules, for each person to agree to.`,
 };
 
 /** Each question kind's name in the builder. */
@@ -989,14 +978,14 @@ export const TRIP_PLAN_QUESTION_KIND_LABELS: Record<
   TripPlanQuestionKind,
   string
 > = {
-  text: "Short answer",
-  longText: "Paragraph",
-  phone: "Phone number",
-  number: "Number",
-  choice: "One from a list",
-  multiChoice: "Tick list",
-  yesNo: "Yes or no",
-  agree: "A box to tick",
+  text: t`Short answer`,
+  longText: t`Paragraph`,
+  phone: t`Phone number`,
+  number: t`Number`,
+  choice: t`One from a list`,
+  multiChoice: t`Tick list`,
+  yesNo: t`Yes or no`,
+  agree: t`A box to tick`,
 };
 
 /** An answer as words, for a table, a list or the print summary. Blank when
@@ -1145,7 +1134,7 @@ export const TRIP_PLAN_FORMS_URGENT_DAYS = 7;
  *  plans list's card say it the same way. Empty for none. */
 export function tripPlanFormsToAnswerLine(count: number): string {
   if (count <= 0) return "";
-  return count === 1 ? "1 form to answer" : `${count} forms to answer`;
+  return plural(count, "# form to answer", "# forms to answer");
 }
 
 const DAY_MS = 86_400_000;
@@ -1252,10 +1241,10 @@ export function tripPlanFormTallyLines(
     ? tally.missing.filter((user) => user.id !== me)
     : tally.missing;
   return [
-    `${tally.answered} of ${tally.total} answered`,
+    t`${tally.answered} of ${tally.total} answered`,
     ...(missing.length > 0
       ? [
-          `Not answered yet: ${missing.map((user) => (user.id === me ? "you" : user.username)).join(", ")}`,
+          t`Not answered yet: ${missing.map((user) => (user.id === me ? t`you` : user.username)).join(", ")}`,
         ]
       : []),
   ];
@@ -1280,8 +1269,8 @@ export function tripPlanBulkOffers<P extends { role: TripPlanRole }>(
     archive: plans.length > 0 && leave.length === 0,
     deleteLabel:
       lead.length > 0
-        ? "Delete or leave the selected plans"
-        : "Leave the selected plans",
+        ? t`Delete or leave the selected plans`
+        : t`Leave the selected plans`,
   };
 }
 
@@ -1293,39 +1282,58 @@ export function tripPlanBulkConfirm(
   deleteAdded = false,
 ) {
   const { lead, leave } = counts;
-  const plans = (count: number) => `${count} ${count === 1 ? "plan" : "plans"}`;
+  const plans = (count: number) => plural(count, "# plan", "# plans");
   const parts: string[] = [];
   if (lead > 0)
     parts.push(
-      `Deleting ${plans(lead)} removes ${lead === 1 ? "its" : "their"} write-up${lead === 1 ? "" : "s"}, forms and everyone's answers, for everyone. Copies people saved to their own accounts stay.`,
+      plural(
+        lead,
+        "Deleting # plan removes its write-up, forms and everyone's answers, for everyone. Copies people saved to their own accounts stay.",
+        "Deleting # plans removes their write-ups, forms and everyone's answers, for everyone. Copies people saved to their own accounts stay.",
+      ),
     );
   if (leave > 0)
     parts.push(
-      `Leaving ${plans(leave)} loses you access at once and removes your answers. ${deleteAdded ? "What you added is deleted too." : "What you added stays."}`,
+      deleteAdded
+        ? plural(
+            leave,
+            "Leaving # plan loses you access at once and removes your answers. What you added is deleted too.",
+            "Leaving # plans loses you access at once and removes your answers. What you added is deleted too.",
+          )
+        : plural(
+            leave,
+            "Leaving # plan loses you access at once and removes your answers. What you added stays.",
+            "Leaving # plans loses you access at once and removes your answers. What you added stays.",
+          ),
     );
   const title =
     lead > 0 && leave > 0
-      ? `Delete ${plans(lead)} and leave ${plans(leave)}?`
+      ? plural(
+          lead,
+          "Delete # plan and leave {0}?",
+          "Delete # plans and leave {0}?",
+          plans(leave),
+        )
       : lead > 0
-        ? `Delete ${plans(lead)}?`
-        : `Leave ${plans(leave)}?`;
+        ? plural(lead, "Delete # plan?", "Delete # plans?")
+        : plural(leave, "Leave # plan?", "Leave # plans?");
   return {
     confirmTitle: title,
     confirmBody: parts.join(" "),
-    confirmLabel: lead > 0 ? "Delete" : "Leave",
+    confirmLabel: lead > 0 ? t`Delete` : t`Leave`,
     destructive: lead > 0,
   };
 }
 
 /** Bulk leave's box. Off by default: leaving keeps what you added. */
-export const TRIP_PLAN_BULK_DELETE_ADDED_LABEL = "Also delete what I added";
+export const TRIP_PLAN_BULK_DELETE_ADDED_LABEL = t`Also delete what I added`;
 
 export function tripPlanLetInMessage(username: string): string {
-  return `${username} is in.`;
+  return t`${username} is in.`;
 }
 
 export function tripPlanRemovedMessage(username: string): string {
-  return `${username} removed.`;
+  return t`${username} removed.`;
 }
 
 /**
@@ -1464,17 +1472,15 @@ export function tripPlanAddable<
 /** The add dialog's submit: "Add 3 places or ways", and the plain verb before a tick
  *  (a zero is left out, shared/DESIGN.md §11). */
 export function tripPlanAddCopiesLabel(count: number): string {
-  if (count === 0) return "Add a place or way";
-  return count === 1 ? "Add 1 place or way" : `Add ${count} places or ways`;
+  if (count === 0) return t`Add a place or way`;
+  return plural(count, "Add # place or way", "Add # places or ways");
 }
 
 /** What landed, said once the loop ends: the API's sentence for a stop. */
 export function tripPlanAddedMessage(added: number, asked: number): string {
   if (added === asked)
-    return added === 1
-      ? "Added 1 place or way."
-      : `Added ${added} places or ways.`;
-  return `Added ${added} of ${asked}.`;
+    return plural(added, "Added # place or way.", "Added # places or ways.");
+  return t`Added ${added} of ${asked}.`;
 }
 
 /** The price line above Add a place or way's submit. `uses` is null when only
@@ -1483,8 +1489,8 @@ export function tripPlanAddCopyPrice(
   uses: string | null,
   left: string,
 ): string {
-  const room = `You have ${left} left.`;
-  return uses ? `Uses ${uses} of your storage. ${room}` : room;
+  const room = t`You have ${left} left.`;
+  return uses ? t`Uses ${uses} of your storage. ${room}` : room;
 }
 
 /**
@@ -1557,16 +1563,22 @@ export function tripPlanTripLogPlacesLine(
   total: number,
 ): string {
   if (matched === 0)
-    return "None of this plan's places are in your places, so the trip links none.";
+    return t`None of this plan's places are in your places, so the trip links none.`;
   const left = total - matched;
   if (left === 0)
-    return "These are all in your places, so the trip can link any of them.";
-  return `Only places you already have are listed; the other ${left} ${left === 1 ? "is" : "are"} left out.`;
+    return t`These are all in your places, so the trip can link any of them.`;
+  return plural(
+    left,
+    "Only places you already have are listed; the other # is left out.",
+    "Only places you already have are listed; the other # are left out.",
+  );
 }
 
 /** Where Save a copy put it. */
 export function tripPlanSavedMessage(kind: TripPlanItemKind): string {
-  return `Saved a copy to your ${kind === "place" ? "places" : "ways"}.`;
+  return kind === "place"
+    ? t`Saved a copy to your places.`
+    : t`Saved a copy to your ways.`;
 }
 
 // ── Plans list: bulk actions ────────────────────────────────────────
@@ -1578,22 +1590,46 @@ export function tripPlanBulkDone(
   done: number,
   total: number,
 ): string {
-  const verb = {
-    delete: "Deleted",
-    leave: "Left",
-    archive: "Archived",
-    unarchive: "Brought back",
+  if (done === total)
+    return {
+      delete: plural(total, "Deleted # plan.", "Deleted # plans."),
+      leave: plural(total, "Left # plan.", "Left # plans."),
+      archive: plural(total, "Archived # plan.", "Archived # plans."),
+      unarchive: plural(total, "Brought back # plan.", "Brought back # plans."),
+    }[kind];
+  // `{0}` is the count done and `#` the total.
+  return {
+    delete: plural(
+      total,
+      "Deleted {0} of # plan. The rest didn't go through.",
+      "Deleted {0} of # plans. The rest didn't go through.",
+      done,
+    ),
+    leave: plural(
+      total,
+      "Left {0} of # plan. The rest didn't go through.",
+      "Left {0} of # plans. The rest didn't go through.",
+      done,
+    ),
+    archive: plural(
+      total,
+      "Archived {0} of # plan. The rest didn't go through.",
+      "Archived {0} of # plans. The rest didn't go through.",
+      done,
+    ),
+    unarchive: plural(
+      total,
+      "Brought back {0} of # plan. The rest didn't go through.",
+      "Brought back {0} of # plans. The rest didn't go through.",
+      done,
+    ),
   }[kind];
-  const plans = total === 1 ? "1 plan" : `${total} plans`;
-  return done === total
-    ? `${verb} ${plans}.`
-    : `${verb} ${done} of ${plans}. The rest didn't go through.`;
 }
 
 /** "20 forms at most": why an Add control is disabled at its cap. */
 export const tripPlanAtMost = (max: number, noun: string): string =>
-  `${max} ${noun} at most`;
+  t`${max} ${noun} at most`;
 
 /** A row's ⋯ label: "Actions for Arethusa Canyon". */
 export const tripPlanActionsFor = (name: string): string =>
-  `Actions for ${name}`;
+  t`Actions for ${name}`;

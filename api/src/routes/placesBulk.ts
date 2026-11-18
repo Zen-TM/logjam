@@ -18,7 +18,7 @@ import {
   validateFieldValues,
   type PlaceMergePolicy,
   type TripLogCustomFieldDef,
-  MALFORMED_REQUEST_SENTENCE,
+  malformedRequestSentence,
   type UserSentence,
 } from "@logjam/shared";
 import { resolveUser } from "../lib/resolveUser";
@@ -185,21 +185,21 @@ router.post(
       if (!row.data || !row.resolution) {
         errors.push({
           rowIndex: i,
-          message: MALFORMED_REQUEST_SENTENCE,
+          message: malformedRequestSentence(),
         });
         continue;
       }
       if (row.resolution.kind !== "create" && row.resolution.kind !== "merge") {
         errors.push({
           rowIndex: i,
-          message: MALFORMED_REQUEST_SENTENCE,
+          message: malformedRequestSentence(),
         });
         continue;
       }
       if (row.resolution.kind === "merge" && !row.resolution.placeId) {
         errors.push({
           rowIndex: i,
-          message: MALFORMED_REQUEST_SENTENCE,
+          message: malformedRequestSentence(),
         });
         continue;
       }

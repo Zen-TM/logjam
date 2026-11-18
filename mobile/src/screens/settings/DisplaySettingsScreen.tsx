@@ -17,11 +17,17 @@
 import { useCallback, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import {
+  language,
+  LANGUAGE_SETTING,
+  offeredHere,
+  showsLanguageChoice,
   THEME_SCHEMES,
   THEME_SCHEME_ORDER,
+  type Language,
   type ThemeSchemeId,
   UNITS_CHOICE,
   type Units,
+  t,
 } from "@logjam/shared";
 
 import { apiFetch } from "../../api/apiFetch";
@@ -41,6 +47,8 @@ import {
   wash,
 } from "../../theme";
 import type { TUser } from "../../api/types";
+import { chooseLanguage, languageRow } from "../../languageSetting";
+import { useTracks } from "../../tracks/useTracks";
 import {
   ScreenScroll,
   SectionHeader,
@@ -60,11 +68,11 @@ import { ChoiceGroup } from "./settingsKit";
 /** Chip labels for the multiplier. The number is the honest label here — a
  *  vocabulary ("Small / Medium / Large") hides that 1.0 is the OS's own size. */
 const TEXT_SCALE_LABELS: Record<TextScale, string> = {
-  0.9: "Smaller",
-  1: "Default",
-  1.15: "Large",
-  1.3: "Larger",
-  1.5: "Largest",
+  0.9: t`Smaller`,
+  1: t`Default`,
+  1.15: t`Large`,
+  1.3: t`Larger`,
+  1.5: t`Largest`,
 };
 
 export function DisplaySettingsScreen() {
@@ -88,7 +96,7 @@ export function DisplaySettingsScreen() {
       // below.
       if (!setThemeSchemeId(id)) {
         notify(
-          "This phone wouldn't store that theme, so it lasts until Logjam GPS closes.",
+          t`This phone wouldn't store that theme, so it lasts until Logjam GPS closes.`,
           "error",
         );
         return;
@@ -104,7 +112,7 @@ export function DisplaySettingsScreen() {
         console.error(err);
         // True, and specific: the phone kept it, the account didn't get it.
         notify(
-          "Saved on this phone, but it didn't reach your account.",
+          t`Saved on this phone, but it didn't reach your account.`,
           "error",
         );
       });
@@ -116,13 +124,15 @@ export function DisplaySettingsScreen() {
   const chooseTextScale = useCallback(
     (next: TextScale) => {
       if (!persistTextScale(next)) {
-        notify("This phone wouldn't store that text size.", "error");
+        notify(t`This phone wouldn't store that text size.`, "error");
         return;
       }
       setTextScale(next);
     },
     [notify],
   );
+
+  const offered = offeredHere();
 
   // Where the units row is drawn, when it is (`unitsSettingRow`): a guest's
   // choice stays on the phone (ADR 0007), and the row holds while a send is out
@@ -141,7 +151,7 @@ export function DisplaySettingsScreen() {
   return (
     <>
       <ScreenScroll>
-        <SectionHeader title="Theme" />
+        <SectionHeader title={t`Theme`} />
         <View style={styles.schemes}>
           {THEME_SCHEME_ORDER.map((id) => (
             <SchemeCard
@@ -154,7 +164,7 @@ export function DisplaySettingsScreen() {
         </View>
 
         <ChoiceGroup
-          label="Text size"
+          label={t`Text size`}
           options={TEXT_SCALES.map((scale) => ({
             value: String(scale),
             label: TEXT_SCALE_LABELS[scale],
@@ -165,7 +175,7 @@ export function DisplaySettingsScreen() {
           hint={
             textScale === chosenTextScale
               ? undefined
-              : "Applies next time you open Logjam GPS."
+              : t`Applies next time you open Logjam GPS.`
           }
         />
 
@@ -179,10 +189,57 @@ export function DisplaySettingsScreen() {
             disabledReason={unitsSaving ? unitsRow.saving : undefined}
           />
         ) : null}
+
+        {/* A child, so prod (one language) reads no tracks for a row it never draws. */}
+        {showsLanguageChoice(offered) ? (
+          <LanguageRow offered={offered} notify={notify} />
+        ) : null}
       </ScreenScroll>
 
       <Toast message={toast} onDismissed={() => setToast(null)} />
     </>
+  );
+}
+
+/**
+ * The language choice. Its own component so that the track list it reads (to
+ * hold the row while one records) is read only where the row is drawn: with one
+ * language offered nothing here runs. Guard: languageSetting.test.ts ("reads
+ * no tracks itself: only the language row does").
+ */
+function LanguageRow({
+  offered,
+  notify,
+}: {
+  offered: readonly Language[];
+  notify: (text: string, tone?: ToastMessage["tone"]) => void;
+}) {
+  const { tracks, loaded } = useTracks();
+  const row = languageRow(offered, tracks, loaded);
+  const pick = useCallback(
+    async (next: Language) => {
+      const result = await chooseLanguage(next);
+      if (result === "refused") {
+        notify(LANGUAGE_SETTING.saveFailed.gps, "error");
+      } else if (result === "stored") {
+        notify(LANGUAGE_SETTING.restartFailed);
+      }
+    },
+    [notify],
+  );
+  if (!row) return null;
+  return (
+    <ChoiceGroup
+      label={LANGUAGE_SETTING.title}
+      options={row.offered.map((lang) => ({
+        value: lang,
+        label: LANGUAGE_SETTING.names[lang],
+      }))}
+      value={language()}
+      hint={LANGUAGE_SETTING.hint.gps}
+      disabledReason={row.heldReason ?? undefined}
+      onChange={(next) => void pick(next)}
+    />
   );
 }
 

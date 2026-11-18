@@ -1,7 +1,7 @@
 // How old the phone's copy of the account is, for the Offline pill: nothing
 // until it is over a day ("Offline · synced Sat"), because within a day the
 // pill's own word is the whole answer.
-import { SHORT_MONTHS, SHORT_WEEKDAYS } from "@logjam/shared";
+import { formatDayMonth, localDay, shortWeekday, t } from "@logjam/shared";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -17,6 +17,6 @@ export function syncAgeLabel(
   const elapsed = now - then.getTime();
   if (elapsed <= DAY_MS) return null;
   return elapsed < 7 * DAY_MS
-    ? `synced ${SHORT_WEEKDAYS[then.getDay()]}`
-    : `synced ${then.getDate()} ${SHORT_MONTHS[then.getMonth()]}`;
+    ? t`synced ${shortWeekday(then.getDay())}`
+    : t`synced ${formatDayMonth(localDay(then))}`;
 }

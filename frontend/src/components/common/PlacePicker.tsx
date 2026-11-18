@@ -18,6 +18,7 @@ import { useId, useMemo, useRef, useState } from "react";
 import { placeMatchesSearch, type TPlace } from "../../placeUtils";
 import { SearchField, Icon } from "../../ui";
 import classes from "./PlacePicker.module.css";
+import { t } from "@logjam/shared";
 
 /** Enough to choose from without becoming a list to scroll — the answer to too
  *  many matches is to type more, not to scroll further. */
@@ -142,9 +143,10 @@ export default function PlacePicker({
             ))}
           </ul>
           {matches.length === 0 && (
-            <p className={classes.status} role="status">
-              No places match.
-            </p>
+            <p
+              className={classes.status}
+              role="status"
+            >{t`No places match.`}</p>
           )}
         </div>
       )}

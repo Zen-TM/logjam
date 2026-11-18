@@ -852,7 +852,7 @@ describe("media pass", () => {
     await expect(flushOutbox()).rejects.toThrow();
 
     expect(rows[0].state).toBe("blocked");
-    expect(String(rows[0].error_json)).toContain("keeps failing");
+    expect(String(rows[0].error_json)).toContain("keeps_failing");
   });
 
   it("requeues a failure that still has attempts left", async () => {

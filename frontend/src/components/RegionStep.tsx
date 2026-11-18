@@ -5,6 +5,7 @@ import {
   REGIONS,
   toggleRegion,
   type Region,
+  t,
 } from "@logjam/shared";
 import { messageFromError } from "../errors/messageFromError";
 import { updateUserPreferences, type TUser } from "../placeUtils";
@@ -84,10 +85,8 @@ function RegionStep({
           className={classes.action}
           onClick={onSignOut}
           disabled={submitting}
-          disabledReason="Saving your regions…"
-        >
-          Sign out
-        </Button>
+          disabledReason={t`Saving your regions…`}
+        >{t`Sign out`}</Button>
       </div>
     </div>
   );

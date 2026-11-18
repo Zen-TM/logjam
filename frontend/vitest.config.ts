@@ -8,7 +8,7 @@ import { defineConfig } from "vitest/config";
 //
 // TZ: a zone behind UTC, set before the workers start (they inherit it). A
 // date-only value is stored as UTC midnight and shows the day before in such a
-// zone unless it is formatted with `timeZone: "UTC"` (AGENTS.md); in CI's UTC
+// zone unless it is read with `utcDay` or `dayOfKey` (frontend/AGENTS.md); in CI's UTC
 // or Sydney's AEST no test would notice a format that forgot. Guard:
 // the date attribute in PlaceDetailPanel.grade.render.test.tsx.
 process.env.TZ = "Pacific/Pago_Pago";

@@ -3,6 +3,8 @@
 // Shared by Logjam GPS and Logjam Web so both clients present identical
 // figures without drift.
 
+import { t } from "./i18n.js";
+
 /**
  * Bytes as a size a person can act on: GB with one decimal, whole MB, whole KB.
  *
@@ -25,9 +27,9 @@ export function formatBytes(bytes: number): string {
  * surfaces so two surfaces do not phrase the same wait differently.
  */
 export function formatMinutes(seconds: number): string {
-  if (seconds < 90) return "under a minute";
+  if (seconds < 90) return t`under a minute`;
   const minutes = Math.round(seconds / 60);
-  if (minutes < 60) return `about ${minutes} min`;
+  if (minutes < 60) return t`about ${minutes} min`;
   const hours = Math.floor(minutes / 60);
-  return `about ${hours} h ${minutes % 60} min`;
+  return t`about ${hours} h ${minutes % 60} min`;
 }

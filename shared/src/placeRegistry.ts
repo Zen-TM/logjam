@@ -10,6 +10,8 @@
 // PRIVACY: the typed query is the sensitive part, often the name of a place
 // the user would rather not publish.
 
+import { t } from "./i18n.js";
+
 /** Bumped when the file's shape changes. Each format has its own prefix, so
  *  an older client keeps reading builds in the format it knows. */
 export const PLACE_REGISTRY_FORMAT = 1;
@@ -80,7 +82,7 @@ export interface PlaceResult {
  *  A town is not near itself. */
 export function placeResultDetail(result: PlaceResult): string {
   return result.near && result.near !== result.name
-    ? `${result.kind} near ${result.near}`
+    ? t`${result.kind} near ${result.near}`
     : result.kind;
 }
 
@@ -138,39 +140,40 @@ export function placeRegistryUrl(
 
 // Words for the kinds whose OSM value reads wrong to a walker ("residential"
 // for a street). Every other kind reads as its value: camp_site → "Camp site".
-const KIND_LABELS: Record<string, string> = {
-  "boundary=protected_area": "Reserve",
-  "boundary=national_park": "National park",
-  "leisure=nature_reserve": "Nature reserve",
-  "waterway=stream": "Creek",
-  "waterway=river": "River",
-  "waterway=waterfall": "Waterfall",
-  "highway=motorway": "Road",
-  "highway=trunk": "Road",
-  "highway=primary": "Road",
-  "highway=secondary": "Road",
-  "highway=tertiary": "Road",
-  "highway=unclassified": "Road",
-  "highway=residential": "Street",
-  "highway=living_street": "Street",
-  "highway=service": "Road",
-  "highway=track": "Track",
-  "highway=path": "Path",
-  "highway=footway": "Path",
-  "highway=trailhead": "Trailhead",
-  "tourism=viewpoint": "Lookout",
-  "place=isolated_dwelling": "Homestead",
-};
+// A function, because the API sends these words in the request's language.
+const kindLabels = (): Record<string, string> => ({
+  "boundary=protected_area": t`Reserve`,
+  "boundary=national_park": t`National park`,
+  "leisure=nature_reserve": t`Nature reserve`,
+  "waterway=stream": t`Creek`,
+  "waterway=river": t`River`,
+  "waterway=waterfall": t`Waterfall`,
+  "highway=motorway": t`Road`,
+  "highway=trunk": t`Road`,
+  "highway=primary": t`Road`,
+  "highway=secondary": t`Road`,
+  "highway=tertiary": t`Road`,
+  "highway=unclassified": t`Road`,
+  "highway=residential": t`Street`,
+  "highway=living_street": t`Street`,
+  "highway=service": t`Road`,
+  "highway=track": t`Track`,
+  "highway=path": t`Path`,
+  "highway=footway": t`Path`,
+  "highway=trailhead": t`Trailhead`,
+  "tourism=viewpoint": t`Lookout`,
+  "place=isolated_dwelling": t`Homestead`,
+});
 
 // `key=yes` says only which key it is: `natural=yes` is a natural feature.
-const YES_LABELS: Record<string, string> = {
-  natural: "Natural feature",
-  tourism: "Attraction",
-  historic: "Historic site",
-  man_made: "Structure",
-  landuse: "Area",
-  leisure: "Leisure area",
-};
+const yesLabels = (): Record<string, string> => ({
+  natural: t`Natural feature`,
+  tourism: t`Attraction`,
+  historic: t`Historic site`,
+  man_made: t`Structure`,
+  landuse: t`Area`,
+  leisure: t`Leisure area`,
+});
 
 function capitalised(text: string): string {
   const spaced = text.replace(/_/g, " ");
@@ -178,10 +181,10 @@ function capitalised(text: string): string {
 }
 
 export function placeKindLabel(kind: string): string {
-  const label = KIND_LABELS[kind];
+  const label = kindLabels()[kind];
   if (label) return label;
   const [key, value] = kind.split("=");
-  if (value === "yes") return YES_LABELS[key] ?? capitalised(key);
+  if (value === "yes") return yesLabels()[key] ?? capitalised(key);
   return capitalised(value);
 }
 

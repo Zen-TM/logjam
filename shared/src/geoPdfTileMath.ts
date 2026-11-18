@@ -6,7 +6,7 @@
 // uses them, and its dialog asks `geoPdfTooLarge` the same question the
 // renderer does, so a refusal shows before anything is drawn.
 import { GEOPDF_BASE_LAYER_CONFIG } from "./geoPdfBaseLayers.js";
-import { say } from "./userSentence.js";
+import { say, type UserSentence } from "./userSentence.js";
 
 const DEG_TO_RAD = Math.PI / 180;
 
@@ -190,12 +190,14 @@ export function geoPdfBaseTileZoom(
 /** The most the renderer allocates for the map image, at four bytes a pixel. */
 export const GEOPDF_MAX_CANVAS_BYTES = 400 * 1024 * 1024;
 
-export const GEOPDF_TOO_LARGE = say`That GeoPDF is too large to make. Try a smaller paper size or a smaller area.`;
+export function geoPdfTooLargeSentence(): UserSentence {
+  return say`That GeoPDF is too large to make. Try a smaller paper size or a smaller area.`;
+}
 
 /**
  * Whether the map image for this area and scale is past what the renderer
  * allocates. The dialog shows it live and the API refuses it at submit, both
- * with `GEOPDF_TOO_LARGE`; the renderer checks the canvas it allocates.
+ * with `geoPdfTooLargeSentence()`; the renderer checks the canvas it allocates.
  */
 export function geoPdfTooLarge(
   extent: { north: number; south: number; east: number; west: number },

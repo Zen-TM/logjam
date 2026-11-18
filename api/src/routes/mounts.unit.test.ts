@@ -19,6 +19,7 @@ const MIDDLEWARE = new Set([
   "pinoHttp",
   "cors",
   "helmet",
+  "languageForRequest",
   "express.json",
   "globalLimiter",
   "originVerify",

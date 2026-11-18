@@ -4,6 +4,9 @@ import {
   todayDateKey,
   tripPlanDatesLabel,
   weekBand,
+  dayOfKey,
+  formatFullDay,
+  formatLongMonthYear,
 } from "@logjam/shared";
 import { Button, IconButton } from "./Button";
 import { inRange, monthGrid } from "./dateRange";
@@ -123,13 +126,7 @@ export function DateRangeField({
     const next = pickDay(range, day);
     onChange(next.start, next.end);
   };
-  const monthLabel = new Date(
-    Date.UTC(shown.year, shown.month, 1),
-  ).toLocaleDateString(undefined, {
-    month: "long",
-    year: "numeric",
-    timeZone: "UTC",
-  });
+  const monthLabel = formatLongMonthYear(shown);
 
   return (
     <fieldset className={classes.field}>
@@ -188,10 +185,7 @@ export function DateRangeField({
               tabIndex={day === stop ? 0 : -1}
               aria-pressed={inRange(range, day)}
               aria-current={day === today ? "date" : undefined}
-              aria-label={new Date(`${day}T00:00:00Z`).toLocaleDateString(
-                undefined,
-                { dateStyle: "full", timeZone: "UTC" },
-              )}
+              aria-label={formatFullDay(dayOfKey(day))}
               onClick={() => {
                 setActive(day);
                 pick(day);

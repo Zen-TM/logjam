@@ -5,6 +5,7 @@ import { navFigures } from "../map/navFigures";
 import { makeStyles, spacing, radius, useTheme } from "../theme";
 import { Icon } from "./Icon";
 import { IconButton } from "./IconButton";
+import { t } from "@logjam/shared";
 
 /** Coarse on purpose: an age in whole seconds needs no more. */
 const AGE_TICK_MS = 5000;
@@ -62,14 +63,20 @@ export function NavReadout({
   const f = navFigures(distanceM, bearingDeg, quality, fixAtMs, now);
   const figure = [styles.figure, f.grey && styles.grey];
   const second = !f.known
-    ? `${name} · waiting for GPS…`
+    ? t`${name} · waiting for GPS…`
     : f.age
-      ? `${name} · ${f.age}`
+      ? t`${name} · ${f.age}`
       : name;
   // What a screen reader says for the figures: the age and "about" included.
   const spoken = !f.known
-    ? "waiting for GPS"
-    : `${f.about ? "about " : ""}${f.distance}${f.unit}, ${f.bearing}${f.age ? `, ${f.age}` : ""}`;
+    ? t`waiting for GPS`
+    : f.about
+      ? f.age
+        ? t`about ${f.distance}${f.unit}, ${f.bearing}, ${f.age}`
+        : t`about ${f.distance}${f.unit}, ${f.bearing}`
+      : f.age
+        ? t`${f.distance}${f.unit}, ${f.bearing}, ${f.age}`
+        : t`${f.distance}${f.unit}, ${f.bearing}`;
 
   return (
     <View style={styles.card}>
@@ -77,12 +84,12 @@ export function NavReadout({
         {/* Its own focus target, so the X stays a button of its own. */}
         <View
           accessible
-          accessibilityLabel={`${name}: ${spoken}`}
+          accessibilityLabel={t`${name}: ${spoken}`}
           style={styles.figures}
         >
           <Icon idea="navigateTo" size={20} color={theme.accent} />
           <Text style={figure}>
-            {f.about ? <Text style={styles.unit}>about </Text> : null}
+            {f.about ? <Text style={styles.unit}>{t`about`} </Text> : null}
             {f.distance}
             <Text style={styles.unit}>{f.unit}</Text>
           </Text>
@@ -91,7 +98,7 @@ export function NavReadout({
         <IconButton
           icon="close"
           size={16}
-          accessibilityLabel="Stop navigating"
+          accessibilityLabel={t`Stop navigating`}
           onPress={onStop}
         />
       </View>

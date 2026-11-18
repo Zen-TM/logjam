@@ -13,6 +13,13 @@
  * timezone.
  */
 
+import { monthInitial } from "./dateNames.js";
+import {
+  formatDayMonthYear,
+  formatMonthYear,
+  formatWeekdayDayMonthYearComma,
+  utcDay,
+} from "./dateFormat.js";
 import {
   UNTAGGED_ACTIVITY,
   type ActivityTally,
@@ -23,6 +30,7 @@ import { withRowUnit } from "./contracts/placePage.js";
 import { isLengthField } from "./placeTypes.js";
 import { displayUnits, lengthInputText, lengthUnitLabel } from "./units.js";
 import { tripTypeLabel } from "./tripTypeIdentity.js";
+import { plural, t } from "./i18n.js";
 
 export type LogbookTrip = {
   date: string;
@@ -44,35 +52,24 @@ export function todayDateKey(now: Date = new Date()): string {
 
 /** "Track 3 Nov 2026" — a recording's name until the user renames it. */
 export function defaultTrackName(now: Date = new Date()): string {
-  return `Track ${formatDateKey(todayDateKey(now))}`;
+  return t`Track ${formatDateKey(todayDateKey(now))}`;
 }
 
-/** "Sun 15 Mar 2026" — a logbook entry's own line; the year group supplies context. */
+/** "Sun, 15 Mar 2026" — a logbook entry's own line; the year group supplies context. */
 export function formatTripDate(isoDate: string): string {
-  return new Date(isoDate).toLocaleDateString(undefined, {
-    weekday: "short",
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-    timeZone: "UTC",
-  });
+  return formatWeekdayDayMonthYearComma(utcDay(new Date(isoDate)));
 }
 
 /** "15 Mar 2026" — where the weekday would be noise (sheet titles, filter summaries). */
 export function formatDateKey(isoDate: string): string {
-  return new Date(isoDate).toLocaleDateString(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-    timeZone: "UTC",
-  });
+  return formatDayMonthYear(utcDay(new Date(isoDate)));
 }
 
 /** "1 Jan 2026 → Today": a date filter summarised in words. Either bound may be
  *  open ("YYYY-MM-DD" or null). */
 export function dateRangeLabel(from: string | null, to: string | null): string {
-  const start = from ? formatDateKey(`${from}T00:00:00.000Z`) : "Any time";
-  const end = to ? formatDateKey(`${to}T00:00:00.000Z`) : "Today";
+  const start = from ? formatDateKey(`${from}T00:00:00.000Z`) : t`Any time`;
+  const end = to ? formatDateKey(`${to}T00:00:00.000Z`) : t`Today`;
   return `${start} → ${end}`;
 }
 
@@ -88,9 +85,9 @@ export function dateRangeLabel(from: string | null, to: string | null): string {
 export function dateSummary(
   range: readonly [string | null, string | null] | null,
 ): string {
-  if (range == null || (range[0] == null && range[1] == null)) return "Any";
+  if (range == null || (range[0] == null && range[1] == null)) return t`Any`;
   if (range[0] != null && range[1] != null) return `${range[0]} – ${range[1]}`;
-  return range[0] != null ? `From ${range[0]}` : `To ${range[1]}`;
+  return range[0] != null ? t`From ${range[0]}` : t`To ${range[1]!}`;
 }
 
 export function tripYear(isoDate: string): number {
@@ -171,9 +168,7 @@ export function monthlyTripCounts(
     const year = Math.floor(total / 12);
     const month = ((total % 12) + 12) % 12;
     buckets.push({
-      label: new Date(Date.UTC(year, month, 1))
-        .toLocaleDateString("en-AU", { month: "narrow", timeZone: "UTC" })
-        .charAt(0),
+      label: monthInitial(month),
       count: counts.get(`${year}-${month}`) ?? 0,
       current: offset === 0,
     });
@@ -196,6 +191,8 @@ export function countTripsInLastMonths(
 // ── Ranges and spark buckets for the stats screen ──────────────────────
 
 export type LogbookRange = {
+  /** What a client keeps to remember the choice: the same in every language, unlike `label`. */
+  id: string;
   label: string;
   from: string | null;
   to: string | null;
@@ -219,9 +216,10 @@ export function datePresets(today: string = todayDateKey()): LogbookRange[] {
     .toISOString()
     .slice(0, 10);
   return [
-    { label: "This year", from: `${year}-01-01`, to: today },
-    { label: "Last 12 months", from: twelveMonths, to: today },
+    { id: "year", label: t`This year`, from: `${year}-01-01`, to: today },
+    { id: "12m", label: t`Last 12 months`, from: twelveMonths, to: today },
     {
+      id: `${year - 1}`,
       label: `${year - 1}`,
       from: `${year - 1}-01-01`,
       to: `${year - 1}-12-31`,
@@ -245,17 +243,30 @@ export function logbookRanges(
   const thisYear = Number(today.slice(0, 4));
   const covered = new Set([thisYear, thisYear - 1]);
   return [
-    { label: "All time", from: null, to: null },
+    { id: "all", label: t`All time`, from: null, to: null },
     ...datePresets(today),
     ...[...new Set(years)]
       .filter((year) => !covered.has(year))
       .sort((a, b) => b - a)
       .map((year) => ({
+        id: `${year}`,
         label: `${year}`,
         from: `${year}-01-01`,
         to: `${year}-12-31`,
       })),
   ];
+}
+
+/**
+ * The range a stored id names, else the first (all time). An id from before
+ * ids were stored (a translated label) or for a year with no trips any more
+ * reads as the default.
+ */
+export function logbookRangeById(
+  ranges: LogbookRange[],
+  id: string | null | undefined,
+): LogbookRange {
+  return ranges.find((range) => range.id === id) ?? ranges[0];
 }
 
 /** Twelve calendar-month buckets for ONE year — the spark for a year pill,
@@ -267,9 +278,7 @@ export function monthBucketsForYear(
 ): MonthBucket[] {
   const current = currentCalendarMonth(now);
   return Array.from({ length: 12 }, (_, month) => ({
-    label: new Date(Date.UTC(2000, month, 1))
-      .toLocaleDateString("en-AU", { month: "narrow", timeZone: "UTC" })
-      .charAt(0),
+    label: monthInitial(month),
     count:
       monthly.find((entry) => entry.year === year && entry.month === month)
         ?.count ?? 0,
@@ -308,7 +317,7 @@ export function yearBuckets(
 // the hard way (the comments say which).
 
 /** The label a tag-less trip is filed under, everywhere on a stats screen. */
-export const UNTAGGED_ACTIVITY_LABEL = "No type";
+export const UNTAGGED_ACTIVITY_LABEL = t`No type`;
 
 export function logbookActivityLabel(type: string): string {
   return type === UNTAGGED_ACTIVITY
@@ -387,31 +396,25 @@ export function statsCadence(
   const lines: string[] = [];
   if (!activity && stats.firstDate) {
     lines.push(
-      `first trip ${formatDateKey(`${stats.firstDate}T00:00:00.000Z`)}`,
+      t`first trip ${formatDateKey(`${stats.firstDate}T00:00:00.000Z`)}`,
     );
   }
   if (stats.averageGapDays != null && stats.longestGapDays != null) {
     lines.push(
-      `every ${pluralCount(stats.averageGapDays, "day")} on average · longest gap ${pluralCount(stats.longestGapDays, "day")}`,
+      t`every ${plural(stats.averageGapDays, "# day", "# days")} on average · longest gap ${plural(stats.longestGapDays, "# day", "# days")}`,
     );
   }
   lines.push(
-    `${stats.weekendTrips} of ${pluralCount(stats.trips, "trip")} fell on a weekend`,
+    t`${stats.weekendTrips} of ${plural(stats.trips, "# trip", "# trips")} fell on a weekend`,
   );
   if (stats.longestRunDays > 1) {
     lines.push(
-      `longest run ${pluralCount(stats.longestRunDays, "day")} back to back`,
+      t`longest run ${plural(stats.longestRunDays, "# day", "# days")} back to back`,
     );
   }
   return {
     busiest: busiest
-      ? `busiest ${new Date(
-          Date.UTC(busiest.year, busiest.month, 1),
-        ).toLocaleDateString(undefined, {
-          month: "short",
-          year: "numeric",
-          timeZone: "UTC",
-        })} · ${pluralCount(busiest.count, "trip")}`
+      ? t`busiest ${formatMonthYear({ month: busiest.month, year: busiest.year })} · ${plural(busiest.count, "# trip", "# trips")}`
       : undefined,
     lines,
   };
@@ -431,27 +434,27 @@ export function statsHeadline(
   bounded: boolean,
 ): { label: string; value: string }[] {
   const ground = bounded
-    ? { label: "New places", value: `${stats.newPlaces}` }
-    : { label: "Revisited", value: `${stats.repeatPlaces}` };
+    ? { label: t`New places`, value: `${stats.newPlaces}` }
+    : { label: t`Revisited`, value: `${stats.repeatPlaces}` };
   return activity
     ? [
-        { label: "Trips", value: `${stats.trips}` },
-        { label: "Days out", value: `${stats.days}` },
-        { label: "Places visited", value: `${stats.places}` },
+        { label: t`Trips`, value: `${stats.trips}` },
+        { label: t`Days out`, value: `${stats.days}` },
+        { label: t`Places visited`, value: `${stats.places}` },
         ground,
       ]
     : [
-        { label: "Trips", value: `${stats.trips}` },
-        { label: "Places visited", value: `${stats.places}` },
-        { label: "Trip types", value: `${stats.activities}` },
+        { label: t`Trips`, value: `${stats.trips}` },
+        { label: t`Places visited`, value: `${stats.places}` },
+        { label: t`Trip types`, value: `${stats.activities}` },
         ground,
       ];
 }
 
 export function activityTallySubtitle(tally: ActivityTally): string {
   return tally.places > 0
-    ? `${pluralCount(tally.trips, "trip")} · ${pluralCount(tally.places, "place")}`
-    : pluralCount(tally.trips, "trip");
+    ? t`${plural(tally.trips, "# trip", "# trips")} · ${plural(tally.places, "# place", "# places")}`
+    : plural(tally.trips, "# trip", "# trips");
 }
 
 /** A trip tagged twice counts under both tags, so the activity rows out-sum
@@ -484,10 +487,10 @@ export function fieldStatDisplay(stat: FieldStat): FieldStatDisplay {
   switch (stat.kind) {
     case "rating":
       return {
-        metric: { value: formatStatNumber(stat.average), suffix: "avg" },
+        metric: { value: formatStatNumber(stat.average), suffix: t`avg` },
         buckets: stat.buckets,
         caption: stat.best
-          ? `highest ${formatStatNumber(stat.best.value)} · ${stat.best.label}`
+          ? t`highest ${formatStatNumber(stat.best.value)} · ${stat.best.label}`
           : undefined,
       };
     case "quantity": {
@@ -502,16 +505,16 @@ export function fieldStatDisplay(stat: FieldStat): FieldStatDisplay {
           ? `${displayUnits() === "imperial" ? lengthInputText(n) : formatStatNumber(n)} ${lengthUnitLabel()}`
           : formatStatNumber(n);
       return {
-        metric: { value: shown(stat.average), suffix: "avg" },
+        metric: { value: shown(stat.average), suffix: t`avg` },
         subtitle: stat.best
-          ? `highest ${shown(stat.best.value)}, ${stat.best.label}`
+          ? t`highest ${shown(stat.best.value)}, ${stat.best.label}`
           : undefined,
       };
     }
     case "boolean":
       return {
-        metric: { value: `${stat.yes}`, suffix: "yes" },
-        subtitle: `of ${pluralCount(stat.of, "trip")} answered`,
+        metric: { value: `${stat.yes}`, suffix: t`yes` },
+        subtitle: t`of ${plural(stat.of, "# trip", "# trips")} answered`,
       };
     case "vocabulary":
       // "×" rather than a space: a value can contain spaces of its own, and
@@ -587,7 +590,7 @@ export function humanizeFieldKey(key: string): string {
  *  date-only, so `formatDateKey` reads it in UTC. */
 export function formatFieldValue(value: unknown, type?: string | null): string {
   if (value === null || value === undefined || value === "") return "—";
-  if (typeof value === "boolean") return value ? "Yes" : "No";
+  if (typeof value === "boolean") return value ? t`Yes` : t`No`;
   if (type === "date" && typeof value === "string") return formatDateKey(value);
   return String(value);
 }

@@ -16,6 +16,7 @@ import Constants from "expo-constants";
 import { apiFetch } from "../api/apiFetch";
 import { capabilityScreenBlock, type AccountState } from "../auth/capabilities";
 import { pushAvailable } from "./pushAvailable";
+import { t } from "@logjam/shared";
 
 const PUSH_TOKEN_KEY = "logjam_push_token";
 
@@ -62,7 +63,7 @@ async function registerGrantedDevice(): Promise<void> {
   try {
     if (Platform.OS === "android") {
       await Notifications.setNotificationChannelAsync("default", {
-        name: "Updates",
+        name: t`Updates`,
         importance: AndroidImportance.DEFAULT,
       });
     }

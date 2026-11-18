@@ -1,5 +1,6 @@
 import { useEffect, type RefObject } from "react";
 import { nextEnabledIndex } from "./rovingFocus";
+import { t } from "@logjam/shared";
 
 // A list of `Row`s is ONE tab stop (WAI-ARIA's roving tabindex): the row that
 // last had focus keeps its title in the Tab order, and Up/Down, Home and End
@@ -129,7 +130,9 @@ export function useListKeys(rootRef: RefObject<HTMLElement | null>) {
         const name = openOf(row)?.textContent ?? "";
         setTimeout(() =>
           announce(
-            `${tile.getAttribute("aria-checked") === "true" ? "Selected" : "Not selected"} ${name}`,
+            tile.getAttribute("aria-checked") === "true"
+              ? t`Selected ${name}`
+              : t`Not selected ${name}`,
           ),
         );
         return;

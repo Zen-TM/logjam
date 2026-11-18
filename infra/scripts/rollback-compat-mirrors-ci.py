@@ -18,6 +18,11 @@ api-integration's, less what only that suite needs (API_ONLY_ENV). Mutations
 that turn that red: drop the socket volume from topo-e2e's MiniStack, or ECS
 from its SERVICES.
 
+web-pseudo (Logjam Web walked in the pseudo-language) reads the same seeded
+account through the same API, so its services, env and the first two wait
+steps equal api-integration's. Mutations that turn that red: delete a variable
+from web-pseudo's env block, or change a line of its `Wait for API` step.
+
 Every service image is pinned, and the pins agree. A floating image (no tag, or
 `latest`) changes under every PR and every nightly at once, a red main with no
 commit to blame. docker-compose.yml's MiniStack is the one pin (tag@sha256
@@ -207,17 +212,25 @@ def main():
                 f"topo-e2e {topo['env'].get(key)!r}"
             )
 
+    web = job("ci.yml", "web-pseudo")
+    if web["services"] != ci["services"] or web["env"] != ci["env"]:
+        failures.append("web-pseudo's services or env differ from api-integration's")
+    web_runs = step_runs(web)
+    for name in WAIT_STEPS[:2]:
+        if web_runs.get(name) != ci_runs.get(name):
+            failures.append(f"web-pseudo: step {name!r} differs or is missing")
+
     check_images(failures)
 
     for f in failures:
         print(f"FAIL — {f}")
     if failures:
         print(
-            "rollback-compat.yml and topo-e2e must mirror ci.yml's api-integration job."
+            "rollback-compat.yml, topo-e2e and web-pseudo must mirror ci.yml's api-integration job."
         )
         return 1
     print(
-        "ok   — rollback-compat.yml and topo-e2e mirror api-integration's services, env and wait steps; every service image is pinned and agrees"
+        "ok   — rollback-compat.yml, topo-e2e and web-pseudo mirror api-integration's services, env and wait steps; every service image is pinned and agrees"
     )
     return 0
 

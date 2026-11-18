@@ -4,6 +4,7 @@ import { makeStyles, spacing, useTheme } from "../theme";
 import { SEARCH_SIZE } from "../map/mapChrome";
 import { Icon, type Glyph } from "./Icon";
 import { IconButton } from "./IconButton";
+import { t } from "@logjam/shared";
 
 /**
  * A mode the map is in, as a pill in the top row beside the search
@@ -50,7 +51,7 @@ export function MapBanner({
         <IconButton
           icon="close"
           size={16}
-          accessibilityLabel={dismissLabel ?? "Dismiss"}
+          accessibilityLabel={dismissLabel ?? t`Dismiss`}
           onPress={onDismiss}
         />
       ) : null}

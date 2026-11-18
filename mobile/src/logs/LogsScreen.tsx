@@ -54,6 +54,8 @@ import {
   type SectionKeysOn,
   type TripSortKey,
   tripTitle,
+  plural,
+  t,
 } from "@logjam/shared";
 
 import {
@@ -115,7 +117,7 @@ import { TripOptionsSheet } from "./TripOptionsSheet";
 const ALL_TYPES = "";
 
 /** The page's name: the full hero's eyebrow and the compact row's title. */
-const PAGE_NAME = "Trips";
+const PAGE_NAME = t`Trips`;
 
 export function LogsScreen({
   onOpenTrip,
@@ -276,7 +278,7 @@ export function LogsScreen({
     }
     clearSelection();
     if (failures === 0) info(tripDeleteDone(count));
-    else fail(`${failures} of ${count} couldn't be deleted.`);
+    else fail(t`${failures} of ${count} couldn't be deleted.`);
   }, [selectedItems, clearSelection, fail, info]);
 
   // Tallies come from the OTHER axes only, so a chip's count answers "how many
@@ -296,7 +298,7 @@ export function LogsScreen({
       (trip) => trip.types.length === 0,
     ).length;
     return [
-      { value: ALL_TYPES, label: "All", count: withoutType.length },
+      { value: ALL_TYPES, label: t`All`, count: withoutType.length },
       // Busiest activity first: the rail's left end is the reachable end, and
       // a logbook's answer to "which of these do I actually do" is the tally.
       // Ties break alphabetically so the order is stable, not arbitrary.
@@ -321,7 +323,7 @@ export function LogsScreen({
         ? [
             {
               value: NO_TYPE_FILTER_VALUE,
-              label: "No type",
+              label: t`No type`,
               hue: tripTypeMeta(null, theme).hue,
               count: untyped,
               disabled: untyped === 0 && typeFilter !== NO_TYPE_FILTER_VALUE,
@@ -470,9 +472,12 @@ export function LogsScreen({
               <>
                 <ActivitySpark
                   buckets={spark}
-                  caption={`${recentCount} in the last 12 months · ${placeCount} ${
-                    placeCount === 1 ? "place" : "places"
-                  }`}
+                  caption={plural(
+                    placeCount,
+                    "{0} in the last 12 months · # place",
+                    "{0} in the last 12 months · # places",
+                    recentCount,
+                  )}
                 />
 
                 {/* State of the world, once, where it can be read at a glance.
@@ -564,7 +569,7 @@ export function LogsScreen({
             refreshing={syncStatus.state === "syncing"}
             onRefresh={() => {
               if (!online) {
-                info("Offline — changes sync when you're back.");
+                info(t`Offline — changes sync when you're back.`);
                 return;
               }
               query.refresh();
@@ -700,7 +705,9 @@ const TripRow = memo(function TripRow({
       titleNumberOfLines={2}
       subtitle={[
         formatTripDate(trip.date),
-        trip.places.length > 1 ? `${trip.places.length} places` : null,
+        trip.places.length > 1
+          ? plural(trip.places.length, "# place", "# places")
+          : null,
       ]
         .filter(Boolean)
         .join(" · ")}
@@ -724,7 +731,7 @@ const TripRow = memo(function TripRow({
               idea="notes"
               size={14}
               color={theme.textMuted}
-              label="Has notes"
+              label={t`Has notes`}
             />
           ) : null}
           {selecting ? (
@@ -739,7 +746,7 @@ const TripRow = memo(function TripRow({
           ) : (
             <IconButton
               icon="overflow"
-              accessibilityLabel={`Actions for ${tripTitle(trip)}`}
+              accessibilityLabel={t`Actions for ${tripTitle(trip)}`}
               onPress={() => onMenu(trip)}
             />
           )}

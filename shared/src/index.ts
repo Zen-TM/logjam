@@ -28,6 +28,7 @@ export * from "./placeTypes.js";
 export * from "./planItemEdit.js";
 export * from "./placeStatus.js";
 export * from "./copyRules.js";
+export * from "./i18nSource.js";
 export * from "./switchCopy.js";
 export * from "./designTokens.js";
 export * from "./webTokens.js";
@@ -88,6 +89,7 @@ export * from "./demSources.js";
 export * from "./contourRules.js";
 export * from "./overlayZoom.js";
 export * from "./dateNames.js";
+export * from "./dateFormat.js";
 export * from "./regions.js";
 export * from "./simRegions.js";
 export * from "./overlayLegends.js";
@@ -131,14 +133,18 @@ export * from "./tripPlans.js";
 export * from "./tripPlanAnswerDraft.js";
 export * from "./tripPlanEdits.js";
 export * from "./tripPlanTripLog.js";
+export * from "./languageChoice.js";
 export {
   LANGUAGES,
   PSEUDO_LANGUAGE,
+  isLanguage,
   SOURCE_LANGUAGE,
+  inSourceLanguage,
   intlLocale,
   language,
   matchLanguage,
   plural,
+  pseudo,
   rich,
   setLanguageResolver,
   t,

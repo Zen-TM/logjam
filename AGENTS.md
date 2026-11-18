@@ -52,8 +52,10 @@ platform: privacy constrains every feature. Each package has its own
   app" or "the web app" where either could be meant. Guard:
   `shared/src/copyRules.test.ts`.
 - User-facing text is written through `t`, `plural`, `rich` or `say`
-  (`shared/src/i18n.ts`), so a language can replace it. Existing literals are not
-  converted yet, and a change does not convert them piecemeal. No guard test yet.
+  (`shared/src/i18n.ts`), so a language can replace it. Guard: `shared`, the API,
+  Logjam Web and Logjam GPS fail on any bare literal
+  (`shared/src/i18nCoverage.test.ts`, `api/src/i18nCoverage.unit.test.ts`,
+  `frontend/src/i18nCoverage.test.ts`, `mobile/src/i18nCoverage.test.ts`).
   [0050](docs/decisions/0050-user-facing-text-goes-through-one-catalogue-function.md)
 - Before opening an issue or a PR, read its form in `.github/ISSUE_TEMPLATE/`
   or `.github/pull_request_template.md` and use its headings and labels: `gh`
@@ -106,8 +108,9 @@ Each package's `AGENTS.md` says how its suites run.
 - A change to a privacy or security boundary (share visibility, email
   omission, log redaction, the error-detail whitelist, auth fail-closed) ships
   a test that the boundary holds.
-- A new guard test names the mutation that turns it red. Guard, for every
-  test an `AGENTS.md` names: `infra/scripts/check-repo-hygiene.py`.
+- A new guard test (an `it`, an `it.each`, a test method) names the mutation
+  that turns it red, not each row. Guard, for every test an `AGENTS.md`
+  names: `infra/scripts/check-repo-hygiene.py`.
 - A test that scans source asserts a floor on what it found, so a pattern
   that stops matching cannot pass by checking nothing.
 - A test fails, never skips or returns early, when its premise is missing (a

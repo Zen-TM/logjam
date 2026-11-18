@@ -17,14 +17,17 @@ import type {
   ElevationProfile,
   TrackClimb,
   SharableEntityType,
+  Language,
 } from "@logjam/shared";
 import {
   ELEVATION_TRACK_MAX_SAMPLES,
   PLACE_SEARCH_API_PATH,
+  language,
   loadStateOf,
   tallyNotifications,
   type PlaceSearchRequest,
   type PlaceSearchResponse,
+  t,
 } from "@logjam/shared";
 import {
   settleReadOverrides,
@@ -103,6 +106,14 @@ function notifySessionExpired() {
   if (sessionExpiredHandler) sessionExpiredHandler();
 }
 
+/** What every API call carries: who is asking, and the language its refusals are written in. */
+function authHeaders(token: string): Record<string, string> {
+  return {
+    Authorization: `Bearer ${token}`,
+    "Accept-Language": language(),
+  };
+}
+
 async function getIdToken(): Promise<string> {
   if (import.meta.env.VITE_AUTH_MODE === "fake") return "fake-token";
   // loadSession refreshes with the refresh token when the ID token has
@@ -131,7 +142,7 @@ export async function apiFetch<T>(
     method: options?.method ?? "GET",
     signal: options?.signal,
     headers: {
-      Authorization: `Bearer ${token}`,
+      ...authHeaders(token),
       ...(options?.body != null && { "Content-Type": "application/json" }),
     },
     ...(options?.body != null && { body: JSON.stringify(options.body) }),
@@ -162,7 +173,7 @@ export async function apiFetchWithTotal<T>(
 ): Promise<{ data: T; total: number | null }> {
   const token = await getIdToken();
   const res = await fetch(`${API_BASE_URL}${path}`, {
-    headers: { Authorization: `Bearer ${token}` },
+    headers: authHeaders(token),
   });
   if (!res.ok) {
     if (res.status === 401) notifySessionExpired();
@@ -190,7 +201,7 @@ export async function apiFetchBlob(
   const res = await fetch(`${API_BASE_URL}${path}`, {
     method: options?.method ?? "GET",
     headers: {
-      Authorization: `Bearer ${token}`,
+      ...authHeaders(token),
       ...(options?.body != null && { "Content-Type": "application/json" }),
     },
     ...(options?.body != null && { body: JSON.stringify(options.body) }),
@@ -223,7 +234,7 @@ export async function apiFetchBlobStreamed(
   const res = await fetch(`${API_BASE_URL}${path}`, {
     method,
     headers: {
-      Authorization: `Bearer ${token}`,
+      ...authHeaders(token),
       ...(options.body != null && { "Content-Type": "application/json" }),
     },
     ...(options.body != null && { body: JSON.stringify(options.body) }),
@@ -431,7 +442,7 @@ export function usePlaceTracks(enabled: boolean) {
       .catch((err) => {
         console.error(err);
         if (!cancelled)
-          setError(messageFromError(err, "Couldn't load place tracks."));
+          setError(messageFromError(err, t`Couldn't load place tracks.`));
       })
       .finally(() => {
         if (!cancelled) setLoaded(true);
@@ -633,7 +644,7 @@ export function useElevationProfile(points: ProfiledLine | null) {
       .catch((err) => {
         console.error(err);
         if (current)
-          setError(messageFromError(err, "Couldn't load elevation."));
+          setError(messageFromError(err, t`Couldn't load elevation.`));
       })
       .finally(() => {
         if (current) setLoading(false);
@@ -666,7 +677,7 @@ export function useRoutes(enabled: boolean) {
       .catch((err) => {
         console.error(err);
         if (!cancelled)
-          setError(messageFromError(err, "Couldn't load routes."));
+          setError(messageFromError(err, t`Couldn't load routes.`));
       })
       .finally(() => {
         if (!cancelled) setLoaded(true);
@@ -718,7 +729,7 @@ export function usePlaces(enabled: boolean) {
       .catch((err) => {
         console.error(err);
         if (!cancelled)
-          setError(messageFromError(err, "Couldn't load places."));
+          setError(messageFromError(err, t`Couldn't load places.`));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -767,7 +778,7 @@ export function useSharedPlaces(enabled: boolean) {
       .catch((err) => {
         console.error(err);
         if (!cancelled)
-          setError(messageFromError(err, "Couldn't load shared places."));
+          setError(messageFromError(err, t`Couldn't load shared places.`));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -849,7 +860,7 @@ export function useCurrentUser(enabled: boolean) {
       .catch((err) => {
         console.error(err);
         if (!cancelled)
-          setError(messageFromError(err, "Couldn't load your account."));
+          setError(messageFromError(err, t`Couldn't load your account.`));
       });
     return () => {
       cancelled = true;
@@ -892,6 +903,7 @@ export function updateUserPreferences(
     copyPlaceMedia: boolean;
     slopeBands: SlopeBand[];
     regions: string[];
+    language: Language;
     units: Units;
   }>,
 ): Promise<TUser> {
@@ -1350,7 +1362,8 @@ export function useTripLogs(enabled: boolean) {
       })
       .catch((err) => {
         console.error(err);
-        if (!cancelled) setError(messageFromError(err, "Couldn't load trips."));
+        if (!cancelled)
+          setError(messageFromError(err, t`Couldn't load trips.`));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -1553,7 +1566,7 @@ export function useStandaloneFiles(enabled: boolean) {
       .catch((err) => {
         console.error(err);
         if (!cancelled)
-          setError(messageFromError(err, "Couldn't load your files."));
+          setError(messageFromError(err, t`Couldn't load your files.`));
       })
       .finally(() => {
         if (!cancelled) setLoaded(true);
@@ -1661,7 +1674,7 @@ export function useStandaloneTracks(
       .catch((err) => {
         console.error(err);
         if (!cancelled)
-          setError(messageFromError(err, "Couldn't load your files."));
+          setError(messageFromError(err, t`Couldn't load your files.`));
       });
     return () => {
       cancelled = true;
@@ -1776,7 +1789,7 @@ export function useFriends(enabled: boolean) {
       .catch((err) => {
         console.error(err);
         if (!cancelled)
-          setError(messageFromError(err, "Couldn't load friends."));
+          setError(messageFromError(err, t`Couldn't load friends.`));
       });
     getFriendRequests()
       .then((data) => {
@@ -1785,7 +1798,7 @@ export function useFriends(enabled: boolean) {
       .catch((err) => {
         console.error(err);
         if (!cancelled)
-          setError(messageFromError(err, "Couldn't load friend requests."));
+          setError(messageFromError(err, t`Couldn't load friend requests.`));
       });
     return () => {
       cancelled = true;
@@ -2056,7 +2069,7 @@ export function useNotifications(enabled: boolean) {
       .catch((err) => {
         console.error(err);
         if (!cancelled)
-          setError(messageFromError(err, "Couldn't load notifications."));
+          setError(messageFromError(err, t`Couldn't load notifications.`));
       })
       .finally(() => {
         if (!cancelled) setLoaded(true);
@@ -2170,7 +2183,7 @@ export function useTopoExports(enabled: boolean, pollMs: number = 5000) {
       .catch((err) => {
         console.error(err);
         if (!cancelled)
-          setError(messageFromError(err, "Couldn't load your maps."));
+          setError(messageFromError(err, t`Couldn't load your maps.`));
       })
       .finally(() => {
         if (!cancelled) {

@@ -13,7 +13,7 @@ import {
   type Region,
 } from "./regions.js";
 import { normalizeUserUiPreferences } from "./themeSchemes.js";
-import { say } from "./userSentence.js";
+import { say, type UserSentence } from "./userSentence.js";
 
 /** What an area export can carry, in the order a file lists them. */
 export const AREA_EXPORT_LAYERS = [
@@ -108,19 +108,25 @@ export const AREA_EXPORT_MAX_SIDE_KM = 100;
 // The limit is written out: a `say` hole takes a number, not a formatted
 // string, and the API sends this sentence as it is, in km. The test "says the
 // limit it enforces" (`areaExport.test.ts`) holds the 100 to the constant.
-export const AREA_EXPORT_TOO_LARGE = say`A map can be up to 100 km on a side. Choose a smaller area, or split it into smaller maps.`;
+export function areaExportTooLargeSentence(): UserSentence {
+  return say`A map can be up to 100 km on a side. Choose a smaller area, or split it into smaller maps.`;
+}
 
 /**
  * Names no region: a sentence that lists them goes stale when one is added.
  * Guard: `areaExport.test.ts` ("names no region in its refusal"); the
  * worker's copy is held to this one by `test_area_export.py`.
  */
-export const AREA_EXPORT_OUTSIDE_TERRAIN = say`Terrain isn't available for that area. Choose an area where it is.`;
+export function areaExportOutsideTerrain(): UserSentence {
+  return say`Terrain isn't available for that area. Choose an area where it is.`;
+}
 
 /** What the worker says when an export fails for no reason the owner can act
  *  on. Logjam Web offers Report a bug beside exactly this sentence; the
  *  worker's copy is held to it by `test_export_worker_helpers.py`. */
-export const AREA_EXPORT_FAILED = say`This map couldn't be made. Start it again.`;
+export function areaExportFailed(): UserSentence {
+  return say`This map couldn't be made. Start it again.`;
+}
 
 const KM_PER_DEGREE_LAT = 110.57;
 const KM_PER_DEGREE_LON_AT_EQUATOR = 111.32;

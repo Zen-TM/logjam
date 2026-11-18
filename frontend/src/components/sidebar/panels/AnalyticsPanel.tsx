@@ -25,15 +25,18 @@ import {
   statsTruncatedNote,
   statsUnderActivitiesNote,
   tripYear,
-  TRIPS_LIST,
   UNTAGGED_ACTIVITY,
   type FieldStat,
   type LoadState,
   type LogbookRange,
+  logbookRangeById,
   type LogbookStats,
   type ScopedCustomFieldDef,
   type SectionKeysOn,
   type StatsSpark,
+  formatLongMonthYear,
+  rich,
+  t,
 } from "@logjam/shared";
 
 const copy = STATS.copy;
@@ -53,6 +56,7 @@ import {
   Icon,
   ListBody,
 } from "../../../ui";
+import { Rich } from "../../../ui/rich";
 import { placeTypeLucideIcon } from "./placeTypeIcon";
 import { tripTypeLook } from "./tripTypeIcon";
 import classes from "./AnalyticsPanel.module.css";
@@ -64,14 +68,7 @@ function namedBuckets(spark: StatsSpark): SparkBucket[] {
     name:
       spark.axis === "year"
         ? `${spark.firstYear + index}`
-        : new Date(Date.UTC(spark.year, index, 1)).toLocaleDateString(
-            undefined,
-            {
-              month: "long",
-              year: "numeric",
-              timeZone: "UTC",
-            },
-          ),
+        : formatLongMonthYear({ month: index, year: spark.year }),
   }));
 }
 
@@ -114,9 +111,10 @@ function AnalyticsPanel({
   const [activity, setActivity] = useState<string | null>(null);
   // Remembered like a preference, as on the phone: the window numbers are read
   // in should not reset every visit.
-  const [rangeLabel, setRangeLabel] = useStoredState(
+  // The id, not the label: the label is in the language of the day.
+  const [rangeId, setRangeId] = useStoredState<string | null>(
     "logjam.logbookStatsRange",
-    "All time",
+    null,
   );
   const rootRef = useRef<HTMLDivElement>(null);
 
@@ -124,8 +122,7 @@ function AnalyticsPanel({
     () => logbookRanges(tripLogs.map((trip) => tripYear(trip.date))),
     [tripLogs],
   );
-  const range: LogbookRange =
-    ranges.find((entry) => entry.label === rangeLabel) ?? ranges[0];
+  const range: LogbookRange = logbookRangeById(ranges, rangeId);
 
   const stats = useMemo(
     () =>
@@ -233,20 +230,18 @@ function AnalyticsPanel({
         <Hero
           title={title}
           onBack={activity ? closeActivity : onBack}
-          backLabel={
-            activity ? copy.backToActivities : `Back to ${TRIPS_LIST.title}`
-          }
+          backLabel={activity ? copy.backToActivities : t`Back to Trips`}
         />
         {tripLogs.length > 0 && (
           <div className={classes.rails}>
             <ChipRail
-              label="Period"
+              label={t`Period`}
               options={ranges.map((entry) => ({
-                value: entry.label,
+                value: entry.id,
                 label: entry.label,
               }))}
-              value={range.label}
-              onChange={setRangeLabel}
+              value={range.id}
+              onChange={setRangeId}
             />
           </div>
         )}
@@ -309,8 +304,8 @@ function SparkBlock({
       <ActivitySpark
         label={
           spark.axis === "year"
-            ? "Trips per year"
-            : `Trips per month in ${spark.year}`
+            ? t`Trips per year`
+            : t`Trips per month in ${spark.year}`
         }
         buckets={namedBuckets(spark)}
         caption={busiest}
@@ -398,14 +393,18 @@ function PlacesVisited({
             }
             trailing={
               <span className={classes.metric}>
-                <b className={classes.metricValue}>{entry.logged}</b> of{" "}
-                {entry.total}
+                <Rich
+                  parts={rich`<b>${entry.logged}</b> of ${entry.total}`}
+                  tags={{
+                    b: (text) => <b className={classes.metricValue}>{text}</b>,
+                  }}
+                />
               </span>
             }
             footer={
               <div className={classes.bar}>
                 <ProgressBar
-                  label={`${entry.name}: ${entry.logged} of ${entry.total} visited`}
+                  label={t`${entry.name}: ${entry.logged} of ${entry.total} visited`}
                   value={
                     entry.total === 0 ? 0 : (entry.logged / entry.total) * 100
                   }
@@ -490,7 +489,7 @@ function AttributeStat({ stat }: { stat: FieldStat }) {
         display.buckets && (
           <div className={classes.bar}>
             <ActivitySpark
-              label={`${stat.label}: trips at each value`}
+              label={t`${stat.label}: trips at each value`}
               buckets={display.buckets.map((bucket) => ({
                 label: `${bucket.value}`,
                 name: `${bucket.value}`,

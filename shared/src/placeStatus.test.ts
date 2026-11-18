@@ -99,6 +99,12 @@ describe("placeSummary", () => {
     ).toBe("v1a2 · 7 h · 0 abseils");
   });
 
+  // Mutation: write the first form of that plural in `placeSummary` as "# abseils".
+  it("says one abseil, not one abseils", () => {
+    expect(summaryOf({ numAbseils: 1 })).toBe("1 abseil");
+    expect(summaryOf({ numAbseils: 3 })).toBe("3 abseils");
+  });
+
   it("states only what is known, with no placeholders", () => {
     expect(
       summaryOf({

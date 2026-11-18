@@ -49,7 +49,6 @@ import {
   type SectionKeysOn,
   removeAllConfirm,
   removeOutcomeMessage,
-  SHARE_KIND_LABEL,
   shareCardItem,
   shareSelectionCountLabel,
   unshareAllConfirm,
@@ -57,6 +56,7 @@ import {
   type FriendShareCard,
   type FriendShareDirection,
   type FriendShareRow,
+  t,
 } from "@logjam/shared";
 import classes from "./FriendSharingSection.module.css";
 import ConfirmDialog from "../../dialogs/ConfirmDialog";
@@ -335,7 +335,7 @@ function FriendSharingSection({
       <Hero
         title={friend.username}
         onBack={onBack}
-        backLabel="Back to friends"
+        backLabel={t`Back to friends`}
       />
     ),
     directions: () => (
@@ -348,7 +348,7 @@ function FriendSharingSection({
             {selected.length < selectableKeys.length && (
               <IconButton
                 icon="multiSelect"
-                label={`Select all ${selectableKeys.length}`}
+                label={t`Select all ${selectableKeys.length}`}
                 onClick={() => setSelectedKeys(selectableKeys)}
               />
             )}
@@ -360,7 +360,7 @@ function FriendSharingSection({
                 icon="unshare"
                 label={bulkUnshareLabel(selected.length, friend.username)}
                 disabled={busy}
-                disabledReason="Working…"
+                disabledReason={t`Working…`}
                 onClick={() => setPendingBulk("unshare")}
               />
             ) : (
@@ -370,14 +370,14 @@ function FriendSharingSection({
                   selected.filter((card) => card.removable).length,
                 )}
                 disabled={busy}
-                disabledReason="Working…"
+                disabledReason={t`Working…`}
                 onClick={() => setPendingBulk("remove")}
               />
             )}
           </SelectionBar>
         ) : (
           <ChipRail
-            label="Which direction"
+            label={t`Which direction`}
             options={directions}
             value={direction}
             onChange={changeDirection}
@@ -388,7 +388,7 @@ function FriendSharingSection({
     note: () => (
       <p className={classes.noteRow}>
         {selecting
-          ? "Shift-click to select a range · Ctrl+A selects all"
+          ? t`Shift-click to select a range · Ctrl+A selects all`
           : friendSharesNote(direction, friend.username)}
       </p>
     ),
@@ -424,7 +424,7 @@ function FriendSharingSection({
                     selectable ? (
                       <TileCheckbox
                         tile={tile}
-                        label={`Select ${card.title}`}
+                        label={t`Select ${card.title}`}
                         checked={isSelected}
                         selecting={selecting}
                         onToggle={(extendRange) =>
@@ -447,7 +447,7 @@ function FriendSharingSection({
                         compact
                         variant="outline"
                         disabled={busy}
-                        disabledReason="Working…"
+                        disabledReason={t`Working…`}
                         onClick={() =>
                           void run(
                             () => revoke(card, friend.id),
@@ -460,10 +460,10 @@ function FriendSharingSection({
                       </Button>
                     ) : card.removable ? (
                       <RemoveSharedButton
-                        kindLabel={SHARE_KIND_LABEL[card.row.entityType]}
+                        entityType={card.row.entityType}
                         itemName={card.title}
                         ownerName={friend.username}
-                        disabledReason={busy ? "Working…" : undefined}
+                        disabledReason={busy ? t`Working…` : undefined}
                         remove={() => revoke(card, "me")}
                         onRemoved={() => {
                           load();
@@ -508,7 +508,7 @@ function FriendSharingSection({
         copy={{
           confirmTitle: unshare.title,
           confirmBody: unshare.body,
-          confirmLabel: `Stop sharing ${selected.length}`,
+          confirmLabel: t`Stop sharing ${selected.length}`,
           tone: "destructive",
           icon: "unshare",
         }}
@@ -524,7 +524,7 @@ function FriendSharingSection({
         copy={{
           confirmTitle: removeAll.title,
           confirmBody: removeAll.body,
-          confirmLabel: "Remove",
+          confirmLabel: t`Remove`,
           tone: "filled",
         }}
         busy={busy}

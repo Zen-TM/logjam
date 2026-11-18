@@ -13,6 +13,7 @@ import {
   writeLocalIdentity,
 } from "./localIdentity";
 import { identityFromIdToken } from "./oidcSession";
+import { t } from "@logjam/shared";
 
 export type FinishedSignIn = { ok: true } | { ok: false; error: string };
 
@@ -37,8 +38,7 @@ export async function finishSignIn(signIn: {
     // through would sign in blind.
     return {
       ok: false,
-      error:
-        "Sign-in didn't return an account identity, so it was cancelled. Try again.",
+      error: t`Sign-in didn't return an account identity, so it was cancelled. Try again.`,
     };
   }
   const previous = await readPreviousIdentity();
@@ -59,7 +59,7 @@ export async function finishSignIn(signIn: {
       // alternative is silently merging two people's data.
       return {
         ok: false,
-        error: `Couldn't clear the previous account's ${wiped.failed.join(" and ")} from this phone, so sign-in was cancelled.`,
+        error: t`Couldn't clear the previous account's ${wiped.failed.join(" and ")} from this phone, so sign-in was cancelled.`,
       };
     }
     await clearLocalIdentity();

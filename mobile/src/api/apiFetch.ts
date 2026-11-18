@@ -9,7 +9,7 @@
 //    session-rejected handler fires ONLY when the provider actively rejects
 //    the refresh while online (classifySessionError), or there is no session,
 //    never on network failure.
-import { ApiError } from "@logjam/shared";
+import { ApiError, language } from "@logjam/shared";
 
 import { config, CLIENT_VERSION, CLIENT_VERSION_HEADER } from "../config";
 import { getSession } from "../auth/oidcSession";
@@ -52,6 +52,8 @@ async function getIdToken(): Promise<string> {
 function baseHeaders(token: string): Record<string, string> {
   return {
     Authorization: `Bearer ${token}`,
+    // The language the API writes its refusals in.
+    "Accept-Language": language(),
     [CLIENT_VERSION_HEADER]: CLIENT_VERSION,
     // DEV ONLY, and only in fake-auth builds: act as a specific seeded user.
     // Without it every fake-auth client is alice, which makes anything with a

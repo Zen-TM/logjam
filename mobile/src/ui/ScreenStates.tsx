@@ -5,6 +5,7 @@ import { ActivityIndicator, Text, View } from "react-native";
 import { spacing, makeStyles, useTheme, muted } from "../theme";
 import { Button } from "./Button";
 import { Icon, type Glyph } from "./Icon";
+import { t } from "@logjam/shared";
 
 // Full-screen data states: loading, empty and error are mandatory on every
 // data surface.
@@ -19,7 +20,7 @@ export function LoadingState({ label }: { label?: string }) {
     <View
       style={styles.container}
       accessibilityRole="progressbar"
-      accessibilityLabel={label ?? "Loading"}
+      accessibilityLabel={label ?? t`Loading`}
       accessibilityState={{ busy: true }}
     >
       <ActivityIndicator size="large" color={theme.accent} />
@@ -84,7 +85,11 @@ export function ErrorState({
     <View style={styles.container}>
       <Text style={styles.title}>{message}</Text>
       {onRetry ? (
-        <Button label="Try again" variant="outlineAccent" onPress={onRetry} />
+        <Button
+          label={t`Try again`}
+          variant="outlineAccent"
+          onPress={onRetry}
+        />
       ) : null}
     </View>
   );
@@ -116,7 +121,7 @@ export function ListBody({
   if (state === "loading") return <LoadingState label={loadingLabel} />;
   if (state === "failed")
     return (
-      <ErrorState message={error ?? "Couldn't load this."} onRetry={onRetry} />
+      <ErrorState message={error ?? t`Couldn't load this.`} onRetry={onRetry} />
     );
   return <>{empty ?? children}</>;
 }

@@ -27,6 +27,7 @@ import {
   type TripPlanPatch,
   type TripPlanValues,
   type TripPlanView,
+  t,
 } from "@logjam/shared";
 
 import { tripTypeLabel, tripTypeMeta } from "../logs/tripTypeMeta";
@@ -203,7 +204,7 @@ export function PlanDetailsSheet({
               />
             ) : null}
             <Button
-              label="Done"
+              label={t`Done`}
               icon="done"
               grow
               onPress={() => {

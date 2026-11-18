@@ -40,6 +40,7 @@
     "Row 2: Quality \"3B III\" isn't a number — left empty",
     "Row 3: Quality \"2A II\" isn't a number — left empty"
   ],
+  "skippedRows": [],
   "droppedRows": 0,
   "matches": [
     {

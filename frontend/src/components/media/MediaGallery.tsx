@@ -3,6 +3,7 @@ import {
   mediaCategory,
   trackDisplayName,
   type MediaItem,
+  t,
 } from "@logjam/shared";
 import { deleteMedia } from "../../placeUtils";
 import { messageFromError } from "../../errors/messageFromError";
@@ -58,7 +59,7 @@ export default function MediaGallery({
       setPendingDelete(null);
     } catch (err) {
       console.error(err);
-      setError(messageFromError(err, "Couldn't delete file."));
+      setError(messageFromError(err, t`Couldn't delete file.`));
     } finally {
       setDeletingId(null);
     }
@@ -68,7 +69,7 @@ export default function MediaGallery({
   const relevant =
     variant === "visual" ? visual : variant === "tracks" ? tracks : media;
   if (relevant.length === 0) {
-    return <div className={classes.empty}>{emptyText ?? "No files yet."}</div>;
+    return <div className={classes.empty}>{emptyText ?? t`No files yet.`}</div>;
   }
 
   return (
@@ -83,7 +84,11 @@ export default function MediaGallery({
                   type="button"
                   className={classes.tileButton}
                   onClick={() => setLightbox(m)}
-                  aria-label={`${isVideo ? "Play video" : "View"} ${m.filename}`}
+                  aria-label={
+                    isVideo
+                      ? t`Play video ${m.filename}`
+                      : t`View ${m.filename}`
+                  }
                 >
                   {m.thumbnailUrl && !failedThumbIds.has(m.id) ? (
                     <img
@@ -113,7 +118,7 @@ export default function MediaGallery({
                     className={classes.deleteBtn}
                     onClick={() => setPendingDelete(m)}
                     disabled={deletingId === m.id}
-                    aria-label={`Delete ${m.filename}`}
+                    aria-label={t`Delete ${m.filename}`}
                   >
                     <Icon idea="delete" size={14} />
                   </button>
@@ -144,13 +149,13 @@ export default function MediaGallery({
               trailing={
                 canDelete && (
                   <Menu
-                    label={`Actions for ${trackDisplayName(m.filename)}`}
+                    label={t`Actions for ${trackDisplayName(m.filename)}`}
                     title={trackDisplayName(m.filename)}
                     placement="right-start"
                     entries={[
                       {
                         id: "delete",
-                        label: "Delete",
+                        label: t`Delete`,
                         icon: "delete",
                         danger: true,
                         onSelect: () => setPendingDelete(m),
@@ -160,7 +165,7 @@ export default function MediaGallery({
                       <IconButton
                         {...props}
                         icon="overflow"
-                        label={`Actions for ${trackDisplayName(m.filename)}`}
+                        label={t`Actions for ${trackDisplayName(m.filename)}`}
                       />
                     )}
                   />
@@ -179,9 +184,9 @@ export default function MediaGallery({
         open={pendingDelete != null}
         copy={
           pendingDelete && {
-            confirmTitle: `Delete ${pendingDelete.filename}?`,
-            confirmBody: "The file is deleted and can't be brought back.",
-            confirmLabel: "Delete",
+            confirmTitle: t`Delete ${pendingDelete.filename}?`,
+            confirmBody: t`The file is deleted and can't be brought back.`,
+            confirmLabel: t`Delete`,
             tone: "destructive",
           }
         }

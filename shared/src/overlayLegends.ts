@@ -86,9 +86,7 @@ export function overlayLegends(
         // Over the light land of a basemap, as the hatch is drawn on the map.
         rows: [
           {
-            label:
-              copy.coverageNoReception[0]!.toUpperCase() +
-              copy.coverageNoReception.slice(1),
+            label: copy.coverageNoReceptionRow,
             colour: MAP_INK.label,
             pattern: COVERAGE_HATCH_URIS[COVERAGE_HATCH_IMAGE],
           },

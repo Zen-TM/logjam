@@ -1,10 +1,14 @@
 // What the map draws while a GeoPDF's area is framed (shared/DESIGN.md §11).
 // Pure, so its test needs neither the map nor the dialog.
+import { basemapHere, type LonLatBox } from "@logjam/shared";
 
 /**
  * The layer the map draws. While the user frames a GeoPDF it is the base layer
  * the dialog has chosen, so the frame sits on the map it will be printed from;
  * otherwise, and whenever no choice has been handed over, it is the user's own.
+ * The dialog's layer is read against the ground in view (`basemapHere`), so a
+ * frame panned off the ground the layer was chosen for sits on the map the
+ * sheet will be printed from there.
  *
  * A pure choice and not a write: the user's stored layer is never touched, so
  * framing ending (confirmed or cancelled) is the map going back, with nothing
@@ -12,7 +16,9 @@
  */
 export function mapLayerFor(
   userLayerId: string,
-  framing: { active: boolean; layerId: string | null },
+  framing: { active: boolean; layerId: string | null; view: LonLatBox },
 ): string {
-  return framing.active && framing.layerId ? framing.layerId : userLayerId;
+  return framing.active && framing.layerId
+    ? basemapHere(framing.layerId, framing.view)
+    : userLayerId;
 }

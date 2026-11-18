@@ -2,6 +2,7 @@ import { Pressable, Text, View } from "react-native";
 
 import { radius, spacing, makeStyles, useTheme, muted } from "../theme";
 import { Icon } from "./Icon";
+import { t } from "@logjam/shared";
 
 export type Stat = {
   label: string;
@@ -60,7 +61,7 @@ export function StatGrid({ stats }: { stats: Stat[] }) {
             key={stat.label}
             accessibilityRole="button"
             accessibilityLabel={`${stat.label}: ${stat.value}`}
-            accessibilityHint="Copies it to the clipboard"
+            accessibilityHint={t`Copies it to the clipboard`}
             onPress={stat.onCopy}
             style={({ pressed }) => [
               styles.cell,

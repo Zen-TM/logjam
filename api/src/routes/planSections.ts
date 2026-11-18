@@ -11,8 +11,9 @@ import {
   parseTripPlanSectionCreate,
   parseTripPlanSectionPatch,
   say,
-  TRIP_PLAN_CHANGED_SENTENCE,
+  tripPlanChangedSentence,
   TRIP_PLAN_MAX_SECTIONS,
+  type UserSentence,
 } from "@logjam/shared";
 import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 import prisma from "../services/prisma";
@@ -28,7 +29,9 @@ import { sectionView } from "../lib/tripPlanView";
 
 const router = Router({ mergeParams: true });
 
-const FORBIDDEN = say`Only a leader or an editor can change the write-up.`;
+function writeUpForbidden(): UserSentence {
+  return say`Only a leader or an editor can change the write-up.`;
+}
 const ORDER = [{ position: "asc" }, { createdAt: "asc" }] as const;
 
 function sectionNotFound(): AppError {
@@ -38,7 +41,7 @@ function sectionNotFound(): AppError {
 async function writer(req: AuthenticatedRequest) {
   const user = await resolveUser(req.user!.sub);
   const access = await requirePlanWrite(user.id, getParam(req.params.planId));
-  requirePlanRole(access, ["leader", "editor"], FORBIDDEN);
+  requirePlanRole(access, ["leader", "editor"], writeUpForbidden());
   return access.plan.id;
 }
 
@@ -91,7 +94,7 @@ router.put(
       });
       const stored = new Set(current.map((row) => row.id));
       if (stored.size !== ids.length || ids.some((id) => !stored.has(id)))
-        throw new AppError(409, TRIP_PLAN_CHANGED_SENTENCE);
+        throw new AppError(409, tripPlanChangedSentence());
       for (const [position, id] of ids.entries())
         await tx.tripPlanSection.updateMany({
           where: { id, planId },
@@ -131,7 +134,7 @@ router.patch(
       });
       const row = await tx.tripPlanSection.findFirst({ where: { id, planId } });
       if (!row) throw sectionNotFound();
-      if (count === 0) throw new AppError(409, TRIP_PLAN_CHANGED_SENTENCE);
+      if (count === 0) throw new AppError(409, tripPlanChangedSentence());
       return row;
     });
     res.json(sectionView(section));

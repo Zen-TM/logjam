@@ -1,31 +1,31 @@
+import { plural, t } from "@logjam/shared";
 import type { UndoImportResult } from "../../placeUtils";
 
-const count = (n: number | undefined, noun: string) =>
-  n ? `${n} ${noun}${n === 1 ? "" : "s"}` : null;
-
-const listed = (...items: (string | null)[]) =>
-  items.filter((item): item is string => item != null).join(" and ");
+/** "2 places and 1 trip", "3 trips", or null when both counts are zero. */
+const nouns = (places: number | undefined, trips: number | undefined) => {
+  const p = places ? plural(places, "# place", "# places") : null;
+  const tr = trips ? plural(trips, "# trip", "# trips") : null;
+  return p && tr ? t`${p} and ${tr}` : (p ?? tr);
+};
 
 /** The toast after Undo. A count an older API leaves out reads as zero. */
 export function undoToastMessage(result: UndoImportResult): string {
-  const done = [
-    listed(
-      count(result.deletedPlaces, "place"),
-      count(result.deletedTrips, "trip"),
-    ),
-    listed(
-      count(result.restoredPlaces, "place"),
-      count(result.restoredTrips, "trip"),
-    ),
-  ];
-  const parts = [
-    done[0] && `${done[0]} removed`,
-    done[1] && `${done[1]} restored`,
-  ].filter(Boolean);
-  const kept = !result.keptFields
-    ? ""
-    : result.keptFields === 1
-      ? " 1 field you changed since stays as you left it."
-      : ` ${result.keptFields} fields you changed since stay as you left them.`;
-  return `${parts.length > 0 ? `Import undone — ${parts.join(", ")}.` : "Import undone."}${kept}`;
+  const removed = nouns(result.deletedPlaces, result.deletedTrips);
+  const restored = nouns(result.restoredPlaces, result.restoredTrips);
+  const head =
+    removed && restored
+      ? t`Import undone — ${removed} removed, ${restored} restored.`
+      : removed
+        ? t`Import undone — ${removed} removed.`
+        : restored
+          ? t`Import undone — ${restored} restored.`
+          : t`Import undone.`;
+  const kept = result.keptFields
+    ? plural(
+        result.keptFields,
+        "# field you changed since stays as you left it.",
+        "# fields you changed since stay as you left them.",
+      )
+    : "";
+  return [head, kept].filter(Boolean).join(" ");
 }

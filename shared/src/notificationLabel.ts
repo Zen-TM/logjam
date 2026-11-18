@@ -5,16 +5,17 @@
 // types fall back to a generic label rather than rendering nothing.
 import type { TNotification } from "./apiTypes.js";
 import { ANNOUNCEMENT } from "./contracts/inbox.js";
+import { formatDayMonth, formatDayMonthYear, localDay } from "./dateFormat.js";
 import { formatBytes } from "./format.js";
 import { EXPORT_FORMAT_LABELS, type ExportFormat } from "./topoExport.js";
+import { t } from "./i18n.js";
 
 /**
  * The second line of a finished LiDAR map's row when its vegetation layer was
  * left out for size. topo/worker_common.py's VEGETATION_LEFT_OUT, word for
  * word (notificationLabel.test.ts holds them equal): the email says it too.
  */
-export const VEGETATION_LEFT_OUT_NOTE =
-  "The area is too large for the vegetation layer, so it was left out.";
+export const VEGETATION_LEFT_OUT_NOTE = t`The area is too large for the vegetation layer, so it was left out.`;
 
 export type NotificationLabel = {
   text: string;
@@ -48,9 +49,9 @@ function who(value: unknown, fallback: string): string {
  * than render a raw enum name.
  */
 const SHARED_ITEM_NOUN: Record<string, string> = {
-  waypoint: "a place",
-  route: "a route",
-  topoJob: "a LiDAR map",
+  waypoint: t`a place`,
+  route: t`a route`,
+  topoJob: t`a LiDAR map`,
 };
 
 /**
@@ -122,7 +123,7 @@ export function notificationLabel(n: TNotification): NotificationLabel {
   switch (n.type) {
     case "friend_request":
       return {
-        text: `${who(p.requesterUsername, "Someone")} sent you a friend request`,
+        text: t`${who(p.requesterUsername, t`Someone`)} sent you a friend request`,
       };
     case "friend_request_accepted":
       // An invite link redeemed writes this type too, flagged, because the
@@ -130,13 +131,18 @@ export function notificationLabel(n: TNotification): NotificationLabel {
       return {
         text:
           p.viaInvite === true
-            ? `${who(p.acceptedByUsername, "Someone")} used your invite link and is now a friend`
-            : `${who(p.acceptedByUsername, "Someone")} accepted your friend request`,
+            ? t`${who(p.acceptedByUsername, t`Someone`)} used your invite link and is now a friend`
+            : t`${who(p.acceptedByUsername, t`Someone`)} accepted your friend request`,
       };
-    case "place_shared":
+    case "place_shared": {
+      const by = who(p.sharedByUsername, t`Someone`);
+      const place = str(p.placeName);
       return {
-        text: `${who(p.sharedByUsername, "Someone")} shared ${str(p.placeName) ?? "a place"} with you`,
+        text: place
+          ? t`${by} shared ${place} with you`
+          : t`${by} shared a place with you`,
       };
+    }
     // A directly-shared saved item. The payload carries the entity's TYPE and
     // its id, and deliberately no name: the recipient already holds the row
     // through delta sync or its own list endpoint, so resolving a waypoint's
@@ -144,54 +150,65 @@ export function notificationLabel(n: TNotification): NotificationLabel {
     // nothing (api/src/routes/notifications.ts says so at the resolve site).
     // The row therefore names the KIND, and the ⋯ sheet's "View in Saved" is
     // what shows which one.
-    case "item_shared":
+    case "item_shared": {
+      const by = who(p.sharedByUsername, t`Someone`);
       return {
-        text: `${who(p.sharedByUsername, "Someone")} shared ${SHARED_ITEM_NOUN[String(p.entityType)] ?? "an item"} with you`,
+        text: t`${by} shared ${SHARED_ITEM_NOUN[String(p.entityType)] ?? t`an item`} with you`,
       };
+    }
     // The filename is deliberately IN the label: the row carries Accept and
     // Turn down, and nobody can answer that without knowing what is on offer.
     // It is user text (routinely a place name), resolved from the live send at
     // read time — rendered here, never logged.
-    case "file_sent":
+    case "file_sent": {
+      const by = who(p.sentByUsername, t`Someone`);
+      const file = str(p.filename);
       return {
-        text: `${who(p.sentByUsername, "Someone")} sent you ${str(p.filename) ?? "a file"}`,
+        text: file ? t`${by} sent you ${file}` : t`${by} sent you a file`,
         // A send that lapsed before it was saved keeps its row and loses its
         // buttons, so the row has to say why it can no longer be answered —
         // otherwise the offer just disappears and the user is left looking for
         // something a friend told them they had sent. Only ever shown for a
         // send they never took: an accepted one is dropped server-side.
         ...(p.fileSendStatus === "expired" && {
-          detail: `This file expired. Ask ${who(p.sentByUsername, "them")} to send it again.`,
+          detail: t`This file expired. Ask ${who(p.sentByUsername, t`them`)} to send it again.`,
         }),
       };
-    case "topo_complete":
+    }
+    case "topo_complete": {
+      const job = str(p.jobName);
       return {
-        text: str(p.jobName)
-          ? `${str(p.jobName)} map ready`
-          : "LiDAR map ready",
+        text: job ? t`${job} map ready` : t`LiDAR map ready`,
         ...(p.vegetationLeftOut === true && {
           detail: VEGETATION_LEFT_OUT_NOTE,
         }),
       };
-    case "topo_failed":
+    }
+    case "topo_failed": {
+      const job = str(p.jobName);
       return {
-        text: str(p.jobName)
-          ? `${str(p.jobName)} map failed`
-          : "LiDAR map failed",
+        text: job ? t`${job} map failed` : t`LiDAR map failed`,
       };
+    }
     case "topo_export_complete": {
       const format =
         EXPORT_FORMAT_LABELS[p.format as ExportFormat] ??
         (p.format ? String(p.format).toUpperCase() : null);
-      const map = format ? `${format} map` : "Map";
+      const job = str(p.jobName);
       if (p.status === "failed") {
         return {
-          text: `${map} failed`,
+          text: format ? t`${format} map failed` : t`Map failed`,
           ...(str(p.errorMessage) && { detail: str(p.errorMessage)! }),
         };
       }
       return {
-        text: `${map}${str(p.jobName) ? ` for ${str(p.jobName)}` : ""} ready`,
+        text: format
+          ? job
+            ? t`${format} map for ${job} ready`
+            : t`${format} map ready`
+          : job
+            ? t`Map for ${job} ready`
+            : t`Map ready`,
         // Older ones carry no size.
         ...(typeof p.resultBytes === "number" &&
           p.resultBytes > 0 && { detail: formatBytes(p.resultBytes) }),
@@ -200,17 +217,17 @@ export function notificationLabel(n: TNotification): NotificationLabel {
     // No longer sent (auto-export is gone); older ones stay in the inbox.
     case "topo_export_skipped":
       return {
-        text: "Auto-export didn't run",
+        text: t`Auto-export didn't run`,
         ...(str(p.reason) && { detail: str(p.reason)! }),
       };
     // Egress has no meter in Logjam GPS or Logjam Web - the allowance sits far
     // above real use, so these two rows are its entire user-facing surface.
     case "egress_quota_warning":
-      return { text: "Approaching your monthly download limit" };
+      return { text: t`Approaching your monthly download limit` };
     case "egress_quota_exceeded":
       return {
-        text: "Monthly download limit reached",
-        detail: "Downloads resume when the limit resets next month.",
+        text: t`Monthly download limit reached`,
+        detail: t`Downloads resume when the limit resets next month.`,
       };
     // The maintainer's own title, resolved at read time. The push carries a
     // fixed title instead (Guard: api/src/services/push.unit.test.ts).
@@ -224,34 +241,60 @@ export function notificationLabel(n: TNotification): NotificationLabel {
     // Plans. The plan's name is resolved at read time like a place's, except
     // in plan_access_ended, which carries it: the plan is gone, or gone for
     // this person, and they are owed which one (api/src/routes/notifications.ts).
-    case "plan_invited":
+    case "plan_invited": {
+      const by = who(p.invitedByUsername, t`Someone`);
+      const plan = str(p.planName);
       return {
-        text: `${who(p.invitedByUsername, "Someone")} invited you to ${str(p.planName) ?? "a trip plan"}`,
+        text: plan
+          ? t`${by} invited you to ${plan}`
+          : t`${by} invited you to a trip plan`,
       };
-    case "plan_join_request":
+    }
+    case "plan_join_request": {
+      const by = who(p.requesterUsername, t`Someone`);
+      const plan = str(p.planName);
       return {
-        text: `${who(p.requesterUsername, "Someone")} asked to join ${str(p.planName) ?? "your trip plan"}`,
+        text: plan
+          ? t`${by} asked to join ${plan}`
+          : t`${by} asked to join your trip plan`,
       };
-    case "plan_join_approved":
+    }
+    case "plan_join_approved": {
+      const by = who(p.approvedByUsername, t`A leader`);
+      const plan = str(p.planName);
       return {
-        text: `${who(p.approvedByUsername, "A leader")} accepted you into ${str(p.planName) ?? "a trip plan"}`,
+        text: plan
+          ? t`${by} accepted you into ${plan}`
+          : t`${by} accepted you into a trip plan`,
       };
-    case "plan_member_joined":
+    }
+    case "plan_member_joined": {
+      const by = who(p.memberUsername, t`Someone`);
+      const plan = str(p.planName);
       return {
-        text: `${who(p.memberUsername, "Someone")} joined ${str(p.planName) ?? "your trip plan"}`,
+        text: plan ? t`${by} joined ${plan}` : t`${by} joined your trip plan`,
       };
+    }
     case "plan_access_ended": {
       const plan = str(p.planName);
       if (p.reason === "declined")
         return {
-          text: `Your request to join ${plan ?? "a trip plan"} was declined`,
+          text: plan
+            ? t`Your request to join ${plan} was declined`
+            : t`Your request to join a trip plan was declined`,
         };
       if (p.reason === "deleted")
-        return { text: `${plan ?? "A trip plan"} was deleted` };
-      return { text: `You're no longer in ${plan ?? "a trip plan"}` };
+        return {
+          text: plan ? t`${plan} was deleted` : t`A trip plan was deleted`,
+        };
+      return {
+        text: plan
+          ? t`You're no longer in ${plan}`
+          : t`You're no longer in a trip plan`,
+      };
     }
     default:
-      return { text: "Notification" };
+      return { text: t`Notification` };
   }
 }
 
@@ -498,15 +541,12 @@ function dayTitle(
   todayKey: string,
   yesterdayKey: string,
 ): string {
-  if (key === "unknown") return "Unknown date";
-  if (key === todayKey) return "Today";
-  if (key === yesterdayKey) return "Yesterday";
-  return at.toLocaleDateString(undefined, {
-    day: "numeric",
-    month: "short",
-    // Only worth the width once the year is ambiguous.
-    ...(at.getFullYear() !== new Date(todayKey).getFullYear()
-      ? { year: "numeric" }
-      : {}),
-  });
+  if (key === "unknown") return t`Unknown date`;
+  if (key === todayKey) return t`Today`;
+  if (key === yesterdayKey) return t`Yesterday`;
+  const day = localDay(at);
+  // Only worth the width once the year is ambiguous.
+  return day.year !== new Date(todayKey).getFullYear()
+    ? formatDayMonthYear(day)
+    : formatDayMonth(day);
 }

@@ -56,8 +56,12 @@ import {
 
 const router = Router({ mergeParams: true });
 
-const REMOVE = say`Only a leader can remove someone.`;
-const NEEDS_A_LEADER = say`A plan needs a leader. Make someone else a leader first.`;
+function onlyLeadersRemove(): UserSentence {
+  return say`Only a leader can remove someone.`;
+}
+function needsALeader(): UserSentence {
+  return say`A plan needs a leader. Make someone else a leader first.`;
+}
 
 function memberNotFound(): AppError {
   return new AppError(404, say`Couldn't find that.`);
@@ -275,7 +279,7 @@ router.patch(
         role !== "leader" &&
         (await otherLeaders(tx, planId, memberId)) === 0
       )
-        throw new AppError(409, NEEDS_A_LEADER);
+        throw new AppError(409, needsALeader());
       await tx.tripPlanMember.update({
         where: { planId_userId: { planId, userId: memberId } },
         data: { role },
@@ -372,7 +376,7 @@ router.delete(
       requirePlanRole(
         await requirePlanMember(user.id, planId),
         ["leader"],
-        REMOVE,
+        onlyLeadersRemove(),
       );
     const seen = req.query.status;
     if (seen !== undefined && !isTripPlanMemberStatus(seen))
@@ -382,7 +386,8 @@ router.delete(
 
     const { late, push } = await prisma.$transaction(async (tx) => {
       await touchPlan(tx, planId);
-      if (!self) await requireStillLeader(tx, planId, user.id, REMOVE);
+      if (!self)
+        await requireStillLeader(tx, planId, user.id, onlyLeadersRemove());
       // Read again behind the plan row: a leader may have answered since.
       const [member, plan] = await Promise.all([
         tx.tripPlanMember.findUnique({
@@ -414,7 +419,7 @@ router.delete(
         member.role === "leader" &&
         (await otherLeaders(tx, planId, memberId)) === 0
       )
-        throw new AppError(409, NEEDS_A_LEADER);
+        throw new AppError(409, needsALeader());
       const late =
         member.status === "active"
           ? await memberGone(tx, {

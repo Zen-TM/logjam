@@ -22,7 +22,6 @@ import {
   View,
 } from "react-native";
 import {
-  ATTRIBUTE_NOUN,
   contractSectionsFor,
   isReservedFieldKey,
   PLACE_PAGE,
@@ -52,6 +51,7 @@ import {
   attributeRows,
   truncationHint,
   tripTitle,
+  t,
 } from "@logjam/shared";
 
 import {
@@ -121,9 +121,9 @@ import { PlaceOptionsSheet } from "./PlaceOptionsSheet";
  *  the point of the section is that the user can SEE what arrived before
  *  deciding what to do with it. */
 function foreignValueText(key: string, value: unknown): string {
-  if (value === null || value === undefined) return "No value";
+  if (value === null || value === undefined) return t`No value`;
   if (typeof value === "object") return JSON.stringify(value);
-  if (typeof value === "boolean") return value ? "Yes" : "No";
+  if (typeof value === "boolean") return value ? t`Yes` : t`No`;
   // A built-in length parked here still reads in the display units.
   return typeof value === "number"
     ? withFieldUnit(key, String(value))
@@ -223,7 +223,10 @@ export function PlaceDetailScreen({
   }
   if (!place) {
     return (
-      <EmptyState title="Place not found" hint="It may have been deleted." />
+      <EmptyState
+        title={t`Place not found`}
+        hint={t`It may have been deleted.`}
+      />
     );
   }
 
@@ -285,7 +288,7 @@ export function PlaceDetailScreen({
   // which they would see bare keys.
   const placeTypeName =
     (placeTypes.data ?? []).find((type) => type.id === place.placeTypeId)
-      ?.name ?? "Place";
+      ?.name ?? t`Place`;
   const storedFields = userFieldValues(place.fieldValues);
   const labellingDefs = [...fieldDefs, ...(place.fieldDefsSnapshot ?? [])];
   const customFields = canyonGradeRows(
@@ -318,16 +321,16 @@ export function PlaceDetailScreen({
         query.refresh();
         notify(
           action === "adopt"
-            ? `“${item.label}” is one of your fields now.`
+            ? t`“${item.label}” is one of your fields now.`
             : action === "notes"
-              ? "Added to the notes."
-              : "Discarded.",
+              ? t`Added to the notes.`
+              : t`Discarded.`,
           "done",
         );
       })
       .catch((err: unknown) => {
         console.error(err);
-        notify(messageFromError(err, "Couldn't do that just now."), "error");
+        notify(messageFromError(err, t`Couldn't do that just now.`), "error");
       })
       .finally(() => setResolvingForeign(false));
   };
@@ -339,7 +342,7 @@ export function PlaceDetailScreen({
         ? `maps:0,0?q=${label}@${place.latitude},${place.longitude}`
         : `geo:${place.latitude},${place.longitude}?q=${place.latitude},${place.longitude}(${label})`;
     Linking.openURL(url).catch(() => {
-      notify("No maps app is available on this device.", "error");
+      notify(t`No maps app is available on this device.`, "error");
     });
   };
 
@@ -412,7 +415,7 @@ export function PlaceDetailScreen({
           icon="place"
           title={position}
           right={<Icon idea="copy" size={20} color={theme.textMuted} />}
-          accessibilityLabel={`Copy the coordinates of ${place.name}`}
+          accessibilityLabel={t`Copy the coordinates of ${place.name}`}
           onPress={copyPosition}
         />
         <MapCoverageRow
@@ -544,7 +547,7 @@ export function PlaceDetailScreen({
                 source.linkable
                   ? () => {
                       Linking.openURL(source.url).catch(() =>
-                        notify("Couldn't open that link.", "error"),
+                        notify(t`Couldn't open that link.`, "error"),
                       );
                     }
                   : undefined
@@ -604,7 +607,7 @@ export function PlaceDetailScreen({
           <>
             <Row
               title={linkedRoute.name}
-              subtitle={`Drawn route · ${formatDistanceM(routeLengthM(linkedRoute.points))}`}
+              subtitle={t`Drawn route · ${formatDistanceM(routeLengthM(linkedRoute.points))}`}
               icon="route"
               hue={assetHue.route}
               onPress={() => onFocusOnMap(routeBbox(linkedRoute.points))}
@@ -612,13 +615,13 @@ export function PlaceDetailScreen({
                 isOwner ? (
                   <IconButton
                     icon="overflow"
-                    accessibilityLabel="Route options"
+                    accessibilityLabel={t`Route options`}
                     onPress={() => setRouteSlotMenu(true)}
                   />
                 ) : undefined
               }
             />
-            <Text style={styles.muted}>One route per place.</Text>
+            <Text style={styles.muted}>{t`One route per place.`}</Text>
           </>
         ) : (
           <MediaStrip
@@ -643,7 +646,7 @@ export function PlaceDetailScreen({
                   notify(
                     messageFromError(
                       err,
-                      "Couldn't read that route file. It may not be downloaded yet.",
+                      t`Couldn't read that route file. It may not be downloaded yet.`,
                     ),
                     "error",
                   );
@@ -683,7 +686,7 @@ export function PlaceDetailScreen({
               right={
                 <IconButton
                   icon="overflow"
-                  accessibilityLabel={`Options for ${linked.name}`}
+                  accessibilityLabel={t`Options for ${linked.name}`}
                   onPress={() => setLinkMenuId(linked.id)}
                 />
               }
@@ -755,7 +758,7 @@ export function PlaceDetailScreen({
         actions={
           <IconButton
             icon="overflow"
-            accessibilityLabel={`Actions for ${place.name}`}
+            accessibilityLabel={t`Actions for ${place.name}`}
             onPress={() => setMenuOpen(true)}
           />
         }
@@ -813,11 +816,11 @@ export function PlaceDetailScreen({
       <BottomSheet
         visible={linking}
         onClose={() => setLinking(false)}
-        title="Link a place"
+        title={t`Link a place`}
       >
         <View style={styles.sheetBody}>
           <TextField
-            label="Find a place"
+            label={t`Find a place`}
             value={linkQuery}
             onChangeText={setLinkQuery}
             autoCapitalize="none"
@@ -835,10 +838,10 @@ export function PlaceDetailScreen({
               return (
                 <Text style={styles.muted}>
                   {(placesQuery.data ?? []).length <= 1
-                    ? "This is the only place you have."
+                    ? t`This is the only place you have.`
                     : candidates.length === 0
-                      ? "Every other place is already linked to this one."
-                      : "No place matches that."}
+                      ? t`Every other place is already linked to this one.`
+                      : t`No place matches that.`}
                 </Text>
               );
             }
@@ -875,7 +878,7 @@ export function PlaceDetailScreen({
         onClose={() => setLinkMenuId(null)}
         title={
           linkedPlaces.find((row) => row.id === linkMenuId)?.name ??
-          "Linked place"
+          t`Linked place`
         }
       >
         <View style={styles.sheetBody}>
@@ -913,7 +916,7 @@ export function PlaceDetailScreen({
         // The title says what the panel is for, and the label/value pair is
         // shown as the same two-column row it has in the table it was tapped
         // in, so the thing being decided about is recognisably the item tapped.
-        title="What should this become?"
+        title={t`What should this become?`}
       >
         <View style={styles.sheetBody}>
           <View style={[styles.fieldRow, styles.fieldRowLast]}>
@@ -932,28 +935,28 @@ export function PlaceDetailScreen({
           {foreignIsBuiltIn ? null : (
             <Row
               icon="add"
-              title={`Create a new ${ATTRIBUTE_NOUN.one} for this place type`}
+              title={t`Create a new attribute for this place type`}
               // No explanation line: the three titles say what they do, and a
               // sentence under each turned a three-item menu into a wall. The
               // slot is kept for the one thing the user cannot see — no
               // connection.
-              subtitle={online ? undefined : "Needs a connection"}
+              subtitle={online ? undefined : t`Needs a connection`}
               disabled={!online || resolvingForeign}
               onPress={() => runForeignAction("adopt")}
             />
           )}
           <Row
             icon="notes"
-            title="Add to notes as text"
-            subtitle={online ? undefined : "Needs a connection"}
+            title={t`Add to notes as text`}
+            subtitle={online ? undefined : t`Needs a connection`}
             disabled={!online || resolvingForeign}
             onPress={() => runForeignAction("notes")}
           />
           <Row
             icon="delete"
             hue={theme.warning}
-            title="Discard"
-            subtitle={online ? undefined : "Needs a connection"}
+            title={t`Discard`}
+            subtitle={online ? undefined : t`Needs a connection`}
             disabled={!online || resolvingForeign}
             // The only one of the three that LOSES something, one tap inside a
             // sheet one tap from a row. Everything else destructive in Logjam GPS
@@ -964,10 +967,9 @@ export function PlaceDetailScreen({
               void (async () => {
                 if (
                   await confirm({
-                    confirmTitle: `Discard "${item.label}"?`,
-                    confirmBody:
-                      "The value is removed from this place. This can't be undone.",
-                    confirmLabel: "Discard",
+                    confirmTitle: t`Discard "${item.label}"?`,
+                    confirmBody: t`The value is removed from this place. This can't be undone.`,
+                    confirmLabel: t`Discard`,
                     tone: "destructive",
                   })
                 )
@@ -981,13 +983,13 @@ export function PlaceDetailScreen({
       <BottomSheet
         visible={routeSlotMenu}
         onClose={() => setRouteSlotMenu(false)}
-        title={linkedRoute?.name ?? "Route"}
+        title={linkedRoute?.name ?? t`Route`}
       >
         <View style={styles.sheetBody}>
           {/* The same panel the empty slot opens: replacing and adding offer
               the same sources. */}
           <Row
-            title="Replace with another way"
+            title={t`Replace with another way`}
             icon="replace"
             hue={assetHue.route}
             onPress={() => {
@@ -996,8 +998,8 @@ export function PlaceDetailScreen({
             }}
           />
           <Row
-            title="Unlink from this place"
-            subtitle="The route is kept."
+            title={t`Unlink from this place`}
+            subtitle={t`The route is kept.`}
             icon="link"
             hue={theme.warning}
             onPress={() => {
@@ -1005,11 +1007,11 @@ export function PlaceDetailScreen({
               setRouteSlotMenu(false);
               if (!target) return;
               updateRouteLocal(target.id, { placeId: null })
-                .then(() => notify("Route unlinked.", "done"))
+                .then(() => notify(t`Route unlinked.`, "done"))
                 .catch((err: unknown) => {
                   console.error(err);
                   notify(
-                    messageFromError(err, "Couldn't unlink that route."),
+                    messageFromError(err, t`Couldn't unlink that route.`),
                     "error",
                   );
                 });

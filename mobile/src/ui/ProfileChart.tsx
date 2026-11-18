@@ -24,6 +24,7 @@
 import { memo, useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
   profileSpan,
+  rich,
   sameSeries,
   type ProfilePoint,
   type ProfileSeries,
@@ -48,6 +49,7 @@ import {
   wash,
 } from "../theme";
 import { SheetScrollLock } from "./BottomSheet";
+import { Rich } from "./rich";
 
 /**
  * Columns drawn: one per POINT of chart width, capped.
@@ -305,9 +307,12 @@ export function ProfileChart({
           // the order the question is asked, costs no extra line, and works
           // unchanged for a speed against a clock ("4.2 km/h at 2:41 pm").
           <Text style={styles.readout}>
-            {scrubbed.value != null ? formatValue(scrubbed.value) : "—"}
-            <Text style={styles.readoutAt}>{"  at  "}</Text>
-            {formatX(scrubbed.x)}
+            <Rich
+              parts={rich`${scrubbed.value != null ? formatValue(scrubbed.value) : "—"}  <at>at</at>  ${formatX(scrubbed.x)}`}
+              tags={{
+                at: (text) => <Text style={styles.readoutAt}>{text}</Text>,
+              }}
+            />
           </Text>
         ) : (
           <Text style={styles.readoutHint}>{hint}</Text>

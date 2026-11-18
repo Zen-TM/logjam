@@ -16,6 +16,7 @@ import {
   formatDurationMs,
   mediaCategory,
   type MediaCategory,
+  t,
 } from "@logjam/shared";
 
 import {
@@ -202,7 +203,7 @@ export function MediaStrip({
     const asset = result.assets[0];
     const mimeType = routeFileMimeType(asset.name, asset.mimeType);
     if (mimeType === null) {
-      onFailed("Pick a .gpx or .kml file.");
+      onFailed(t`Pick a .gpx or .kml file.`);
       return;
     }
     await attach([{ uri: asset.uri, mimeType, fileName: asset.name }]);
@@ -213,11 +214,11 @@ export function MediaStrip({
       setBusy(true);
       try {
         if (await attachRecordedTrack(linkedType, linkedId, track))
-          onAdded("1 route added.");
-        else onFailed("That track has too few points to attach.");
+          onAdded(t`1 route added.`);
+        else onFailed(t`That track has too few points to attach.`);
       } catch (err) {
         console.error(err);
-        onFailed("That track couldn't be attached.");
+        onFailed(t`That track couldn't be attached.`);
       } finally {
         setBusy(false);
       }
@@ -253,10 +254,9 @@ export function MediaStrip({
   const confirmDelete = useCallback(async (item: MirrorMedia) => {
     if (
       await confirm({
-        confirmTitle: "Delete this attachment?",
-        confirmBody:
-          "It goes from your account and your other devices. This can't be undone.",
-        confirmLabel: "Delete",
+        confirmTitle: t`Delete this attachment?`,
+        confirmBody: t`It goes from your account and your other devices. This can't be undone.`,
+        confirmLabel: t`Delete`,
         tone: "destructive",
       })
     )
@@ -281,9 +281,9 @@ export function MediaStrip({
                   ? ADD_PHOTO_LABEL
                   : onAddWay
                     ? atLimit
-                      ? "Replace this place's route"
-                      : "Add a way"
-                    : "Add a route"
+                      ? t`Replace this place's route`
+                      : t`Add a way`
+                    : t`Add a route`
               }
               accessibilityState={{ busy }}
               // A second batch would run beside the first.
@@ -308,7 +308,7 @@ export function MediaStrip({
                 />
               )}
               <Text style={styles.addTileLabel}>
-                {busy ? "Adding…" : atLimit ? "Replace" : "Add"}
+                {busy ? t`Adding…` : atLimit ? t`Replace` : t`Add`}
               </Text>
             </Pressable>
           ) : null}
@@ -335,10 +335,10 @@ export function MediaStrip({
           {atLimit && !readOnly ? (
             <Text style={styles.emptyHint}>
               {limit !== 1
-                ? `This holds up to ${limit} attachments.`
+                ? t`This holds up to ${limit ?? 0} attachments.`
                 : onAddWay
-                  ? "One route per place."
-                  : "One route per place. Press and hold to replace it."}
+                  ? t`One route per place.`
+                  : t`One route per place. Press and hold to replace it.`}
             </Text>
           ) : null}
         </View>
@@ -360,14 +360,14 @@ export function MediaStrip({
           // the button unresponsive.
           void Promise.resolve(job()).catch((err: unknown) => {
             console.error(err);
-            onFailed("Couldn't finish that. Try again.");
+            onFailed(t`Couldn't finish that. Try again.`);
           });
         }}
         title={
           sourceMode === "tracks"
-            ? "Recorded tracks"
+            ? t`Recorded tracks`
             : kind === "track"
-              ? "Add a route"
+              ? t`Add a route`
               : ADD_PHOTO_LABEL
         }
       >
@@ -390,14 +390,14 @@ export function MediaStrip({
               <>
                 <Row
                   icon="map"
-                  title="Attach a route file"
-                  subtitle="A .gpx or .kml from this phone"
+                  title={t`Attach a route file`}
+                  subtitle={t`A .gpx or .kml from this phone`}
                   onPress={() => runAfterSheet(pickRouteFile)}
                 />
                 <Row
                   icon="track"
-                  title="Attach a recorded track"
-                  subtitle="A track you recorded in Logjam GPS"
+                  title={t`Attach a recorded track`}
+                  subtitle={t`A track you recorded in Logjam GPS`}
                   onPress={() => setSourceMode("tracks")}
                 />
               </>
@@ -411,13 +411,12 @@ export function MediaStrip({
             {tracks === null ? (
               <ActivityIndicator color={theme.accent} />
             ) : tracks.length === 0 ? (
-              <Text style={styles.emptyHint}>
-                No finished recordings yet. Start one from the map — it will
-                appear here once you stop it.
-              </Text>
+              <Text
+                style={styles.emptyHint}
+              >{t`No finished recordings yet. Start one from the map — it will appear here once you stop it.`}</Text>
             ) : (
               <>
-                <SectionHeader title={`${tracks.length} finished`} />
+                <SectionHeader title={t`${tracks.length} finished`} />
                 {tracks.map((track) => (
                   <Row
                     key={track.id}
@@ -471,7 +470,7 @@ function AttachmentTile({
   return (
     <Pressable
       accessibilityRole="imagebutton"
-      accessibilityLabel={item.filename ?? "Attachment"}
+      accessibilityLabel={item.filename ?? t`Attachment`}
       onPress={onPress}
       onLongPress={onLongPress}
       style={styles.tileWrap}
@@ -494,7 +493,7 @@ function AttachmentTile({
             style={[styles.glyphLabel, { color: theme.onFill }]}
             numberOfLines={2}
           >
-            {item.filename ?? "Attachment"}
+            {item.filename ?? t`Attachment`}
           </Text>
         </View>
       )}
@@ -506,7 +505,7 @@ function AttachmentTile({
       {item.syncState === "pendingUpload" ? (
         <View style={styles.pendingBadge}>
           <Text style={styles.pendingBadgeText}>
-            {online ? "Uploading…" : "Waiting"}
+            {online ? t`Uploading…` : t`Waiting`}
           </Text>
         </View>
       ) : null}

@@ -11,6 +11,7 @@
 // its unit as one string.
 // Test: `units.test.ts` holds the metric output to what Logjam wrote before.
 
+import { t } from "./i18n.js";
 import { formatNumber } from "./numberFormat.js";
 import { accountRegion, REGIONS, type Region } from "./regions.js";
 
@@ -207,7 +208,7 @@ export function formatArea(km2: number): string {
   if (!Number.isFinite(km2) || km2 < 0) {
     throw new Error(`formatArea: invalid area ${km2}`);
   }
-  const unit = imperial() ? "sq mi" : "km²";
+  const unit = imperial() ? t`sq mi` : "km²";
   const area = imperial() ? km2 / KM2_PER_SQ_MI : km2;
   if (area >= 10) return `${formatNumber(area, 0)} ${unit}`;
   if (area > 0 && area < 0.005) return `<0.01 ${unit}`;

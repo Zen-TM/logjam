@@ -38,8 +38,10 @@ import {
   currentConsentVersionOf,
   navLabel,
   isThemeSchemeId,
+  language,
   needsReconsent,
   SETTINGS,
+  t,
   TRIP_PLANS_LIST,
   type IconIdea,
 } from "@logjam/shared";
@@ -47,9 +49,11 @@ import {
 import {
   fetchCurrentUser,
   getUnreadNotificationCount,
+  recordLanguage,
   useApiQuery,
 } from "./api/queries";
 import { AccountStateProvider } from "./auth/AccountStateContext";
+import { languageToSend } from "./languageSetting";
 import type { AccountState } from "./auth/capabilities";
 import { getCachedUnreadCount } from "./sync/notificationsCache";
 import { onMirrorChanged } from "./sync/syncDb";
@@ -1037,7 +1041,7 @@ export function AppShell({
   useDisplayUnits();
   const userQuery = useApiQuery(
     fetchCurrentUser,
-    "Couldn't load your account.",
+    t`Couldn't load your account.`,
     !isGuest,
   );
   const [consented, setConsented] = useState(false);
@@ -1100,6 +1104,24 @@ export function AppShell({
   useEffect(() => {
     if (!isGuest && accountLoaded) keepAccountRegions(accountRegions);
   }, [accountRegions, accountLoaded, isGuest]);
+
+  // Tell the account which language this phone runs in when it differs from
+  // the one recorded, for the messages sent with nobody asking. Nothing in
+  // prod (the source language is all there is), nothing for a guest, and
+  // nothing behind the consent gate or the new-account region step
+  // (`languageToSend`; guard: src/languageSetting.test.ts, the "languageToSend"
+  // tests).
+  const accountUser = userQuery.data;
+  useEffect(() => {
+    const next = languageToSend({
+      accountState,
+      user: accountUser,
+      consented,
+      newAccount,
+      running: language(),
+    });
+    if (next) recordLanguage(next).catch(console.error);
+  }, [accountUser, accountState, consented, newAccount]);
 
   // The account's units, kept the same way. Absent is its own state: the
   // account never chose, so its home region's units apply.
@@ -1290,6 +1312,7 @@ export function AppShell({
             <Tabs.Screen
               name="Map"
               options={{
+                tabBarLabel: t`Map`,
                 tabBarIcon: ({ color }) => <TabIcon idea="map" color={color} />,
               }}
             >
@@ -1331,6 +1354,7 @@ export function AppShell({
             <Tabs.Screen
               name="More"
               options={{
+                tabBarLabel: t`More`,
                 // Leaving More and coming back shows its ROOT, not the page last
                 // open inside it: the hub is where a visit starts. React
                 // Navigation pops the tab's stack when the tab loses focus.

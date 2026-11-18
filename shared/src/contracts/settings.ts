@@ -3,8 +3,8 @@
 // `screens/SettingsScreen.tsx`, `places/PlaceTypesEditor.tsx` and
 // `customFields/CustomFieldsEditor.tsx`. A screen with no question to answer
 // has no hero (shared/DESIGN.md §2).
-import { t } from "../i18n.js";
 import type { NotificationPreferences } from "../themeSchemes.js";
+import { plural, t, type Language } from "../i18n.js";
 import { REGIONS, regionsOf, type Region } from "../regions.js";
 import { ATTRIBUTE_NOUN } from "../tripLogFields.js";
 import type { Units } from "../units.js";
@@ -13,7 +13,7 @@ import type { ClientOnly, ScreenContract } from "./types.js";
 
 export const SETTINGS = {
   id: "settings.menu",
-  title: "Settings",
+  title: t`Settings`,
   sections: [
     // What is set, in the order a user goes looking: Logjam GPS draws one row
     // per section here that opens a page of its own (split by where the
@@ -28,15 +28,13 @@ export const SETTINGS = {
     {
       key: "map",
       on: "gps",
-      reason:
-        "These set how the phone's location marker, compass, battery use and screen behave on the map. Logjam Web's map runs on the browser's own settings.",
+      reason: t`These set how the phone's location marker, compass, battery use and screen behave on the map. Logjam Web's map runs on the browser's own settings.`,
     },
     { key: "notifications" },
     {
       key: "offline",
       on: "gps",
-      reason:
-        "Offline maps and the downloads that fetch them are stored on the phone. A browser keeps neither.",
+      reason: t`Offline maps and the downloads that fetch them are stored on the phone. A browser keeps neither.`,
     },
     { key: "privacy" },
     { key: "categories" },
@@ -44,25 +42,24 @@ export const SETTINGS = {
     {
       key: "about",
       on: "gps",
-      reason:
-        "The build a user quotes in a bug report is the one installed on the phone. Logjam Web is always the current site.",
+      reason: t`The build a user quotes in a bug report is the one installed on the phone. Logjam Web is always the current site.`,
     },
   ],
   copy: {
-    display: "Display",
-    regions: "Regions",
-    map: "Map",
-    notifications: "Notifications",
-    offline: "Offline and storage",
-    privacy: "Privacy and security",
-    friends: "Friends",
-    copying: "Copying a place",
-    categories: "Your own place types",
-    attributes: `Your own ${ATTRIBUTE_NOUN.many}`,
-    placeTypes: "Place types",
-    tripAttributes: "Trip attributes",
-    placeAttributes: "Place attributes",
-    about: "About",
+    display: t`Display`,
+    regions: t`Regions`,
+    map: t`Map`,
+    notifications: t`Notifications`,
+    offline: t`Offline and storage`,
+    privacy: t`Privacy and security`,
+    friends: t`Friends`,
+    copying: t`Copying a place`,
+    categories: t`Your own place types`,
+    attributes: t`Your own ${ATTRIBUTE_NOUN.many}`,
+    placeTypes: t`Place types`,
+    tripAttributes: t`Trip attributes`,
+    placeAttributes: t`Place attributes`,
+    about: t`About`,
   },
 } as const satisfies ScreenContract;
 
@@ -74,20 +71,17 @@ export const SETTINGS_PHONE_ONLY = [
   {
     id: "deviceGuards",
     on: "gps",
-    reason:
-      "App lock, crash reports and Save to gallery configure the phone's own lock, error reporting and photo library. Logjam Web leaves each to the browser.",
+    reason: t`App lock, crash reports and Save to gallery configure the phone's own lock, error reporting and photo library. Logjam Web leaves each to the browser.`,
   },
   {
     id: "pushNotifications",
     on: "gps",
-    reason:
-      "A push is allowed per phone, by the phone's own permission, so its switch sits under This phone. Logjam Web's switches follow the account.",
+    reason: t`A push is allowed per phone, by the phone's own permission, so its switch sits under This phone. Logjam Web's switches follow the account.`,
   },
   {
     id: "textSize",
     on: "gps",
-    reason:
-      "Logjam Web follows the browser's own zoom and text size, so there is nothing to set. The phone's size is chosen in Logjam GPS.",
+    reason: t`Logjam Web follows the browser's own zoom and text size, so there is nothing to set. The phone's size is chosen in Logjam GPS.`,
   },
 ] as const satisfies readonly ClientOnly[];
 
@@ -100,9 +94,42 @@ export const SETTINGS_PHONE_ONLY = [
  * loses what the sharee could see (`themeSchemes.ts`).
  */
 export const COPY_MEDIA_SETTING = {
-  label: "Copy photos too",
-  hint: "Shared place photos and files.",
-  saveFailed: "Couldn't save that setting.",
+  // Each client's `switchCopy.test.ts` ("keeps to the limit") holds both to
+  // `SWITCH_COPY_MAX`.
+  label: t`Copy photos too`,
+  hint: t`Shared place photos and files.`,
+  saveFailed: t`Couldn't save that setting.`,
+} as const;
+
+/**
+ * The language row in Display, drawn by both clients only while
+ * `showsLanguageChoice(offeredHere())` (`languageChoice.ts`), so prod shows
+ * none. Guards: `languageChoice.test.ts` ("offers the source alone where the
+ * simulated regions are off"), `SettingsPanel.render.test.tsx` ("is not drawn
+ * in prod: one region declaring no language, nothing for development") and
+ * `mobile/src/languageSetting.test.ts` ("is not drawn with one language
+ * offered, recording or not"). Choosing one stores it on the device and
+ * restarts the client: the text is read when the client starts, since contract
+ * text is evaluated at import (ADR 0050).
+ */
+export const LANGUAGE_SETTING = {
+  title: t`Language`,
+  names: {
+    "en-AU": t`English (Australia)`,
+    "en-US": t`English (United States)`,
+    "en-XA": t`Pseudo-language (development)`,
+  } satisfies Record<Language, string>,
+  hint: {
+    web: t`Logjam Web reloads to apply this.`,
+    gps: t`Logjam GPS restarts to apply this.`,
+  },
+  /** Logjam GPS holds the row while a track records, and until the track list is read: the restart would interrupt a recording (`mobile/src/languageSetting.test.ts`, "is held while a track records, with the reason" and "is held until the track list has been read"). */
+  held: t`Not while a track is recording: Logjam GPS restarts to change language.`,
+  saveFailed: {
+    web: t`This browser wouldn't store that language.`,
+    gps: t`This phone wouldn't store that language.`,
+  },
+  restartFailed: t`Saved. Close Logjam GPS and open it again to apply it.`,
 } as const;
 
 /**
@@ -112,10 +139,10 @@ export const COPY_MEDIA_SETTING = {
  * is shown while `offersRegionChoice()` is false.
  */
 export const REGION_CHOICE = {
-  title: "Where do you canyon?",
+  title: t`Where do you canyon?`,
   hint: t`Logjam opens on your regions and offers their canyon lists.`,
-  continue: "Continue",
-  saveFailed: "Couldn't save your regions.",
+  continue: t`Continue`,
+  saveFailed: t`Couldn't save your regions.`,
 } as const;
 
 /**
@@ -136,7 +163,7 @@ export const UNITS_CHOICE = {
 
 /** Why a choice can't be saved, or null: at least one region stays chosen. */
 export function regionChoiceProblem(ids: readonly string[]): string | null {
-  return ids.length === 0 ? "Choose at least one region." : null;
+  return ids.length === 0 ? t`Choose at least one region.` : null;
 }
 
 /** The choice with `id` switched, in `REGIONS` order whatever order it was ticked in. */
@@ -176,11 +203,11 @@ export function chosenRegionsLabel(
 
 /** A navigation row's subtitle is live state: how many the user has made. */
 export function ownTypeCountLabel(own: number): string {
-  return own === 0 ? "Built-ins only" : `${own} of your own`;
+  return own === 0 ? t`Built-ins only` : t`${own} of your own`;
 }
 
 export function ownAttributeCountLabel(own: number): string {
-  if (own === 0) return "None yet";
+  if (own === 0) return t`None yet`;
   return `${own} ${own === 1 ? ATTRIBUTE_NOUN.one : ATTRIBUTE_NOUN.many}`;
 }
 
@@ -201,8 +228,8 @@ export function stepAfterPlaceTypeSave(
  *  to add one already scoped to it, and the way past. */
 export const NEW_TYPE_ATTRIBUTES = {
   /** Shown while none of the user's own attributes is on the type yet. */
-  hint: "Add what you record at a place of this type, like a depth or a grade. You can add more later from any place.",
-  done: "Done",
+  hint: t`Add what you record at a place of this type, like a depth or a grade. You can add more later from any place.`,
+  done: t`Done`,
 } as const;
 
 export type NotificationPreferenceGroup = "email" | "inApp";
@@ -215,10 +242,12 @@ export type NotificationPreferenceGroup = "email" | "inApp";
 export const NOTIFICATION_PREFERENCES = [
   // A LiDAR map or a print or GIS map mails whether it finishes or fails
   // (topo/worker.py, topo/export_worker.py, api/src/lib/topoJobReaper.ts).
-  { key: "topoEmail", group: "email", label: "LiDAR maps" },
-  { key: "exportEmail", group: "email", label: "Print and GIS maps" },
-  { key: "friendRequestInApp", group: "inApp", label: "Friend requests" },
-  { key: "shareInApp", group: "inApp", label: "Shares with me" },
+  // Each client's `switchCopy.test.ts` ("keeps to the limit") holds every
+  // label here to `SWITCH_COPY_MAX` and asserts it by name.
+  { key: "topoEmail", group: "email", label: t`LiDAR maps` },
+  { key: "exportEmail", group: "email", label: t`Print and GIS maps` },
+  { key: "friendRequestInApp", group: "inApp", label: t`Friend requests` },
+  { key: "shareInApp", group: "inApp", label: t`Shares with me` },
 ] as const satisfies readonly {
   key: keyof NotificationPreferences;
   group: NotificationPreferenceGroup;
@@ -231,7 +260,9 @@ export function notificationGroupLead(
   group: NotificationPreferenceGroup,
   surface: "Logjam Web" | "Logjam GPS",
 ): string {
-  return group === "email" ? "Email me about" : `Notify me in ${surface} about`;
+  return group === "email"
+    ? t`Email me about`
+    : t`Notify me in ${surface} about`;
 }
 
 /**
@@ -242,17 +273,17 @@ export function notificationGroupLead(
  */
 export const SETTINGS_LIST = {
   copy: {
-    yours: "Yours",
-    builtIn: "Built in",
+    yours: t`Yours`,
+    builtIn: t`Built in`,
     // Under a "Built in" attributes heading, beside the lock on each row.
-    builtInAttributesWhy: `Built-in ${ATTRIBUTE_NOUN.many} come with Logjam, so they can't be changed or deleted.`,
-    addPlaceType: "Add a place type",
+    builtInAttributesWhy: t`Built-in ${ATTRIBUTE_NOUN.many} come with Logjam, so they can't be changed or deleted.`,
+    addPlaceType: t`Add a place type`,
     addAttribute: ATTRIBUTE_NOUN.add,
-    editType: "Edit type",
-    mergeType: "Merge into another type",
-    deleteType: "Delete type",
-    editAttribute: `Edit ${ATTRIBUTE_NOUN.one}`,
-    deleteAttribute: `Delete ${ATTRIBUTE_NOUN.one}`,
+    editType: t`Edit type`,
+    mergeType: t`Merge into another type`,
+    deleteType: t`Delete type`,
+    editAttribute: t`Edit ${ATTRIBUTE_NOUN.one}`,
+    deleteAttribute: t`Delete ${ATTRIBUTE_NOUN.one}`,
   },
 } as const;
 
@@ -263,7 +294,7 @@ export function drawsYoursHeading(own: number, builtIn: number): boolean {
 
 /** "3 places" under a place type's name. */
 export function placeCountLabel(count: number): string {
-  return `${count} place${count === 1 ? "" : "s"}`;
+  return plural(count, "# place", "# places");
 }
 
 /**
@@ -272,15 +303,18 @@ export function placeCountLabel(count: number): string {
  * server call, not an offline write), so it names Logjam Web for that half.
  */
 export function placeTypeInUseNote(count: number): string {
-  return `${placeCountLabel(count)} use${count === 1 ? "s" : ""} this type. Change ${count === 1 ? "it" : "them"} to another type, or merge it on Logjam Web, to delete it.`;
+  return plural(
+    count,
+    "# place uses this type. Change it to another type, or merge it on Logjam Web, to delete it.",
+    "# places use this type. Change them to another type, or merge it on Logjam Web, to delete it.",
+  );
 }
 
 /** What deleting a place type costs. A type with places cannot be deleted. */
 export function placeTypeDeleteConfirm(name: string): ConfirmCopy {
   return {
-    confirmTitle: `Delete ${name}?`,
-    confirmBody:
-      "Any attributes that belong only to this type are deleted with it. Places are not affected — this type has none. This can't be undone.",
+    confirmTitle: t`Delete ${name}?`,
+    confirmBody: t`Any attributes that belong only to this type are deleted with it. Places are not affected — this type has none. This can't be undone.`,
     confirmLabel: SETTINGS_LIST.copy.deleteType,
     tone: "destructive",
   };
@@ -300,16 +334,21 @@ export function attributeDeleteConfirm(
     count === "unknown"
       ? ""
       : count === null
-        ? `Checking how many ${rows.many} use it…`
+        ? t`Checking how many ${rows.many} use it…`
         : count === 0
-          ? `No ${rows.many} have a value for it.`
-          : `${count} ${count === 1 ? `${rows.one} has` : `${rows.many} have`} a value for it, and ${count === 1 ? "that value goes" : "those values go"} too.`;
+          ? t`No ${rows.many} have a value for it.`
+          : plural(
+              count,
+              "# {0} has a value for it, and that value goes too.",
+              "# {0} have a value for it, and those values go too.",
+              count === 1 ? rows.one : rows.many,
+            );
   return {
-    confirmTitle: `Delete ${label}?`,
+    confirmTitle: t`Delete ${label}?`,
     confirmBody: [
-      `This removes the ${ATTRIBUTE_NOUN.one} from every ${rows.one}.`,
+      t`This removes the ${ATTRIBUTE_NOUN.one} from every ${rows.one}.`,
       impact,
-      "This can't be undone.",
+      t`This can't be undone.`,
     ]
       .filter(Boolean)
       .join(" "),
@@ -320,5 +359,5 @@ export function attributeDeleteConfirm(
 
 /** The line an attributes list always carries: what they are for. */
 export function attributesHint(row: string): string {
-  return `Add your own ${ATTRIBUTE_NOUN.one} to record on a ${row}, e.g. water level or party size.`;
+  return t`Add your own ${ATTRIBUTE_NOUN.one} to record on a ${row}, e.g. water level or party size.`;
 }

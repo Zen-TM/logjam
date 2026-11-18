@@ -14,6 +14,7 @@
 // commercial app may call under a fair-use policy is true, though its owner can
 // withdraw access.
 import { GEOCODER_LICENCE } from "./geocode.js";
+import { t } from "./i18n.js";
 import { TERRARIUM, worldwideSource } from "./demSources.js";
 import { BASEMAP_CATALOG } from "./geoPdfBaseLayers.js";
 import { REGIONS, WORLD, type Region } from "./regions.js";
@@ -29,22 +30,22 @@ export type Licence = {
 
 export const LICENCES = {
   "cc-by-3-au": {
-    name: "CC BY 3.0 AU",
+    name: t`CC BY 3.0 AU`,
     url: "https://creativecommons.org/licenses/by/3.0/au/",
     commercialUse: true,
   },
   "cc-by-2.5-au": {
-    name: "CC BY 2.5 AU",
+    name: t`CC BY 2.5 AU`,
     url: "https://creativecommons.org/licenses/by/2.5/au/",
     commercialUse: true,
   },
   "cc-by-4": {
-    name: "CC BY 4.0",
+    name: t`CC BY 4.0`,
     url: "https://creativecommons.org/licenses/by/4.0/",
     commercialUse: true,
   },
   "cc-by-sa-3": {
-    name: "CC BY-SA 3.0",
+    name: t`CC BY-SA 3.0`,
     url: "https://creativecommons.org/licenses/by-sa/3.0/",
     commercialUse: true,
   },
@@ -52,7 +53,7 @@ export const LICENCES = {
   // site refuses automated reads): the name and URL are the family's, with no
   // version, until someone reads its copyright page.
   "cc-by-nc-sa": {
-    name: "CC BY-NC-SA",
+    name: t`CC BY-NC-SA`,
     url: "https://creativecommons.org/licenses/",
     commercialUse: false,
   },
@@ -65,13 +66,13 @@ export const LICENCES = {
   },
   // USGS-authored data is in the U.S. public domain; it asks for a credit.
   "us-public-domain": {
-    name: "U.S. public domain (USGS)",
+    name: t`U.S. public domain (USGS)`,
     url: "https://www.usgs.gov/information-policies-and-instructions/copyrights-and-credits",
     commercialUse: true,
   },
   // The Copernicus DEM's full, free and open licence.
   "copernicus-dem": {
-    name: "Copernicus DEM licence",
+    name: t`Copernicus DEM licence`,
     url: "https://dataspace.copernicus.eu/explore-data/data-collections/copernicus-contributing-missions/collections-description/COP-DEM",
     commercialUse: true,
   },
@@ -83,39 +84,39 @@ export const LICENCES = {
   // OpenStreetMap's own tile servers: ODbL data; the policy forbids offline
   // use and bulk fetching, and says commercial services can lose access at any time.
   "osmf-tiles": {
-    name: "OpenStreetMap Foundation map server usage policy",
+    name: t`OpenStreetMap Foundation map server usage policy`,
     url: "https://operations.osmfoundation.org/policies/tiles/",
     commercialUse: true,
   },
   // ODbL data; heavy use is refused (one request a second at most).
   "osmf-nominatim": {
-    name: "Nominatim usage policy",
+    name: t`Nominatim usage policy`,
     url: "https://operations.osmfoundation.org/policies/nominatim/",
     commercialUse: true,
   },
   // Spatial Services' web services: data under CC BY, with its own credit line.
   "six-web-services": {
-    name: "NSW Spatial Services web services terms (CC BY)",
+    name: t`NSW Spatial Services web services terms (CC BY)`,
     url: "https://www.spatial.nsw.gov.au/products_and_services/web_services/terms_and_conditions",
     commercialUse: true,
   },
   // Terrain Tiles hold many open datasets, each credited under its own terms
   // (public domain, or an attribution licence; none forbids commercial use).
   "terrain-tiles": {
-    name: "Mapzen terrain data attributions",
+    name: t`Mapzen terrain data attributions`,
     url: "https://github.com/tilezen/joerd/blob/master/docs/attribution.md",
     commercialUse: true,
   },
   // WaterNSW lets anyone use its information on condition of its notice, but
   // asks permission to charge for access or to put it in a product for sale.
   "waternsw-copyright": {
-    name: "WaterNSW copyright notice",
+    name: t`WaterNSW copyright notice`,
     url: "https://www.waternsw.com.au/copyright",
     commercialUse: false,
   },
   // The free API is for non-commercial use only; a paid plan lifts that.
   "open-meteo-free": {
-    name: "Open-Meteo free API terms (data CC BY 4.0)",
+    name: t`Open-Meteo free API terms (data CC BY 4.0)`,
     url: "https://open-meteo.com/en/terms",
     commercialUse: false,
   },

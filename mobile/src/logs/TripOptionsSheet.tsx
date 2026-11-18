@@ -15,6 +15,7 @@ import {
   tripTitle,
   tripVerbs,
   type TripVerbId,
+  t,
 } from "@logjam/shared";
 
 import type { MirrorTrip } from "../sync/mirrorStore";
@@ -59,7 +60,7 @@ export function TripOptionsSheet({
       })
       .catch((err: unknown) => {
         console.error(err);
-        onError("Couldn't delete this trip.");
+        onError(t`Couldn't delete this trip.`);
       });
   };
 

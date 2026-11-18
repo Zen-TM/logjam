@@ -64,7 +64,9 @@ vi.mock("expo-file-system/legacy", () => ({
   EncodingType: { UTF8: "utf8" },
 }));
 
-const { exportRoute, exportStoredFile } = await import("./fileExport");
+const { exportRoute, exportStoredFile, savedMessage } = await import(
+  "./fileExport"
+);
 
 const STAMP = "2026-11-06 1432";
 
@@ -83,8 +85,10 @@ const route = { name: "Claustral", points: [] };
 describe("saving an export to a folder the user picks", () => {
   it("writes into a Downloads-only picker, which the legacy SAF helpers refuse", async () => {
     fs.state.createdAs = "1234"; // Downloads hands back a numeric id
-    await expect(exportRoute(route, "gpx")).resolves.toBe(
-      "to the folder you chose",
+    const saved = await exportRoute(route, "gpx");
+    expect(saved).not.toBeNull();
+    expect(savedMessage(saved as string)).toBe(
+      "Saved to the folder you chose.",
     );
     expect(fs.written).toHaveLength(1);
     expect(fs.written[0]).toMatchObject({

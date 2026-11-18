@@ -40,6 +40,8 @@ const serve = (url: string, build: "fake" | "oidc", dev: string) =>
     ? `npx vite preview --outDir dist-e2e/${build} --port ${new URL(url).port} --strictPort`
     : dev;
 
+const PSEUDO_SPEC = /pseudo\.spec\.ts/;
+
 export default defineConfig({
   testDir: "./e2e",
   // Timeout: An axe walk is not a user interaction, and 30s (Playwright's default) is a
@@ -55,6 +57,12 @@ export default defineConfig({
   reporter: process.env.CI ? [["github"], ["html", { open: "never" }]] : "html",
   use: {
     baseURL,
+    // Logjam GPS and Logjam Web start in the language the browser speaks among
+    // those offered, and write it to the account when it differs from the one
+    // recorded. Playwright's default, en-US, would make a case with simulated
+    // regions record en-US on the shared seeded account and the next case
+    // record en-AU back, which a11y.spec.ts's no-writes check fails.
+    locale: "en-AU",
     trace: "on-first-retry",
     screenshot: "only-on-failure",
     // Playwright ships no chromium for some hosts; drive system Chrome via the
@@ -68,6 +76,7 @@ export default defineConfig({
     // shows up).
     {
       name: "chromium",
+      testIgnore: PSEUDO_SPEC,
       use: {
         ...devices["Desktop Chrome"],
         channel: "chrome",
@@ -83,6 +92,26 @@ export default defineConfig({
         ...devices["Desktop Chrome"],
         channel: "chrome",
         colorScheme: "light",
+      },
+    },
+    // Logjam Web started in the pseudo-language (e2e/pseudo.spec.ts): the
+    // language is fixed at start, read from this key (src/language.ts).
+    {
+      name: "pseudo",
+      testMatch: PSEUDO_SPEC,
+      use: {
+        ...devices["Desktop Chrome"],
+        channel: "chrome",
+        colorScheme: "dark",
+        storageState: {
+          cookies: [],
+          origins: [
+            {
+              origin: baseURL,
+              localStorage: [{ name: "logjam.language", value: "en-XA" }],
+            },
+          ],
+        },
       },
     },
   ],

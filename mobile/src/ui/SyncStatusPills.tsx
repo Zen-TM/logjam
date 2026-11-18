@@ -15,6 +15,7 @@ import { useLastSyncAt } from "../sync/useSyncQueries";
 import { spacing } from "../theme";
 import { StatusPill } from "./StatusPill";
 import { syncAgeLabel } from "./syncAge";
+import { t } from "@logjam/shared";
 
 export function SyncStatusPills({
   online,
@@ -36,14 +37,14 @@ export function SyncStatusPills({
     <View style={styles.row}>
       {online ? null : (
         <StatusPill
-          label={age ? `Offline · ${age}` : "Offline"}
+          label={age ? t`Offline · ${age}` : t`Offline`}
           tone="muted"
           icon="offline"
         />
       )}
       {showPending ? (
         <StatusPill
-          label={`${pendingCount} waiting to sync`}
+          label={t`${pendingCount} waiting to sync`}
           tone="outline"
           icon="uploading"
         />

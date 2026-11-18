@@ -22,6 +22,7 @@ import {
   TRIP_PAGE,
   tripTitle,
   type SectionKeysOn,
+  t,
 } from "@logjam/shared";
 
 import { useConnectivity } from "../map/connectivity";
@@ -209,7 +210,7 @@ export function TripDetailScreen({
                 notify(
                   messageFromError(
                     err,
-                    "Couldn't read that route file. It may not be downloaded yet.",
+                    t`Couldn't read that route file. It may not be downloaded yet.`,
                   ),
                   "error",
                 );
@@ -250,7 +251,7 @@ export function TripDetailScreen({
         actions={
           <IconButton
             icon="overflow"
-            accessibilityLabel={`Actions for ${tripTitle(current)}`}
+            accessibilityLabel={t`Actions for ${tripTitle(current)}`}
             onPress={() => setMenuOpen(true)}
           />
         }

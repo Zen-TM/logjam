@@ -1,6 +1,8 @@
+import { t } from "@logjam/shared";
+
 /** "Places · 36": the page's name, then its count. */
 export function compactHeroTitle(name: string, count: number): string {
-  return `${name} · ${count}`;
+  return t`${name} · ${count}`;
 }
 
 /** With reduced motion the swap happens inside this last stretch of the

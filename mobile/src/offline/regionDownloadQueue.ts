@@ -12,7 +12,7 @@
 // them in parallel would triple the request rate at the same host.
 import { useSyncExternalStore } from "react";
 import { AppState } from "react-native";
-import { type OfflineBasemapId, type RegionBbox } from "@logjam/shared";
+import { type OfflineBasemapId, type RegionBbox, t } from "@logjam/shared";
 
 import NetInfo from "@react-native-community/netinfo";
 import type { ToastMessage } from "../ui";
@@ -130,7 +130,7 @@ function syncDownloadService(): void {
     return;
   }
   shown = { text: notice.text, at: now };
-  LogjamDownloadService.show("Downloading maps", notice.text, notice.percent);
+  LogjamDownloadService.show(t`Downloading maps`, notice.text, notice.percent);
 }
 
 // --- Finish toast ---------------------------------------------------------

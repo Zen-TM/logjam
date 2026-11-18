@@ -1,4 +1,5 @@
 import type { MediaMetadata, MediaOrigin } from "./mediaMetadata.js";
+import { t } from "./i18n.js";
 
 // Media (object storage) shared types + validation.
 //
@@ -87,16 +88,16 @@ export type TrackColor = (typeof TRACK_COLORS)[number];
  * and filter words already follow.
  */
 export const TRACK_COLOR_NAMES: Record<TrackColor, string> = {
-  "#e6194b": "Red",
-  "#3cb44b": "Green",
-  "#ffe119": "Yellow",
-  "#911eb4": "Purple",
-  "#42d4f4": "Cyan",
-  "#f032e6": "Magenta",
-  "#bfef45": "Lime",
-  "#469990": "Teal",
-  "#9a6324": "Brown",
-  "#dcbeff": "Lavender",
+  "#e6194b": t`Red`,
+  "#3cb44b": t`Green`,
+  "#ffe119": t`Yellow`,
+  "#911eb4": t`Purple`,
+  "#42d4f4": t`Cyan`,
+  "#f032e6": t`Magenta`,
+  "#bfef45": t`Lime`,
+  "#469990": t`Teal`,
+  "#9a6324": t`Brown`,
+  "#dcbeff": t`Lavender`,
 };
 
 /**
@@ -107,7 +108,7 @@ export const TRACK_COLOR_NAMES: Record<TrackColor, string> = {
  * hide which colour it actually is. Unhelpful is better than wrong.
  */
 export function trackColorName(color: string | null | undefined): string {
-  if (!color) return "No colour";
+  if (!color) return t`No colour`;
   return TRACK_COLOR_NAMES[color.toLowerCase() as TrackColor] ?? color;
 }
 
@@ -222,7 +223,7 @@ export function mediaDisplayName(media: {
 }): string {
   const label = media.displayName?.trim();
   if (label) return label;
-  return media.filename?.trim() || "Untitled file";
+  return media.filename?.trim() || t`Untitled file`;
 }
 
 /** Cap for a user-supplied media label, matching the trip-title cap. */

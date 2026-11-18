@@ -8,9 +8,9 @@ import {
   areaExportRequestError,
   areaExportStyleSnapshot,
   areaExportTooLarge,
-  AREA_EXPORT_OUTSIDE_TERRAIN,
+  areaExportOutsideTerrain,
   areaInTerrainRegion,
-  AREA_EXPORT_TOO_LARGE,
+  areaExportTooLargeSentence,
   areaSizeKm,
   type AreaBbox,
 } from "./areaExport.js";
@@ -283,7 +283,7 @@ describe("areaInTerrainRegion", () => {
   // region is added or this one is renamed.
   it("names no region in its refusal", () => {
     for (const region of REGIONS_WITH_SIMULATED)
-      expect(AREA_EXPORT_OUTSIDE_TERRAIN).not.toContain(region.name);
+      expect(areaExportOutsideTerrain()).not.toContain(region.name);
   });
 });
 
@@ -380,9 +380,11 @@ describe("areaExportStyleSnapshot", () => {
   });
 });
 
-describe("AREA_EXPORT_TOO_LARGE", () => {
+describe("areaExportTooLargeSentence", () => {
   // Mutation: change AREA_EXPORT_MAX_SIDE_KM to 120 without the sentence.
   it("says the limit it enforces", () => {
-    expect(AREA_EXPORT_TOO_LARGE).toContain(`${AREA_EXPORT_MAX_SIDE_KM} km`);
+    expect(areaExportTooLargeSentence()).toContain(
+      `${AREA_EXPORT_MAX_SIDE_KM} km`,
+    );
   });
 });

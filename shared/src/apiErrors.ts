@@ -6,7 +6,8 @@
 // so every client must construct and check the SAME class — always import it
 // from @logjam/shared, never redeclare locally.
 
-import { SERVER_FAULT_SENTENCE } from "./userSentence.js";
+import { serverFaultSentence } from "./userSentence.js";
+import { t } from "./i18n.js";
 
 export class ApiError extends Error {
   readonly status: number;
@@ -32,31 +33,27 @@ export class ApiError extends Error {
 // ── Cognito account-call error mapping ────────────────────────────────────────
 
 export const AUTH_ERROR_CODES: Record<string, string> = {
-  NotAuthorizedException: "Incorrect email or password.",
-  UserNotConfirmedException: "Confirm your email address before signing in.",
-  UserNotFoundException: "No account found with that email address.",
-  UsernameExistsException: "An account with that email already exists.",
-  InvalidPasswordException:
-    "Password must be at least 8 characters and include uppercase, lowercase, number, and symbol.",
-  CodeMismatchException:
-    "Incorrect verification code. Check your email (and spam) and try again.",
-  ExpiredCodeException:
-    "That verification code has expired. Request a new one.",
-  LimitExceededException:
-    "Too many attempts. Wait a few minutes and try again.",
-  InvalidParameterException: "Check your details and try again.",
-  NetworkError: "Couldn't connect. Check your internet connection.",
+  NotAuthorizedException: t`Incorrect email or password.`,
+  UserNotConfirmedException: t`Confirm your email address before signing in.`,
+  UserNotFoundException: t`No account found with that email address.`,
+  UsernameExistsException: t`An account with that email already exists.`,
+  InvalidPasswordException: t`Password must be at least 8 characters and include uppercase, lowercase, number, and symbol.`,
+  CodeMismatchException: t`Incorrect verification code. Check your email (and spam) and try again.`,
+  ExpiredCodeException: t`That verification code has expired. Request a new one.`,
+  LimitExceededException: t`Too many attempts. Wait a few minutes and try again.`,
+  InvalidParameterException: t`Check your details and try again.`,
+  NetworkError: t`Couldn't connect. Check your internet connection.`,
 };
 
 // Cognito wraps a pre sign-up Lambda's error as "PreSignUp failed with error
 // <text>" under UserLambdaValidationException, a name other triggers share, so
 // the cap is recognised by the sentence the Lambda throws, which must match
-// CAP_MESSAGE in infra/lambda/cognito-pre-signup/src/index.ts. Guard:
-// apiErrors.test.ts.
+// CAP_MESSAGE in infra/lambda/cognito-pre-signup/src/index.ts. It is that
+// English text, not a message: a language entry for it would stop it matching.
+// Guard: apiErrors.test.ts.
 export const SIGNUP_CAP_SENTENCE =
   "Logjam is not taking new accounts this month";
-export const SIGNUP_CAP_MESSAGE =
-  "Logjam isn't taking new accounts right now. Try again next month.";
+export const SIGNUP_CAP_MESSAGE = t`Logjam isn't taking new accounts right now. Try again next month.`;
 
 export function mapAuthError(err: unknown): string | null {
   if (err instanceof Error) {
@@ -74,17 +71,14 @@ export function mapAuthError(err: unknown): string | null {
 
 // ── User-facing message derivation ────────────────────────────────────────────
 
-const SERVER_ERROR_MESSAGE: string = SERVER_FAULT_SENTENCE;
-const NETWORK_ERROR_MESSAGE =
-  "Couldn't reach Logjam. Check your connection and try again.";
+const NETWORK_ERROR_MESSAGE = t`Couldn't reach Logjam. Check your connection and try again.`;
 
 // 403 and 404 are absent on purpose: only the caller knows what it was after
 // ("Couldn't find this place."), so its fallback beats a generic sentence.
 const STATUS_MESSAGES: Record<number, string | undefined> = {
-  401: "You're signed out. Sign in and try again.",
-  429: "Too many requests. Wait a moment and try again.",
-  500: SERVER_ERROR_MESSAGE,
-  503: "Logjam is unavailable for a moment. Try again shortly.",
+  401: t`You're signed out. Sign in and try again.`,
+  429: t`Too many requests. Wait a moment and try again.`,
+  503: t`Logjam is unavailable for a moment. Try again shortly.`,
 };
 
 /**
@@ -99,7 +93,7 @@ export function messageFromError(err: unknown, fallback: string): string {
     if (err.serverMessage) return err.serverMessage;
     const statusMsg = STATUS_MESSAGES[err.status];
     if (statusMsg) return statusMsg;
-    if (err.status >= 500) return SERVER_ERROR_MESSAGE;
+    if (err.status >= 500) return serverFaultSentence();
     if (err.status >= 400) return fallback;
   }
 

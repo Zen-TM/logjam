@@ -7,9 +7,11 @@ import type {
 import { messageFromError } from "../../errors/messageFromError";
 import { useToast } from "../feedback/ToastProvider";
 import MatchReview from "./MatchReview";
+import { autoImportedLine, reviewAppliedToast } from "./ropeWikiCounts";
 import type { ReviewItem, ReviewDecision } from "./MatchReview";
 import { Button, Dialog, ErrorBanner } from "../../ui";
 import classes from "./RopeWikiReviewDialog.module.css";
+import { t } from "@logjam/shared";
 
 // ── Adapter: RopeWikiCandidatePayload → ReviewItem ─────────────────────────
 
@@ -87,17 +89,13 @@ function RopeWikiReviewDialog({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const autoParts = [
-    autoImported && autoImported.added > 0
-      ? `${autoImported.added} added`
-      : null,
-    autoImported && autoImported.autoLinked > 0
-      ? `${autoImported.autoLinked} linked to existing`
-      : null,
-    autoImported && autoImported.updated > 0
-      ? `${autoImported.updated} updated`
-      : null,
-  ].filter(Boolean);
+  const autoLine = autoImported
+    ? autoImportedLine(
+        autoImported.added,
+        autoImported.autoLinked,
+        autoImported.updated,
+      )
+    : "";
 
   // Each open, and each new review while open, starts the decisions afresh.
   const [reviewShown, setReviewShown] = useState({ open, review });
@@ -128,22 +126,15 @@ function RopeWikiReviewDialog({
         toApplyDecision(row, items[i]),
       );
       const result = await applyRopeWikiImport(regionId, payload);
-      const parts = [
-        result.created > 0 ? `${result.created} created` : null,
-        result.linked > 0 ? `${result.linked} linked` : null,
-        result.skipped > 0 ? `${result.skipped} skipped` : null,
-      ].filter(Boolean);
       toast.done(
-        parts.length > 0
-          ? `Review applied: ${parts.join(", ")}.`
-          : "Review applied.",
+        reviewAppliedToast(result.created, result.linked, result.skipped),
       );
       onApplied();
       onClose();
     } catch (err) {
       console.error(err);
       setError(
-        messageFromError(err, "Couldn't apply RopeWiki review decisions."),
+        messageFromError(err, t`Couldn't apply RopeWiki review decisions.`),
       );
     } finally {
       setSubmitting(false);
@@ -153,7 +144,7 @@ function RopeWikiReviewDialog({
   return (
     <Dialog
       open={open}
-      title="Review possible duplicates"
+      title={t`Review possible duplicates`}
       size="large"
       dismissible={!submitting}
       onClose={onClose}
@@ -162,15 +153,15 @@ function RopeWikiReviewDialog({
           <Button
             onClick={onClose}
             disabled={submitting}
-            disabledReason="Applying…"
-          >
-            Cancel
-          </Button>
+            disabledReason={t`Applying…`}
+          >{t`Cancel`}</Button>
           {/* Absent with nothing to review: no decision exists to apply. */}
           {review.length > 0 && (
-            <Button variant="filled" busy={submitting} onClick={handleApply}>
-              Apply
-            </Button>
+            <Button
+              variant="filled"
+              busy={submitting}
+              onClick={handleApply}
+            >{t`Apply`}</Button>
           )}
         </>
       }
@@ -179,18 +170,15 @@ function RopeWikiReviewDialog({
         {/* What the refresh already did, before what it is asking about: a
             count of places that appeared without being asked about is the
             first thing to account for. */}
-        {autoParts.length > 0 && (
+        {autoLine && (
           <p className={classes.intro}>
-            Already imported automatically: {autoParts.join(", ")}. The{" "}
-            {review.length} below looked like places you may already have, so
-            they were left alone.
+            {autoLine}{" "}
+            {t`The ${review.length} below looked like places you may already have, so they were left alone.`}
           </p>
         )}
-        <p className={classes.intro}>
-          These RopeWiki places may already be in your collection. For each one,
-          say whether to link it to a place you have, create it as new, or skip
-          it.
-        </p>
+        <p
+          className={classes.intro}
+        >{t`These RopeWiki places may already be in your collection. For each one, say whether to link it to a place you have, create it as new, or skip it.`}</p>
         {error && <ErrorBanner message={error} />}
         <MatchReview items={items} onChange={handleChange} />
       </div>

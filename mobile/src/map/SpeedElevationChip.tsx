@@ -24,7 +24,7 @@
 // logged.
 import { memo, useEffect, useState } from "react";
 import { StyleSheet, Text, View, useWindowDimensions } from "react-native";
-import { formatHeight, formatSpeedMps } from "@logjam/shared";
+import { formatHeight, formatSpeedMps, t } from "@logjam/shared";
 
 import {
   fontSize,
@@ -113,7 +113,7 @@ export const SpeedElevationChip = memo(function SpeedElevationChip({
   // fix is stale, "about" when it is a tower's guess (gpsSignal.ts). It takes
   // the label's place (over the figure, so "about" reads into it) because the
   // name plus the age does not fit a column at a large system font.
-  const note = figures.age ?? (figures.quality === "coarse" ? "about" : null);
+  const note = figures.age ?? (figures.quality === "coarse" ? t`about` : null);
   const grey = figures.quality === "stale";
   const { width, stacked } = readoutChipLayout(fontScale, textScale, maxWidth);
 
@@ -125,12 +125,12 @@ export const SpeedElevationChip = memo(function SpeedElevationChip({
     >
       <View style={[styles.column, stacked && styles.columnStacked]}>
         <Text style={styles.label} numberOfLines={1}>
-          {note && figures.speedMps != null ? note : "Speed"}
+          {note && figures.speedMps != null ? note : t`Speed`}
         </Text>
         <Text
           numberOfLines={1}
           style={[styles.value, grey && styles.grey]}
-          accessibilityLabel={`Speed ${speed}`}
+          accessibilityLabel={t`Speed ${speed}`}
         >
           {speed}
         </Text>
@@ -143,12 +143,20 @@ export const SpeedElevationChip = memo(function SpeedElevationChip({
             someone already asking. The screen reader still gets it, on the
             value below. */}
         <Text style={styles.label} numberOfLines={1}>
-          {note && figures.elevationM != null ? note : "Elevation"}
+          {note && figures.elevationM != null ? note : t`Elevation`}
         </Text>
         <Text
           numberOfLines={1}
           style={[styles.value, grey && styles.grey]}
-          accessibilityLabel={`Elevation ${elevation}${note ? `, ${note}` : ""}${readout?.fromTerrain ? ", from terrain data" : ""}`}
+          accessibilityLabel={
+            note
+              ? readout?.fromTerrain
+                ? t`Elevation ${elevation}, ${note}, from terrain data`
+                : t`Elevation ${elevation}, ${note}`
+              : readout?.fromTerrain
+                ? t`Elevation ${elevation}, from terrain data`
+                : t`Elevation ${elevation}`
+          }
         >
           {elevation}
         </Text>
