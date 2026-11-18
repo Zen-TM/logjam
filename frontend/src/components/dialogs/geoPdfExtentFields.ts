@@ -14,11 +14,16 @@
 //     hemisphere assumptions).
 
 import {
+  areaExportGrid,
   boxCentre,
   GRID_NAMES,
   gridNamedAt,
+  REGIONS,
   t,
+  type AreaBbox,
   type ExtentState,
+  type GridId,
+  type Region,
 } from "@logjam/shared";
 import { sheetGrid } from "../../geoPdf/sheetGrid";
 
@@ -192,4 +197,26 @@ export function scaleFieldError(raw: string): string | null {
   if (v === null) return t`Enter a number`;
   if (v < 1) return t`Must be at least 1`;
   return null;
+}
+
+/** What a GIS reads a grid's EPSG code as: its datum and projection. */
+const GRID_LABELS: Record<GridId, string> = {
+  mga2020: "GDA2020 / MGA",
+  nztm2000: "NZGD2000 / NZTM 2000",
+  utm: "WGS 84 / UTM",
+};
+
+/**
+ * The grid a GIS file is in, as a GIS reads it: the box's export grid
+ * (`areaExportGrid`, the one the worker uses). With no box yet, the one
+ * declared region's grid (`gridNamedAt`: prod reads "GDA2020 / MGA" as it
+ * always has), and null with two or more, where it follows the ground.
+ * Guards: `geoPdfExtentFields.test.ts`, "names the grid a GIS file is in".
+ */
+export function exportGridLabel(
+  area: AreaBbox | null,
+  regions: readonly Region[] = REGIONS,
+): string | null {
+  if (area) return GRID_LABELS[areaExportGrid(area, regions)];
+  return regions.length === 1 ? GRID_LABELS[gridNamedAt(null, regions)] : null;
 }

@@ -52,6 +52,7 @@ lacks is absent from `terrain`, so the map says "Not available here" there.
 | `terrain.coverage` | mobile coverage by carrier | `topo/build_coverage.py` (NSW's source) |
 | `vector` | the region's cut of the vector basemap | `pmtiles extract` (section 4) |
 | `placeSearch` | the place registry's CDN prefix | `topo/build_place_registry.py` |
+| `geocoderCountry` | the country a place search over the region stays in (`"au"`), so a search for a name stays in it | a two-letter ISO 3166-1 code, lower case; leave it out where the region does not lie in one country |
 | `gauges` | the river gauge feed's CDN prefix | `topo/build_gauges.py` is NSW's: another region's feed needs a builder of its own |
 | `canyons` | where the canyon-list import reads from | a RopeWiki region and a snapshot in the media bucket |
 | `sharpen` | whether a LiDAR survey can be sharpened there | the worker, `topo/sharpen.py` |

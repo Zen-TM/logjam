@@ -1069,6 +1069,16 @@ describe("Make a map, for GIS", () => {
     expect(screen.getByText(/rasters in WGS 84 \/ UTM, for QGIS/)).toBeTruthy();
   });
 
+  // Mutation: drop the one-region branch of `exportGridLabel`, and the note
+  // before a box is drawn says "the grid of the area you choose" in NSW.
+  it("names the one declared region's grid before a box is drawn", () => {
+    render(dialog({ open: true }));
+    chooseGis("GeoTIFF");
+    expect(
+      screen.getByText(/rasters in GDA2020 \/ MGA, for QGIS/),
+    ).toBeTruthy();
+  });
+
   // A GIS file is a free box: no paper, and only the layers the format holds.
   // Mutation: render the GeoPDF body whatever the format, or list every layer.
   it("drops the paper and offers only the format's layers", () => {

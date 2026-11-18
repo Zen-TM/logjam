@@ -26,8 +26,9 @@
 //
 // PRIVACY: only the typed string leaves Logjam GPS, to our API (with the id of
 // the region the map shows) when the phone has no registry for it, and to
-// Nominatim when asked, which also gets the outline of
-// the covered region the map shows and nothing extra when it shows none
+// Nominatim when asked, which also gets the outline of the covered region the
+// map shows and, where it declares one, that region's country code, and
+// nothing extra when it shows none
 // (shared/src/geocode.test.ts); with a registry, nowhere. No saved place's name or coordinates is sent — the saved matches are the
 // reason they do not have to be. The only thing persisted is the short list of
 // recent picks (`recentSearches.ts`), on this phone, cleared on sign-out.

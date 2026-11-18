@@ -220,6 +220,15 @@ export type Region = {
   /** The registry's licence: not null exactly where `placeSearch` is not (`licences.test.ts`). */
   placeSearchLicence: LicenceId | null;
   /**
+   * The ISO 3166-1 alpha-2 code (lower case) a search over this region asks the
+   * geocoder to stay in, so a name ranks inside the region's country. Absent
+   * where the region has no one country (`WORLD`): the search is then
+   * unrestricted. Guards: `geocode.test.ts` ("sends the region's country code,
+   * and none where the region declares none") and `regions.test.ts` ("declares
+   * a geocoder country as two lower-case letters").
+   */
+  geocoderCountry?: string;
+  /**
    * The CDN prefix of the gauge feed (ADR 0044), ending in "/" because a feed's
    * paths are this prefix and a file name (`gaugeLatestPath`, `gaugeHistoryUrl`),
    * or null. Guard: `regions.test.ts` ("every gauge feed prefix ends in a slash").
@@ -566,6 +575,7 @@ export const NSW_REGION = {
   },
   placeSearch: PLACE_REGISTRY_PREFIX,
   placeSearchLicence: "odbl",
+  geocoderCountry: "au",
   gauges: GAUGE_PREFIX,
   // The readings are WaterNSW's; the history is the Bureau's, under CC BY. The
   // stricter is tagged (ADR 0044).
