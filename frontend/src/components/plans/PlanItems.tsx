@@ -139,7 +139,8 @@ export default function PlanItems({
       {adds.map((verb, index) => (
         <Button
           key={verb.id}
-          variant={index === 0 ? "filled" : undefined}
+          compact
+          variant={index === 0 ? "filled" : "outline"}
           icon={verb.icon}
           onClick={verb.run}
         >
