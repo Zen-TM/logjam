@@ -56,14 +56,18 @@ import { AnswersTable } from "./AnswersTable";
 import { PlanFormFields } from "./PlanFormFields";
 import { deleteForm, putAnswer } from "./plansApi";
 import { afterPlanWrite } from "./plansCache";
+import { formSheetBack } from "./planViews";
 
 const copy = TRIP_PLAN_FORMS.copy;
 const OFFLINE = unavailableReasonText("needs-connection");
 
-/** `verbs`: the form's ⋯ (a leader's Delete form), as rows. */
+/** `verbs`: the form's ⋯ (a leader's Delete form), as rows. `direct`: opened
+ *  from the Forms list's ⋯ or the "to answer" card, with no form behind it to
+ *  go back to. */
 export type FormSheetState = {
   formId: string;
   mode: "read" | "answer" | "verbs";
+  direct?: boolean;
 } | null;
 
 /** One person's answers, question by question, in the form's order. */
@@ -169,13 +173,14 @@ export function FormSheet({
     body: string;
   } | null>(null);
   const saying = said != null && form != null && !answering && !choosing;
+  const backTo = state ? formSheetBack(state) : null;
   const back = saying
     ? () => setSaid(null)
-    : (answering || choosing) && form
+    : (answering || choosing) && backTo
       ? () => {
           setError(null);
           setChanged(false);
-          onState({ formId: form.id, mode: "read" });
+          onState(backTo);
         }
       : undefined;
   // Edit hands over to the builder once this sheet has gone: a sheet can't
