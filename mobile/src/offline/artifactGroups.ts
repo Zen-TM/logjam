@@ -195,3 +195,26 @@ export function groupArtifacts(
   }
   return [...groups.values()];
 }
+
+/** The saved areas as Saved lists them: one card per area, holding its maps and clips. */
+export function savedAreaGroups(
+  artifacts: readonly MapArtifact[],
+): ArtifactGroup[] {
+  return groupArtifacts(artifacts.filter(isRegionArtifact), regionGroupKey);
+}
+
+/**
+ * How many saved areas there are and what they hold, read from the same cards
+ * Saved draws (`savedAreaGroups`), so the Offline tab and sign-out cannot count
+ * a different set of files than Saved lists.
+ */
+export function savedAreaTotals(artifacts: readonly MapArtifact[]): {
+  areas: number;
+  bytes: number;
+} {
+  const groups = savedAreaGroups(artifacts);
+  return {
+    areas: groups.length,
+    bytes: groups.reduce((sum, group) => sum + group.sizeBytes, 0),
+  };
+}

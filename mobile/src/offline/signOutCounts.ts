@@ -5,9 +5,8 @@
 // Reads only. Nothing here is sent anywhere, logged, or kept.
 import {
   groupArtifacts,
-  isRegionArtifact,
   overlayJobId,
-  regionGroupKey,
+  savedAreaTotals,
 } from "./artifactGroups";
 import { listArtifacts } from "./registryDb";
 import { listGeoPdfImports } from "../geopdf/geoPdfImportsDb";
@@ -35,7 +34,7 @@ export async function countSignOutLosses(): Promise<SignOutCounts> {
       listTracks(),
       readRouteDraft(),
     ]);
-  const regionFiles = artifacts.filter(isRegionArtifact);
+  const regionTotals = savedAreaTotals(artifacts);
   return {
     unsynced,
     unresolved,
@@ -46,11 +45,8 @@ export async function countSignOutLosses(): Promise<SignOutCounts> {
     ).length,
     routeDraft: draft ? 1 : 0,
     // One card per area saved, as Saved shows them, not one per file.
-    regions: groupArtifacts(
-      artifacts.filter((artifact) => artifact.kind === "basemap-region"),
-      regionGroupKey,
-    ).length,
-    regionBytes: regionFiles.reduce((sum, file) => sum + file.sizeBytes, 0),
+    regions: regionTotals.areas,
+    regionBytes: regionTotals.bytes,
     geoPdfs: geoPdfs.length,
     topos: groupArtifacts(
       artifacts.filter((artifact) => artifact.kind === "topo-overlay"),
