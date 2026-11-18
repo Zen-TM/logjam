@@ -381,11 +381,12 @@ describe("stats presentation", () => {
     placeDefs: [],
     placeTypes: [{ id: "t", name: "Canyon", color: "#000000" }],
   });
-  const allTime = { label: "All time", from: null, to: null };
+  const allTime = { id: "all", label: "All time", from: null, to: null };
 
   it("draws years for a multi-year all-time range, and a year pill's months", () => {
     expect(statsSpark(base, allTime).axis).toBe("year");
     const pill = statsSpark(base, {
+      id: "2024",
       label: "2024",
       from: "2024-01-01",
       to: "2024-12-31",
