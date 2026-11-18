@@ -24,11 +24,7 @@ import {
   formatDateKey,
   formatFieldValue,
   isReservedFieldKey,
-  formatDistanceM,
   mediaCategory,
-  mediaDisplayName,
-  placeRoute,
-  routeLengthM,
   primaryTripType,
   placeDeleteConfirm,
   placeLinkedToast,
@@ -37,7 +33,6 @@ import {
   contractSectionsFor,
   canyonGradeRow,
   isCanyonGradeKey,
-  ADD_WAY,
   PLACE_PAGE,
   PLACE_PAGE_PRIMARY_VERBS,
   WEATHER,
@@ -64,7 +59,7 @@ import ShareDialog from "../../dialogs/ShareDialog";
 import { NoteBody } from "../../plans/WriteUpBody";
 import TripLogDialog from "../../dialogs/TripLogDialog";
 import ConfirmDialog from "../../dialogs/ConfirmDialog";
-import AddWayDialog from "../../dialogs/AddWayDialog";
+import PlaceRouteSection from "./PlaceRouteSection";
 import type {
   TPlace,
   TFriend,
@@ -73,7 +68,6 @@ import type {
   TPlaceType,
   TRoute,
 } from "../../../placeUtils";
-import { boundsOfPoints } from "./waysModel";
 import {
   deletePlace,
   getCustomFields,
@@ -108,11 +102,7 @@ import {
   StatGrid,
   StatusPill,
 } from "../../../ui";
-import {
-  formatCanyonGrade,
-  linkMediaToPlace,
-  updateRoute,
-} from "../../../placeUtils";
+import { formatCanyonGrade } from "../../../placeUtils";
 
 /**
  * Runs a verb pressed on the place's ROW that needs this page's forms and
@@ -273,7 +263,6 @@ function PlaceDetailPanel({
   const [removing, setRemoving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [showShareDialog, setShowShareDialog] = useState(false);
-  const [addingWay, setAddingWay] = useState(false);
   const [fileToDelete, setFileToDelete] = useState<MediaItem | null>(null);
   const [deletingFile, setDeletingFile] = useState(false);
 
@@ -699,9 +688,28 @@ function PlaceDetailPanel({
   const visualMedia = placeMedia.filter(
     (m) => mediaCategory(m.mediaType) !== "track",
   );
-  const slot = place ? placeRoute(place.id, routes, placeMedia) : null;
-  const track = slot?.kind === "file" ? slot.file : null;
-  const drawnRoute = slot?.kind === "drawn" ? slot.route : null;
+
+  const routeSection = (draw?: () => void) => (
+    <PlaceRouteSection
+      place={current}
+      owned={isOwnedPlace}
+      shared={isShared}
+      routes={routes}
+      media={placeMedia}
+      currentUserId={currentUserId}
+      onFocusBounds={onFocusBounds}
+      onOpenRoute={onOpenRoute}
+      onRoutesChanged={onRoutesChanged}
+      onReloadMedia={reloadPlaceMedia}
+      onFilled={() => {
+        reloadPlaceMedia();
+        onRoutesChanged();
+        onQuotaChanged();
+      }}
+      onDeleteFile={setFileToDelete}
+      onDrawRoute={draw}
+    />
+  );
 
   const copy = PLACE_PAGE.copy;
   const sources = placeSources(current.fieldValues);
@@ -957,120 +965,8 @@ function PlaceDetailPanel({
       </section>
     ),
 
-    // One route per place (the API enforces it): a FILE, so the row is a real
-    // link (middle-click, save as), wearing the glyph and hue a track wears on
-    // Ways. Sources are not a section: they are an attribute, and sit with the
-    // others.
-    route: () => (
-      <section className={classes.section}>
-        <SectionHeader
-          title={placeSectionTitle("route", copy.route, {
-            owned: isOwnedPlace,
-            shared: isShared,
-            filled: Boolean(track || drawnRoute),
-          })}
-        />
-        {drawnRoute ? (
-          <Row
-            leading={<IconTile icon="route" hue="var(--hue-route)" />}
-            title={drawnRoute.name}
-            subtitle={`Drawn route · ${formatDistanceM(routeLengthM(drawnRoute.points))}`}
-            onOpen={() => {
-              const bounds = boundsOfPoints(drawnRoute.points);
-              if (bounds) onFocusBounds(bounds);
-            }}
-            trailing={
-              <>
-                <IconButton
-                  icon="forward"
-                  label="Open way"
-                  onClick={() => onOpenRoute(drawnRoute)}
-                />
-                {isOwnedPlace && (
-                  <IconButton
-                    icon="unlink"
-                    label="Unlink from this place"
-                    onClick={() => {
-                      updateRoute(drawnRoute.id, { placeId: null })
-                        .then(() => {
-                          onRoutesChanged();
-                          toast.done("Route unlinked.");
-                        })
-                        .catch((err: unknown) =>
-                          toast.error(
-                            messageFromError(
-                              err,
-                              "Couldn't unlink that route.",
-                            ),
-                          ),
-                        );
-                    }}
-                  />
-                )}
-              </>
-            }
-          />
-        ) : track ? (
-          <Row
-            leading={<IconTile icon="track" hue="var(--hue-track)" />}
-            title={mediaDisplayName(track)}
-            subtitle="Click to download"
-            href={track.displayUrl}
-            download={track.filename}
-            trailing={
-              isOwnedPlace ? (
-                // An import or a recording is the user's own file, so it comes
-                // off the place and stays; only a file uploaded here has no life
-                // apart from the place and can only be deleted.
-                track.origin !== null ? (
-                  <IconButton
-                    icon="unlink"
-                    label="Unlink from this place"
-                    onClick={() => {
-                      linkMediaToPlace(track.id, null)
-                        .then(() => {
-                          reloadPlaceMedia();
-                          toast.done("Route unlinked.");
-                        })
-                        .catch((err: unknown) =>
-                          toast.error(
-                            messageFromError(
-                              err,
-                              "Couldn't unlink that route.",
-                            ),
-                          ),
-                        );
-                    }}
-                  />
-                ) : (
-                  <IconButton
-                    icon="delete"
-                    label={`Delete the track ${mediaDisplayName(track)}`}
-                    tone="danger"
-                    onClick={() => setFileToDelete(track)}
-                  />
-                )
-              ) : undefined
-            }
-          />
-        ) : (
-          <p className={classes.muted}>{copy.routeEmpty}</p>
-        )}
-        {isOwnedPlace && (
-          <div>
-            <Button
-              compact
-              icon={drawnRoute || track ? "replace" : "add"}
-              onClick={() => setAddingWay(true)}
-            >
-              {drawnRoute || track
-                ? ADD_WAY.copy.replaceTitle
-                : ADD_WAY.copy.title}
-            </Button>
-          </div>
-        )}
-      </section>
-    ),
+    // One route per place (the API enforces it).
+    route: () => routeSection(() => onDrawRoute(current.id)),
 
     // NAVIGATIONAL ONLY: a link grants no visibility (ADR 0019;
     // api/src/__tests__/placeLinks.test.ts), so this is the owner's own filing
@@ -1241,24 +1137,6 @@ function PlaceDetailPanel({
         </div>
       </div>
 
-      {isOwnedPlace && (
-        <AddWayDialog
-          open={addingWay}
-          placeId={current.id}
-          placeName={current.name}
-          routes={routes}
-          currentUserId={currentUserId}
-          media={placeMedia}
-          onClose={() => setAddingWay(false)}
-          onDrawRoute={() => onDrawRoute(current.id)}
-          onFilled={() => {
-            reloadPlaceMedia();
-            onRoutesChanged();
-            onQuotaChanged();
-          }}
-        />
-      )}
-
       <PlaceDialog
         place={current}
         open={showEdit && !pickingCoords}
@@ -1270,6 +1148,18 @@ function PlaceDetailPanel({
         onCustomFieldDefsChange={onPlaceCustomFieldDefsChange}
         placeTypes={placeTypes}
         onMediaChanged={reloadPlaceMedia}
+        // The pen takes the map over from under the dialog, so unsaved edits
+        // would go: the dialog offers it only while it holds none.
+        routeSection={(clean) =>
+          routeSection(
+            clean
+              ? () => {
+                  setShowEdit(false);
+                  onDrawRoute(current.id);
+                }
+              : undefined,
+          )
+        }
       />
 
       {/* The three actions on one parked value, as Logjam GPS's sheet: the

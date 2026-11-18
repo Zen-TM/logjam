@@ -505,6 +505,86 @@ describe("adding a route from the place page", () => {
   });
 });
 
+// The edit dialog's Route section is the place page's own, so the same
+// "Add a way" dialog opens from it.
+describe("adding a route from the edit dialog", () => {
+  const editDialog = () => screen.findByRole("dialog", { name: "Edit place" });
+
+  // Mutation: give PlaceDialog back its own route uploader, or drop the
+  // `routeSection` prop from the panel's PlaceDialog, and the dialog has no
+  // "Add a way" button.
+  it("opens the place page's Add a way dialog, and links a drawn route", async () => {
+    const onRoutesChanged = vi.fn();
+    renderPanel({
+      verbRequest: { id: "edit" },
+      routes: [route({ id: "mine", name: "Mine" })],
+      onRoutesChanged,
+    });
+    const dialog = await editDialog();
+    fireEvent.click(
+      await within(dialog).findByRole("button", { name: ADD_WAY.copy.title }),
+    );
+    const addWay = await screen.findByRole("dialog", {
+      name: ADD_WAY.copy.title,
+    });
+    fireEvent.click(
+      within(addWay).getByRole("button", {
+        name: new RegExp(ADD_WAY.copy.routeTitle),
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Mine/ }));
+    await waitFor(() =>
+      expect(api.updateRoute).toHaveBeenCalledWith("mine", { placeId: "p1" }),
+    );
+    expect(onRoutesChanged).toHaveBeenCalled();
+  });
+
+  // Mutation: hand the pen over without `setShowEdit(false)`.
+  it("closes the dialog to hand the map's pen this place", async () => {
+    const onDrawRoute = vi.fn();
+    renderPanel({ verbRequest: { id: "edit" }, onDrawRoute });
+    const dialog = await editDialog();
+    fireEvent.click(
+      await within(dialog).findByRole("button", { name: ADD_WAY.copy.title }),
+    );
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: new RegExp(ADD_WAY.copy.drawTitle),
+      }),
+    );
+    expect(onDrawRoute).toHaveBeenCalledWith("p1");
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog", { name: "Edit place" })).toBeNull(),
+    );
+  });
+
+  // Mutation: pass the draw hand-off whatever `clean` says: unsaved edits go
+  // when the dialog closes.
+  it("offers no pen once the form holds edits", async () => {
+    renderPanel({ verbRequest: { id: "edit" } });
+    const dialog = await editDialog();
+    fireEvent.change(within(dialog).getByRole("textbox", { name: /^Name/ }), {
+      target: { value: "Claustral Canyon" },
+    });
+    fireEvent.click(
+      await within(dialog).findByRole("button", { name: ADD_WAY.copy.title }),
+    );
+    const addWay = await screen.findByRole("dialog", {
+      name: ADD_WAY.copy.title,
+    });
+    expect(
+      within(addWay).queryByRole("button", {
+        name: new RegExp(ADD_WAY.copy.drawTitle),
+      }),
+    ).toBeNull();
+    expect(
+      within(addWay).getByRole("button", {
+        name: new RegExp(ADD_WAY.copy.routeTitle),
+      }),
+    ).toBeTruthy();
+  });
+});
+
 describe("the place panel's notes", () => {
   // Mutation: draw `current.notes` as a raw paragraph again, and Markdown in a
   // note (shared with a sharee too) shows as typed.

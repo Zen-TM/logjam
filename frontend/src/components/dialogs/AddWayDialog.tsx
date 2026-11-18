@@ -89,8 +89,9 @@ export default function AddWayDialog({
   onClose: () => void;
   /** The slot changed: the page refetches its routes and media. */
   onFilled: () => void;
-  /** Hand over to the map's pen; the save links the route to this place. */
-  onDrawRoute: () => void;
+  /** Hand over to the map's pen; the save links the route to this place.
+   *  Absent where the pen cannot be taken up, and the row is absent with it. */
+  onDrawRoute?: () => void;
 }) {
   const toast = useToast();
   const confirm = useConfirm();
@@ -283,16 +284,18 @@ export default function AddWayDialog({
                 disabled={busy}
                 onOpen={() => setMode("routes")}
               />
-              <Row
-                leading={<IconTile icon="draw" hue="var(--hue-route)" />}
-                title={ADD_WAY.copy.drawTitle}
-                subtitle={ADD_WAY.copy.drawSubtitle}
-                disabled={busy}
-                onOpen={() => {
-                  close();
-                  onDrawRoute();
-                }}
-              />
+              {onDrawRoute && (
+                <Row
+                  leading={<IconTile icon="draw" hue="var(--hue-route)" />}
+                  title={ADD_WAY.copy.drawTitle}
+                  subtitle={ADD_WAY.copy.drawSubtitle}
+                  disabled={busy}
+                  onOpen={() => {
+                    close();
+                    onDrawRoute();
+                  }}
+                />
+              )}
               <Row
                 leading={<IconTile icon="track" hue="var(--hue-track)" />}
                 title={ADD_WAY.copy.trackTitle}

@@ -162,16 +162,44 @@ describe("PlaceDialog, a coordinate pair pasted into Latitude", () => {
   });
 });
 
-// The form names its route section and its empty slot with the words the place
-// page uses. Mutation: write either back as a literal ("Track", "No track yet.").
+// The form names its route section with the words the place page uses.
+// Mutation: write it back as a literal ("Track", "No track yet.").
 describe("PlaceDialog, route section", () => {
   it("says route where the place page does", async () => {
-    render(dialog(place("p1", "Claustral")));
+    render(dialog(null));
     expect(
-      (await screen.findByRole("heading", { name: PLACE_PAGE.copy.route }))
+      (await screen.findByRole("heading", { name: PLACE_FORM.copy.route }))
         .textContent,
     ).toBe("Route");
     expect(await screen.findByText(PLACE_PAGE.copy.routeEmpty)).toBeTruthy();
+  });
+
+  // Mutation: render the upload for an existing place too, or ignore
+  // `routeSection`, and the place page's section is not what shows.
+  it("shows the section it is handed for an existing place, clean until edited", async () => {
+    const routeSection = vi.fn((clean: boolean) => (
+      <p>{clean ? "clean route section" : "edited route section"}</p>
+    ));
+    render(
+      <ToastProvider>
+        <PlaceDialog
+          place={place("p1", "Claustral")}
+          open
+          onClose={() => {}}
+          onSaved={() => {}}
+          onPickCoords={() => {}}
+          onCancelPickCoords={() => {}}
+          customFieldDefs={[]}
+          onCustomFieldDefsChange={() => {}}
+          placeTypes={[CANYON]}
+          routeSection={routeSection}
+        />
+      </ToastProvider>,
+    );
+    expect(await screen.findByText("clean route section")).toBeTruthy();
+    fireEvent.change(box(/^Name/), { target: { value: "Claustral Canyon" } });
+    expect(await screen.findByText("edited route section")).toBeTruthy();
+    expect(screen.queryByText(PLACE_PAGE.copy.routeEmpty)).toBeNull();
   });
 });
 

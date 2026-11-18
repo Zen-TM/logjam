@@ -96,6 +96,7 @@ function PlaceDialog({
   onCustomFieldDefsChange,
   placeTypes,
   onMediaChanged,
+  routeSection,
   initialCoords = null,
 }: {
   place: TPlace | null;
@@ -115,6 +116,10 @@ function PlaceDialog({
   // Called after a media/track upload or delete so the opener (place detail
   // panel) can refresh its slideshow/track without waiting for a Save.
   onMediaChanged?: () => void;
+  /** Edit mode: the place page's own Route section, so a way is added the same
+   *  way from here (nothing is shown there without it). `clean` is false once
+   *  the form holds unsaved edits. */
+  routeSection?: (clean: boolean) => ReactNode;
   /** Create mode only: the spot the form opens on ("Add a place here"), so the
    *  coordinates are already in and the user names it. */
   initialCoords?: { latitude: number; longitude: number } | null;
@@ -893,36 +898,37 @@ function PlaceDialog({
         </section>
       </>
     ),
-    route: (
-      <>
-        <section className={classes.section}>
-          <SectionHeader title={PLACE_FORM.copy.route} />
-          {!mediaLoading && (
-            <MediaGallery
-              media={media}
-              variant="tracks"
-              canDelete
-              onDeleted={handleMediaDeleted}
-              emptyText={PLACE_PAGE.copy.routeEmpty}
-            />
-          )}
-          <MediaUpload
-            category="track"
-            maxFiles={1}
-            linkedType="place"
-            linkedId={place ? place.id : ""}
-            resolveLinkedId={place ? undefined : ensureLinkedPlaceId}
-            onUploaded={handleMediaUploaded}
-            onBusyChange={handleUploadBusy}
-            disabled={saving}
-            disabledReason={
-              media.some((m) => mediaCategory(m.mediaType) === "track")
-                ? "This place already has a route. Delete it to add another."
-                : undefined
-            }
-          />
-        </section>
-      </>
+    // An existing place has the place page's own Route section. A place not
+    // yet saved has no page to add a way on, so its route is a file uploaded
+    // against the draft.
+    route: place ? (
+      routeSection?.(!isDirty)
+    ) : (
+      <section className={classes.section}>
+        <SectionHeader title={PLACE_FORM.copy.route} />
+        <MediaGallery
+          media={media}
+          variant="tracks"
+          canDelete
+          onDeleted={handleMediaDeleted}
+          emptyText={PLACE_PAGE.copy.routeEmpty}
+        />
+        <MediaUpload
+          category="track"
+          maxFiles={1}
+          linkedType="place"
+          linkedId=""
+          resolveLinkedId={ensureLinkedPlaceId}
+          onUploaded={handleMediaUploaded}
+          onBusyChange={handleUploadBusy}
+          disabled={saving}
+          disabledReason={
+            media.some((m) => mediaCategory(m.mediaType) === "track")
+              ? "This place already has a route. Delete it to add another."
+              : undefined
+          }
+        />
+      </section>
     ),
   };
 

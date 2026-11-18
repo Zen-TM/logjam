@@ -1684,7 +1684,14 @@ function App() {
   const mapToolActions: MapToolActions = {
     measure: { onSelect: () => startMeasuring() },
     route: { onSelect: () => startDrawingRoute() },
-    place: { onSelect: () => setShowAdd(true) },
+    // Where first: the form opens on the spot picked, and a cancel opens nothing.
+    place: {
+      onSelect: () =>
+        startPickingCoords((latitude, longitude) => {
+          setAddPlaceAt({ latitude, longitude });
+          setShowAdd(true);
+        }),
+    },
     makeMap: {
       onSelect: () => {
         setBoxPick((pick) => endBox(pick, "export"));
