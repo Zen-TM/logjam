@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import request from "supertest";
+import { HeadObjectCommand } from "@aws-sdk/client-s3";
+import { s3 } from "../services/awsClients";
 import { randomUUID } from "crypto";
 import prisma from "../services/prisma";
 import {
@@ -318,6 +320,15 @@ describe("POST /plans/:id/items (a new place or way, made in the plan)", () => {
         400,
       ],
       [{ kind: "route", new: newRoute({ anchors: [0, 9] }) }, 400],
+      [
+        {
+          kind: "route",
+          new: newRoute({
+            points: Array.from({ length: 1001 }, () => [150.3, -33.6]),
+          }),
+        },
+        413,
+      ],
       [{ kind: "route", new: newRoute({ placeId: randomUUID() }) }, 400],
       [{ kind: "route", new: newRoute({ ownerId: ALICE_ID }) }, 400],
       [{ kind: "media", new: {} }, 400],
@@ -494,6 +505,32 @@ describe("a way imported straight into the plan", () => {
       .set(as(BOB_SUB));
     expect(del.status).toBe(204);
     expect(await used(BOB_ID)).toBe(before);
+  });
+
+  // Mutation: remove the P2002 skip in chargeAndWrite, and the loser deletes
+  // the object the winner's row points at.
+  it("keeps the file when two confirms of one upload race", async () => {
+    const before = await used(BOB_ID);
+    const mediaId = await upload(BOB_SUB);
+    const [one, two] = await Promise.all([
+      confirm(BOB_SUB, mediaId),
+      confirm(BOB_SUB, mediaId),
+    ]);
+    expect([one.status, two.status].sort()).toEqual([200, 201]);
+    expect(one.body.item.id).toBe(mediaId);
+    expect(two.body.item.id).toBe(mediaId);
+    const row = await prisma.media.findUniqueOrThrow({
+      where: { id: mediaId },
+    });
+    await expect(
+      s3.send(
+        new HeadObjectCommand({
+          Bucket: process.env.S3_BUCKET_MEDIA ?? "",
+          Key: row.s3KeyDisplay,
+        }),
+      ),
+    ).resolves.toBeTruthy();
+    expect(await used(BOB_ID)).toBe(before + BigInt(GPX.length));
   });
 
   // The boundary again, for a file: who may write into a plan.

@@ -1259,6 +1259,8 @@ function newPlace(value: unknown): TripPlanNewPlace {
 function newRoute(value: unknown): TripPlanNewRoute {
   const input = record(value, "new");
   onlyFields(input, ["name", "color", "points", "anchors"]);
+  if (Array.isArray(input.points) && input.points.length > MAX_ROUTE_POINTS)
+    bad("points is over the cap", 413);
   const error = validateRoutePayload(input, { requireCore: true });
   if (error) bad(error);
   const points = parseRoutePoints(input.points);

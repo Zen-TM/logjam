@@ -23,7 +23,7 @@ import {
   type TripPlanQuestion,
 } from "./tripPlans.js";
 import { apiSentenceViolations } from "./copyRules.js";
-import { ROUTE_ERRORS } from "./routeValidation.js";
+import { MAX_ROUTE_POINTS, ROUTE_ERRORS } from "./routeValidation.js";
 
 function value<T>(parsed: TripPlanParsed<T>): T {
   if (!("value" in parsed)) throw new Error(JSON.stringify(parsed));
@@ -260,6 +260,18 @@ describe("item add, new in the plan", () => {
       parseTripPlanItemAdd({
         kind: "place",
         new: { ...place, altNames: Array.from({ length: 51 }, () => "a") },
+      }),
+    ).toMatchObject({ status: 413 });
+    // Mutation: drop the cap check in newRoute, and 1001 points is a 400.
+    expect(
+      parseTripPlanItemAdd({
+        kind: "route",
+        new: {
+          ...route,
+          points: Array.from({ length: MAX_ROUTE_POINTS + 1 }, () => [
+            150, -33,
+          ]),
+        },
       }),
     ).toMatchObject({ status: 413 });
   });

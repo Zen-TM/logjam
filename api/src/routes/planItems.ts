@@ -204,11 +204,15 @@ router.post(
     const displayName = parseMediaDisplayName(body.displayName);
 
     // A confirm that already landed: its row, charged once. Another's id is 404.
-    const existing = await prisma.media.findUnique({ where: { id: mediaId } });
-    if (existing) {
-      if (existing.planId !== access.plan.id || existing.addedById !== user.id)
+    const landed = async () => {
+      const row = await prisma.media.findUnique({ where: { id: mediaId } });
+      if (!row) return false;
+      if (row.planId !== access.plan.id || row.addedById !== user.id)
         throw itemNotFound();
-    } else {
+      return true;
+    };
+    let existing = await landed();
+    if (!existing) {
       const { displayKey } = mediaKeys(user.id, mediaId, mediaType);
       let bytes: number;
       try {
@@ -230,15 +234,28 @@ router.post(
           say`That file is too big. The limit is ${limitMb} MB.`,
         );
       }
-      await createPlanFile(user, access.plan.id, {
-        mediaId,
-        bytes: BigInt(bytes),
-        mediaType,
-        filename,
-        displayName,
-        metadata: metadata as Prisma.InputJsonValue,
-        color: parseRouteColor(body.color),
-      });
+      try {
+        await createPlanFile(user, access.plan.id, {
+          mediaId,
+          bytes: BigInt(bytes),
+          mediaType,
+          filename,
+          displayName,
+          metadata: metadata as Prisma.InputJsonValue,
+          color: parseRouteColor(body.color),
+        });
+      } catch (err) {
+        // A concurrent confirm of the same upload won: answer with its row.
+        if (
+          !(
+            err instanceof Prisma.PrismaClientKnownRequestError &&
+            err.code === "P2002" &&
+            (await landed())
+          )
+        )
+          throw err;
+        existing = true;
+      }
     }
     const items = await loadPlanItems(access.plan.id, {
       kind: "media",

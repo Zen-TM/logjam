@@ -235,7 +235,16 @@ async function chargeAndWrite<T>(
       return write(tx);
     });
   } catch (err) {
-    await deleteS3KeysBestEffort(keys.bucket, keys.keys);
+    // A row with this id already exists: a concurrent confirm of the same
+    // upload won, and its row points at these very keys. Guard:
+    // __tests__/planItemsNew.test.ts ("two confirms at once").
+    if (
+      !(
+        err instanceof Prisma.PrismaClientKnownRequestError &&
+        err.code === "P2002"
+      )
+    )
+      await deleteS3KeysBestEffort(keys.bucket, keys.keys);
     throw err;
   }
 }
