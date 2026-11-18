@@ -58,6 +58,9 @@ function archiveByPath() {
 }
 
 export async function stubMaster(page: Page) {
+  // Built here, not inside the first map request: the build is synchronous and
+  // takes 10-40 s on a loaded machine, which the request would sit through.
+  archiveByPath();
   await page.route("**/master/**", async (route: Route) => {
     const body =
       archiveByPath()[new URL(route.request().url()).pathname.slice(1)];

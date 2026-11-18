@@ -65,7 +65,7 @@ import {
   type IconIdea,
   type SectionKeysOn,
   friendSeesUnit,
-  SHARE_KIND_LABEL,
+  shareKindLabel,
   t,
 } from "@logjam/shared";
 
@@ -742,7 +742,7 @@ function ShareCardMenu({
   const theme = useTheme();
   const styles = useStyles();
 
-  const kind = SHARE_KIND_LABEL[card.row.entityType];
+  const kind = shareKindLabel(card.row.entityType);
 
   // Dimmed with the reason, never hidden: sharing is the one thing on this
   // screen that needs the network, so it is the row a user would go looking

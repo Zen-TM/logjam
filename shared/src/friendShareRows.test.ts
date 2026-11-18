@@ -65,7 +65,7 @@ describe("buildShareCards", () => {
       direction: "theySee",
       friendName: FRIEND,
     });
-    expect(card.title).toBe("Untitled topo");
+    expect(card.title).toBe("Untitled sharpened area");
   });
 
   // My own grants: there is nothing to copy (it is already mine) and nothing to
@@ -349,6 +349,14 @@ describe("copyConfirm", () => {
     expect(confirm.body).toContain("3 items are copied");
     expect(confirm.body).not.toContain("route");
     expect(confirm.body).toContain("stay if bob stops sharing");
+  });
+
+  // Mutation: write the first form of that plural in `copyConfirm` as
+  // "# items are copied into your own account."
+  it("says one item is copied when a count of 1 has no name", () => {
+    const confirm = copyConfirm({ count: 1, friendName: FRIEND });
+    expect(confirm.body).toContain("1 item is copied into your own account.");
+    expect(confirm.body).not.toContain("1 items");
   });
 
   // When item sheets know no username, "the owner" starts a sentence and must

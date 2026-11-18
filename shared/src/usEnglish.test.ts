@@ -69,7 +69,7 @@ describe("US English", () => {
   });
 
   // Mutation: delete the `"Scrub density for bushbashing"` entry, or the
-  // `"{0} abseils"` one, or the `"Colour terrain based on how steep it is."` one,
+  // `"# abseils"` one, or the `"Colour terrain based on how steep it is."` one,
   // from en-US.ts.
   it("uses US words and spellings in the text a screen shows", async () => {
     const { terrain, signIn, status } = await loadIn("en-US");
@@ -84,6 +84,14 @@ describe("US English", () => {
     );
     expect(status.placeSummary({ fieldValues: { num_abseils: 3 } })).toBe(
       "3 rappels",
+    );
+  });
+
+  // Mutation: delete the `one` form from the `"# abseils"` entry in en-US.ts.
+  it("says one rappel, not one rappels", async () => {
+    const { status } = await loadIn("en-US");
+    expect(status.placeSummary({ fieldValues: { num_abseils: 1 } })).toBe(
+      "1 rappel",
     );
   });
 

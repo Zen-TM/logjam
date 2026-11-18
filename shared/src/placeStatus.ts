@@ -12,7 +12,7 @@
 import { formatCanyonGrade } from "./canyonGrade.js";
 import { numericFieldValue } from "./fieldValues.js";
 import { lengthToInput, lengthUnitLabel } from "./units.js";
-import { t } from "./i18n.js";
+import { plural, t } from "./i18n.js";
 
 export type PlaceStatus = "done" | "todo" | "shared";
 
@@ -88,7 +88,7 @@ export function placeSummary(place: PlaceSummaryFields): string {
     longest != null
       ? t`${trimNumber(lengthToInput(longest))} ${lengthUnitLabel()} max`
       : null,
-    abseils != null ? t`${abseils} abseils` : null,
+    abseils != null ? plural(abseils, "# abseil", "# abseils") : null,
   ]
     .filter((part): part is string => Boolean(part))
     .slice(0, SUMMARY_FACTS)
