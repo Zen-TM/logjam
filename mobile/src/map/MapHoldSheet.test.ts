@@ -45,6 +45,21 @@ describe("the tap sheet", () => {
     expect(sheet).toContain('mapPointVerbs("gps", savedHereOnly, fix != null)');
   });
 
+  // Mutation: copy the land, fire and coverage lookups back into the arrow
+  // branch of `handleMapOrArrowPress` (or null them there), and a tap on your
+  // own position has none of the overlay rows a tap on the map has.
+  it("asks the overlays the same way for a tap on the map and on your position", () => {
+    const screen = read("MapScreen.tsx");
+    expect(screen.match(/askAbout\(/g)).toHaveLength(2);
+    expect(screen.match(/landNameOf\(/g)).toHaveLength(1);
+    expect(screen.match(/fireNameOf\(/g)).toHaveLength(1);
+    expect(screen.match(/coverageAtTap\(/g)).toHaveLength(1);
+    const arrow = screen.slice(screen.indexOf("const handleMapOrArrowPress"));
+    expect(arrow.slice(0, arrow.indexOf("handleMapPress(event)"))).toContain(
+      "askAbout(",
+    );
+  });
+
   // Mutation: give the sheet a plain `onClose={onClose}` again, and the back
   // gesture, the scrim and the swipe close the whole sheet from the forecast
   // or Options instead of undoing one layer. The steps themselves are

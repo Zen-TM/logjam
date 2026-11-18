@@ -23,7 +23,6 @@ import {
   buildCustomFieldDef,
   fieldValue,
   setFieldValues as withFieldValues,
-  SOURCES_FIELD_KEY,
   SYSTEM_PLACE_TYPE_IDS,
   defsForType,
   LATITUDE_RANGE,
@@ -33,9 +32,9 @@ import {
   isValidLongitude,
   coordinateNumber,
   PLACE_PAGE,
-  cleanSources,
   deleteSourceLabel,
   sourceRows,
+  sourcesPatch,
   type SourceRow,
 } from "@logjam/shared";
 import type { NumericFieldConstraints } from "../../numberInput";
@@ -130,6 +129,11 @@ function PlaceDialog({
   const [longitude, setLongitude] = useState("");
   const [notes, setNotes] = useState("");
   const [sources, setSources] = useState<SourceRow[]>([]);
+  // The one Link that refused the save, under its own field.
+  const [sourceError, setSourceError] = useState<{
+    index: number;
+    message: string;
+  } | null>(null);
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
   // THE TYPE, chosen first. It decides which fields the form below has, so it
   // sits at the top of the dialog rather than among them.
@@ -284,6 +288,7 @@ function PlaceDialog({
       }),
     );
     setError(null);
+    setSourceError(null);
     setShowFieldErrors(false);
     setShowAddField(false);
     setNewFieldLabel("");
@@ -451,6 +456,7 @@ function PlaceDialog({
   async function handleSave() {
     setSaving(true);
     setError(null);
+    setSourceError(null);
     try {
       const parsedLat = coordinateNumber(latitude);
       const parsedLng = coordinateNumber(longitude);
@@ -473,10 +479,15 @@ function PlaceDialog({
       }
 
       // Non-http(s) links are refused rather than stored to later render as a
-      // clickable href (shared/src/placeSources.test.ts).
-      const cleaned = cleanSources(sources);
-      if ("error" in cleaned) {
-        setError(cleaned.error);
+      // clickable href, and only sources the user changed are checked
+      // (shared/src/placeSources.test.ts).
+      const sourcesResult = sourcesPatch(sources, place?.fieldValues);
+      if ("error" in sourcesResult) {
+        setSourceError({
+          index: sourcesResult.index,
+          message: sourcesResult.error,
+        });
+        setError(PLACE_FORM.copy.fixFields);
         setSaving(false);
         return;
       }
@@ -509,7 +520,7 @@ function PlaceDialog({
         notes: notes || null,
         fieldValues: withFieldValues(place?.fieldValues ?? {}, {
           ...attributes,
-          [SOURCES_FIELD_KEY]: cleaned.sources,
+          ...sourcesResult.patch,
         }),
       };
 
@@ -824,7 +835,11 @@ function PlaceDialog({
                 className={classes.grow}
                 value={source.url}
                 placeholder={PLACE_FORM.copy.sourceLinkPlaceholder}
+                error={
+                  sourceError?.index === index ? sourceError.message : null
+                }
                 onChange={(event) => {
+                  if (sourceError?.index === index) setSourceError(null);
                   const next = [...sources];
                   next[index] = { ...next[index], url: event.target.value };
                   setSources(next);
@@ -834,9 +849,10 @@ function PlaceDialog({
                 icon="delete"
                 label={deleteSourceLabel(source, index)}
                 tone="danger"
-                onClick={() =>
-                  setSources(sources.filter((_, other) => other !== index))
-                }
+                onClick={() => {
+                  setSourceError(null);
+                  setSources(sources.filter((_, other) => other !== index));
+                }}
               />
             </div>
           ))}

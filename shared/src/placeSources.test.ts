@@ -9,6 +9,7 @@ import {
   deleteSourceLabel,
   isHttpUrl,
   sourceRows,
+  sourcesPatch,
 } from "./placeSources.js";
 import { SOURCES_FIELD_KEY } from "./placeTypes.js";
 
@@ -72,11 +73,17 @@ describe("a place form's source rows", () => {
   it("refuses a link that is not http(s), with the one sentence", () => {
     expect(cleanSources([{ label: "x", url: "javascript:alert(1)" }])).toEqual({
       error: PLACE_FORM.copy.sourceLinkInvalid,
+      index: 0,
     });
-    // Even on a row that has no label: the whole save is refused.
-    expect(cleanSources([{ label: "", url: "ftp://x.example" }])).toEqual({
-      error: PLACE_FORM.copy.sourceLinkInvalid,
-    });
+    // Even on a row that has no label: the whole save is refused, and the
+    // error names the first such row.
+    expect(
+      cleanSources([
+        { label: "ok", url: "https://a.example" },
+        { label: "", url: "ftp://x.example" },
+        { label: "x", url: "javascript:1" },
+      ]),
+    ).toEqual({ error: PLACE_FORM.copy.sourceLinkInvalid, index: 1 });
   });
 
   // Mutation: return an empty list from `cleanSources` when nothing is left,
@@ -86,6 +93,33 @@ describe("a place form's source rows", () => {
     const stored = { [SOURCES_FIELD_KEY]: [["a", "https://a.example"]] };
     const next = setFieldValues(stored, { [SOURCES_FIELD_KEY]: null });
     expect(SOURCES_FIELD_KEY in next).toBe(false);
+  });
+
+  // Mutation: have `sourcesPatch` always clean the rows (or drop the
+  // unchanged check), and a name-only edit of a place whose stored sources hold
+  // a scheme-less link or an unlabelled entry is refused or rewrites them.
+  it("leaves sources a save did not touch alone, whatever they hold", () => {
+    const stored = {
+      [SOURCES_FIELD_KEY]: [
+        ["RopeWiki", "ropewiki.com/x"],
+        ["", "https://a.example"],
+      ],
+    };
+    expect(sourcesPatch(sourceRows(stored), stored)).toEqual({ patch: {} });
+    // Touched: the same rows now meet the rules.
+    const touched = [...sourceRows(stored), { label: "New", url: "" }];
+    expect(sourcesPatch(touched, stored)).toEqual({
+      error: PLACE_FORM.copy.sourceLinkInvalid,
+      index: 0,
+    });
+    const fixed = [{ label: "RopeWiki", url: "https://ropewiki.com/x" }];
+    expect(sourcesPatch(fixed, stored)).toEqual({
+      patch: { [SOURCES_FIELD_KEY]: [["RopeWiki", "https://ropewiki.com/x"]] },
+    });
+    expect(sourcesPatch([], stored)).toEqual({
+      patch: { [SOURCES_FIELD_KEY]: null },
+    });
+    expect(sourcesPatch([], {})).toEqual({ patch: {} });
   });
 
   it("round-trips: rows -> pairs -> rows", () => {
@@ -119,7 +153,8 @@ describe("both clients edit sources through the shared helpers", () => {
     (_name, file) => {
       const source = readFileSync(join(repo, file), "utf8");
       expect(source).toContain("sourceRows(");
-      expect(source).toContain("cleanSources(");
+      expect(source).toContain("sourcesPatch(sources, place?.fieldValues)");
+      expect(source).not.toContain("cleanSources(");
       expect(source).toContain("deleteSourceLabel(");
       for (const words of [
         PLACE_FORM.copy.addSource,
@@ -135,6 +170,6 @@ describe("both clients edit sources through the shared helpers", () => {
   // never merged, so an edit on the phone drops or ignores the list.
   it("merges the cleaned list under the reserved key on a save", () => {
     const source = readFileSync(join(repo, clients[1][1]), "utf8");
-    expect(source.match(/\.\.\.sourcesPatch/g)).toHaveLength(2);
+    expect(source.match(/\.\.\.sourcesResult\.patch/g)).toHaveLength(2);
   });
 });

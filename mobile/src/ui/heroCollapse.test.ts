@@ -335,14 +335,18 @@ describe("list screens collapse their hero", () => {
   });
   // Mutation: put Plans' add back in the hero's body as a `Button`, or draw
   // `HeroAdd` only when `compact`, and the full hero has its add under the
-  // title instead of top right like the other lists.
+  // title instead of top right like the other lists; drop `emptyCarriesAdd`,
+  // and an empty Upcoming list shows two adds (or an empty Past, none).
   it("draws Plans' add in the hero's actions, full and compact", () => {
     const source = readFileSync(
       new URL("../plans/PlansScreen.tsx", import.meta.url),
       "utf8",
     );
     expect(source).toMatch(
-      /actions=\{\s*<HeroAdd\s+label=\{copy\.add\}\s+icon="add"\s+compact=\{compact\}/,
+      /actions=\{\s*emptyCarriesAdd \? undefined : \(\s*<HeroAdd\s+label=\{copy\.add\}\s+icon="add"\s+compact=\{compact\}/,
+    );
+    expect(source).toMatch(
+      /emptyCarriesAdd =\s*listReady && bucket === "upcoming" && rows\.length === 0/,
     );
     expect(source).not.toMatch(/<Button\s+label=\{copy\.add\}/);
   });

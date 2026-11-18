@@ -2321,6 +2321,57 @@ export function MapScreen({
    *  `handleMapPress` — see the retroactive dismissal below. */
   const swallowNextPress = useRef(false);
 
+  /**
+   * Opens the point sheet at `tapped` and asks the overlays what is drawn under
+   * `screenPoint`. One path for a tap on the map and a press on your own
+   * arrow, so the sheet has the same rows for both.
+   */
+  const askAbout = useCallback(
+    (
+      tapped: MapPoint,
+      screenPoint: PressEvent["point"],
+      lngLat: [number, number],
+    ) => {
+      setTappedPoint(tapped);
+      setTappedLand(null);
+      setTappedFire(null);
+      setTappedCoverage(null);
+      landAskedFor.current = tapped;
+      // From the tiles on the phone, so this works offline and asks no one.
+      if (landLayerIds.length > 0) {
+        mapRef.current
+          ?.queryRenderedFeatures(screenPoint, { layers: landLayerIds })
+          .then((features) => {
+            if (landAskedFor.current === tapped)
+              setTappedLand(landNameOf(features));
+          })
+          // Never a failure to show: the sheet just has no land figure.
+          .catch(() => undefined);
+      }
+      if (fireLayerIdList.length > 0) {
+        mapRef.current
+          ?.queryRenderedFeatures(screenPoint, { layers: fireLayerIdList })
+          .then((features) => {
+            if (landAskedFor.current === tapped)
+              setTappedFire(fireNameOf(features));
+          })
+          .catch(() => undefined);
+      }
+      coverageAtTap(
+        mapRef.current,
+        screenPoint,
+        lngLat,
+        coverageLayerIdList,
+        coverageCarrier,
+      )
+        .then((name) => {
+          if (landAskedFor.current === tapped) setTappedCoverage(name);
+        })
+        .catch(() => undefined);
+    },
+    [coverageCarrier, coverageLayerIdList, fireLayerIdList, landLayerIds],
+  );
+
   const handleMapPress = useCallback(
     (event: NativeSyntheticEvent<PressEvent>) => {
       if (ignoreMapPress.current) return;
@@ -2356,56 +2407,16 @@ export function MapScreen({
       setTappedFix(null);
       // A tap is not a pan, so it does not stop follow mode — looking at a
       // spot on the map or opening the point panel should not drop follow mode.
-      const tapped = { latitude: lat, longitude: lon };
-      setTappedPoint(tapped);
-      setTappedLand(null);
-      setTappedFire(null);
-      setTappedCoverage(null);
-      landAskedFor.current = tapped;
-      // From the tiles on the phone, so this works offline and asks no one.
-      if (landLayerIds.length > 0) {
-        mapRef.current
-          ?.queryRenderedFeatures(event.nativeEvent.point, {
-            layers: landLayerIds,
-          })
-          .then((features) => {
-            if (landAskedFor.current === tapped)
-              setTappedLand(landNameOf(features));
-          })
-          // Never a failure to show: the sheet just has no land figure.
-          .catch(() => undefined);
-      }
-      if (fireLayerIdList.length > 0) {
-        mapRef.current
-          ?.queryRenderedFeatures(event.nativeEvent.point, {
-            layers: fireLayerIdList,
-          })
-          .then((features) => {
-            if (landAskedFor.current === tapped)
-              setTappedFire(fireNameOf(features));
-          })
-          .catch(() => undefined);
-      }
-      coverageAtTap(
-        mapRef.current,
-        event.nativeEvent.point,
-        [lon, lat],
-        coverageLayerIdList,
-        coverageCarrier,
-      )
-        .then((name) => {
-          if (landAskedFor.current === tapped) setTappedCoverage(name);
-        })
-        .catch(() => undefined);
+      askAbout({ latitude: lat, longitude: lon }, event.nativeEvent.point, [
+        lon,
+        lat,
+      ]);
     },
     [
       addToolPoint,
       anchorDeleteSideFor,
+      askAbout,
       collectingPoints,
-      coverageCarrier,
-      coverageLayerIdList,
-      fireLayerIdList,
-      landLayerIds,
       pressedAnchorIndex,
     ],
   );
@@ -3514,18 +3525,23 @@ export function MapScreen({
           accuracyM: here.coords.accuracy,
           altitudeM: here.coords.altitude,
         });
-        setTappedLand(null);
-        setTappedFire(null);
-        setTappedCoverage(null);
-        setTappedPoint({
-          latitude: here.coords.latitude,
-          longitude: here.coords.longitude,
-        });
+        askAbout(
+          { latitude: here.coords.latitude, longitude: here.coords.longitude },
+          event.nativeEvent.point,
+          [here.coords.longitude, here.coords.latitude],
+        );
         return;
       }
       handleMapPress(event);
     },
-    [camera.zoom, collectingPoints, dotWanted, handleMapPress, userCoord],
+    [
+      askAbout,
+      camera.zoom,
+      collectingPoints,
+      dotWanted,
+      handleMapPress,
+      userCoord,
+    ],
   );
 
   /**

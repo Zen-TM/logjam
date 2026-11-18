@@ -8,6 +8,7 @@ import {
   setFieldValues,
   SOURCES_FIELD_KEY,
   sourceRows,
+  sourcesPatch,
   type SyncDeltaPlaceRow,
 } from "@logjam/shared";
 
@@ -47,6 +48,7 @@ vi.mock("expo-crypto", () => ({
 
 const { createPlaceLocal, updatePlaceLocal } = await import("./outbox");
 const { getMirrorPlace, upsertPlace } = await import("./mirrorStore");
+const { sameFieldValues } = await import("../customFields/fieldValueCoercion");
 
 const TYPE = "b0000000-0000-4000-8000-000000000001";
 
@@ -128,6 +130,35 @@ describe("a place's source links", () => {
     });
     expect(JSON.parse(ops()[0].fields_json).fieldValues).toEqual({ grade: 3 });
     expect(sourceRows((await getMirrorPlace("p1"))?.fieldValues)).toEqual([]);
+  });
+
+  // Mutation: have the save clean the rows whether or not they changed, and a
+  // name-only edit of a place imported with a scheme-less link and an
+  // unlabelled source is refused, or queues `fieldValues` without the entry.
+  it("leaves sources a name-only edit did not touch out of the queued op", async () => {
+    const stored = {
+      grade: 3,
+      [SOURCES_FIELD_KEY]: [
+        ["RopeWiki", "ropewiki.com/x"],
+        ["", "https://a.example"],
+      ],
+    };
+    await upsertPlace(db as never, row(stored), []);
+    const place = await getMirrorPlace("p1");
+    // The sheet seeds its rows from the place and merges what the save returns.
+    const result = sourcesPatch(
+      sourceRows(place?.fieldValues),
+      place?.fieldValues,
+    );
+    if ("error" in result) throw new Error(result.error);
+    const next = setFieldValues(place?.fieldValues, result.patch);
+    const changes: Record<string, unknown> = { name: "Renamed" };
+    if (!sameFieldValues(next, place?.fieldValues ?? {}))
+      changes.fieldValues = next;
+    await updatePlaceLocal("p1", changes);
+
+    expect(JSON.parse(ops()[0].fields_json)).toEqual({ name: "Renamed" });
+    expect((await getMirrorPlace("p1"))?.fieldValues).toEqual(stored);
   });
 
   it("creates a place with its sources in the queued op", async () => {

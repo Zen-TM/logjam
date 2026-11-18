@@ -12,7 +12,6 @@ import {
   abandonConfirm,
   ADD_WAY,
   ATTRIBUTE_NOUN,
-  cleanSources,
   contractSectionKeys,
   defsForType,
   deleteSourceLabel,
@@ -23,7 +22,7 @@ import {
   type SectionKeysOn,
   setFieldValues as withFieldValues,
   sourceRows,
-  SOURCES_FIELD_KEY,
+  sourcesPatch,
   SYSTEM_FIELD_DEFS,
   SYSTEM_PLACE_TYPE_IDS,
   userFieldValues,
@@ -228,6 +227,11 @@ export function PlaceEditSheet({
   // custom-field form.
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
   const [sources, setSources] = useState<SourceRow[]>([]);
+  // The one Link that refused the save, under its own field.
+  const [sourceError, setSourceError] = useState<{
+    index: number;
+    message: string;
+  } | null>(null);
   const [dateFieldKey, setDateFieldKey] = useState<string | null>(null);
   // The form as seeded, to tell an edit from an untouched sheet (§10).
   const [pristine, setPristine] = useState("");
@@ -258,6 +262,7 @@ export function PlaceEditSheet({
     setNameError(null);
     setLatitudeError(null);
     setLongitudeError(null);
+    setSourceError(null);
     setFormError(null);
     setSaving(false);
     const start: FormValues = {
@@ -385,6 +390,7 @@ export function PlaceEditSheet({
     setNameError(null);
     setLatitudeError(null);
     setLongitudeError(null);
+    setSourceError(null);
     setFormError(null);
     const effectiveCustomFields = coerceCustomFields(
       fieldValues,
@@ -433,10 +439,23 @@ export function PlaceEditSheet({
         defs: [...SYSTEM_FIELD_DEFS, ...typeFieldDefs],
       },
     );
+    // The same check Logjam Web runs, and only on sources the user changed.
+    // Merged like a field value below: null removes the key.
+    const sourcesResult = sourcesPatch(sources, place?.fieldValues);
     setNameError(nameProblem);
     setLatitudeError(latitudeProblem);
     setLongitudeError(longitudeProblem);
-    if (nameProblem || latitudeProblem || longitudeProblem) {
+    setSourceError(
+      "error" in sourcesResult
+        ? { index: sourcesResult.index, message: sourcesResult.error }
+        : null,
+    );
+    if (
+      nameProblem ||
+      latitudeProblem ||
+      longitudeProblem ||
+      "error" in sourcesResult
+    ) {
       setFormError(PLACE_FORM.copy.fixFields);
       return;
     }
@@ -445,15 +464,6 @@ export function PlaceEditSheet({
       setFormError(fieldProblem);
       return;
     }
-    // The same check Logjam Web runs: a link that is not http(s) is refused.
-    const cleanedSources = cleanSources(sources);
-    if ("error" in cleanedSources) {
-      setFormError(cleanedSources.error);
-      return;
-    }
-    // Merged like a field value: null removes the key, and it is built over
-    // the stored values below.
-    const sourcesPatch = { [SOURCES_FIELD_KEY]: cleanedSources.sources };
 
     setSaving(true);
     try {
@@ -482,7 +492,7 @@ export function PlaceEditSheet({
         // `foreignFields` rather than lose them (§2.6).
         const nextValues = withFieldValues(place.fieldValues, {
           ...effectiveCustomFields,
-          ...sourcesPatch,
+          ...sourcesResult.patch,
         });
         if (!sameFieldValues(nextValues, place.fieldValues ?? {})) {
           changes.fieldValues = nextValues;
@@ -506,7 +516,7 @@ export function PlaceEditSheet({
             {},
             {
               ...effectiveCustomFields,
-              ...sourcesPatch,
+              ...sourcesResult.patch,
             },
           ),
         });
@@ -841,9 +851,10 @@ export function PlaceEditSheet({
                   icon="delete"
                   accessibilityLabel={deleteSourceLabel(source, index)}
                   color={theme.warning}
-                  onPress={() =>
-                    setSources((rows) => rows.filter((_, at) => at !== index))
-                  }
+                  onPress={() => {
+                    setSourceError(null);
+                    setSources((rows) => rows.filter((_, at) => at !== index));
+                  }}
                 />
               }
             />
@@ -854,11 +865,13 @@ export function PlaceEditSheet({
               keyboardType="url"
               autoCapitalize="none"
               autoCorrect={false}
-              onChangeText={(url) =>
+              error={sourceError?.index === index ? sourceError.message : null}
+              onChangeText={(url) => {
+                if (sourceError?.index === index) setSourceError(null);
                 setSources((rows) =>
                   rows.map((row, at) => (at === index ? { ...row, url } : row)),
-                )
-              }
+                );
+              }}
             />
           </View>
         ))}
