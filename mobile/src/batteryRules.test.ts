@@ -20,7 +20,9 @@ import { useNow } from "./ui/useNow";
 //     `mapFocused && appActive`.
 //  3. An inventory: every `setInterval` and sensor subscription in `src/` is
 //     declared below with the reason it is safe. A new one fails until someone
-//     writes that reason down. `setTimeout` is not inventoried: the ones that
+//     writes that reason down. So is every `subscribeReconnect(` caller: a
+//     regained signal reaches a process kept alive behind a dark screen, so
+//     the callback must return when AppState is `background`. `setTimeout` is not inventoried: the ones that
 //     retry are one-shot ladders (`syncEngine.ts` has its own foreground test).
 //
 // Mutations that turn it red:
@@ -32,6 +34,9 @@ import { useNow } from "./ui/useNow";
 //    `sensorsActive` `mapFocused || appActive` (layer 2).
 //  - Add a `setInterval` or `Accelerometer.addListener` to any file, or a second
 //    one to a declared file (layer 3).
+//  - `topoAutoDownload.ts`, `placeRegistry.ts` or `useGauges.ts`: drop the
+//    `AppState.currentState === "background"` return from the reconnect
+//    callback, or add an undeclared `subscribeReconnect(` caller (layer 3).
 
 const SRC = __dirname;
 
@@ -480,5 +485,79 @@ describe("the inventory of timers and sensors", () => {
       importers,
       "A new file imports expo-sensors: add it to SENSOR_IMPORTS in batteryRules.test.ts with why it cannot run behind a dark screen, and put its subscription in SENSORS (ADR 0010).",
     ).toEqual(Object.keys(SENSOR_IMPORTS).sort());
+  });
+});
+
+// ---- Layer 3b: the reconnect callbacks -----------------------------------
+
+type Reconnect = {
+  file: string;
+  /** Why a caller may run in the background; absent when it must not. */
+  exempt?: string;
+};
+
+const RECONNECTS: Reconnect[] = [
+  { file: "gauges/useGauges.ts" },
+  { file: "offline/placeRegistry.ts" },
+  { file: "offline/topoAutoDownload.ts" },
+  {
+    file: "sync/syncEngine.ts",
+    exempt:
+      "the offline to online edge is one of the two triggers that recover sync, so the user's own edits leave the phone when the signal returns; the backoff ladder is the part that stays foreground-only (ADR 0013, syncEngine.test.ts)",
+  },
+];
+
+const IN_FRONT_ONLY = 'AppState.currentState === "background"';
+
+describe("the reconnect callbacks", () => {
+  const callers = () =>
+    sources(SRC).flatMap((path) => {
+      if (!/subscribeReconnect\(/.test(readFileSync(path, "utf8"))) return [];
+      const file = parse(path);
+      const out: { rel: string; arg: ts.Expression; file: ts.SourceFile }[] =
+        [];
+      walk(file, (n) => {
+        if (ts.isCallExpression(n) && calleeText(n) === "subscribeReconnect") {
+          out.push({ rel: relative(SRC, path), arg: n.arguments[0], file });
+        }
+      });
+      return out;
+    });
+
+  /** The text of the function a call hands over, named or written inline. */
+  function bodyOf(arg: ts.Expression, file: ts.SourceFile): string {
+    if (!ts.isIdentifier(arg)) return arg.getText();
+    let text = "";
+    walk(file, (n) => {
+      if (
+        (ts.isFunctionDeclaration(n) && n.name?.text === arg.text) ||
+        (ts.isVariableDeclaration(n) && n.name.getText() === arg.text)
+      ) {
+        text = n.getText();
+      }
+    });
+    return text;
+  }
+
+  it("return behind a dark screen, or say why they may not", () => {
+    const found = callers();
+    // Four callers today: a pattern that stops matching cannot pass by finding none.
+    expect(found.length).toBeGreaterThanOrEqual(4);
+    expect(
+      [...new Set(found.map((c) => c.rel))].sort(),
+      'A file calls subscribeReconnect that is not declared in RECONNECTS (batteryRules.test.ts). A regained signal reaches a process kept alive behind a dark screen: gate the callback on `AppState.currentState === "background"` and declare it, or give the reason it is exempt (ADR 0013).',
+    ).toEqual(RECONNECTS.map((r) => r.file).sort());
+    for (const r of RECONNECTS) {
+      if (r.exempt) {
+        expect(r.exempt.length, r.file).toBeGreaterThan(20);
+        continue;
+      }
+      for (const call of found.filter((c) => c.rel === r.file)) {
+        expect(
+          bodyOf(call.arg, call.file),
+          `${r.file}: the callback given to subscribeReconnect must contain \`${IN_FRONT_ONLY}\` (ADR 0013).`,
+        ).toContain(IN_FRONT_ONLY);
+      }
+    }
   });
 });
