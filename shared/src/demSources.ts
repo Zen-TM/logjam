@@ -24,7 +24,13 @@ import {
 import type { SamplePosition } from "./elevation.js";
 import type { LicenceId } from "./licences.js";
 import { lonWithin } from "./placeGeo.js";
-import { areasInRegion, layerIn, REGIONS, type Region } from "./regions.js";
+import {
+  layerIn,
+  regionOfArea,
+  REGIONS,
+  WORLD,
+  type Region,
+} from "./regions.js";
 
 export type DemSource = {
   /** Recorded on a saved `dem-region` file and on every result read from it. */
@@ -86,12 +92,25 @@ export const TERRARIUM = {
 } as const satisfies DemSource;
 
 /**
+ * The source that answers anywhere the finer ones do not: the world entry's
+ * heights where it declares an archive, else the public Terrarium tiles. An
+ * archive's box would make it a regional source to the slope reading
+ * (`demSlopeReading` skips a null `coverage`, and the 30 m worldwide heights
+ * are too coarse for a slope), so it is read with none. Guards:
+ * `demSources.test.ts` ("the worldwide source").
+ */
+export function worldwideSource(world: Region = WORLD): DemSource {
+  const heights = layerIn(world, "heights");
+  return heights ? { ...heights, coverage: null } : TERRARIUM;
+}
+
+/**
  * Every public source, finest first: each region's, then the worldwide one.
  * The order IS the precedence.
  */
 export const DEM_SOURCES: readonly DemSource[] = [
   ...REGIONS.flatMap((region) => region.dem),
-  TERRARIUM,
+  worldwideSource(),
 ];
 
 /** What a sharpened area's source id starts with, before its job id. */
@@ -114,13 +133,29 @@ export const GPS_CLIMB_SOURCE = "gps";
 /**
  * Where a track's stored climb and descent can have come from, finest first:
  * every DEM source, then GPS heights. Recorded beside the figures so a phone
- * can tell later that a finer source could now answer.
+ * can tell later that a finer source could now answer. The public Terrarium
+ * tiles stay on the list when the world has an archive of its own: tracks
+ * already carry that id, and `climbRank` ranks it with the archive.
  */
 export const CLIMB_SOURCES: readonly string[] = [
   SHARPENED_CLIMB_SOURCE,
   ...DEM_SOURCES.map((source) => source.id),
+  ...(DEM_SOURCES.some((source) => source.id === TERRARIUM.id)
+    ? []
+    : [TERRARIUM.id]),
   GPS_CLIMB_SOURCE,
 ];
+
+/**
+ * Where an id sits in `CLIMB_SOURCES`, or -1. The Terrarium tiles rank with
+ * the worldwide source that now answers in their place: a climb stored from
+ * them is not finer or coarser than one read from the archive for the same
+ * ground, so neither replaces the other. Guard: `demSources.test.ts` ("climb
+ * sources", "rank the Terrarium tiles with the world's archive").
+ */
+export function climbRank(id: string): number {
+  return CLIMB_SOURCES.indexOf(id === TERRARIUM.id ? worldwideSource().id : id);
+}
 
 /** The climb id a height read from `sourceId` is stored under. */
 export function climbSourceOf(sourceId: string): string {
@@ -143,8 +178,8 @@ export function isFinerClimbSource(
   candidate: string,
   stored: string | null | undefined,
 ): boolean {
-  const rank = CLIMB_SOURCES.indexOf(candidate);
-  return rank >= 0 && rank < CLIMB_SOURCES.indexOf(stored ?? GPS_CLIMB_SOURCE);
+  const rank = climbRank(candidate);
+  return rank >= 0 && rank < climbRank(stored ?? GPS_CLIMB_SOURCE);
 }
 
 /**
@@ -167,8 +202,10 @@ export function demTileUrl(
 
 /**
  * The credit lines for the sources a result was read from, each once. A
- * sharpened area's carries the heights credit of the region it lies in too:
- * where its survey has no ground, its archive holds that region's heights.
+ * sharpened area's carries the heights credit of the region it was filled
+ * from too (`regionOfArea`): where its survey has no ground, its archive holds
+ * that region's heights. Guard: `demSources.test.ts` ("credits a sharpened
+ * area with the region that filled it").
  */
 export function demCredits(
   sourceIds: readonly string[] = DEM_SOURCES.map((source) => source.id),
@@ -180,11 +217,7 @@ export function demCredits(
     .flatMap((source) => {
       const { areaId, coverage } = source;
       if (!areaId || !coverage) return [source.credit];
-      // The first region the area's box shares ground with: the same test a
-      // map and a save use to say which areas belong to a region.
-      const region =
-        regions.find((r) => areasInRegion(r, [{ coverage }]).length > 0) ??
-        null;
+      const region = regionOfArea(coverage, regions);
       return [source.credit, layerIn(region, "heights")?.credit ?? null];
     })
     .filter((line): line is string => line !== null);

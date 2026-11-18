@@ -1,5 +1,3 @@
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { TERRARIUM } from "./demSources.js";
@@ -10,7 +8,13 @@ import {
   sourcesNeedingReplacement,
   type DataSource,
 } from "./licences.js";
-import { NSW_REGION, REGIONS, WORLD, type Region } from "./regions.js";
+import {
+  NSW_REGION,
+  REGIONS,
+  REGIONS_WITH_SIMULATED,
+  WORLD,
+  type Region,
+} from "./regions.js";
 import {
   SHARPENED_LICENCE,
   sharpenedDemSource,
@@ -20,6 +24,10 @@ import { SIM_REGIONS, SIM_WORLD } from "./simRegions.js";
 
 const NSW_ONLY = dataSources([NSW_REGION], WORLD);
 const WITH_SIM = dataSources([NSW_REGION, ...SIM_REGIONS], SIM_WORLD);
+// Every source of every declared region, real or simulated: the guards that
+// read it cover a region added to `REGIONS_WITH_SIMULATED`. `NSW_ONLY` and
+// `WITH_SIM` are exact expectations and are extended by hand.
+const EVERY_DECLARED = dataSources(REGIONS_WITH_SIMULATED, SIM_WORLD);
 const ids = (sources: readonly DataSource[]) => sources.map((s) => s.id);
 
 describe("LICENCES", () => {
@@ -89,6 +97,14 @@ describe("dataSources", () => {
     }
     expect(checked).toBeGreaterThanOrEqual(18);
     expect(WITH_SIM.length).toBeGreaterThan(NSW_ONLY.length + 15);
+  });
+
+  // Mutation: add the Terrarium tiles whatever the world declares, and a
+  // world with an archive of its own lists tiles the app no longer reads.
+  it("lists the public worldwide height tiles only while the world has no archive of its own", () => {
+    expect(ids(NSW_ONLY)).toContain("dem:terrarium");
+    expect(ids(WITH_SIM)).not.toContain("dem:terrarium");
+    expect(ids(WITH_SIM)).toContain("dem:simworld-heights");
   });
 
   // Mutation: set NSW's `gaugesLicence` to null, or give a simulated region
@@ -172,7 +188,7 @@ describe("dataSources", () => {
   it("gives every region's vector cut the licence the Protomaps basemap carries", () => {
     const protomaps = BASEMAP_CATALOG.find((entry) => entry.id === "protomaps");
     expect(protomaps).toBeDefined();
-    const withVector = [...REGIONS, WORLD, ...SIM_REGIONS, SIM_WORLD].filter(
+    const withVector = [...REGIONS_WITH_SIMULATED, WORLD, SIM_WORLD].filter(
       (region) => region.vector !== null,
     );
     expect(withVector.length).toBeGreaterThanOrEqual(4);
@@ -182,7 +198,7 @@ describe("dataSources", () => {
 
   // Mutation: tag the land layer `cc-by-3-au`, whose name its credit does not hold.
   it("tags a height source or archive with the licence its credit names", () => {
-    const named = WITH_SIM.filter(
+    const named = EVERY_DECLARED.filter(
       (source) => source.credit?.match(/CC BY \d\.\d(?: AU)?/) != null,
     );
     expect(named.length).toBeGreaterThanOrEqual(7);
@@ -209,14 +225,16 @@ describe("dataSources", () => {
     expect(sharpenedDemSource(area).licence).toBe(listed?.licence);
   });
 
-  // Mutation: change the licence's name in the worker's `credit`, or tag the
+  // Mutation: change the licence's name in NSW's `sharpen.credit`, or tag the
   // kind with a licence its credit does not name.
-  it("names the sharpened heights' licence in the worker's credit", () => {
-    const worker = readFileSync(
-      join(import.meta.dirname, "..", "..", "topo", "sharpen.py"),
-      "utf8",
+  it("names the sharpened heights' licence in the region's sharpen credit", () => {
+    const credits = REGIONS.flatMap((region) =>
+      region.sharpen.mode === "upload" ? [region.sharpen.credit] : [],
     );
-    expect(worker).toContain(`${LICENCES[SHARPENED_LICENCE].name}.`);
+    expect(credits.length).toBeGreaterThanOrEqual(1);
+    expect(
+      credits.some((c) => c.includes(`${LICENCES[SHARPENED_LICENCE].name}.`)),
+    ).toBe(true);
   });
 });
 

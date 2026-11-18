@@ -13,6 +13,8 @@ import {
   coverageCarrierHere,
   layerIn,
   overlayLegends,
+  sharpenOfferFor,
+  sharpenUnavailable,
   type CarrierId,
   type LonLatBox,
   type Region,
@@ -233,6 +235,7 @@ export default function LayersPopover({
             close();
             onSharpen();
           }}
+          sharpenOff={sharpenUnavailable(sharpenOfferFor(null, region))}
           onExportArea={(job) => {
             close();
             onExportArea(job);

@@ -54,7 +54,9 @@ read from, and `topo/tests/test_nsw_dem.py`
 (`test_both_archives_carry_the_credit_of_the_heights`) checks that the credit of the height archive `nsw-5m.pmtiles` and of the slope
 archive `nsw-5m-slope.pmtiles` that `build_nsw_dem.py slope` builds from it
 carries `NSW_REGION.terrain.heights.credit`'s text from "the NSW 5 m" to "extracted"
-(updated 2026-10-18).
+(updated 2026-10-18). That test compares strings only: the credit of the
+slope archive that `slope` builds is held by `TestDerivedCredit` and
+`TestNswSlopeUnchanged` (updated 2026-11-14).
 
 ## Consequences
 

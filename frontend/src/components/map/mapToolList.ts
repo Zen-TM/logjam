@@ -1,8 +1,11 @@
 import { mapTools, type MapToolIdOn } from "@logjam/shared";
 import type { MenuEntry } from "../../ui";
+import type { SharpenUnavailable } from "@logjam/shared";
 import type { MapTool } from "./MapChrome";
 
-type Action = { onSelect: () => void } | { menu: readonly MenuEntry[] };
+type Action =
+  | { onSelect: () => void; unavailable?: SharpenUnavailable }
+  | { menu: readonly MenuEntry[] };
 
 /**
  * The tray's tools: `MAP_TOOLS` gives the ids, order, icons and words, the

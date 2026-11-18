@@ -54,6 +54,14 @@ The publisher states the data is good to ±0.9 m on open ground.
   so no client changes, and the statewide archive keeps its quarter metre.
   Guard: `topo/tests/test_sharpen.py` `TestPyramid`. Everything else above
   stands.
+- **Update 2026-11-14: a region's archive cut from Mapterhorn is rounded the
+  same way.** `topo/build_region_dem.py` writes a quarter metre to z15 and halves
+  the step each zoom deeper, as a sharpened area's archive does, for the reason
+  given there: its zoom 16 and 17 pixels are as fine as a sharpened area's
+  ([0052](0052-a-new-regions-heights-are-a-mapterhorn-extract-transcoded-to-adr-0030-tiles.md)).
+  The NSW statewide archive keeps its quarter metre. Guard:
+  `topo/tests/test_region_dem.py` `TestRounding`. Everything else above
+  stands.
 
 Guard: `topo/tests/test_nsw_dem.py` decodes what the builder encodes with the
 clients' formula, and checks the no-data value and the rounding.
@@ -70,8 +78,10 @@ clients' formula, and checks the no-data value and the rounding.
   source's own digits: on dead-flat ground it adds about 0.6° of slope noise at
   zoom 15.
 - **Neutral:** the worldwide source stays a public XYZ tile set that Logjam
-  does not build, so a phone holds two kinds of saved DEM file: an MBTiles
-  pyramid for it, a PMTiles clip for a source built here.
+  does not build (updated 2026-11-16: until the world entry declares an
+  archive of its own, [0028](0028-a-height-comes-from-the-finest-dem-source-that-has-it.md)),
+  so a phone holds two kinds of saved DEM file: an MBTiles pyramid for it, a
+  PMTiles clip for a source built here.
 
 ## Alternatives considered
 

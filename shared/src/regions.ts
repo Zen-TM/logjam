@@ -9,7 +9,8 @@
 // saved, printed or exported; the basemap gallery asks them through
 // `offeredBasemaps` and `basemapHere` (geoPdfBaseLayers.ts). Heights, gauges and the area-export check never took a
 // choice: they follow coverage (ADR 0028 for heights). Worldwide sources
-// (TERRARIUM, the OSM rasters, Open-Meteo) belong to no region. Guarded for
+// (the public Terrarium tiles, the OSM rasters, Open-Meteo) belong to no
+// region. Guarded for
 // heights and the area-export check: `regions.test.ts` (`DEM_SOURCES` holds
 // every region's sources) and `areaExport.test.ts` (the check reads every
 // region with terrain).
@@ -126,6 +127,40 @@ export type RegionTerrain = {
   coverage?: CoverageArchive;
 };
 
+/**
+ * `upload`: a user's own download of a survey is sharpened, and where the
+ * survey has no ground the area is filled from the region's heights and slope,
+ * which therefore stop at z15, where a sharpened area starts (guard:
+ * topo/tests/test_regions.py `test_an_upload_region_is_filled_from_z15`). `off`:
+ * the worker refuses the survey, with a sentence for the reason
+ * (topo/sharpen.py `upload_region`).
+ */
+export type RegionSharpen =
+  | {
+      mode: "upload";
+      /**
+       * Where a user gets the survey. `steps` is what Logjam Web's sharpen
+       * dialog walks them through: `elvis` is the errand ELVIS needs (draw the
+       * area, take its shapefile there, order the tiles); `link` is only the
+       * portal's address and the reminder that an upload is one ZIP. Guard:
+       * `sharpen.test.ts` ("gives every upload region a portal").
+       */
+      portal: { name: string; url: string; steps: "elvis" | "link" };
+      /**
+       * What the survey's publisher asks a derived product to show.
+       * `{extracted}` is where topo/sharpen.py `credit` puts ", extracted
+       * <month>", or nothing when the upload does not say.
+       */
+      credit: string;
+      /** Whether the vegetation layer's inputs (topo/pipeline.py) cover the region. */
+      vegetation: boolean;
+    }
+  | {
+      mode: "off";
+      /** No survey to sharpen from, or heights already as fine as one. */
+      reason: "no-lidar" | "already-fine";
+    };
+
 /** An archive of the vector basemap: a CDN-relative path and its deepest zoom. */
 export type VectorArchive = {
   archivePath: string;
@@ -141,7 +176,7 @@ export type Region = {
    * lower-case letters and digits").
    */
   id: string;
-  /** What user copy calls it: "That area is outside NSW". */
+  /** What user copy calls it: "Import NSW from RopeWiki". */
   name: string;
   /** What a sentence with room for it calls it: "canyoning in New South Wales". */
   fullName: string;
@@ -210,6 +245,8 @@ export type Region = {
   canyonGrades: CanyonGradeSystem;
   /** How distances and heights are written for an account whose home this is, until it chooses (`unitsOf`). */
   units: Units;
+  /** Whether a LiDAR survey of ground here can be sharpened into an area. */
+  sharpen: RegionSharpen;
   /** Where the canyon-list import reads from, or null where there is none. */
   canyons: {
     kind: "ropewiki";
@@ -541,6 +578,19 @@ export const NSW_REGION = {
   grid: "mga2020",
   canyonGrades: "french",
   units: "metric",
+  sharpen: {
+    mode: "upload",
+    portal: {
+      name: "ELVIS",
+      url: "https://elevation.fsdf.org.au/",
+      steps: "elvis",
+    },
+    // What ELVIS's metadata asks of a derived product (CC BY 3.0 AU).
+    credit:
+      "Elevation: derived from a LiDAR survey, © Department of Customer Service (NSW Spatial Services){extracted}. CC BY 3.0 AU.",
+    // The vegetation model is NSW's: SVTM formations and the NPWS fire raster.
+    vegetation: true,
+  },
   canyons: {
     kind: "ropewiki",
     // The licence and its version were not verified at RopeWiki's own page
@@ -567,18 +617,34 @@ export function simRegionsOn(): boolean {
   );
 }
 
+/**
+ * NSW and the simulated regions, whatever the switch says: the list
+ * topo/regions.json is written from (topoRegions.ts). `REGIONS` is this list
+ * with the switch on.
+ */
+export const REGIONS_WITH_SIMULATED: readonly Region[] = [
+  NSW_REGION,
+  ...SIM_REGIONS,
+];
+
+/** Whether `region` is one of the simulated ones (simRegions.ts), switch or no switch. */
+export function isSimulatedRegion(region: Region): boolean {
+  return SIM_REGIONS.includes(region);
+}
+
 /** Every region, in the order a picker lists them. */
 export const REGIONS: readonly Region[] = simRegionsOn()
-  ? [NSW_REGION, ...SIM_REGIONS]
+  ? REGIONS_WITH_SIMULATED
   : [NSW_REGION];
 
 /**
  * What answers outside every region: no border, so never in `REGIONS` and
  * never returned by `regionAt`. It declares nothing in prod. Guards:
  * `regions.test.ts` ("declares only NSW unless the simulated-regions flag is
- * set", "never returns the world"). Nothing reads it yet. `DEM_SOURCES` is
- * built from `REGIONS` alone, so switching the worldwide tier on means setting
- * `vector` and `terrain` here and also adding its heights to `DEM_SOURCES`.
+ * set", "never returns the world"). Where it declares `terrain.heights`, those
+ * are the last height source in place of the public Terrarium tiles
+ * (`worldwideSource` in demSources.ts; guard: `demSources.test.ts`, the
+ * describe "the worldwide source"); where it declares none, they stay.
  */
 const EMPTY_WORLD: Region = {
   id: "world",
@@ -601,6 +667,7 @@ const EMPTY_WORLD: Region = {
   grid: "utm",
   canyonGrades: "french",
   units: "metric",
+  sharpen: { mode: "off", reason: "no-lidar" },
   canyons: null,
 };
 export const WORLD: Region = simRegionsOn() ? SIM_WORLD : EMPTY_WORLD;
@@ -827,6 +894,20 @@ export function regionAt(
       region.borders.some((ring) => inRing(ring, lon, lat)),
     ) ?? null
   );
+}
+
+/**
+ * The region a sharpened area was filled from and is credited to: the one that
+ * holds the centre of its survey box, which is how topo/regions.py
+ * `region_of_area` picks it when the area is made. Not `areasInRegion`, which
+ * asks where an area is drawn and counts every region its box touches. Guard:
+ * `regions.test.ts` ("regionOfArea"), on the cases the worker's test reads.
+ */
+export function regionOfArea(
+  [west, south, east, north]: readonly [number, number, number, number],
+  regions: readonly Region[] = REGIONS,
+): Region | null {
+  return regionAt((west + east) / 2, (south + north) / 2, regions);
 }
 
 /**

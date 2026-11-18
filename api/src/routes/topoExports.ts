@@ -39,7 +39,7 @@ import { assertHasEgressQuota } from "../lib/egressQuota";
 import { resolveUser as getUser } from "../lib/resolveUser";
 import { visibleSharpenedAreas } from "../services/sharpenedAreas";
 
-// An export of an area: the statewide terrain over a box (topo/area_export.py).
+// An export of an area: the terrain of the box's region over it (topo/area_export.py).
 const areaRequestSchema = z.object({
   bbox: z.object({
     west: z.number(),

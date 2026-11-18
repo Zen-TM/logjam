@@ -17,6 +17,7 @@
 
 import {
   CLIMB_SOURCES,
+  climbRank,
   climbSourceOf,
   DEM_SOURCES,
   GPS_CLIMB_SOURCE,
@@ -513,7 +514,7 @@ export function climbFromProfile(
   if (profile.samples.some((sample) => sample.elevationM == null)) return null;
   const coarsestDem = DEM_SOURCES[DEM_SOURCES.length - 1]!.id;
   const ranks = (profile.demSourceIds ?? [])
-    .map((id) => CLIMB_SOURCES.indexOf(climbSourceOf(id)))
+    .map((id) => climbRank(climbSourceOf(id)))
     .filter((rank) => rank >= 0);
   return {
     elevationGainM: profile.gainM,

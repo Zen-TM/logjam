@@ -88,7 +88,6 @@
   line-height: inherit;
   text-align: left;
   box-shadow: var(--shadow-map-card);
-  cursor: pointer;
   z-index: calc(10 - var(--i, 0));
   animation: trayFold 110ms ease-out both;
   animation-delay: calc(var(--i, 0) * 30ms);
@@ -130,7 +129,14 @@
   }
 }
 
-.trayItem:hover {
+/* Only a tool that can run answers a pointer (shared/DESIGN.md §4). Guard:
+   e2e/sharpen-region.spec.ts, which expects `cursor: default` on the tool
+   over Makarora and `pointer` over New South Wales. */
+.trayItem:not([aria-disabled="true"]) {
+  cursor: pointer;
+}
+
+.trayItem:not([aria-disabled="true"]):hover {
   background: var(--color-card-pressed);
 }
 
@@ -140,6 +146,19 @@
 
 .trayGlyph {
   color: var(--color-accent);
+}
+
+/* A tool the map's region cannot run dims its glyph and label; its state
+   (`.trayState`) is left at full strength so the reason stays readable
+   (shared/DESIGN.md §5). */
+.trayUnavailable .trayGlyph,
+.trayUnavailable .trayLabel {
+  opacity: var(--opacity-disabled);
+}
+
+.trayState {
+  white-space: nowrap;
+  color: var(--color-text-muted);
 }
 
 /* Beneath MapLibre's control corners (z-index 2), like the scale bar beside it:

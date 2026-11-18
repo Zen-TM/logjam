@@ -33,12 +33,16 @@ export function regionNameFromSurvey(survey: string): string {
 
 import { say, type UserSentence } from "./userSentence.js";
 
-const NOT_A_ZIP = say`That file isn't a ZIP. Choose the ZIP that ELVIS sent you.`;
-const TRUNCATED = say`Logjam couldn't read that ZIP. It may be damaged, so download it from ELVIS again.`;
-const TOO_MANY_FILES = say`That ZIP lists more files than Logjam can check. Choose a smaller area in ELVIS.`;
+// Said before anyone knows where the ZIP's ground is, so no sentence here
+// names a region or the portal a survey came from (elvisZip.test.ts, "names no
+// region and no portal").
+const NOT_A_ZIP = say`That file isn't a ZIP. Choose the ZIP with the LiDAR data in it.`;
+const TRUNCATED = say`Logjam couldn't read that ZIP. It may be damaged, so download it again.`;
+const TOO_MANY_FILES = say`That ZIP lists more files than Logjam can check. Choose a smaller area.`;
+const UNSAFE_PATH = say`That ZIP has a file path Logjam won't open. Download it again.`;
 const NO_USABLE_FILES = say`That ZIP has no point clouds or elevation rasters in it.`;
 /** topo/sharpen.py's ONLY_5M, word for word (elvisZip.test.ts holds them equal). */
-const ONLY_5M = say`This ZIP holds only 5 m DEMs, which Logjam already has for all of NSW. Choose the 1 m or 2 m DEM, or the point clouds, in ELVIS.`;
+const ONLY_5M = say`This ZIP holds only DEMs too coarse to sharpen an area. Choose a 1 m or 2 m DEM, or the point clouds.`;
 /**
  * The coarsest DEM cell a sharpened job uses as ground (sharpen.py
  * `zoom_for_cell`; elvisZip.test.ts holds them equal).
@@ -382,10 +386,7 @@ export function classifyElvisEntries(entries: ZipEntry[]): ElvisStats {
 
   for (const entry of entries) {
     if (isUnsafeZipEntryName(entry.filename)) {
-      throw new ElvisZipError(
-        "UNSAFE_PATH",
-        say`That ZIP has a file path Logjam won't open. Download it from ELVIS again.`,
-      );
+      throw new ElvisZipError("UNSAFE_PATH", UNSAFE_PATH);
     }
     uncompressedBytes += entry.uncompressedSize;
     compressedBytes += entry.compressedSize;
@@ -448,9 +449,9 @@ export function classifyElvisEntries(entries: ZipEntry[]): ElvisStats {
   }
 
   // A sharpened job grounds on a DEM no coarser than SHARPEN_MAX_DEM_CELL_M,
-  // else on the point clouds, and a ZIP with neither adds nothing to the
-  // statewide 5 m data (topo/sharpen.py `dem_plan`). Said before the upload,
-  // as the worker would.
+  // else on the point clouds, and a ZIP with neither has nothing to sharpen
+  // an area from (topo/sharpen.py `dem_plan`). Said before the upload, as the
+  // worker would.
   if (lazCount === 0 && !groundDem) {
     throw new ElvisZipError("ONLY_5M", ONLY_5M);
   }

@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ToastProvider } from "../feedback/ToastProvider";
+import type { SharpenUnavailable } from "@logjam/shared";
 import type { CompletedTopoJob } from "../../topoLayerTypes";
 import SharpenedAreasView from "./SharpenedAreasView";
 import type { TopoJob } from "../dialogs/TopoDialog";
@@ -63,6 +64,7 @@ function draw(
   jobs: CompletedTopoJob[],
   loaded = true,
   activeTopoJobs: TopoJob[] = [],
+  sharpenOff: SharpenUnavailable | null = null,
 ) {
   const props = {
     onBack: vi.fn(),
@@ -72,6 +74,7 @@ function draw(
     friends: [],
     loaded,
     onSharpen: vi.fn(),
+    sharpenOff,
     onExportArea: vi.fn(),
     onFlyTo: vi.fn(),
     onRefetchCompletedTopoJobs: vi.fn(),
@@ -85,6 +88,34 @@ function draw(
   );
   return props;
 }
+
+describe("the sharpened areas view's Sharpen an area button", () => {
+  // Mutation: ignore `sharpenOff` in SharpenedAreasView.tsx, and the button
+  // opens a dialog over ground with no sharpening.
+  it("says Not available here, and why, where the region has none", () => {
+    const props = draw([], true, [], {
+      state: "Not available here",
+      reason: "Made-up reason.",
+    });
+    const button = screen.getByRole("button", { name: "Sharpen an area" });
+    expect(button.getAttribute("aria-disabled")).toBe("true");
+    fireEvent.click(button);
+    expect(props.onSharpen).not.toHaveBeenCalled();
+    expect(screen.getByRole("tooltip").textContent).toBe(
+      "Not available here. Made-up reason.",
+    );
+  });
+
+  // Mutation: disable the button whatever `sharpenOff` holds, and New South
+  // Wales, the only region in prod, cannot start one.
+  it("starts one where the region can", () => {
+    const props = draw([]);
+    const button = screen.getByRole("button", { name: "Sharpen an area" });
+    expect(button.getAttribute("aria-disabled")).toBeNull();
+    fireEvent.click(button);
+    expect(props.onSharpen).toHaveBeenCalledTimes(1);
+  });
+});
 
 describe("the sharpened areas view", () => {
   it("lists areas with a pill on one shared with you, and flies to a row", () => {
