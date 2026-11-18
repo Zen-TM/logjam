@@ -102,8 +102,10 @@ Each package's `AGENTS.md` says how its suites run.
 - A change to a privacy or security boundary (share visibility, email
   omission, log redaction, the error-detail whitelist, auth fail-closed) ships
   a test that the boundary holds.
-- A new guard test names the mutation that turns it red. Guard, for every
-  test an `AGENTS.md` names: `infra/scripts/check-repo-hygiene.py`.
+- A new guard test names the mutation that turns it red: one note for the
+  test (an `it`, an `it.each`, a test method), not for each row or assertion
+  in it. Guard, for every test an `AGENTS.md` names:
+  `infra/scripts/check-repo-hygiene.py`.
 - A test that scans source asserts a floor on what it found, so a pattern
   that stops matching cannot pass by checking nothing.
 - A test fails, never skips or returns early, when its premise is missing (a
