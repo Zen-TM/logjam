@@ -37,6 +37,7 @@ it lacks is absent from `terrain`, so the map says "Not available here" there.
 | `terrain.coverage` | mobile coverage by carrier | `topo/build_coverage.py` |
 | `vector` | the region's cut of the vector basemap | no script in the repo |
 | `placeSearch` | the place registry's CDN prefix | `topo/build_place_registry.py` |
+| `geocoderCountry` | the country a place search over the region stays in (`"au"`), so a search for a name stays in it | a two-letter ISO 3166-1 code, lower case; leave it out where the region is not one country |
 | `gauges` | the river gauge feed's CDN prefix | `topo/build_gauges.py` |
 | `canyons` | where the canyon-list import reads from | a RopeWiki region and a snapshot in the media bucket |
 

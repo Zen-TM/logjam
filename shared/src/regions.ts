@@ -159,6 +159,14 @@ export type Region = {
   terrain: RegionTerrain;
   /** The CDN prefix of the place-search registry (ADR 0034), or null. */
   placeSearch: string | null;
+  /**
+   * The ISO 3166-1 alpha-2 code (lower case) a search over this region asks the
+   * geocoder to stay in, so a name ranks inside the region's country. Absent
+   * where the region has no one country (`WORLD`): the search is then
+   * unrestricted. Guard: `geocode.test.ts` ("sends the region's country code,
+   * and none where the region declares none").
+   */
+  geocoderCountry?: string;
   /** The CDN prefix of the gauge feed (ADR 0044), or null. */
   gauges: string | null;
   /** The map grid coordinates are given in. */
@@ -474,6 +482,7 @@ export const NSW_REGION = {
     },
   },
   placeSearch: PLACE_REGISTRY_PREFIX,
+  geocoderCountry: "au",
   gauges: GAUGE_PREFIX,
   grid: "mga2020",
   canyons: {
