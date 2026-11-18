@@ -3,7 +3,6 @@ import { Tooltip } from "./Tooltip";
 import classes from "./SettingsRow.module.css";
 import { Icon } from "./Icon";
 import type { Disablable } from "./Button";
-import { t } from "@logjam/shared";
 
 /**
  * One setting as a LINE: what it is at the left, the control that sets it at
@@ -16,15 +15,22 @@ import { t } from "@logjam/shared";
  * it on costs. It hangs off a focusable glyph rather than the row, so it is
  * reachable from the keyboard and dismissable with Escape (WCAG 1.4.13), and
  * the settings stay a list of lines instead of a wall of paragraphs.
+ *
+ * `infoLabel` is the glyph's accessible name, a whole message from the caller
+ * ("About orientation"): the label is not lower-cased here, since a translated
+ * word cannot be reshaped by code. A row with a note and no `infoLabel` falls
+ * back to its visible label.
  */
 export function SettingsRow({
   label,
+  infoLabel,
   tooltip,
   disabled,
   disabledReason,
   children,
 }: {
   label: string;
+  infoLabel?: string;
   tooltip?: string;
   children: ReactNode;
 } & Disablable) {
@@ -36,7 +42,7 @@ export function SettingsRow({
     <div className={classes.row} data-disabled={disabled || undefined}>
       <span className={classes.rowLabel}>
         {label}
-        {note && <InfoTip label={label} content={note} />}
+        {note && <InfoTip label={infoLabel ?? label} content={note} />}
       </span>
       <div className={classes.control} inert={disabled}>
         {children}
@@ -46,7 +52,8 @@ export function SettingsRow({
 }
 
 /** The glyph a tooltip hangs from. A button, because it is the thing you move
- *  to and press Escape out of; its own name says which setting it explains. */
+ *  to and press Escape out of; `label` is its whole accessible name ("About
+ *  orientation"), saying which setting it explains. */
 export function InfoTip({
   label,
   content,
@@ -60,7 +67,7 @@ export function InfoTip({
         <button
           type="button"
           className={classes.info}
-          aria-label={t`About ${label.toLowerCase()}`}
+          aria-label={label}
           aria-describedby={describedById}
         >
           <Icon idea="info" size={14} aria-hidden />

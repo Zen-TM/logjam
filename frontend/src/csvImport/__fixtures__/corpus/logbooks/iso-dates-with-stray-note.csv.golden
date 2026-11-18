@@ -44,7 +44,10 @@
   "skippedRows": [
     {
       "line": 4,
-      "reason": "date \"sometime in March\" couldn't be read"
+      "reason": {
+        "kind": "date",
+        "raw": "sometime in March"
+      }
     }
   ],
   "droppedRows": 1,

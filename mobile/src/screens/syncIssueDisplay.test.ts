@@ -5,6 +5,9 @@ import { parkedError } from "../sync/parkedError";
 import type { ParkedOp, ShelfEntry } from "../sync/syncIssues";
 import {
   bulkDiscardBody,
+  capitalFieldLabel,
+  FIELD_LABEL_KEYS,
+  fieldLabel,
   opChanges,
   opTarget,
   hasEarlierVersion,
@@ -753,4 +756,24 @@ describe("a conflict whose field changed after the push", () => {
       /changed again/,
     );
   });
+});
+
+describe("FIELD_LABEL", () => {
+  it("lists a floor of fields, so the loop below cannot pass by checking nothing", () => {
+    expect(FIELD_LABEL_KEYS.length).toBeGreaterThanOrEqual(25);
+  });
+
+  // The capital form is the lower one with its first letter raised. This test
+  // reads the en-AU source strings, so it says nothing about a translation.
+  // Mutation: change one `capital` string ("Water grade" to "Water grde") or
+  // reword a `lower` without its `capital`, and this goes red.
+  it.each(FIELD_LABEL_KEYS)(
+    "%s: capital is lower with a capital first letter",
+    (key) => {
+      const lower = fieldLabel(key);
+      expect(capitalFieldLabel(key)).toBe(
+        lower.charAt(0).toUpperCase() + lower.slice(1),
+      );
+    },
+  );
 });

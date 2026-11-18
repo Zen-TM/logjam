@@ -74,6 +74,9 @@ const FIELD_LABEL: Record<string, { lower: string; capital: string }> = {
  */
 const UNRENDERABLE_FIELDS = new Set(["latitude", "longitude"]);
 
+/** The listed field keys, for the guard in syncIssueDisplay.test.ts. */
+export const FIELD_LABEL_KEYS = Object.keys(FIELD_LABEL);
+
 export function fieldLabel(field: string): string {
   return FIELD_LABEL[field]?.lower ?? field;
 }

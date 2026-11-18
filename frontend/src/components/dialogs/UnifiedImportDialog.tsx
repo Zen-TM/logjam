@@ -1185,11 +1185,12 @@ function UnifiedImportDialog({
           for (const e of result.errors) {
             rejectedRowIndexes.add(e.rowIndex);
             const rejected = createRows[e.rowIndex];
-            const label =
-              rejected?.form.name.trim() ||
-              rejected?.key ||
-              t`row ${e.rowIndex + 1}`;
-            errors.push(t`Couldn't create place "${label}": ${e.message}`);
+            const label = rejected?.form.name.trim() || rejected?.key;
+            errors.push(
+              label
+                ? t`Couldn't create place "${label}": ${e.message}`
+                : t`Couldn't create row ${e.rowIndex + 1}: ${e.message}`,
+            );
           }
           // Resolve ids from the freshly-fetched place list.
           const all = await apiFetch<TPlace[]>("/places");
@@ -1332,6 +1333,19 @@ function UnifiedImportDialog({
       : step === "review"
         ? t`Review matches`
         : t`Confirm import`;
+  // One whole message per (step, kind): a translated title is not a hole.
+  const tripsTitle =
+    step === "map"
+      ? t`Import from CSV — trips (2 of 2)`
+      : step === "review"
+        ? t`Review matches — trips (2 of 2)`
+        : t`Confirm import — trips (2 of 2)`;
+  const placesTitle =
+    step === "map"
+      ? t`Import from CSV — places (1 of 2)`
+      : step === "review"
+        ? t`Review matches — places (1 of 2)`
+        : t`Confirm import — places (1 of 2)`;
   const title = showingMergeSettings
     ? t`Merge settings`
     : outcome
@@ -1340,8 +1354,8 @@ function UnifiedImportDialog({
         ? t`Importing…`
         : bothFiles
           ? activeKind === "triplog"
-            ? t`${stepTitle} — trips (2 of 2)`
-            : t`${stepTitle} — places (1 of 2)`
+            ? tripsTitle
+            : placesTitle
           : stepTitle;
 
   /** The file, and which kind the importer is treating it as. The kind is a
@@ -1795,19 +1809,19 @@ function UnifiedImportDialog({
       const headline: HeadlineCount[] =
         outcome.kind === "place"
           ? [
-              { count: outcome.created, label: t`created` },
-              { count: outcome.merged, label: t`merged` },
+              { count: outcome.created, label: t`Created` },
+              { count: outcome.merged, label: t`Merged` },
               // Rows that couldn't be read are the "Skipped rows" section under
               // the tiles, counted there once. `skipped` is the server's
               // merge-policy count, a different thing.
-              { count: outcome.skipped, label: t`kept as they were` },
+              { count: outcome.skipped, label: t`Kept as they were` },
             ]
           : [
-              { count: outcome.imported, label: t`imported` },
-              { count: outcome.updated, label: t`updated` },
-              { count: outcome.linked, label: t`linked to a place` },
-              { count: outcome.noPlace, label: t`without a place` },
-              { count: outcome.discarded, label: t`discarded` },
+              { count: outcome.imported, label: t`Imported` },
+              { count: outcome.updated, label: t`Updated` },
+              { count: outcome.linked, label: t`Linked to a place` },
+              { count: outcome.noPlace, label: t`Without a place` },
+              { count: outcome.discarded, label: t`Discarded` },
             ];
       // A merge folds an imported row into a place that already existed, which
       // is the one outcome the headline count alone can't be checked against

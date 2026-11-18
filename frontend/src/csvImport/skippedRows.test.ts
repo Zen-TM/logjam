@@ -38,11 +38,12 @@ describe("dropped rows, in a language other than English", () => {
       detectPlaceColumns(headers),
       lines,
     );
-    expect(skippedRows).toEqual([{ line: 3, reason: expect.any(String) }]);
-    expect(skippedRows[0].reason).toContain("⟦");
+    expect(skippedRows).toEqual([
+      { line: 3, reason: { kind: "latitude", raw: "x" } },
+    ]);
     expect(warnings).toHaveLength(1);
     expect(skippedRowsNote(skippedRows)).toMatch(/⟦.*3.*⟧/);
-    expect(skippedRowLine(skippedRows[0])).toContain("3");
+    expect(skippedRowLine(skippedRows[0])).toMatch(/⟦.*3.*⟧/);
   });
 
   it("keeps a dropped trip row apart from a field left empty", async () => {
@@ -64,7 +65,9 @@ describe("dropped rows, in a language other than English", () => {
       customFieldDefs: [],
       dateFormat: "YYYY-MM-DD",
     });
-    expect(skippedRows).toEqual([{ line: 3, reason: expect.any(String) }]);
+    expect(skippedRows).toEqual([
+      { line: 3, reason: { kind: "date", raw: "someday" } },
+    ]);
     expect(warnings).toHaveLength(1);
     expect(skippedRowsNote(skippedRows)).toMatch(/⟦.*3.*⟧/);
   });
@@ -72,13 +75,13 @@ describe("dropped rows, in a language other than English", () => {
 
 describe("the confirm step's line about dropped rows", () => {
   it("says which rows it will skip", () => {
-    expect(skippedRowsNote([{ line: 4, reason: "x" }])).toBe(
+    expect(skippedRowsNote([{ line: 4, reason: { kind: "name" } }])).toBe(
       "1 row can't be read and will be skipped (row 4).",
     );
     expect(
       skippedRowsNote([
-        { line: 4, reason: "x" },
-        { line: 9, reason: "y" },
+        { line: 4, reason: { kind: "name" } },
+        { line: 9, reason: { kind: "name" } },
       ]),
     ).toBe("2 rows can't be read and will be skipped (rows 4, 9).");
     expect(skippedRowsNote([])).toBe("");
@@ -86,7 +89,7 @@ describe("the confirm step's line about dropped rows", () => {
 
   it("lists a dropped row as it always has", () => {
     expect(
-      skippedRowLine({ line: 4, reason: 'latitude "x" couldn\'t be read' }),
+      skippedRowLine({ line: 4, reason: { kind: "latitude", raw: "x" } }),
     ).toBe('Row 4: latitude "x" couldn\'t be read — skipped');
   });
 });

@@ -1125,6 +1125,7 @@ function GeoPdfDialog({
                 </SettingsRow>
                 <SettingsRow
                   label={t`Orientation`}
+                  infoLabel={t`About orientation`}
                   disabled={extentState.paperSize === "custom"}
                   disabledReason={t`A custom ratio sets its own shape.`}
                 >
@@ -1144,6 +1145,7 @@ function GeoPdfDialog({
                 {extentState.paperSize === "custom" && (
                   <SettingsRow
                     label={t`Ratio`}
+                    infoLabel={t`About ratio`}
                     tooltip={t`Width against height, in whatever units. A4 is 210 by 297.`}
                   >
                     <div className={classes.ratioRow}>
@@ -1189,7 +1191,11 @@ function GeoPdfDialog({
                     </div>
                   </SettingsRow>
                 )}
-                <SettingsRow label={t`Scale`} tooltip={SCALE_TOOLTIP}>
+                <SettingsRow
+                  label={t`Scale`}
+                  infoLabel={t`About scale`}
+                  tooltip={SCALE_TOOLTIP}
+                >
                   <ChipRail
                     label={t`Scale`}
                     wrap
@@ -1270,6 +1276,7 @@ function GeoPdfDialog({
                   <div className={classes.group}>
                     <SettingsRow
                       label={t`Coordinates`}
+                      infoLabel={t`About coordinates`}
                       tooltip={coordTooltip(extentState)}
                     >
                       <ChipRail
@@ -1807,7 +1814,11 @@ function AreaExportFields({
         <FieldError message={areaError} />
         {coordsOpen && (
           <div className={classes.group}>
-            <SettingsRow label={t`Coordinates`} tooltip={coordTooltip(edges)}>
+            <SettingsRow
+              label={t`Coordinates`}
+              infoLabel={t`About coordinates`}
+              tooltip={coordTooltip(edges)}
+            >
               <ChipRail
                 label={t`Coordinates`}
                 className={classes.railCell}

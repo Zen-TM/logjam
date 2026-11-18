@@ -42,7 +42,10 @@
   "skippedRows": [
     {
       "line": 4,
-      "reason": "latitude \"\" couldn't be read"
+      "reason": {
+        "kind": "latitude",
+        "raw": ""
+      }
     }
   ],
   "droppedRows": 1,

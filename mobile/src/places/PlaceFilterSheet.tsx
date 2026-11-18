@@ -347,7 +347,9 @@ export function PlaceFilterSheet(props: Props) {
           : copy.updated;
   const title =
     mode.kind === "date"
-      ? `${dateLabel} · ${(mode.bound === 0 ? copy.dateFrom : copy.dateTo).toLowerCase()}`
+      ? mode.bound === 0
+        ? t`${dateLabel} · from`
+        : t`${dateLabel} · to`
       : PLACES_FILTER_SHEET.title;
 
   return (

@@ -69,7 +69,7 @@ function headlineStats(headline: HeadlineCount[]): Stat[] {
     .map((tally) => ({
       // The label carries the verb, the value the number — the same way a
       // route's figures read.
-      label: tally.label.charAt(0).toUpperCase() + tally.label.slice(1),
+      label: tally.label,
       value: String(tally.count),
     }));
 }

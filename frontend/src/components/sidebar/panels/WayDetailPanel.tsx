@@ -740,7 +740,7 @@ export default function WayDetailPanel({
           <section className={classes.section}>
             <p className={classes.note}>
               {sharedWayNote(
-                way.viaPlace ? (sharingPlace?.name ?? t`a place`) : null,
+                way.viaPlace ? { place: sharingPlace?.name ?? null } : null,
               )}
             </p>
           </section>

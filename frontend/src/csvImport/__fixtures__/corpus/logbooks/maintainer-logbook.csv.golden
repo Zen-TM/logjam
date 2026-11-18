@@ -102,7 +102,10 @@
   "skippedRows": [
     {
       "line": 4,
-      "reason": "date \"not sure of the exact date\" couldn't be read"
+      "reason": {
+        "kind": "date",
+        "raw": "not sure of the exact date"
+      }
     }
   ],
   "droppedRows": 1,
