@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -248,6 +249,8 @@ function renderPanel(
       onOpenItem={() => {}}
       addCopyRequest={null}
       onAddCopyRequestConsumed={() => {}}
+      onPickPoint={() => {}}
+      onDrawRoute={() => {}}
       onBack={() => {}}
       onPlansChanged={() => {}}
       onStartTripLog={() => {}}
@@ -403,6 +406,58 @@ describe("a plan's page ends its views with their add buttons", () => {
     expect(
       screen.getAllByRole("button", { name: planAddVerbLabel("copy") }),
     ).toHaveLength(1);
+  });
+
+  // Mutation: leave one of the three out of ITEM_ADD_VERBS, and a plan has no
+  // way to make a place, draw a way or import one from its own page.
+  it("ends the Map with the three ways to make one in the plan too", () => {
+    renderPanel({ view: { ...plan, places: [place] } });
+    fireEvent.click(screen.getByRole("radio", { name: /^Map/ }));
+    for (const id of ["newPlace", "route", "import"] as const)
+      expect(
+        screen.getAllByRole("button", { name: planAddVerbLabel(id) }),
+      ).toHaveLength(1);
+  });
+
+  // Mutation: send the pick to the account's own place form, or skip the
+  // type, and the place lands in the wrong place.
+  it("makes a place in the plan at the point picked on the map", async () => {
+    vi.mocked(addPlanItem).mockResolvedValueOnce({ item: {} as TripPlanItem });
+    const onPickPoint = vi.fn();
+    renderPanel({ onPickPoint });
+    fireEvent.click(screen.getByRole("radio", { name: /^Map/ }));
+    fireEvent.click(
+      screen.getByRole("button", { name: planAddVerbLabel("newPlace") }),
+    );
+    expect(onPickPoint).toHaveBeenCalledTimes(1);
+    act(() => onPickPoint.mock.calls[0]![0](-33.5, 150.25));
+    fireEvent.change(screen.getByLabelText(/^Name/), {
+      target: { value: "Water drop" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(addPlanItem).toHaveBeenCalledWith("p1", {
+        kind: "place",
+        new: expect.objectContaining({
+          placeTypeId: SYSTEM_PLACE_TYPE_IDS.marker,
+          name: "Water drop",
+          latitude: -33.5,
+          longitude: 150.25,
+        }),
+      }),
+    );
+  });
+
+  // Mutation: draw on the account (no onDrawRoute call), and the route is
+  // made where the plan can't see it.
+  it("hands the map to the route tool for this plan", () => {
+    const onDrawRoute = vi.fn();
+    renderPanel({ onDrawRoute });
+    fireEvent.click(screen.getByRole("radio", { name: /^Map/ }));
+    fireEvent.click(
+      screen.getByRole("button", { name: planAddVerbLabel("route") }),
+    );
+    expect(onDrawRoute).toHaveBeenCalledWith(plan);
   });
 
   // Mutation: draw the end button without the role check, and a member is

@@ -5,7 +5,6 @@
 import { useState } from "react";
 import {
   mediaSkippedSentence,
-  planAddVerbLabel,
   planItemDeleteConfirm,
   planItemVerbs,
   PLAN_ITEM_VERBS,
@@ -74,7 +73,7 @@ export default function PlanItems({
   myUserId,
   onChanged,
   onSaved,
-  onAddCopy,
+  adds,
   onOpen,
   onView,
 }: {
@@ -85,7 +84,9 @@ export default function PlanItems({
   /** The caller's own lists or storage changed: a copy landed, or a thing
    *  they were charged for went. */
   onSaved: () => void;
-  onAddCopy: () => void;
+  /** The verbs that put a place or way in the plan, in menu order; none on
+   *  an archived plan. */
+  adds: { id: string; label: string; icon: Glyph; run: () => void }[];
   /** Fit the map to it. */
   onOpen: (item: TripPlanItem) => void;
   /** A place's page, one step inside the plan. */
@@ -133,10 +134,19 @@ export default function PlanItems({
   });
 
   // The empty state's buttons and the end of the list's are the same ones.
-  const addCopy = !archived && (
-    <Button variant="filled" icon="add" onClick={onAddCopy}>
-      {planAddVerbLabel("copy")}
-    </Button>
+  const addCopy = !archived && adds.length > 0 && (
+    <>
+      {adds.map((verb, index) => (
+        <Button
+          key={verb.id}
+          variant={index === 0 ? "filled" : undefined}
+          icon={verb.icon}
+          onClick={verb.run}
+        >
+          {verb.label}
+        </Button>
+      ))}
+    </>
   );
 
   const deleteCopy = deleting

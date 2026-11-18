@@ -10,6 +10,7 @@ import {
   formatBytes,
   planLeaveConfirm,
   planAddVerbLabel,
+  tripPlanAddedMessage,
   TRIP_PLAN_MAX_FORMS,
   planLeaveDeleteAddedLabel,
   planFormDeleteConfirm,
@@ -95,6 +96,8 @@ import PlanInvitePage from "./PlanInvitePage";
 import PlanItems from "./PlanItems";
 import PlanPlacePage from "./PlanPlacePage";
 import PlanAddCopyDialog from "./PlanAddCopyDialog";
+import PlanNewPlaceDialog from "./PlanNewPlaceDialog";
+import { useWayImport } from "../sidebar/panels/useWayImport";
 import PlanTripLogPlacesDialog from "./PlanTripLogPlacesDialog";
 import type { TPlace, TRoute, TUser } from "../../placeUtils";
 import { addedBy } from "./plansModel";
@@ -106,6 +109,13 @@ const copy = TRIP_PLAN_PAGE.copy;
 /** Add a place or way opened from the page rather than from a pin: nothing ticked. */
 const NOTHING_TICKED = { kind: "place" as const, id: "" };
 const formsCopy = TRIP_PLAN_FORMS.copy;
+/** The add verbs that put a place or way in the plan: the Map view's buttons. */
+const ITEM_ADD_VERBS: readonly PlanAddVerbId[] = [
+  "copy",
+  "newPlace",
+  "route",
+  "import",
+];
 
 export default function PlanDetailPanel({
   view,
@@ -119,6 +129,8 @@ export default function PlanDetailPanel({
   onOpenItem,
   addCopyRequest,
   onAddCopyRequestConsumed,
+  onPickPoint,
+  onDrawRoute,
   onBack,
   onPlansChanged,
   onStartTripLog,
@@ -148,6 +160,12 @@ export default function PlanDetailPanel({
   /** One of the caller's own things pressed on the map: Add a place or way, ticked. */
   addCopyRequest: { kind: TripPlanItemKind; id: string } | null;
   onAddCopyRequestConsumed: () => void;
+  /** The map's pick-a-point flow: `onPicked` hears the point chosen. */
+  onPickPoint: (
+    onPicked: (latitude: number, longitude: number) => void,
+  ) => void;
+  /** Hand the map to the route tool; a save adds the way to this plan. */
+  onDrawRoute: (plan: TripPlanView) => void;
   onBack: () => void;
   /** Something the list shows changed (name, dates, archive, membership). */
   onPlansChanged: () => void;
@@ -165,6 +183,11 @@ export default function PlanDetailPanel({
     kind: TripPlanItemKind;
     id: string;
   } | null>(null);
+  const [newPlaceAt, setNewPlaceAt] = useState<{
+    latitude: number;
+    longitude: number;
+  } | null>(null);
+  const wayImport = useWayImport(() => refetch(), view?.id);
   const [tab, setTab] = useState<TripPlanPageView>(initialView);
   const [editing, setEditing] = useState(false);
   const [sectionOpen, setSectionOpen] = useState<{ id: string | null } | null>(
@@ -318,6 +341,17 @@ export default function PlanDetailPanel({
       setTab("items");
       setAddingCopy(NOTHING_TICKED);
     },
+    newPlace: () => {
+      setTab("items");
+      onPickPoint((latitude, longitude) =>
+        setNewPlaceAt({ latitude, longitude }),
+      );
+    },
+    route: () => onDrawRoute(plan),
+    import: () => {
+      setTab("items");
+      wayImport.openPicker();
+    },
     form: () => {
       setTab("forms");
       setBuilding({ id: null });
@@ -351,7 +385,6 @@ export default function PlanDetailPanel({
     delete: () => setConfirm({ kind: "section", section }),
   });
 
-  // The "web" filter drops the GPS-only add verbs (Draw a route).
   const addVerbs = planVerbsFor(PLAN_ADD_VERBS, "web", role, {
     archived,
   }) as PlanVerb<PlanAddVerbId>[];
@@ -591,7 +624,9 @@ export default function PlanDetailPanel({
         myUserId={myUserId}
         onChanged={refetch}
         onSaved={onOwnChanged}
-        onAddCopy={() => setAddingCopy(NOTHING_TICKED)}
+        adds={addVerbs
+          .filter((verb) => ITEM_ADD_VERBS.includes(verb.id))
+          .map((verb) => ({ ...verb, run: addRunners[verb.id] }))}
         onOpen={onOpenItem}
         onView={(place) => openPlacePage(place.id)}
       />
@@ -762,6 +797,19 @@ export default function PlanDetailPanel({
             setAddingCopy(null);
             onAddCopyRequestConsumed();
           }}
+        />
+      )}
+      {wayImport.input}
+      {newPlaceAt && (
+        <PlanNewPlaceDialog
+          planId={plan.id}
+          at={newPlaceAt}
+          onSaved={() => {
+            setNewPlaceAt(null);
+            toast.done(tripPlanAddedMessage(1, 1));
+            refetch();
+          }}
+          onClose={() => setNewPlaceAt(null)}
         />
       )}
       {printing && (
