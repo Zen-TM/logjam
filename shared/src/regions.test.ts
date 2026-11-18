@@ -145,6 +145,15 @@ describe("the declaration", () => {
       expect(region.dem).toContain(region.terrain.heights);
   });
 
+  // Mutation: declare NSW's `geocoderCountry` as "AU", and the geocoder is
+  // sent a code it ignores, so the search is unrestricted.
+  it("declares a geocoder country as two lower-case letters", () => {
+    const declared = ALL.filter((r) => r.geocoderCountry !== undefined);
+    expect(declared.length).toBeGreaterThanOrEqual(1);
+    for (const region of declared)
+      expect(region.geocoderCountry).toMatch(/^[a-z]{2}$/);
+  });
+
   // Mutation: "Australia/Sidney", and every date read in it throws.
   it("names a time zone the runtime knows", () => {
     for (const region of REGIONS)

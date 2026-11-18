@@ -44,6 +44,7 @@ describe("geocode", () => {
     expect(Object.fromEntries(sent.searchParams)).toEqual({
       format: "jsonv2",
       q: "Newnes Plateau",
+      countrycodes: "au",
       limit: "5",
       viewbox: "140.9,-28.04,154.29,-37.73",
       bounded: "0",
@@ -52,6 +53,43 @@ describe("geocode", () => {
       "Accept",
       "User-Agent",
     ]);
+  });
+
+  // The request a search over NSW sent before regions existed, as a string so
+  // the parameter order is pinned too. Mutation: drop `countrycodes` from NSW's
+  // declaration, or send it after `bounded`.
+  it("sends a search over NSW exactly as it was sent before regions existed", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(Date.now() + 30_000);
+    const fetchMock = vi.fn(async () => new Response("[]"));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await geocode("Wollemi Creek", undefined, around(NSW_REGION.view.center));
+
+    const [url] = fetchMock.mock.calls[0] as unknown as [string];
+    expect(url).toBe(
+      "https://nominatim.openstreetmap.org/search?format=jsonv2&q=Wollemi+Creek&countrycodes=au&limit=5&viewbox=140.9%2C-28.04%2C154.29%2C-37.73&bounded=0",
+    );
+  });
+
+  // Mutation: send `countrycodes` whatever the region declares (for instance
+  // a hard-coded "au"), or never send it.
+  it("sends the region's country code, and none where the region declares none", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(Date.now() + 45_000);
+    const fetchMock = vi.fn(async () => new Response("[]"));
+    vi.stubGlobal("fetch", fetchMock);
+    const view = around(SIM_NZ.view.center);
+    const { geocoderCountry: _dropped, ...noCountry } = SIM_NZ;
+
+    await geocode("Franz Josef", undefined, view, SIM_REGIONS, SIM_WORLD);
+    expect(sentParams(fetchMock)).toMatchObject({ countrycodes: "nz" });
+
+    await vi.advanceTimersByTimeAsync(1000);
+    await geocode("Fox Glacier", undefined, view, [noCountry], SIM_WORLD);
+    const params = sentParams(fetchMock);
+    expect(params).toHaveProperty("viewbox");
+    expect(params).not.toHaveProperty("countrycodes");
   });
 
   it("sends nothing for a query too short to be useful", async () => {
