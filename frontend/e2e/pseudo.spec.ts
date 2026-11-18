@@ -255,11 +255,12 @@ class Walk {
   }
 }
 
-// stubMaster builds the made-up archives when the map first asks for one, and
-// building them blocks this process for seconds (10 to 40 on a loaded laptop).
-// By then the page is up and its first `evaluate` is waiting on this process,
-// so the screen is read as 30 s of silence. Built here, the cost falls in a
-// hook, ahead of the page.
+// Building the made-up archives blocks this process for seconds (10 to 40 on a
+// loaded laptop). If it happened once the page is up, the page's first
+// `evaluate` would be waiting on this process and the screen would be read as
+// 30 s of silence. This hook warms the `statewideArchives()` cache under a
+// 180 s timeout, so the `stubMaster` call in `beforeEach` finds it built and
+// only reads the sim fixtures.
 test.beforeAll(() => {
   test.setTimeout(180_000);
   statewideArchives();

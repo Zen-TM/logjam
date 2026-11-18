@@ -69,7 +69,7 @@ describe("US English", () => {
   });
 
   // Mutation: delete the `"Scrub density for bushbashing"` entry, or the
-  // `"{0} abseils"` one, or the `"Colour terrain based on how steep it is."` one,
+  // `"# abseils"` one, or the `"Colour terrain based on how steep it is."` one,
   // from en-US.ts.
   it("uses US words and spellings in the text a screen shows", async () => {
     const { terrain, signIn, status } = await loadIn("en-US");

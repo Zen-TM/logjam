@@ -28,6 +28,7 @@ import {
   copyAndRemoveConfirm,
   copyConfirm,
   plural,
+  shareKindLabel,
   t,
 } from "@logjam/shared";
 
@@ -139,7 +140,7 @@ export function useCopyPanel({
 
   const one = targets.length === 1;
   const itemName = one ? targets[0].title : "";
-  const kindLabel = one ? targets[0].entityType : t`item`;
+  const kindLabel = one ? shareKindLabel(targets[0].entityType) : t`item`;
 
   const confirm =
     mode === "copyAndRemove"
