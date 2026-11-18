@@ -1312,6 +1312,7 @@ export function AppShell({
             <Tabs.Screen
               name="Map"
               options={{
+                tabBarLabel: t`Map`,
                 tabBarIcon: ({ color }) => <TabIcon idea="map" color={color} />,
               }}
             >
@@ -1353,6 +1354,7 @@ export function AppShell({
             <Tabs.Screen
               name="More"
               options={{
+                tabBarLabel: t`More`,
                 // Leaving More and coming back shows its ROOT, not the page last
                 // open inside it: the hub is where a visit starts. React
                 // Navigation pops the tab's stack when the tab loses focus.
