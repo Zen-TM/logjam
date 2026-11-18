@@ -1,12 +1,15 @@
 // A plan's places, routes and files: Add a place or way of something of
-// yours, Save a copy of something in the plan, delete. Copy and storage
-// rules are lib/planItems.ts's; access is lib/planAccess.ts's.
+// yours or make a new one in the plan, Save a copy of something in the plan,
+// delete. Copy and storage rules are lib/planItems.ts's; access is
+// lib/planAccess.ts's.
 import { Router, Response } from "express";
 import { isDeepStrictEqual } from "node:util";
 import { Prisma } from "@prisma/client";
 import {
   asFieldValues,
+  isSystemPlaceTypeId,
   isTripPlanItemKind,
+  isTripPlanItemNew,
   parseRouteColor,
   parseTripPlanFilePatch,
   parseTripPlanItemAdd,
@@ -15,6 +18,7 @@ import {
   say,
   TRIP_PLAN_CHANGED_SENTENCE,
   validateRoutePayload,
+  type TripPlanItemAdd,
   type TripPlanItemKind,
 } from "@logjam/shared";
 import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
@@ -71,9 +75,34 @@ async function planRow(planId: string, kind: TripPlanItemKind, id: string) {
   return row;
 }
 
+/**
+ * A new item is held to the rules an owner's own place or way, or a plan
+ * item's edit, is: a place's values against its type's attributes, a way's
+ * points as the way tools make them (parsed in shared). A plan holds system
+ * types only, as a copy lands.
+ */
+async function refuseNewItem(input: TripPlanItemAdd): Promise<void> {
+  if (!isTripPlanItemNew(input) || input.kind !== "place") return;
+  const place = input.new;
+  if (!isSystemPlaceTypeId(place.placeTypeId))
+    throw malformed("a plan place takes a system place type");
+  const defs = await defsForPlaceType(null, place.placeTypeId);
+  if (
+    Object.keys(place.fieldValues ?? {}).some(
+      (key) => !defs.some((def) => def.key === key),
+    )
+  )
+    throw malformed("a field isn't one of the type's attributes");
+  const refusal =
+    placePayloadRefusal(place, { requireCoords: true, defs }) ??
+    validatePlaceTextFields(place);
+  if (refusal) throw refusal;
+}
+
 // ── POST /plans/:planId/items ─────────────────────────────────
-// Body { kind, id }: a copy of one of the caller's own things,
-// charged to them. The response is the new item as GET /plans/:id shows it.
+// Body { kind, id }: a copy of one of the caller's own things, charged to
+// them; or { kind, new }: a place or way made in the plan, owned by no
+// account. The response is the new item as GET /plans/:id shows it.
 router.post(
   "/",
   requireAuth,
@@ -81,6 +110,7 @@ router.post(
     const user = await resolveUser(req.user!.sub);
     const access = await requirePlanWrite(user.id, getParam(req.params.planId));
     const input = accepted(parseTripPlanItemAdd(req.body));
+    await refuseNewItem(input);
     const added = await addPlanItem(user, access.plan.id, input);
     const items = await loadPlanItems(access.plan.id, {
       kind: input.kind,
