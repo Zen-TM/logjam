@@ -1,8 +1,9 @@
 // "Auto-download finished LiDAR topos": the overlays a topo job renders.
 //
 // WHEN IT CHECKS: on app start, on return to the foreground, and when a
-// connection is regained — the three moments the sync engine uses, and never a
-// background timer, because battery is a field resource (ADR 0013).
+// connection is regained, each only in the foreground: the three moments the
+// sync engine uses, and never a background timer, because battery is a field
+// resource (ADR 0013).
 //
 // WHAT IT TAKES: every layer of every completed job the account has, once each.
 // That is deliberately simple rather than
@@ -149,6 +150,12 @@ export async function runTopoAutoDownload(): Promise<void> {
 }
 
 function requestRun(): void {
+  // A regained signal reaches a process kept alive in the background (a track
+  // recording): nothing is fetched there (ADR 0013), and returning to the
+  // foreground runs again. `=== "background"`, not `!== "active"`, as
+  // `sync/syncEngine.ts` has it: Android reports "unknown" until the first
+  // AppState event, and the run at launch sits inside that window.
+  if (AppState.currentState === "background") return;
   if (Date.now() - lastRunAt < MIN_INTERVAL_MS) return;
   lastRunAt = Date.now();
   void runTopoAutoDownload();
