@@ -57,7 +57,7 @@ Examples for Logjam:
 
 ## 3. Contacts & references
 
-- **Operator contact:** zentmarcos@gmail.com
+- **Operator contact:** support@logjam.earth
 - **OAIC NDB scheme:** <https://www.oaic.gov.au/privacy/notifiable-data-breaches>
 - **Privacy policy commitment:** `frontend/public/privacy.html` (Data breaches section)
 

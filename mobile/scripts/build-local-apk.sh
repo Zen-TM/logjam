@@ -16,7 +16,9 @@
 #      exemption (plugins/withLocalApiCleartext.js).
 #   3. The Sentry upload fails the build when there is no SENTRY_AUTH_TOKEN,
 #      which is every local build; this script switches it off.
-#   4. `:app:packageRelease` is flaky above one worker on constrained hosts.
+#   4. `:app:packageRelease` is flaky above one worker on constrained hosts, so
+#      one worker is the default; GRADLE_WORKERS=4 on a roomy, otherwise idle one
+#      (a 25 min cold build on 8 cores and 15 GiB).
 #
 # 1, 2 and 3 all present as something OTHER than a build problem — a bare
 # `TypeError: Network request failed` with no console output, which reads as a
@@ -76,7 +78,7 @@ echo "==> forcing a fresh JS bundle (.env is not a gradle input)"
 rm -rf "$generated_assets"
 
 echo "==> assembleRelease"
-(cd android && ./gradlew assembleRelease --max-workers=1)
+(cd android && ./gradlew assembleRelease --max-workers="${GRADLE_WORKERS:-1}")
 
 # Prove the two things that fail silently, rather than trusting the build. Both
 # are asserted, not printed: a warning nobody reads is how these got shipped in
