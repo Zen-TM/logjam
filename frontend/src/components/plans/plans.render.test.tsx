@@ -366,24 +366,68 @@ describe("Edit form over another leader's save", () => {
   });
 });
 
-describe("a plan's page keeps its adds in the hero", () => {
-  // Mutation: put a `<ListEnd>` add back under the write-up, and the page
-  // draws the same verb twice.
-  it("draws Add a write-up section once, in the hero's menu", () => {
-    renderPanel({
-      view: {
-        ...plan,
-        myRole: "leader",
-        sections: [{ id: "s1", title: "Gear", body: "", position: 0 } as never],
-      },
-    });
+describe("a plan's page ends its views with their add buttons", () => {
+  const section = { id: "s1", title: "Gear", body: "", position: 0 } as never;
+  const place = {
+    id: "pl1",
+    name: "Claustral",
+    altNames: [],
+    latitude: -33.5,
+    longitude: 150.25,
+    elevation: null,
+    placeTypeId: SYSTEM_PLACE_TYPE_IDS.canyon,
+    notes: null,
+    fieldValues: {},
+    addedBy: null,
+    media: [],
+  } as unknown as TripPlanPlace;
+
+  // Mutation: drop the `<ListEnd>` under the write-up's sections, and a plan
+  // with sections has its add only in the hero's menu.
+  it("ends the write-up with Add a write-up section, still in the menu", () => {
+    renderPanel({ view: { ...plan, sections: [section] } });
     expect(
-      screen.queryByRole("button", { name: planAddVerbLabel("section") }),
-    ).toBeNull();
+      screen.getAllByRole("button", { name: planAddVerbLabel("section") }),
+    ).toHaveLength(1);
     fireEvent.click(screen.getByRole("button", { name: "Add" }));
     expect(
       screen.getByRole("menuitem", { name: planAddVerbLabel("section") }),
     ).toBeTruthy();
+  });
+
+  // Mutation: drop the `<ListEnd>` under the map's rows, and a plan with
+  // places has no add at the end of them.
+  it("ends the Map with Add a place or way", () => {
+    renderPanel({ view: { ...plan, places: [place] } });
+    fireEvent.click(screen.getByRole("radio", { name: /^Map/ }));
+    expect(
+      screen.getAllByRole("button", { name: planAddVerbLabel("copy") }),
+    ).toHaveLength(1);
+  });
+
+  // Mutation: draw the end button without the role check, and a member is
+  // offered a section the API refuses.
+  it("leaves a member without the write-up's add", () => {
+    renderPanel({ view: { ...plan, myRole: "member", sections: [section] } });
+    expect(
+      screen.queryByRole("button", { name: planAddVerbLabel("section") }),
+    ).toBeNull();
+  });
+
+  // Mutation: draw the Map's end button on an archived plan, and a finished
+  // plan takes new places.
+  it("leaves an archived plan's Map without the add", () => {
+    renderPanel({
+      view: {
+        ...plan,
+        archivedAt: "2026-10-02T00:00:00.000Z",
+        places: [place],
+      },
+    });
+    fireEvent.click(screen.getByRole("radio", { name: /^Map/ }));
+    expect(
+      screen.queryByRole("button", { name: planAddVerbLabel("copy") }),
+    ).toBeNull();
   });
 
   // Mutation: drop `disabledReason` from the form entry, and the API refuses

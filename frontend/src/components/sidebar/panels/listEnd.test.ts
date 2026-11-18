@@ -7,8 +7,9 @@ import { describe, expect, it } from "vitest";
  * A list whose empty state offers a button ends with that same button when it
  * has rows (UX §9): adding is where the eye lands after scrolling down. Each
  * panel names the button once and draws it in both places. Friends is the
- * exception, with Place types, Plans and a plan's pages: the hero's add is
- * already there, so a second at the end of the rows would be a duplicate.
+ * exception, with Place types and Plans: the hero's add is already there, so a
+ * second at the end of the rows would be a duplicate. A plan's write-up and
+ * map views also end with theirs, as Logjam GPS does.
  *
  * Mutation that turns it red: delete a panel's `<ListEnd>` line, put a
  * different button in the empty state than at the end, or add a `<ListEnd>`
@@ -20,6 +21,8 @@ const PANELS: [file: string, button: string][] = [
   ["PlacesPanel.tsx", "addPlaceButton"],
   ["TripLogsPanel.tsx", "addTripButtons"],
   ["RoutesPanel.tsx", "addWayButtons"],
+  ["../../plans/PlanDetailPanel.tsx", "addSectionButton"],
+  ["../../plans/PlanItems.tsx", "addCopy"],
 ];
 
 // Their hero already carries every add, so a button at the end of the rows
@@ -28,8 +31,6 @@ const HERO_ADD_ONLY = [
   "FriendsPanel.tsx",
   "PlaceTypeSection.tsx",
   "../../plans/PlansPanel.tsx",
-  "../../plans/PlanDetailPanel.tsx",
-  "../../plans/PlanItems.tsx",
 ];
 
 describe("a list ends with its empty state's add button", () => {

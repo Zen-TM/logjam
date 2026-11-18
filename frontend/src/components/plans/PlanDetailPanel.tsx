@@ -60,6 +60,7 @@ import {
   Hero,
   IconButton,
   IconTile,
+  ListEnd,
   LoadingState,
   Menu,
   Row,
@@ -361,6 +362,16 @@ export default function PlanDetailPanel({
     over,
     ...tripPlanLeaveState(plan),
   });
+  // The empty state's button and the end of the write-up's are the same one.
+  const addSectionButton = canAddSection && (
+    <Button
+      variant="filled"
+      icon="add"
+      onClick={() => setSectionOpen({ id: null })}
+    >
+      {planAddVerbLabel("section")}
+    </Button>
+  );
   const canBuildForms = addVerbs.some((verb) => verb.id === "form");
   const formsFull = plan.forms.length >= TRIP_PLAN_MAX_FORMS;
   const formsFullReason = `${TRIP_PLAN_MAX_FORMS} forms at most`;
@@ -527,17 +538,7 @@ export default function PlanDetailPanel({
             icon="notes"
             title={copy.writeUpEmptyTitle}
             body={copy.writeUpEmptyBody}
-            actions={
-              canAddSection && (
-                <Button
-                  variant="filled"
-                  icon="add"
-                  onClick={() => setSectionOpen({ id: null })}
-                >
-                  {planAddVerbLabel("section")}
-                </Button>
-              )
-            }
+            actions={addSectionButton}
           />
         ) : (
           plan.sections.map((section, index) => (
@@ -578,6 +579,9 @@ export default function PlanDetailPanel({
               )}
             </section>
           ))
+        )}
+        {plan.sections.length > 0 && addSectionButton && (
+          <ListEnd>{addSectionButton}</ListEnd>
         )}
       </div>
     ),
