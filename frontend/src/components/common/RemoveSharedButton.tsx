@@ -19,7 +19,7 @@ import { messageFromError } from "../../errors/messageFromError";
 import { Button, Icon } from "../../ui";
 import {
   removeShareConfirm,
-  SHARE_KIND_LABEL,
+  shareKindLabel,
   t,
   type BulkShareItemType,
 } from "@logjam/shared";
@@ -79,7 +79,7 @@ export default function RemoveSharedButton({
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const confirm = removeShareConfirm({
-    kindLabel: SHARE_KIND_LABEL[entityType],
+    kindLabel: shareKindLabel(entityType),
     itemName,
     ownerName,
   });

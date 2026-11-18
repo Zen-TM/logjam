@@ -232,22 +232,24 @@ export type FriendShares = {
 };
 
 /**
- * The kind, lower-case, as it reads mid-sentence — "place", "route", "topo".
+ * The kind, lower-case, as it reads mid-sentence — "place", "route", "sharpened area".
  *
  * Feeds `removeShareConfirm`'s `kindLabel` and the row subtitles on both
- * clients, so a kind cannot be worded two ways on two screens. A
- * `Record<BulkShareItemType, …>` on purpose: a new shareable kind cannot be
- * added without naming it here.
+ * clients, so a kind cannot be worded two ways on two screens. Indexed by
+ * `BulkShareItemType` on purpose: a new shareable kind cannot be added without
+ * naming it here. A function, so the words follow the language in force when
+ * it is called, not at import.
  */
-export const SHARE_KIND_LABEL: Record<BulkShareItemType, string> = {
-  place: "place",
-  route: "route",
-  topoJob: "topo",
-};
+export const shareKindLabel = (kind: BulkShareItemType): string =>
+  ({
+    place: t`place`,
+    route: t`route`,
+    topoJob: t`sharpened area`,
+  })[kind];
 
 /** What an audit row is called, untitled jobs included. */
 export function shareRowTitle(row: FriendShareRow): string {
-  return row.name ?? t`Untitled ${SHARE_KIND_LABEL[row.entityType]}`;
+  return row.name ?? t`Untitled ${shareKindLabel(row.entityType)}`;
 }
 
 /**

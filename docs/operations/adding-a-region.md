@@ -71,7 +71,11 @@ Two things follow from the layers chosen:
   the worker reads the archives from `topo/regions.json`. Nothing else is
   declared for it. Guards: `areaExport.test.ts` ("is the region the worker reads
   the archives from") and `topo/tests/test_regions.py` (`TestExportRegion`), both
-  reading `shared/src/__fixtures__/export-region.json`.
+  reading `shared/src/__fixtures__/export-region.json`. The export panel's last
+  sentence ("What comes out is drawn from the government's survey…", in
+  `GeoPdfDialog.tsx`) says "the government's survey" whatever the region: give it
+  per-region copy, or check it against the region's source, before the region
+  offers an export. No test checks it.
 - **Sharpening** is filled from the region's heights and slope at z15, so an
   upload region needs both, with heights that stop at z15 (section 3).
 

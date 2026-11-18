@@ -55,8 +55,9 @@ export function useImportedTrackDetail(
       .catch((err: unknown) => {
         console.error(err);
         if (!current) return;
-        // The over-large refusal carries its own sentence; anything else is a
-        // read that failed, and the file's contents never reach this string.
+        // `TooManyPointsError` is not an `ApiError`, so it reads as this
+        // fallback like any other failed read; the file's contents never reach
+        // this string.
         setSettled({
           imported,
           detail: null,

@@ -28,7 +28,7 @@
 // which — and nothing here is logged.
 import { formatDayMonth, localDay } from "./dateFormat.js";
 import {
-  SHARE_KIND_LABEL,
+  shareKindLabel,
   shareRowTitle,
   isCopyableSharedRow,
   type BulkShareItem,
@@ -116,7 +116,7 @@ export function buildShareCards(
       key,
       row,
       title: shareRowTitle(row),
-      subtitle: t`${capitalise(SHARE_KIND_LABEL[row.entityType])} · shared ${formatShareDay(row.sharedAt)}`,
+      subtitle: t`${capitalise(shareKindLabel(row.entityType))} · shared ${formatShareDay(row.sharedAt)}`,
       copyable: options.direction === "youSee" && isCopyableSharedRow(row),
       removable: options.direction === "youSee" && !viaPlace,
       ...(viaPlace
@@ -294,7 +294,11 @@ export function copyConfirm(args: {
         ? withRoute
           ? t`“${args.itemName}” is copied into your own account, with its route.`
           : t`“${args.itemName}” is copied into your own account.`
-        : t`${args.count} items are copied into your own account.`,
+        : plural(
+            args.count,
+            "# item is copied into your own account.",
+            "# items are copied into your own account.",
+          ),
       one
         ? t`The copy is yours to edit, and stays if ${owner} stops sharing.`
         : t`The copies are yours to edit, and stay if ${owner} stops sharing.`,

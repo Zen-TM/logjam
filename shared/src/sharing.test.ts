@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
 import {
   BULK_SHARE_ITEM_TYPES,
@@ -7,8 +7,28 @@ import {
   isSharableEntityType,
   removeShareConfirm,
   removeSharedAreaConfirm,
+  shareKindLabel,
   sharedRowVisibility,
 } from "./sharing";
+
+describe("shareKindLabel", () => {
+  afterEach(() => {
+    delete (globalThis as { LOGJAM_LANGUAGE?: string }).LOGJAM_LANGUAGE;
+  });
+
+  // Mutation: make `topoJob` read "topo" again in `shareKindLabel`.
+  it("names each kind as the screens say it", () => {
+    expect(shareKindLabel("place")).toBe("place");
+    expect(shareKindLabel("route")).toBe("route");
+    expect(shareKindLabel("topoJob")).toBe("sharpened area");
+  });
+
+  // Mutation: write `shareKindLabel` as a constant object read at import.
+  it("follows the language in force when it is called", () => {
+    (globalThis as { LOGJAM_LANGUAGE?: string }).LOGJAM_LANGUAGE = "en-XA";
+    expect(shareKindLabel("topoJob")).toMatch(/^⟦.*⟧$/u);
+  });
+});
 
 // The rule these pin is the reason the helper exists: a row that is visible
 // BOTH ways must not offer a Remove, because revoking the direct share leaves

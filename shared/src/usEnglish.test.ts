@@ -87,6 +87,14 @@ describe("US English", () => {
     );
   });
 
+  // Mutation: delete the `one` form from the `"# abseils"` entry in en-US.ts.
+  it("says one rappel, not one rappels", async () => {
+    const { status } = await loadIn("en-US");
+    expect(status.placeSummary({ fieldValues: { num_abseils: 1 } })).toBe(
+      "1 rappel",
+    );
+  });
+
   // Mutation: make `localise` in i18n.ts read the en-US catalogue whatever the language.
   it("leaves Australian English as it was, the default in New South Wales", async () => {
     const { dates, terrain, signIn, status } = await loadIn(undefined);
