@@ -6,7 +6,7 @@
 // changes after it lands, so unlike a live recording there is nothing to
 // subscribe to; it reads once per open.
 import { useEffect, useState } from "react";
-import { messageFromError, type TrackDetail } from "@logjam/shared";
+import { messageFromError, type TrackDetail, t } from "@logjam/shared";
 
 import type { VectorImport } from "./importsDb";
 import { readImportedTrackDetail } from "./importedTrackSeries";
@@ -55,13 +55,14 @@ export function useImportedTrackDetail(
       .catch((err: unknown) => {
         console.error(err);
         if (!current) return;
-        // The over-large refusal carries its own sentence; anything else is a
-        // read that failed, and the file's contents never reach this string.
+        // `TooManyPointsError` is not an `ApiError`, so it reads as this
+        // fallback like any other failed read; the file's contents never reach
+        // this string.
         setSettled({
           imported,
           detail: null,
           line: NO_LINE,
-          error: messageFromError(err, "Couldn't read that file."),
+          error: messageFromError(err, t`Couldn't read that file.`),
         });
       });
     return () => {

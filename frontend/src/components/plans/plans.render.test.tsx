@@ -22,7 +22,7 @@ import {
   TRIP_PLAN_ROLE_ABOUT,
   TRIP_PLAN_JOIN,
   TRIP_PLAN_PAGE,
-  TRIP_PLAN_VISIBILITY_CHANGED_SENTENCE,
+  tripPlanVisibilityChangedSentence,
   tripPlanInPlanNow,
   TRIP_PLANS_LIST,
   type TripPlanFormView,
@@ -419,9 +419,7 @@ describe("answering a form whose audience changes", () => {
       />
     );
     const { rerender } = render(view(contacts));
-    expect(
-      screen.queryByText(TRIP_PLAN_VISIBILITY_CHANGED_SENTENCE),
-    ).toBeNull();
+    expect(screen.queryByText(tripPlanVisibilityChangedSentence())).toBeNull();
     rerender(
       view({
         ...contacts,
@@ -429,9 +427,7 @@ describe("answering a form whose audience changes", () => {
         updatedAt: "2026-10-02T00:00:00.000Z",
       }),
     );
-    expect(
-      screen.getByText(TRIP_PLAN_VISIBILITY_CHANGED_SENTENCE),
-    ).toBeTruthy();
+    expect(screen.getByText(tripPlanVisibilityChangedSentence())).toBeTruthy();
   });
 });
 

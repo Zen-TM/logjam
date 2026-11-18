@@ -19,6 +19,7 @@ import {
   railChoices,
   type AttributeRow,
   type TripLogCustomFieldDef,
+  t,
 } from "@logjam/shared";
 
 import { spacing, makeStyles, muted } from "../theme";
@@ -42,8 +43,8 @@ import {
  */
 const BOOLEAN_OPTIONS: ChipOption<string>[] = [
   { value: "", label: "—" },
-  { value: "true", label: "Yes" },
-  { value: "false", label: "No" },
+  { value: "true", label: t`Yes` },
+  { value: "false", label: t`No` },
 ];
 
 /** Every definition as an input, in the user's own order. */
@@ -76,7 +77,7 @@ export function CustomFieldValueInputs({
             onRemove ? (
               <IconButton
                 icon="close"
-                accessibilityLabel={`Remove ${def.label}`}
+                accessibilityLabel={t`Remove ${def.label}`}
                 onPress={() => onRemove(def.key)}
               />
             ) : undefined
@@ -166,7 +167,7 @@ function CustomFieldValueInput({
       <Beside trailing={trailing}>
         <Row
           icon="date"
-          title={value ? formatDateKey(`${value}T00:00:00.000Z`) : "Not set"}
+          title={value ? formatDateKey(`${value}T00:00:00.000Z`) : t`Not set`}
           subtitle={label}
           chevron
           onPress={onPickDate}

@@ -4,6 +4,7 @@ import {
   type CustomFieldEntityKind,
 } from "../../placeUtils";
 import { messageFromError } from "../../errors/messageFromError";
+import { t } from "@logjam/shared";
 
 /**
  * Impact count for a custom field: how many of the user's rows (trip logs or
@@ -37,7 +38,6 @@ export function useCustomFieldImpact(
   useEffect(() => {
     if (!fieldKey) return;
     let cancelled = false;
-    const noun = entity === "place" ? "places" : "trips";
     getCustomFieldImpact(entity, fieldKey)
       .then(({ count: impactCount }) => {
         if (!cancelled) setCount(impactCount);
@@ -48,7 +48,9 @@ export function useCustomFieldImpact(
           setError(
             messageFromError(
               err,
-              `Couldn't check how many ${noun} use this field.`,
+              entity === "place"
+                ? t`Couldn't check how many places use this field.`
+                : t`Couldn't check how many trips use this field.`,
             ),
           );
       });

@@ -57,9 +57,15 @@ import {
   type RegionBbox,
   type SharpenOffer,
   type TripLogCustomFieldDef,
+  formatDayLongMonthYear,
+  plural,
+  rich,
+  utcDay,
+  t,
 } from "@logjam/shared";
 import { placesBounds } from "./placesModel";
 import classes from "./PlaceDetailPanel.module.css";
+import { Rich } from "../../../ui/rich";
 import { useToast } from "../../feedback/ToastProvider";
 import { messageFromError } from "../../../errors/messageFromError";
 import { PlaceGauge } from "../../gauges/PlaceGauge";
@@ -150,16 +156,11 @@ function formatCustomFieldValue(
   type: TripLogCustomFieldDef["type"],
 ): string | null {
   if (value == null || value === "") return null;
-  if (type === "boolean") return value ? "Yes" : "No";
+  if (type === "boolean") return value ? t`Yes` : t`No`;
   if (type === "date" && typeof value === "string") {
     // Date-typed attributes are stored as UTC-midnight (date-only); format in
     // UTC so a zone behind UTC (the Americas) doesn't render the prior day.
-    return new Date(value).toLocaleDateString("en-AU", {
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-      timeZone: "UTC",
-    });
+    return formatDayLongMonthYear(utcDay(new Date(value)));
   }
   return String(value);
 }
@@ -374,7 +375,7 @@ function PlaceDetailPanel({
       onRefetch();
     } catch (err) {
       console.error(err);
-      toast.error(messageFromError(err, "Couldn't update that attribute."));
+      toast.error(messageFromError(err, t`Couldn't update that attribute.`));
     } finally {
       setForeignFieldBusy(false);
     }
@@ -454,7 +455,7 @@ function PlaceDetailPanel({
       })
       .catch((err) => {
         console.error(err);
-        toast.error(messageFromError(err, "Couldn't load place details."));
+        toast.error(messageFromError(err, t`Couldn't load place details.`));
       })
       .finally(() => {
         if (detailFetchKeyRef.current === requestedId) setLoadingTrips(false);
@@ -465,12 +466,12 @@ function PlaceDetailPanel({
   if (!place) {
     return (
       <div className={classes.root}>
-        <Hero title="Place" onBack={onBack} backLabel="Back to Places" />
+        <Hero title={t`Place`} onBack={onBack} backLabel={t`Back to Places`} />
         <div className={classes.body}>
           <EmptyState
             icon="map"
-            title="No place selected"
-            body="Pick one from Places, or press a pin on the map."
+            title={t`No place selected`}
+            body={t`Pick one from Places, or press a pin on the map.`}
           />
         </div>
       </div>
@@ -493,7 +494,7 @@ function PlaceDetailPanel({
       // A browser that refuses the clipboard (no permission, no secure
       // context) must say so rather than looking like it worked.
       console.error(err);
-      toast.error("Couldn't copy the coordinates.");
+      toast.error(t`Couldn't copy the coordinates.`);
     }
   }
 
@@ -522,16 +523,20 @@ function PlaceDetailPanel({
       sharedNames.length <= 3 ? (
         joinWithAnd(sharedNames)
       ) : (
-        <>
-          {sharedNames[0]}, {sharedNames[1]}, and{" "}
-          <button
-            type="button"
-            className={classes.sharedMoreLink}
-            onClick={() => setShowShareDialog(true)}
-          >
-            {sharedNames.length - 2} more
-          </button>
-        </>
+        <Rich
+          parts={rich`${sharedNames[0]}, ${sharedNames[1]}, and <button>${t`${sharedNames.length - 2} more`}</button>`}
+          tags={{
+            button: (text) => (
+              <button
+                type="button"
+                className={classes.sharedMoreLink}
+                onClick={() => setShowShareDialog(true)}
+              >
+                {text}
+              </button>
+            ),
+          }}
+        />
       )
     ) : null;
 
@@ -549,7 +554,7 @@ function PlaceDetailPanel({
       onAfterDelete();
     } catch (err) {
       console.error(err);
-      toast.error(messageFromError(err, "Couldn't delete place. Try again."));
+      toast.error(messageFromError(err, t`Couldn't delete place. Try again.`));
       setDeleting(false);
     }
   }
@@ -562,11 +567,11 @@ function PlaceDetailPanel({
       onRefetchShared();
       setSelectedPlaceID(null);
       onAfterDelete();
-      toast.done("Removed.");
+      toast.done(t`Removed.`);
     } catch (err) {
       console.error(err);
       toast.error(
-        messageFromError(err, "Couldn't remove that place. Try again."),
+        messageFromError(err, t`Couldn't remove that place. Try again.`),
       );
     } finally {
       setRemoving(false);
@@ -598,18 +603,26 @@ function PlaceDetailPanel({
       if (skipped > 0) {
         toast.error(
           copied.mediaOutOfSpace
-            ? `Copied, but your storage is full — ${skipped === 1 ? "1 photo or file" : `${skipped} photos and files`} weren't copied.`
-            : `Copied, but ${skipped === 1 ? "1 photo or file" : `${skipped} photos and files`} couldn't be copied.`,
+            ? plural(
+                skipped,
+                "Copied, but your storage is full — # photo or file weren't copied.",
+                "Copied, but your storage is full — # photos and files weren't copied.",
+              )
+            : plural(
+                skipped,
+                "Copied, but # photo or file couldn't be copied.",
+                "Copied, but # photos and files couldn't be copied.",
+              ),
         );
       } else {
         toast.done(
-          andRemove ? "Copied, and the shared one removed." : "Copied.",
+          andRemove ? t`Copied, and the shared one removed.` : t`Copied.`,
         );
       }
       onRefetch();
     } catch (err) {
       console.error(err);
-      toast.error(messageFromError(err, "Couldn't copy place. Try again."));
+      toast.error(messageFromError(err, t`Couldn't copy place. Try again.`));
     } finally {
       setCopying(false);
       setConfirmCopyAndRemove(false);
@@ -628,7 +641,7 @@ function PlaceDetailPanel({
       })
       .catch((err) => {
         console.error(err);
-        toast.error(messageFromError(err, "Couldn't refresh media."));
+        toast.error(messageFromError(err, t`Couldn't refresh media.`));
       });
     onQuotaChanged();
     onWaysChanged();
@@ -639,7 +652,7 @@ function PlaceDetailPanel({
       .then(setTripLogs)
       .catch((err) => {
         console.error(err);
-        toast.error(messageFromError(err, "Couldn't refresh trips."));
+        toast.error(messageFromError(err, t`Couldn't refresh trips.`));
       });
     // Also refresh the global Trip Logs list/search (separate query).
     onRefetchTripLogs();
@@ -655,7 +668,7 @@ function PlaceDetailPanel({
       onQuotaChanged();
     } catch (err) {
       console.error(err);
-      toast.error(messageFromError(err, "Couldn't delete file. Try again."));
+      toast.error(messageFromError(err, t`Couldn't delete file. Try again.`));
     } finally {
       setDeletingFile(false);
     }
@@ -750,7 +763,7 @@ function PlaceDetailPanel({
             icon={TypeGlyph}
             hue={placeType?.color ?? "var(--color-accent)"}
           />
-          {placeType?.name ?? "Unknown type"}
+          {placeType?.name ?? t`Unknown type`}
         </p>
         <div className={classes.pills}>
           {grade ? <StatusPill label={grade} tone="outline" /> : null}
@@ -782,7 +795,7 @@ function PlaceDetailPanel({
               variant={index === primaryVerbs.length - 1 ? "filled" : "outline"}
               icon={verb.icon}
               disabled={busy}
-              disabledReason="Working…"
+              disabledReason={t`Working…`}
               onClick={() => verbRunners[verb.id]()}
             >
               {verb.label}
@@ -799,7 +812,7 @@ function PlaceDetailPanel({
         <StatGrid
           stats={[
             {
-              label: "Coordinates",
+              label: t`Coordinates`,
               value: coordinates,
               span: true,
               onCopy: () => void handleCopyCoordinates(),
@@ -993,7 +1006,7 @@ function PlaceDetailPanel({
           <Row
             leading={<IconTile icon="route" hue="var(--hue-route)" />}
             title={drawnRoute.name}
-            subtitle={`Drawn route · ${formatDistanceM(routeLengthM(drawnRoute.points))}`}
+            subtitle={t`Drawn route · ${formatDistanceM(routeLengthM(drawnRoute.points))}`}
             onOpen={() => {
               const bounds = boundsOfPoints(drawnRoute.points);
               if (bounds) onFocusBounds(bounds);
@@ -1002,24 +1015,24 @@ function PlaceDetailPanel({
               <>
                 <IconButton
                   icon="forward"
-                  label="Open way"
+                  label={t`Open way`}
                   onClick={() => onOpenRoute(drawnRoute)}
                 />
                 {isOwnedPlace && (
                   <IconButton
                     icon="unlink"
-                    label="Unlink from this place"
+                    label={t`Unlink from this place`}
                     onClick={() => {
                       updateRoute(drawnRoute.id, { placeId: null })
                         .then(() => {
                           onRoutesChanged();
-                          toast.done("Route unlinked.");
+                          toast.done(t`Route unlinked.`);
                         })
                         .catch((err: unknown) =>
                           toast.error(
                             messageFromError(
                               err,
-                              "Couldn't unlink that route.",
+                              t`Couldn't unlink that route.`,
                             ),
                           ),
                         );
@@ -1033,7 +1046,7 @@ function PlaceDetailPanel({
           <Row
             leading={<IconTile icon="track" hue="var(--hue-track)" />}
             title={mediaDisplayName(track)}
-            subtitle="Click to download"
+            subtitle={t`Click to download`}
             href={track.displayUrl}
             download={track.filename}
             trailing={
@@ -1044,18 +1057,18 @@ function PlaceDetailPanel({
                 track.origin !== null ? (
                   <IconButton
                     icon="unlink"
-                    label="Unlink from this place"
+                    label={t`Unlink from this place`}
                     onClick={() => {
                       linkMediaToPlace(track.id, null)
                         .then(() => {
                           reloadPlaceMedia();
-                          toast.done("Route unlinked.");
+                          toast.done(t`Route unlinked.`);
                         })
                         .catch((err: unknown) =>
                           toast.error(
                             messageFromError(
                               err,
-                              "Couldn't unlink that route.",
+                              t`Couldn't unlink that route.`,
                             ),
                           ),
                         );
@@ -1064,7 +1077,7 @@ function PlaceDetailPanel({
                 ) : (
                   <IconButton
                     icon="delete"
-                    label={`Delete the track ${mediaDisplayName(track)}`}
+                    label={t`Delete the track ${mediaDisplayName(track)}`}
                     tone="danger"
                     onClick={() => setFileToDelete(track)}
                   />
@@ -1120,7 +1133,7 @@ function PlaceDetailPanel({
                 onOpen={() => setSelectedPlaceID(linked.id)}
                 trailing={
                   <Menu
-                    label={`Options for ${linked.name}`}
+                    label={t`Options for ${linked.name}`}
                     title={linked.name}
                     placement="bottom-end"
                     entries={[
@@ -1142,7 +1155,7 @@ function PlaceDetailPanel({
                       <IconButton
                         {...props}
                         icon="overflow"
-                        label={`Options for ${linked.name}`}
+                        label={t`Options for ${linked.name}`}
                       />
                     )}
                   />
@@ -1177,9 +1190,7 @@ function PlaceDetailPanel({
           count={tripLogs.length > 0 ? tripLogs.length : undefined}
         />
         {loadingTrips ? (
-          <p className={classes.muted} role="status">
-            Loading trips…
-          </p>
+          <p className={classes.muted} role="status">{t`Loading trips…`}</p>
         ) : tripLogs.length === 0 ? (
           <p className={classes.muted}>
             {isOwnedPlace ? copy.tripsEmpty : copy.tripsShared}
@@ -1233,11 +1244,11 @@ function PlaceDetailPanel({
         <Hero
           title={current.name}
           onBack={onBack}
-          backLabel="Back to Places"
+          backLabel={t`Back to Places`}
           actions={
             <>
               <Menu
-                label={`Actions for ${current.name}`}
+                label={t`Actions for ${current.name}`}
                 title={current.name}
                 placement="bottom-end"
                 entries={entries}
@@ -1245,7 +1256,7 @@ function PlaceDetailPanel({
                   <IconButton
                     {...props}
                     icon="overflow"
-                    label={`Actions for ${current.name}`}
+                    label={t`Actions for ${current.name}`}
                   />
                 )}
               />
@@ -1296,7 +1307,7 @@ function PlaceDetailPanel({
           same label/value row it was clicked from. */}
       <Dialog
         open={foreignItem !== null && !confirmDiscard}
-        title="What should this become?"
+        title={t`What should this become?`}
         onClose={() => setForeignKey(null)}
         dismissible={!foreignFieldBusy}
       >
@@ -1316,20 +1327,20 @@ function PlaceDetailPanel({
             {!isReservedFieldKey(foreignItem.key) && (
               <Row
                 leading={<IconTile icon="add" hue="var(--color-accent)" />}
-                title="Create a new attribute for this place type"
+                title={t`Create a new attribute for this place type`}
                 onOpen={() => runForeignFieldAction("adopt")}
                 disabled={foreignFieldBusy}
               />
             )}
             <Row
               leading={<IconTile icon="notes" hue="var(--color-accent)" />}
-              title="Add to notes as text"
+              title={t`Add to notes as text`}
               onOpen={() => runForeignFieldAction("notes")}
               disabled={foreignFieldBusy}
             />
             <Row
               leading={<IconTile icon="delete" hue="var(--color-accent)" />}
-              title="Discard"
+              title={t`Discard`}
               onOpen={() => setConfirmDiscard(true)}
               disabled={foreignFieldBusy}
             />
@@ -1342,10 +1353,9 @@ function PlaceDetailPanel({
         open={foreignItem !== null && confirmDiscard}
         copy={
           foreignItem && {
-            confirmTitle: `Discard "${foreignItem.label}"?`,
-            confirmBody:
-              "The value is removed from this place. This can't be undone.",
-            confirmLabel: "Discard",
+            confirmTitle: t`Discard "${foreignItem.label}"?`,
+            confirmBody: t`The value is removed from this place. This can't be undone.`,
+            confirmLabel: t`Discard`,
             tone: "destructive",
           }
         }
@@ -1358,9 +1368,9 @@ function PlaceDetailPanel({
         open={fileToDelete != null}
         copy={
           fileToDelete && {
-            confirmTitle: `Delete ${fileToDelete.filename}?`,
-            confirmBody: "The file is deleted and can't be brought back.",
-            confirmLabel: "Delete",
+            confirmTitle: t`Delete ${fileToDelete.filename}?`,
+            confirmBody: t`The file is deleted and can't be brought back.`,
+            confirmLabel: t`Delete`,
             tone: "destructive",
           }
         }
@@ -1371,7 +1381,7 @@ function PlaceDetailPanel({
 
       {isOwnedPlace && (
         <ShareDialog
-          title={`Share ${current.name}`}
+          title={t`Share ${current.name}`}
           kind="place"
           friends={friends}
           open={showShareDialog}
@@ -1387,7 +1397,7 @@ function PlaceDetailPanel({
         copy={{
           confirmTitle: copyAndRemoveCopy.title,
           confirmBody: copyAndRemoveCopy.body,
-          confirmLabel: "Save a copy and remove",
+          confirmLabel: t`Save a copy and remove`,
           tone: "filled",
         }}
         busy={copying}
@@ -1402,7 +1412,7 @@ function PlaceDetailPanel({
         copy={{
           confirmTitle: removeCopy.title,
           confirmBody: removeCopy.body,
-          confirmLabel: "Remove",
+          confirmLabel: t`Remove`,
           tone: "filled",
         }}
         busy={removing}

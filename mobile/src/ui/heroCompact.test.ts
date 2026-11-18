@@ -19,7 +19,9 @@ describe("Hero compact", () => {
   });
   // Mutation: drop the accessibilityLabel, and the icon-only back has no name.
   it("keeps the back button's accessible name", () => {
-    expect(branch).toContain("accessibilityLabel={`Back to ${backLabel}`}");
+    expect(branch).toContain(
+      'accessibilityLabel={t`Back to ${backLabel ?? ""}`}',
+    );
   });
 });
 
@@ -30,7 +32,8 @@ describe("Saved's compact title", () => {
       new URL("../saved/SavedScreen.tsx", import.meta.url),
       "utf8",
     );
-    expect(saved).toContain("`Saved · ${CATEGORY_META[filter].plural}`");
+    expect(saved).toContain("t`Saved · ${CATEGORY_META[filter].plural}`");
+    expect(saved).toContain("const name = savedFilterTitle(filter);");
   });
 });
 

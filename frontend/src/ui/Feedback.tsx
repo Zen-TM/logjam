@@ -3,6 +3,7 @@ import {
   type LoadState,
   type ToastAction,
   type ToastTone,
+  t,
 } from "@logjam/shared";
 import type { ComponentProps, CSSProperties, ReactNode } from "react";
 import { Button, IconButton } from "./Button";
@@ -105,7 +106,7 @@ export function EmptyState({
  * what is loading ("Loading your places…"), centred and muted; Logjam GPS's
  * `LoadingState` is the same. It is a status, so a screen reader hears it.
  */
-export function LoadingState({ label = "Loading…" }: { label?: string }) {
+export function LoadingState({ label = t`Loading…` }: { label?: string }) {
   return (
     <p className={classes.state} role="status">
       <Icon idea="loading" size={16} className={classes.spinner} />
@@ -132,9 +133,11 @@ export function ErrorState({
         {message}
       </p>
       {onRetry && (
-        <Button variant="outline" compact onClick={onRetry}>
-          Try again
-        </Button>
+        <Button
+          variant="outline"
+          compact
+          onClick={onRetry}
+        >{t`Try again`}</Button>
       )}
     </div>
   );
@@ -173,7 +176,7 @@ export function ListBody({
     return (
       <div className={classes.listArea}>
         <ErrorState
-          message={error ?? "Couldn't load this."}
+          message={error ?? t`Couldn't load this.`}
           onRetry={onRetry}
         />
       </div>
@@ -209,10 +212,14 @@ export function SelectionBar({
   children: ReactNode;
 }) {
   return (
-    <div role="group" aria-label="Selection" className={classes.selectionBar}>
+    <div
+      role="group"
+      aria-label={t`Selection`}
+      className={classes.selectionBar}
+    >
       <IconButton
         icon="close"
-        label="Clear selection (Esc)"
+        label={t`Clear selection (Esc)`}
         onClick={onClear}
       />
       <span className={classes.selectionCount} aria-live="polite">
@@ -252,7 +259,7 @@ export function Toast({
       )}
       <IconButton
         icon="close"
-        label="Dismiss"
+        label={t`Dismiss`}
         tone="onInverse"
         size={14}
         round

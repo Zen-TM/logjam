@@ -27,6 +27,7 @@
 // (src/ui/Row.tsx), the same shape `map/sourceResolver.ts` already uses for
 // unavailable tile sources.
 
+import { t } from "@logjam/shared";
 export type AccountState = "guest" | "linked";
 
 /**
@@ -120,29 +121,40 @@ export function capabilityStatus(
 export function unavailableReasonText(reason: UnavailableReason): string {
   switch (reason) {
     case "needs-account":
-      return "Needs an account";
+      return t`Needs an account`;
     case "needs-connection":
-      return "Needs a connection";
+      return t`Needs a connection`;
     case "needs-upload":
-      return "Needs to sync first";
+      return t`Needs to sync first`;
   }
 }
 
 /**
- * What a capability is CALLED, for copy that has to name it. Only spelled here,
- * for the same reason the two reason strings are.
+ * The first sentence of the screen hint that names what a capability is
+ * CALLED. One whole message per capability, so a catalogue can inflect each.
  */
-const CAPABILITY_LABEL: Record<Capability, string> = {
-  sharing: "Sharing",
-  friends: "Friends",
-  inbox: "The inbox",
-  plans: "Plans",
-  lidarOverlays: "LiDAR overlays",
-  placeSearch: "Location search",
-  serverPrefs: "This preference",
-  pushNotifications: "Push notifications",
-  syncNow: "Syncing",
-};
+function needsAccountSentence(capability: Capability): string {
+  switch (capability) {
+    case "sharing":
+      return t`Sharing needs a Logjam account.`;
+    case "friends":
+      return t`Friends needs a Logjam account.`;
+    case "inbox":
+      return t`The inbox needs a Logjam account.`;
+    case "plans":
+      return t`Plans needs a Logjam account.`;
+    case "lidarOverlays":
+      return t`LiDAR map needs a Logjam account.`;
+    case "placeSearch":
+      return t`Location search needs a Logjam account.`;
+    case "serverPrefs":
+      return t`This preference needs a Logjam account.`;
+    case "pushNotifications":
+      return t`Push notifications needs a Logjam account.`;
+    case "syncNow":
+      return t`Syncing needs a Logjam account.`;
+  }
+}
 
 /**
  * The screen-level counterpart of `capabilityRowProps`: copy for a whole screen
@@ -164,7 +176,10 @@ export function capabilityScreenBlock(
   }
   return {
     title: unavailableReasonText("needs-account"),
-    hint: `${CAPABILITY_LABEL[capability]} needs a Logjam account. Your data on this phone still works.`,
+    hint: [
+      needsAccountSentence(capability),
+      t`Your data on this phone still works.`,
+    ].join(" "),
   };
 }
 
@@ -190,7 +205,7 @@ export function changeEmailRowProps(
   authMode: "oidc" | "fake",
 ): { disabled: boolean; subtitle?: string } {
   if (authMode === "fake") {
-    return { disabled: true, subtitle: "Not available under fake sign-in." };
+    return { disabled: true, subtitle: t`Not available under fake sign-in.` };
   }
   return capabilityRowProps("serverPrefs", "linked", online);
 }

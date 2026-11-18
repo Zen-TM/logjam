@@ -15,6 +15,8 @@
 // A UI that words these the same way teaches users that a sent file can be
 // taken back, which it cannot. Keep the two verbs distinct everywhere.
 
+import { plural, t } from "./i18n.js";
+
 /**
  * What a `Share` row may point at.
  *
@@ -230,22 +232,24 @@ export type FriendShares = {
 };
 
 /**
- * The kind, lower-case, as it reads mid-sentence — "place", "route", "topo".
+ * The kind, lower-case, as it reads mid-sentence — "place", "route", "sharpened area".
  *
  * Feeds `removeShareConfirm`'s `kindLabel` and the row subtitles on both
- * clients, so a kind cannot be worded two ways on two screens. A
- * `Record<BulkShareItemType, …>` on purpose: a new shareable kind cannot be
- * added without naming it here.
+ * clients, so a kind cannot be worded two ways on two screens. Indexed by
+ * `BulkShareItemType` on purpose: a new shareable kind cannot be added without
+ * naming it here. A function, so the words follow the language in force when
+ * it is called, not at import.
  */
-export const SHARE_KIND_LABEL: Record<BulkShareItemType, string> = {
-  place: "place",
-  route: "route",
-  topoJob: "topo",
-};
+export const shareKindLabel = (kind: BulkShareItemType): string =>
+  ({
+    place: t`place`,
+    route: t`route`,
+    topoJob: t`sharpened area`,
+  })[kind];
 
 /** What an audit row is called, untitled jobs included. */
 export function shareRowTitle(row: FriendShareRow): string {
-  return row.name ?? `Untitled ${SHARE_KIND_LABEL[row.entityType]}`;
+  return row.name ?? t`Untitled ${shareKindLabel(row.entityType)}`;
 }
 
 /**
@@ -310,21 +314,26 @@ export function copyAndRemoveConfirm(args: {
   // the generic one is not a proper noun: in sentence-initial position, a
   // lowercase "the owner" reads as a rendering fault. `removeShareConfirm`
   // capitalises its sentence-initial one; this needs both, so it spells both.
-  const owner = args.ownerName ?? "the owner";
-  const Owner = args.ownerName ?? "The owner";
+  const owner = args.ownerName ?? t`the owner`;
+  const Owner = args.ownerName ?? t`The owner`;
   const left = args.mediaLeftBehind ?? 0;
   const leftBehind =
     left === 0
       ? ""
-      : left === 1
-        ? ` Its 1 photo or file is NOT copied, and stops being available to you.`
-        : ` Its ${left} photos and files are NOT copied, and stop being available to you.`;
+      : plural(
+          left,
+          "Its # photo or file is NOT copied, and stops being available to you.",
+          "Its # photos and files are NOT copied, and stop being available to you.",
+        );
   return {
-    title: `Save a copy and remove?`,
-    body:
-      `A copy of “${args.itemName}” is saved to your own ${args.kindLabel}s — yours to edit, and it stays whether or not ${owner} keeps sharing.` +
-      leftBehind +
-      ` The shared ${args.kindLabel} is then removed from your account, on every device. ${Owner} keeps the original.`,
+    title: t`Save a copy and remove?`,
+    body: [
+      t`A copy of “${args.itemName}” is saved to your own ${args.kindLabel}s — yours to edit, and it stays whether or not ${owner} keeps sharing.`,
+      leftBehind,
+      t`The shared ${args.kindLabel} is then removed from your account, on every device. ${Owner} keeps the original.`,
+    ]
+      .filter(Boolean)
+      .join(" "),
   };
 }
 
@@ -396,11 +405,34 @@ export function removeShareConfirm(args: {
   /** The owner's username, on the surfaces that know it. */
   ownerName?: string | null;
 }): { title: string; body: string } {
-  const owner = args.ownerName ?? "The owner";
   return {
-    title: `Remove shared ${args.kindLabel}?`,
-    body:
-      `“${args.itemName}” is removed from your account, on every device. ` +
-      `${owner} keeps the original — ask them to share it again if you want it back.`,
+    title: t`Remove shared ${args.kindLabel}?`,
+    body: removeShareBody(args),
   };
+}
+
+/**
+ * `removeShareConfirm` for a LiDAR topo that Logjam Web calls a sharpened
+ * area. The title is a whole message rather than "sharpened area" in the
+ * kind's hole, so a language can decline the phrase as one piece.
+ */
+export function removeSharedAreaConfirm(args: {
+  itemName: string;
+  ownerName?: string | null;
+}): { title: string; body: string } {
+  return {
+    title: t`Remove shared sharpened area?`,
+    body: removeShareBody(args),
+  };
+}
+
+function removeShareBody(args: {
+  itemName: string;
+  ownerName?: string | null;
+}): string {
+  const owner = args.ownerName ?? t`The owner`;
+  return [
+    t`“${args.itemName}” is removed from your account, on every device.`,
+    t`${owner} keeps the original — ask them to share it again if you want it back.`,
+  ].join(" ");
 }

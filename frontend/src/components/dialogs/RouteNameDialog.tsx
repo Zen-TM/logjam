@@ -2,6 +2,7 @@ import { useId, useState } from "react";
 import { Button, Dialog, TextField } from "../../ui";
 import { wayNameError } from "../sidebar/panels/waysModel";
 import classes from "./RouteNameDialog.module.css";
+import { t } from "@logjam/shared";
 
 type RouteNameDialogProps = {
   open: boolean;
@@ -41,17 +42,22 @@ function RouteNameForm({
   return (
     <Dialog
       open
-      title="Name this route"
+      title={t`Name this route`}
       onClose={onClose}
       dismissible={!busy}
       footer={
         <>
-          <Button onClick={onClose} disabled={busy} disabledReason="Saving…">
-            Cancel
-          </Button>
-          <Button type="submit" form={formId} variant="filled" busy={busy}>
-            Save
-          </Button>
+          <Button
+            onClick={onClose}
+            disabled={busy}
+            disabledReason={t`Saving…`}
+          >{t`Cancel`}</Button>
+          <Button
+            type="submit"
+            form={formId}
+            variant="filled"
+            busy={busy}
+          >{t`Save`}</Button>
         </>
       }
     >
@@ -67,7 +73,7 @@ function RouteNameForm({
         }}
       >
         <TextField
-          label="Route name"
+          label={t`Route name`}
           value={name}
           onChange={(event) => {
             setName(event.target.value);

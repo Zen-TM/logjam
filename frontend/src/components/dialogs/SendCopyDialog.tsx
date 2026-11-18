@@ -16,6 +16,7 @@ import {
   SEND_COPY,
   sendCopyLabel,
   type SectionKeysOn,
+  t,
 } from "@logjam/shared";
 import { useState } from "react";
 import { friendMatches } from "@logjam/shared";
@@ -79,7 +80,7 @@ function SendCopyDialog({
 
   const handleSend = async () => {
     if (picked.size === 0) {
-      setError("Pick a friend to send the copy to.");
+      setError(t`Pick a friend to send the copy to.`);
       return;
     }
     setBusy(true);
@@ -88,7 +89,7 @@ function SendCopyDialog({
       await send([...picked]);
     } catch (err) {
       console.error(err);
-      setError(messageFromError(err, "Couldn't send the copy."));
+      setError(messageFromError(err, t`Couldn't send the copy.`));
     } finally {
       setBusy(false);
     }
@@ -146,9 +147,11 @@ function SendCopyDialog({
       dismissible={!busy}
       footer={
         <>
-          <Button onClick={onClose} disabled={busy} disabledReason="Sending…">
-            Cancel
-          </Button>
+          <Button
+            onClick={onClose}
+            disabled={busy}
+            disabledReason={t`Sending…`}
+          >{t`Cancel`}</Button>
           {friends.length > 0 && (
             <Button
               variant="filled"

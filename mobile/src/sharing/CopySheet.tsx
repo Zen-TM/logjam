@@ -27,6 +27,9 @@ import {
   COPY_MEDIA_SETTING,
   copyAndRemoveConfirm,
   copyConfirm,
+  plural,
+  shareKindLabel,
+  t,
 } from "@logjam/shared";
 
 import { unavailableReasonText } from "../auth/capabilities";
@@ -137,13 +140,15 @@ export function useCopyPanel({
 
   const one = targets.length === 1;
   const itemName = one ? targets[0].title : "";
-  const kindLabel = one ? targets[0].entityType : "item";
+  const kindLabel = one ? shareKindLabel(targets[0].entityType) : t`item`;
 
   const confirm =
     mode === "copyAndRemove"
       ? copyAndRemoveConfirm({
           kindLabel,
-          itemName: one ? itemName : `${targets.length} items`,
+          itemName: one
+            ? itemName
+            : plural(targets.length, "# item", "# items"),
           ownerName: friendName,
           // The count only counts as "left behind" while the switch is off.
           mediaLeftBehind: withMedia ? 0 : media.count,
@@ -151,7 +156,7 @@ export function useCopyPanel({
       : copyConfirm({
           count: targets.length,
           friendName,
-          ...(one ? { itemName, kindLabel } : {}),
+          ...(one ? { itemName, entityType: targets[0].entityType } : {}),
         });
 
   return {
@@ -165,11 +170,12 @@ export function useCopyPanel({
             icon="photo"
             // The same words as the Privacy and security setting this choice defaults from.
             title={COPY_MEDIA_SETTING.label}
-            description={`${
-              media.count === 1
-                ? "1 photo or file"
-                : `${media.count} photos and files`
-            }, ${formatBytes(media.bytes)}`}
+            description={plural(
+              media.count,
+              "# photo or file, {0}",
+              "# photos and files, {0}",
+              formatBytes(media.bytes),
+            )}
             checked={withMedia}
             onChange={toggleMedia}
             disabled={busy}
@@ -180,7 +186,7 @@ export function useCopyPanel({
             share verb follows (`useShareRowProps`). */}
         {!online ? (
           <View style={styles.note}>
-            <FieldError message="Saving a copy needs a connection." />
+            <FieldError message={t`Saving a copy needs a connection.`} />
           </View>
         ) : null}
       </>
@@ -188,14 +194,14 @@ export function useCopyPanel({
     footer: (
       <Button
         label={
-          mode === "copyAndRemove" ? "Save a copy and remove" : "Save a copy"
+          mode === "copyAndRemove" ? t`Save a copy and remove` : t`Save a copy`
         }
         onPress={() =>
           onConfirm(media.count > 0 ? { copyMedia: withMedia } : {})
         }
         disabled={busy || !online}
         disabledReason={
-          online ? "Saving…" : unavailableReasonText("needs-connection")
+          online ? t`Saving…` : unavailableReasonText("needs-connection")
         }
         loading={busy}
         grow

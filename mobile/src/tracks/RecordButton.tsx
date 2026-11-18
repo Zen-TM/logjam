@@ -19,6 +19,7 @@ import { Animated, Easing, Pressable, View } from "react-native";
 import { SEARCH_SIZE } from "../map/mapChrome";
 import { radius, makeStyles } from "../theme";
 import { holdTick, useReducedMotion } from "../ui";
+import { t } from "@logjam/shared";
 
 /** One breath. Slow on purpose: at the map's scale this reads as alive rather
  *  than as an alarm, and it is a redraw every two seconds, not every frame of
@@ -93,10 +94,10 @@ export function RecordButton({
       accessibilityRole="button"
       accessibilityLabel={
         state === null
-          ? "Record track"
+          ? t`Record track`
           : state === "recording"
-            ? "Recording — tap for stats, hold to finish."
-            : "Recording paused — tap for stats, hold to finish."
+            ? t`Recording — tap for stats, hold to finish.`
+            : t`Recording paused — tap for stats, hold to finish.`
       }
       style={styles.button}
       onPress={onPress}

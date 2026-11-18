@@ -9,8 +9,9 @@
 // box: an alert is the screen most likely to be screenshotted.
 import {
   formatBytes,
-  pluralCount,
+  plural,
   SIGN_OUT_EVERYWHERE_NOTE,
+  t,
 } from "@logjam/shared";
 
 import type { Loss } from "./wipedStores";
@@ -46,7 +47,7 @@ export type SignOutConfirm = {
 };
 
 const LOST = (count: number) =>
-  count === 1 ? "It is lost for good." : "These are lost for good.";
+  count === 1 ? t`It is lost for good.` : t`These are lost for good.`;
 
 /**
  * Each kind's line, for its count. In the order they are shown: what cannot be
@@ -56,33 +57,62 @@ const LOST = (count: number) =>
 const LINES: { loss: Loss; text: (n: number, c: SignOutCounts) => string }[] = [
   {
     loss: "unsynced",
-    text: (n) => `${pluralCount(n, "change")} not yet synced. ${LOST(n)}`,
+    text: (n) =>
+      [
+        plural(n, "# change not yet synced.", "# changes not yet synced."),
+        LOST(n),
+      ].join(" "),
   },
   {
     loss: "unresolved",
     text: (n) =>
-      `${pluralCount(n, "edit")} left to resolve in Sync issues. ${LOST(n)}`,
+      [
+        plural(
+          n,
+          "# edit left to resolve in Sync issues.",
+          "# edits left to resolve in Sync issues.",
+        ),
+        LOST(n),
+      ].join(" "),
   },
   {
     loss: "recordings",
     text: (n) =>
-      `${pluralCount(n, "recorded track")} not yet backed up. ${LOST(n)}`,
+      [
+        plural(
+          n,
+          "# recorded track not yet backed up.",
+          "# recorded tracks not yet backed up.",
+        ),
+        LOST(n),
+      ].join(" "),
   },
   {
     loss: "routeDraft",
-    text: () => "A route you were drawing. It is lost for good.",
+    text: () => t`A route you were drawing. It is lost for good.`,
   },
   {
     loss: "regions",
     text: (n, c) =>
-      `${pluralCount(n, "offline map")} (${formatBytes(c.regionBytes)})`,
+      plural(
+        n,
+        "# offline map ({0})",
+        "# offline maps ({0})",
+        formatBytes(c.regionBytes),
+      ),
   },
   {
     loss: "geoPdfs",
     text: (n) =>
-      `${pluralCount(n, "imported GeoPDF")}. An imported file can only come back from the original file.`,
+      [
+        plural(n, "# imported GeoPDF.", "# imported GeoPDFs."),
+        t`An imported file can only come back from the original file.`,
+      ].join(" "),
   },
-  { loss: "topos", text: (n) => pluralCount(n, "sharpened area") },
+  {
+    loss: "topos",
+    text: (n) => plural(n, "# sharpened area", "# sharpened areas"),
+  },
 ];
 
 /**
@@ -99,11 +129,11 @@ export function signOutConfirm(
   );
   if (lines.length === 0 && !everywhere) return null;
   return {
-    title: everywhere ? "Sign out everywhere?" : "Sign out of Logjam GPS?",
+    title: everywhere ? t`Sign out everywhere?` : t`Sign out of Logjam GPS?`,
     everywhere,
-    intro: "This removes from this phone:",
+    intro: t`This removes from this phone:`,
     lines,
-    keeps: "Your synced places and trips stay in your account.",
+    keeps: t`Your synced places and trips stay in your account.`,
     canSyncFirst: online && counts.unsynced > 0,
   };
 }

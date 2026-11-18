@@ -1,11 +1,11 @@
-import { ApiError } from "@logjam/shared";
-import { unavailableReasonText } from "../auth/capabilities";
+import { ApiError, t } from "@logjam/shared";
 
 /**
  * What a grant that the API 404s means for the sharer's own item (ADR 0002:
  * 404, not 403). If this phone still holds the row, the account has not
- * received it yet and syncing is the way out, in the wording the sheet already
- * uses for that state. If the mirror no longer holds it, it was deleted
+ * received it yet and syncing is the way out. The wording is the sheet's
+ * `needs-upload` reason with a full stop, kept as its own message so it can be
+ * a sentence; `notOnServer.test.ts` fails if the two drift apart. If the mirror no longer holds it, it was deleted
  * elsewhere and a sync would only confirm that. Null for any other failure.
  */
 export function shareGrantNotFound(
@@ -14,6 +14,6 @@ export function shareGrantNotFound(
 ): { message: string; syncFixes: boolean } | null {
   if (!(err instanceof ApiError) || err.status !== 404) return null;
   return stillHeld
-    ? { message: `${unavailableReasonText("needs-upload")}.`, syncFixes: true }
-    : { message: "This was deleted.", syncFixes: false };
+    ? { message: t`Needs to sync first.`, syncFixes: true }
+    : { message: t`This was deleted.`, syncFixes: false };
 }

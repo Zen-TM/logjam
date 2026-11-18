@@ -23,6 +23,7 @@ import {
   type CustomFieldFilter,
 } from "./customFieldFilter.js";
 import { tripFieldDefs, type ScopedCustomFieldDef } from "./tripLogFields.js";
+import { t } from "./i18n.js";
 
 /** The type-filter value meaning "trips with no type at all". Distinct from
  * `""` (any type), which never matches an actual `types` entry. */
@@ -169,8 +170,8 @@ export function activeTripFilterCount(criteria: TripFilterCriteria): number {
 export type TripSortKey = "newest" | "oldest";
 
 export const TRIP_SORT_OPTIONS: { key: TripSortKey; label: string }[] = [
-  { key: "newest", label: "Newest first" },
-  { key: "oldest", label: "Oldest first" },
+  { key: "newest", label: t`Newest first` },
+  { key: "oldest", label: t`Oldest first` },
 ];
 
 /** Sorts a COPY. Stable, so trips sharing a date keep the order they arrived

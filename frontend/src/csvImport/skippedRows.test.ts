@@ -1,31 +1,96 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
+import { detectPlaceColumns } from "./placeColumns";
 import { parseCsv } from "./parseCsv";
-import { skippedRowsNote, splitSkippedRows } from "./prepareRows";
+import {
+  preparePlaceRows,
+  prepareTripRows,
+  skippedRowLine,
+  skippedRowsNote,
+} from "./prepareRows";
 
-// Mutation that turns these red: change SKIPPED_ROW_SUFFIX in prepareRows.ts
-// without the lines preparePlaceRows and prepareTripRows push.
-describe("dropped rows", () => {
-  const warnings = [
-    'Row 4: latitude "x" couldn\'t be read — skipped',
-    'Row 5: "n/a" in the depth column was left empty',
-  ];
+const languageOf = globalThis as { LOGJAM_LANGUAGE?: string };
+afterEach(() => {
+  delete languageOf.LOGJAM_LANGUAGE;
+});
 
-  it("separates dropped rows from fields left empty", () => {
-    expect(splitSkippedRows(warnings)).toEqual({
-      skipped: [warnings[0]],
-      leftEmpty: [warnings[1]],
-    });
+// Mutation that turns these red: in preparePlaceRows or prepareTripRows push
+// `skippedRowLine(...)` onto `warnings` instead of `{ line, reason }` onto
+// `skippedRows`: the dropped row lands in "left empty" and the list is empty.
+// In the pseudo-language no sentence ends in English, so a split that read the
+// text back (ADR 0050, Update rule 2) would put every dropped row there.
+describe("dropped rows, in a language other than English", () => {
+  const csv = (text: string) =>
+    parseCsv(new File([text], "a.csv", { type: "text/csv" }));
+
+  it("keeps a dropped place row apart from a field left empty", async () => {
+    const { headers, rows, lines } = await csv(
+      [
+        "name,latitude,longitude,attr:aca_water",
+        "Fine,-33,150,C2",
+        "Bad,x,150,",
+        "Odd,-33,150,D",
+      ].join("\n"),
+    );
+    languageOf.LOGJAM_LANGUAGE = "en-XA";
+    const { warnings, skippedRows } = preparePlaceRows(
+      rows,
+      detectPlaceColumns(headers),
+      lines,
+    );
+    expect(skippedRows).toEqual([
+      { line: 3, reason: { kind: "latitude", raw: "x" } },
+    ]);
+    expect(warnings).toHaveLength(1);
+    expect(skippedRowsNote(skippedRows)).toMatch(/⟦.*3.*⟧/);
+    expect(skippedRowLine(skippedRows[0])).toMatch(/⟦.*3.*⟧/);
   });
 
-  it("says which rows the confirm step will skip", () => {
-    expect(skippedRowsNote([warnings[0]])).toBe(
+  it("keeps a dropped trip row apart from a field left empty", async () => {
+    const { headers, rows, lines } = await csv(
+      [
+        "place,date,pitches",
+        "A,2024-01-02,3",
+        "B,someday,2",
+        "C,2024-01-03,x",
+      ].join("\n"),
+    );
+    languageOf.LOGJAM_LANGUAGE = "en-XA";
+    const { warnings, skippedRows } = prepareTripRows({
+      headers,
+      rows,
+      lines,
+      tripAssignments: { place: "name", date: "date", pitches: "new-cf" },
+      tripNewCfForms: { pitches: { label: "Pitches", type: "integer" } },
+      customFieldDefs: [],
+      dateFormat: "YYYY-MM-DD",
+    });
+    expect(skippedRows).toEqual([
+      { line: 3, reason: { kind: "date", raw: "someday" } },
+    ]);
+    expect(warnings).toHaveLength(1);
+    expect(skippedRowsNote(skippedRows)).toMatch(/⟦.*3.*⟧/);
+  });
+});
+
+describe("the confirm step's line about dropped rows", () => {
+  it("says which rows it will skip", () => {
+    expect(skippedRowsNote([{ line: 4, reason: { kind: "name" } }])).toBe(
       "1 row can't be read and will be skipped (row 4).",
     );
-    expect(skippedRowsNote([warnings[0], "Row 9: date — skipped"])).toBe(
-      "2 rows can't be read and will be skipped (rows 4, 9).",
-    );
+    expect(
+      skippedRowsNote([
+        { line: 4, reason: { kind: "name" } },
+        { line: 9, reason: { kind: "name" } },
+      ]),
+    ).toBe("2 rows can't be read and will be skipped (rows 4, 9).");
     expect(skippedRowsNote([])).toBe("");
+  });
+
+  it("lists a dropped row as it always has", () => {
+    expect(
+      skippedRowLine({ line: 4, reason: { kind: "latitude", raw: "x" } }),
+    ).toBe('Row 4: latitude "x" couldn\'t be read — skipped');
   });
 });
 

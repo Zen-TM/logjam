@@ -28,6 +28,7 @@ import {
   type SectionKeysOn,
   type TripPlanBucket,
   type TripPlanSummary,
+  t,
 } from "@logjam/shared";
 import {
   Button,
@@ -271,7 +272,7 @@ export default function PlansPanel({
           plan.status === "active" ? (
             <TileCheckbox
               tile={<IconTile icon="plan" hue="var(--hue-plan)" />}
-              label={`Select ${plan.name}`}
+              label={t`Select ${plan.name}`}
               checked={selectedIds.includes(plan.id)}
               selecting={selecting}
               onToggle={(extendRange) => toggle(plan.id, extendRange)}
@@ -306,7 +307,7 @@ export default function PlansPanel({
             )}
             {plan.status === "active" && !selecting && (
               <Menu
-                label={`Actions for ${plan.name}`}
+                label={t`Actions for ${plan.name}`}
                 title={plan.name}
                 placement="right-start"
                 entries={[
@@ -324,14 +325,14 @@ export default function PlansPanel({
                   <IconButton
                     {...props}
                     icon="overflow"
-                    label={`Actions for ${plan.name}`}
+                    label={t`Actions for ${plan.name}`}
                   />
                 )}
               />
             )}
             {plan.status === "requested" && (
               <Menu
-                label={`Actions for ${plan.name}`}
+                label={t`Actions for ${plan.name}`}
                 title={plan.name}
                 placement="right-start"
                 entries={PLAN_REQUEST_VERBS.map((verb) => ({
@@ -344,7 +345,7 @@ export default function PlansPanel({
                   <IconButton
                     {...props}
                     icon="overflow"
-                    label={`Actions for ${plan.name}`}
+                    label={t`Actions for ${plan.name}`}
                   />
                 )}
               />
@@ -411,7 +412,7 @@ export default function PlansPanel({
             {offers.archive && archiveVerb && (
               <SelectionVerb
                 disabled={busyId != null}
-                disabledReason="Working…"
+                disabledReason={t`Working…`}
                 onClick={() => runOrConfirm(archiveVerb.id, selected)}
               >
                 {archiveVerb.label}
@@ -420,7 +421,7 @@ export default function PlansPanel({
             <SelectionVerb
               danger={offers.destructive}
               disabled={busyId != null}
-              disabledReason="Working…"
+              disabledReason={t`Working…`}
               onClick={() => ask(selected)}
             >
               {offers.deleteLabel}

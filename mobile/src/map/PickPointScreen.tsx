@@ -51,6 +51,7 @@ import {
   MAP_INK,
   pointBox,
   regionInView,
+  t,
 } from "@logjam/shared";
 
 import { config } from "../config";
@@ -101,7 +102,6 @@ export type PickedPoint = { latitude: number; longitude: number };
 
 export function PickPointScreen({
   initialPoint,
-  subject,
   hidePlaceId = null,
   onCancel,
   onConfirm,
@@ -109,11 +109,7 @@ export function PickPointScreen({
   /** A coordinate already in the form, if any — the picker opens on it with the
    *  marker already placed, so "nudge what I typed" is one drag. */
   initialPoint: PickedPoint | null;
-  /**
-   * What is being placed, for the hint: "Tap where the place is". Naming the
-   * thing matters because the screen is reached from two different forms and
-   * arrives with no other context on it.
-   */
+  /** What is being placed. The hint is the fixed "Tap where the place is". */
   subject: "place";
   /**
    * The place being MOVED, which must not draw itself.
@@ -329,7 +325,7 @@ export function PickPointScreen({
           <Pressable
             key={id}
             accessibilityRole="button"
-            accessibilityLabel={`Use ${BASEMAP_CATALOG.find((entry) => entry.id === id)?.name ?? "this map"}`}
+            accessibilityLabel={t`Use ${BASEMAP_CATALOG.find((entry) => entry.id === id)?.name ?? t`this map`}`}
             accessibilityState={{ selected: id === basemapId }}
             style={[styles.thumb, id === basemapId && styles.thumbActive]}
             onPress={() => setBasemapId(id)}
@@ -346,9 +342,7 @@ export function PickPointScreen({
         pointerEvents="none"
       >
         <Text style={styles.hintText}>
-          {picked
-            ? "Tap again to move the point"
-            : `Tap where the ${subject} is`}
+          {picked ? t`Tap again to move the point` : t`Tap where the place is`}
         </Text>
       </View>
 
@@ -358,18 +352,22 @@ export function PickPointScreen({
           navigation bar's height above the tabs. */}
       <View style={styles.actions}>
         <View style={styles.action}>
-          <Button label="Cancel" variant="outlineAccent" onPress={onCancel} />
+          <Button
+            label={t`Cancel`}
+            variant="outlineAccent"
+            onPress={onCancel}
+          />
         </View>
         <View style={styles.action}>
           <Button
-            label="Use this point"
+            label={t`Use this point`}
             icon="done"
             // Absent-minded taps aside, there is nothing to confirm without a
             // point — and a button that exists only to refuse is worse than a
             // disabled one saying why (DESIGN.md), which is what the hint
             // above is for.
             disabled={picked == null}
-            disabledReason="Tap the map to pick a point"
+            disabledReason={t`Tap the map to pick a point`}
             onPress={() => picked && onConfirm(picked)}
           />
         </View>

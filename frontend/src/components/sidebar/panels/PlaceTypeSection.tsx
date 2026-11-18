@@ -9,9 +9,11 @@ import {
   placeTypeDeleteConfirm,
   PLACE_TYPE_NAME_MAX_LENGTH,
   placeTypeNameError,
+  plural,
   SETTINGS_LIST,
   stepAfterPlaceTypeSave,
   type ScopedCustomFieldDef,
+  t,
 } from "@logjam/shared";
 
 import {
@@ -154,9 +156,9 @@ function PlaceTypeSection({
   return (
     <div className={classes.root}>
       <Hero
-        title="Place types"
+        title={t`Place types`}
         onBack={onBack}
-        backLabel="Back to Settings"
+        backLabel={t`Back to Settings`}
         actions={addTypeButton}
       />
 
@@ -183,7 +185,7 @@ function PlaceTypeSection({
                 }
                 title={type.name}
                 subtitle={placeCountLabel(type.placeCount)}
-                description="Opens this type for editing"
+                description={t`Opens this type for editing`}
                 onOpen={() => setEditing(type)}
                 trailing={
                   /* The destructive verb lives in the ⋯, like every other
@@ -191,7 +193,7 @@ function PlaceTypeSection({
                      (Basalt) — the menu's surface is where it clears 4.5
                      (`scripts/wcag-contrast.mjs`). */
                   <Menu
-                    label={`Actions for ${type.name}`}
+                    label={t`Actions for ${type.name}`}
                     title={type.name}
                     placement="bottom-end"
                     /* The row opens the editor too; the menu names the verb
@@ -230,7 +232,7 @@ function PlaceTypeSection({
                       <IconButton
                         {...props}
                         icon="overflow"
-                        label={`Actions for ${type.name}`}
+                        label={t`Actions for ${type.name}`}
                       />
                     )}
                   />
@@ -284,7 +286,7 @@ function PlaceTypeSection({
           onSave={async (draft) => {
             const ok = await run(
               () => updatePlaceType(editing.id, draft),
-              "Couldn't save that type.",
+              t`Couldn't save that type.`,
             );
             if (ok) setEditing(null);
           }}
@@ -300,7 +302,7 @@ function PlaceTypeSection({
           if (!type) return;
           const ok = await run(
             () => deletePlaceType(type.id),
-            "Couldn't delete that type.",
+            t`Couldn't delete that type.`,
           );
           if (ok) setDeleting(null);
         }}
@@ -317,32 +319,38 @@ function PlaceTypeSection({
         open={mergingFrom !== null}
         copy={
           mergingFrom && {
-            confirmTitle: `Merge "${mergingFrom.name}" into ${
-              mergeTarget ? `"${mergeTarget.name}"` : "another type"
-            }?`,
-            confirmBody: `"${mergingFrom.name}" is then deleted. Values ${
-              mergeTarget ? `"${mergeTarget.name}"` : "the new type"
-            } has no attribute for are kept on each place, and can be added to it later.`,
-            confirmLabel: "Merge",
+            confirmTitle: mergeTarget
+              ? t`Merge "${mergingFrom.name}" into "${mergeTarget.name}"?`
+              : t`Merge "${mergingFrom.name}" into another type?`,
+            confirmBody: mergeTarget
+              ? t`"${mergingFrom.name}" is then deleted. Values "${mergeTarget.name}" has no attribute for are kept on each place, and can be added to it later.`
+              : t`"${mergingFrom.name}" is then deleted. Values the new type has no attribute for are kept on each place, and can be added to it later.`,
+            confirmLabel: t`Merge`,
             tone: "destructive",
             icon: "merge",
           }
         }
         busy={saving}
         confirmDisabledReason={
-          mergeTargetId ? undefined : "Pick the type to move them to"
+          mergeTargetId ? undefined : t`Pick the type to move them to`
         }
         onConfirm={async () => {
           const type = mergingFrom;
           if (!type || !mergeTargetId) return;
-          const moved = placeCountLabel(type.placeCount);
           const ok = await run(async () => {
             await reassignPlaceType(type.id, mergeTargetId);
             await deletePlaceType(type.id);
-          }, "Couldn't merge those types.");
+          }, t`Couldn't merge those types.`);
           if (ok) {
             setMergingFrom(null);
-            toast.done(`${moved} moved to ${mergeTarget?.name}`);
+            toast.done(
+              plural(
+                type.placeCount,
+                "# place moved to {0}",
+                "# places moved to {0}",
+                mergeTarget?.name ?? "",
+              ),
+            );
           }
         }}
         onClose={() => {
@@ -350,11 +358,15 @@ function PlaceTypeSection({
         }}
       >
         <Select
-          label={`Move its ${placeCountLabel(mergingFrom?.placeCount ?? 0)} to`}
+          label={plural(
+            mergingFrom?.placeCount ?? 0,
+            "Move its # place to",
+            "Move its # places to",
+          )}
           value={mergeTargetId}
           onChange={(event) => setMergeTargetId(event.target.value)}
         >
-          <option value="">Choose a type</option>
+          <option value="">{t`Choose a type`}</option>
           {types
             .filter((type) => type.id !== mergingFrom?.id)
             .map((type) => (
@@ -419,7 +431,7 @@ export function NewPlaceTypeFlow({
           else onClose();
         } catch (err) {
           console.error(err);
-          setError(messageFromError(err, "Couldn't create that type."));
+          setError(messageFromError(err, t`Couldn't create that type.`));
         } finally {
           setSaving(false);
         }
@@ -463,14 +475,16 @@ function PlaceTypeDialog({
   return (
     <Dialog
       open
-      title={editing ? `Edit "${editing.name}"` : "New place type"}
+      title={editing ? t`Edit "${editing.name}"` : t`New place type`}
       onClose={onClose}
       dismissible={!saving}
       footer={
         <>
-          <Button onClick={onClose} disabled={saving} disabledReason="Saving…">
-            Cancel
-          </Button>
+          <Button
+            onClick={onClose}
+            disabled={saving}
+            disabledReason={t`Saving…`}
+          >{t`Cancel`}</Button>
           <Button
             variant="filled"
             busy={saving}
@@ -481,15 +495,13 @@ function PlaceTypeDialog({
               }
               onSave({ name: name.trim(), iconKey, color });
             }}
-          >
-            Save
-          </Button>
+          >{t`Save`}</Button>
         </>
       }
     >
       <div className={classes.dialogForm}>
         <TextField
-          label="Name"
+          label={t`Name`}
           value={name}
           onChange={(event) => setName(event.target.value)}
           maxLength={PLACE_TYPE_NAME_MAX_LENGTH}
@@ -498,8 +510,12 @@ function PlaceTypeDialog({
           data-autofocus
         />
 
-        <span className={classes.fieldLabel}>Icon</span>
-        <div className={classes.iconGrid} role="radiogroup" aria-label="Icon">
+        <span className={classes.fieldLabel}>{t`Icon`}</span>
+        <div
+          className={classes.iconGrid}
+          role="radiogroup"
+          aria-label={t`Icon`}
+        >
           {PLACE_TYPE_ICON_KEYS.map((key) => {
             const Icon = placeTypeLucideIcon(key);
             const selected = key === iconKey;
@@ -527,7 +543,7 @@ function PlaceTypeDialog({
         </div>
 
         <ColourField
-          label="Colour"
+          label={t`Colour`}
           palette={PLACE_TYPE_COLORS}
           value={color}
           onChange={setColor}

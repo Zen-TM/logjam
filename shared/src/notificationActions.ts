@@ -29,6 +29,7 @@ import {
 } from "./contracts/plans.js";
 import { planTurnDownConfirm } from "./contracts/planVerbs.js";
 import { friendAcceptedMessage } from "./contracts/friends.js";
+import { t } from "./i18n.js";
 
 /** The two answers. `decline` is always the destructive one. */
 export type NotificationActionKind = "accept" | "decline";
@@ -97,25 +98,25 @@ export function friendRequestAnswers(
   return [
     {
       kind: "accept",
-      label: "Accept",
+      label: t`Accept`,
       confirm: null,
-      failure: "Couldn't accept that request.",
+      failure: t`Couldn't accept that request.`,
       success: friendAcceptedMessage(username),
     },
     {
       kind: "decline",
-      label: "Decline",
-      failure: "Couldn't decline that request.",
-      success: "Request declined.",
+      label: t`Decline`,
+      failure: t`Couldn't decline that request.`,
+      success: t`Request declined.`,
       // Asked on every surface, the Friends lists included (ADR 0016):
       // side by side with Accept there is no overflow sheet to keep "no" a step
       // away. Guard: notificationActions.test.ts.
       confirm: {
-        title: `Decline ${username}'s request?`,
+        title: t`Decline ${username}'s request?`,
         // The two things the user actually needs: it is not announced, and
         // it is not final.
-        body: `${username} won't be told, and can send another request later.`,
-        confirmLabel: "Decline",
+        body: t`${username} won't be told, and can send another request later.`,
+        confirmLabel: t`Decline`,
       },
     },
   ];
@@ -139,7 +140,7 @@ export function notificationActions(
   if (n.type === "friend_request") {
     const friendshipId = str(payload, "friendshipId");
     if (!friendshipId) return null;
-    const username = str(payload, "requesterUsername") ?? "them";
+    const username = str(payload, "requesterUsername") ?? t`them`;
     return {
       type: "friend_request",
       targetId: friendshipId,
@@ -162,18 +163,18 @@ export function notificationActions(
       actions: [
         {
           kind: "accept",
-          label: "Accept",
+          label: t`Accept`,
           confirm: null,
           failure: TRIP_PLAN_JOIN.copy.joinFailed,
           success: TRIP_PLAN_JOIN.copy.joined,
         },
         {
           kind: "decline",
-          label: "Decline",
+          label: t`Decline`,
           confirm: {
             title: TRIP_PLAN_JOIN.copy.declineTitle,
             body: TRIP_PLAN_JOIN.copy.declineBody,
-            confirmLabel: "Decline",
+            confirmLabel: t`Decline`,
           },
           failure: TRIP_PLANS_LIST.copy.declineFailed,
           success: TRIP_PLANS_LIST.copy.declined,
@@ -186,7 +187,7 @@ export function notificationActions(
     const planId = str(payload, "planId");
     const requesterId = str(payload, "requesterId");
     if (!planId || !requesterId) return null;
-    const username = str(payload, "requesterUsername") ?? "them";
+    const username = str(payload, "requesterUsername") ?? t`them`;
     const turnDown = planTurnDownConfirm(username);
     return {
       type: "plan_join_request",
@@ -197,14 +198,14 @@ export function notificationActions(
       actions: [
         {
           kind: "accept",
-          label: "Accept",
+          label: t`Accept`,
           confirm: null,
           failure: TRIP_PLAN_PAGE.copy.letInFailed,
           success: tripPlanLetInMessage(username),
         },
         {
           kind: "decline",
-          label: "Decline",
+          label: t`Decline`,
           confirm: {
             title: turnDown.confirmTitle,
             body: turnDown.confirmBody,
@@ -220,8 +221,9 @@ export function notificationActions(
   if (n.type === "file_sent") {
     const fileSendId = str(payload, "fileSendId");
     if (!fileSendId) return null;
-    const filename = str(payload, "filename") ?? "this file";
+    const filename = str(payload, "filename") ?? t`this file`;
     const sender = str(payload, "sentByUsername");
+    const from = sender ?? t`them`;
     // A lapsed send offers NOTHING. The bytes are gone or going, so every
     // button would fail; the row explains itself through the label's warning
     // line instead (`notificationLabel.ts`). Returning null here is
@@ -239,24 +241,24 @@ export function notificationActions(
     // The phone keeps a copy in Saved; Logjam Web has no Saved, so accepting
     // there is a download and its words say so.
     const acceptFailure = web
-      ? "Couldn't download that file."
-      : "Couldn't save that file.";
+      ? t`Couldn't download that file.`
+      : t`Couldn't save that file.`;
     if (payload.fileSendStatus === "accepted") {
       return {
         type: "file_sent",
         targetId: fileSendId,
         requesterId: null,
-        pill: web ? "Downloaded" : "Saved",
+        pill: web ? t`Downloaded` : t`Saved`,
         sender,
         actions: [
           {
             kind: "accept",
-            label: "Download again",
+            label: t`Download again`,
             confirm: null,
             failure: acceptFailure,
             success: web
-              ? "Downloaded again."
-              : "Downloaded again — find it in Saved.",
+              ? t`Downloaded again.`
+              : t`Downloaded again — find it in Saved.`,
             quiet: true,
           },
         ],
@@ -271,18 +273,18 @@ export function notificationActions(
       actions: [
         {
           kind: "accept",
-          label: platform === "web" ? "Download" : "Accept",
+          label: platform === "web" ? t`Download` : t`Accept`,
           confirm: null,
           failure: acceptFailure,
-          success: web ? "Downloaded." : "Saved — find it in Saved.",
+          success: web ? t`Downloaded.` : t`Saved — find it in Saved.`,
         },
         {
           kind: "decline",
-          label: "Decline",
-          failure: "Couldn't decline that.",
-          success: "Declined.",
+          label: t`Decline`,
+          failure: t`Couldn't decline that.`,
+          success: t`Declined.`,
           confirm: {
-            title: "Decline this file?",
+            title: t`Decline this file?`,
             // Two facts and no more: what you lose, and the ONE way back. What
             // it does to the sender and the other recipients was true but not
             // the question being asked, and length is what stops a confirm
@@ -291,8 +293,8 @@ export function notificationActions(
             // "send it again", never "share it again": a share is the other
             // verb — live and revocable — and blurring them here is exactly the
             // confusion the two verbs exist to prevent (ADR 0016).
-            body: `You won't get a copy of ${filename}. If you want it back, you'd have to ask ${sender ?? "them"} to send it again.`,
-            confirmLabel: "Decline",
+            body: t`You won't get a copy of ${filename}. If you want it back, you'd have to ask ${from} to send it again.`,
+            confirmLabel: t`Decline`,
           },
         },
       ],

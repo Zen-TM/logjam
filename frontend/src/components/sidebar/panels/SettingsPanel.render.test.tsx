@@ -10,6 +10,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   contractSectionKeys,
   COPY_MEDIA_SETTING,
+  LANGUAGE_SETTING,
   LEADERBOARD_SETTING,
   NOTIFICATION_PREFERENCES,
   notificationGroupLead,
@@ -22,14 +23,19 @@ import {
 } from "@logjam/shared";
 
 import { updateUserPreferences, type TUser } from "../../../placeUtils";
+import { chooseLanguage } from "../../../languageSetting";
 import SettingsPanel from "./SettingsPanel";
 
 const toast = { done: vi.fn(), error: vi.fn() };
 vi.mock("../../feedback/ToastProvider", () => ({ useToast: () => toast }));
 vi.mock("./ThemeChooser", () => ({ default: () => null }));
+vi.mock("../../../languageSetting", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../../languageSetting")>()),
+  chooseLanguage: vi.fn(),
+}));
 
-// jsdom has no ResizeObserver, which the chip rail of the units row measures
-// with. Assigned, not stubbed: `unstubAllGlobals` runs after every test.
+// jsdom has no ResizeObserver, which the chip rails of the language and units
+// rows measure with. Assigned, not stubbed: `unstubAllGlobals` runs after every test.
 globalThis.ResizeObserver = class {
   observe() {}
   unobserve() {}
@@ -311,6 +317,52 @@ describe("the Regions section", () => {
       expect(toast.error).toHaveBeenCalledWith(REGION_CHOICE.saveFailed),
     );
     expect(nz.getAttribute("aria-checked")).toBe("false");
+  });
+});
+
+const UTAH_LIKE: Region[] = [
+  NSW_REGION,
+  { ...NSW_REGION, id: "utah", name: "Utah", languages: ["en-US"] },
+];
+
+describe("the Language row", () => {
+  // Mutation: draw the chooser whatever `languages.length > 1` says (a prod
+  // Logjam Web, with NSW alone and no pseudo-language, would show a choice of one).
+  it("is not drawn in prod: one region declaring no language, nothing for development", () => {
+    renderPanel(vi.fn(), { regions: [NSW_REGION] });
+    expect(screen.queryByText(LANGUAGE_SETTING.title)).toBeNull();
+    expect(screen.queryByRole("radiogroup", { name: "Language" })).toBeNull();
+    cleanup();
+    renderPanel(vi.fn());
+    expect(screen.queryByText(LANGUAGE_SETTING.title)).toBeNull();
+  });
+
+  // Mutation: delete `<LanguageChooser … />` from the Display section, or map
+  // the options from `LANGUAGES` instead of what is offered.
+  it("is drawn with a region that declares a language, one choice for each language offered, the one running chosen", () => {
+    renderPanel(vi.fn(), { regions: UTAH_LIKE });
+    const group = screen.getByRole("radiogroup", {
+      name: LANGUAGE_SETTING.title,
+    });
+    const chips = within(group).getAllByRole("radio");
+    expect(chips.map((chip) => chip.textContent)).toEqual([
+      LANGUAGE_SETTING.names["en-AU"],
+      LANGUAGE_SETTING.names["en-US"],
+    ]);
+    expect(chips[0].getAttribute("aria-checked")).toBe("true");
+    expect(screen.getByText(LANGUAGE_SETTING.hint.web)).toBeTruthy();
+  });
+
+  // Mutation: pass another value than the pressed language to `chooseLanguage`,
+  // or drop the toast on a refused write.
+  it("stores the pressed language, and says so when the browser refuses it", () => {
+    vi.mocked(chooseLanguage).mockReturnValue(false);
+    renderPanel(vi.fn(), { regions: UTAH_LIKE });
+    fireEvent.click(
+      screen.getByRole("radio", { name: LANGUAGE_SETTING.names["en-US"] }),
+    );
+    expect(chooseLanguage).toHaveBeenCalledWith("en-US");
+    expect(toast.error).toHaveBeenCalledWith(LANGUAGE_SETTING.saveFailed.web);
   });
 });
 

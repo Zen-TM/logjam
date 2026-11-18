@@ -1,5 +1,5 @@
 import { Pressable, Text, View } from "react-native";
-import { chipFill } from "@logjam/shared";
+import { chipFill, t } from "@logjam/shared";
 
 import {
   hitSlop,
@@ -85,7 +85,7 @@ export function Chip({
             ? "checkbox"
             : "button"
       }
-      accessibilityLabel={starred ? `${label}, starred` : undefined}
+      accessibilityLabel={starred ? t`${label}, starred` : undefined}
       accessibilityState={
         choice ? { checked: active, disabled } : { selected: active, disabled }
       }

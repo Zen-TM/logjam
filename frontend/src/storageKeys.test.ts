@@ -31,6 +31,8 @@ const CLEARED_BY_OWN_MODULE = [
 ];
 
 const KEPT: Record<string, string> = {
+  "logjam.language":
+    "the language this browser runs in, read before anyone signs in: a device preference",
   "logjam.signInArea":
     "which sign-in picture was shown last; read while nobody is signed in",
   "logjam.activeLayerId":
@@ -48,7 +50,7 @@ const KEPT: Record<string, string> = {
     "sort order reorders and never hides: a device preference",
   "logjam.tripSort": "sort order reorders and never hides: a device preference",
   "logjam.logbookStatsRange":
-    "a range label such as 'All time': a device preference",
+    "a range id such as 'all' or '2024': a device preference",
   "logjam.weatherModel": "the forecast model picked: a device preference",
   "logjam.leaderboard.podiumDismissed":
     "per device by design, holds a season and no user",

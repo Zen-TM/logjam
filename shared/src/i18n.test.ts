@@ -3,7 +3,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type * as I18n from "./i18n";
 
-// en-US is empty in source; these are the differences the tests need.
+// A stand-in catalogue, so this file tests the mechanism and not US English
+// (`usEnglish.test.ts` holds that).
 vi.mock("./i18nCatalogues/en-US.js", () => ({
   enUS: {
     "{0} {1} {2}": "{1} {0}, {2}",
@@ -102,6 +103,32 @@ describe("language", () => {
     setLanguageResolver(() => "en-XA");
     expect(language()).toBe("en-XA");
     setLanguageResolver(() => undefined);
+    expect(language()).toBe("en-US");
+  });
+});
+
+describe("inSourceLanguage", () => {
+  // Mutation: return `render()` without pinning the language, and a stored
+  // English sentence no longer equals the sentence rendered to compare with it.
+  it("writes in the source language whatever is in force, and puts the language back", async () => {
+    const { inSourceLanguage, language, t } = await load();
+    use("en-XA");
+    const render = () => t`Couldn't find that place.`;
+    expect(render()).not.toBe("Couldn't find that place.");
+    expect(inSourceLanguage(render)).toBe("Couldn't find that place.");
+    expect(language()).toBe("en-XA");
+  });
+
+  // Mutation: drop the `finally`, and a render that throws leaves every later
+  // message in the source language.
+  it("puts the language back when the render throws", async () => {
+    const { inSourceLanguage, language } = await load();
+    use("en-US");
+    expect(() =>
+      inSourceLanguage(() => {
+        throw new Error("render failed");
+      }),
+    ).toThrow("render failed");
     expect(language()).toBe("en-US");
   });
 });

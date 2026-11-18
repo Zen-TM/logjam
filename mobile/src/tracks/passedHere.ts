@@ -1,5 +1,5 @@
 // The one line a track's sheet says about the spot that was tapped to open it.
-import { timeOfDayFormatter, type TrackPass } from "@logjam/shared";
+import { plural, t, timeOfDayFormatter, type TrackPass } from "@logjam/shared";
 
 /** A visit shorter than this is a walk past: one time says it. */
 const STOP_MS = 5 * 60_000;
@@ -21,16 +21,20 @@ export function passedHereText(
   const mixed = listed.some(isStop);
   const times = listed.map((pass) =>
     isStop(pass)
-      ? `from ${format(pass.fromMs)} to ${format(pass.toMs)}`
-      : `${mixed ? "at " : ""}${format(pass.atMs)}`,
+      ? t`from ${format(pass.fromMs)} to ${format(pass.toMs)}`
+      : mixed
+        ? t`at ${format(pass.atMs)}`
+        : format(pass.atMs),
   );
   const more = passes.length - listed.length;
-  if (more > 0) times.push(`${more} more ${more === 1 ? "time" : "times"}`);
+  if (more > 0) times.push(plural(more, "# more time", "# more times"));
   const list =
     times.length === 1
       ? times[0]!
-      : `${times.slice(0, -1).join(", ")} and ${times[times.length - 1]!}`;
+      : t`${times.slice(0, -1).join(", ")} and ${times[times.length - 1]!}`;
   if (passes.length === 1 && mixed)
-    return `The track was at this point ${list}.`;
-  return `This point was passed ${mixed ? "" : "at "}${list}.`;
+    return t`The track was at this point ${list}.`;
+  return mixed
+    ? t`This point was passed ${list}.`
+    : t`This point was passed at ${list}.`;
 }

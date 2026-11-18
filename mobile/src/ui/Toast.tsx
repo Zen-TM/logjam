@@ -4,6 +4,7 @@ import {
   toastMs,
   type ToastAction,
   type ToastTone,
+  t,
 } from "@logjam/shared";
 import {
   useEffect,
@@ -217,7 +218,7 @@ function ToastDock({
         ) : null}
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Dismiss"
+          accessibilityLabel={t`Dismiss`}
           hitSlop={12}
           onPress={onDismissed}
           style={styles.close}

@@ -3,6 +3,8 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
+import { setLanguageResolver, t } from "./i18n.js";
+
 import {
   contractSectionKeys,
   GAUGES,
@@ -239,7 +241,7 @@ describe("a gauge on a trip's date", () => {
     );
     // The newest past trip, 2 Oct, has no value: nothing older stands in.
     expect(line(["2026-10-01", "2026-10-02"])).toEqual([
-      `${gaugeDisplayName(g.name)} ${GAUGES.copy.noneForDate}`,
+      `${gaugeDisplayName(g.name)} has no reading for that date.`,
     ]);
   });
 
@@ -286,7 +288,7 @@ describe("a gauge on a trip's date", () => {
         now,
         latest,
       ),
-    ).toEqual([`${gaugeDisplayName(g.name)} ${GAUGES.copy.noneForDate}`]);
+    ).toEqual([`${gaugeDisplayName(g.name)} has no reading for that date.`]);
     expect(
       tripGaugeLines([{ gauge: g, history }], [], "lastTrip", now, latest),
     ).toEqual([]);
@@ -339,7 +341,7 @@ describe("the gauge panel's words", () => {
   const gauge = latest.gauges[0];
 
   it("tidies BoM's names for reading", () => {
-    // Mutation: drop an entry from NAME_WORDS or the "@" padding → red.
+    // Mutation: drop an entry from nameWords or the "@" padding → red.
     expect(gaugeDisplayName("COLO R @ UPPER COLO")).toBe(
       "Colo River at Upper Colo",
     );
@@ -377,6 +379,25 @@ describe("the gauge panel's words", () => {
     expect(gaugeDisplayName("Waratah Rivulet at Fire RD 9J")).toBe(
       "Waratah Rivulet at Fire Road 9J",
     );
+  });
+
+  // The name is built from the catalogue's words, so none of the clean-up may
+  // read them as English: under the pseudo-language every word is rewritten,
+  // and "at" must still drop before a stream phrase.
+  // Mutation: replace the `filter` in `gaugeDisplayName` with
+  // `.replace(/ at ((?:up|down)stream of) /, " $1 ")` on the joined string.
+  it("drops the 'at' before a stream phrase whatever language the words are in", () => {
+    setLanguageResolver(() => "en-XA");
+    try {
+      expect(gaugeDisplayName("OAKEY CK AT D/S WEIR")).toBe(
+        ["Oakey", t`Creek`, t`downstream of`, "Weir"].join(" "),
+      );
+      expect(gaugeDisplayName("OAKEY CK AT DOWNSTREAM WEIR")).toBe(
+        ["Oakey", t`Creek`, t`downstream`, t`of`, "Weir"].join(" "),
+      );
+    } finally {
+      setLanguageResolver(() => undefined);
+    }
   });
 
   it("reads the newest level and the newest flow each on their own, within 7 days", () => {
@@ -450,7 +471,7 @@ describe("the gauge panel's words", () => {
     );
   });
 
-  // Readings, never advice. Mutation: put "safe" in the copy → red.
+  // Readings, never advice. Mutation: put "safe" in the copy, or in a sentence a function writes whole (`gaugeAges`, `gaugeFileNote`, `tripGaugeLines`) → red.
   it("has no word of advice and no colour scale", () => {
     const words = JSON.stringify([
       GAUGES.copy,
@@ -461,6 +482,33 @@ describe("the gauge panel's words", () => {
         "lastTrip",
         Date.parse("2026-10-30T12:00:00Z"),
         latest,
+      ),
+      // The sentences written whole in the functions, not in `GAUGES.copy`.
+      gaugeAges(
+        {
+          level: 1,
+          levelAt: Date.parse("2026-10-30T11:00:00Z"),
+          flow: 2,
+          flowAt: Date.parse("2026-10-30T11:00:00Z"),
+        },
+        Date.parse("2026-10-30T12:00:00Z"),
+      ).line,
+      gaugeFileNote("2026-10-28T12:00:00Z", Date.parse("2026-10-30T12:00:00Z")),
+      ...[true, false].map((withCurrent) =>
+        tripGaugeLines(
+          [
+            {
+              gauge: withCurrent
+                ? latest.gauges[0]!
+                : { ...latest.gauges[0]!, readings: [] },
+              history,
+            },
+          ],
+          ["2026-10-01"],
+          "trip",
+          Date.parse("2026-10-30T12:00:00Z"),
+          latest,
+        ),
       ),
       MAP_OVERLAYS.copy,
       GAUGES.title,

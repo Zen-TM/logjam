@@ -72,7 +72,11 @@ Two things follow from the layers chosen:
   the worker reads the archives from `topo/regions.json`. Nothing else is
   declared for it. Guards: `areaExport.test.ts` ("is the region the worker reads
   the archives from") and `topo/tests/test_regions.py` (`TestExportRegion`), both
-  reading `shared/src/__fixtures__/export-region.json`.
+  reading `shared/src/__fixtures__/export-region.json`. The export panel's last
+  sentence ("What comes out is drawn from the government's survey…", in
+  `GeoPdfDialog.tsx`) says "the government's survey" whatever the region: give it
+  per-region copy, or check it against the region's source, before the region
+  offers an export. No test checks it.
 - **Sharpening** is filled from the region's heights and slope at z15, so an
   upload region needs both, with heights that stop at z15 (section 3).
 
@@ -112,6 +116,7 @@ the simulated regions only.
 | `grid` | The map grid coordinates are given in: one of `GridId` (`shared/src/grids.ts`): `mga2020`, `nztm2000` or `utm`. A region on another grid needs the type, a zone rule, `GRID_NAMES` and the typed-reference reader widened first. | `grids.test.ts` checks each grid's projection against the survey agencies' published values. No test checks that a region's `grid` suits where it is. |
 | `canyonGrades` | The system canyon grades are written in there, `french` or `aca`: a canyon form offers that system's fields. A third system needs `CanyonGradeSystem` and its attribute definitions first ([0051](../decisions/0051-a-lettered-grade-is-stored-as-its-rank.md)). | `canyonGrade.test.ts` ("the grade system at a position"). Nothing checks the value is the region's practice. |
 | `units` | `metric` or `imperial`: what an account whose home this is reads until it chooses (`unitsOf`, `shared/src/units.ts`). Stored values never change. | `units.test.ts` ("unitsOf", "offersUnitsChoice"). Nothing checks the value suits the region. |
+| `languages` | Optional. The BCP 47 tags, beyond the source language, that the region's users read. A tag is offered only if it is in `LANGUAGES` (`shared/src/i18n.ts`), which needs that language's catalogue in `shared/src/i18nCatalogues/` first ([0050](../decisions/0050-user-facing-text-goes-through-one-catalogue-function.md)). `offeredLanguages` (`shared/src/languageChoice.ts`) reads it: once a region declares one, both clients draw a language choice. | `languageChoice.test.ts`: "every tag a declared region carries is a language the catalogue knows". Nothing checks that the region's users read the language. |
 
 ### Each Terrain archive
 
@@ -362,13 +367,11 @@ GPS supports.
 
 ## Before the pull request
 
-Run the topo suite with the Python version CI uses (`python-version` in the
-`topo` job of [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml)), after
-`pip install -r requirements-test.txt`; [topo/AGENTS.md](../../topo/AGENTS.md)
-says how it runs. Several of its tests read `regions.ts` and `regions.json`:
+Run the topo suite, which reads `regions.ts` and `regions.json` in several
+tests ([topo/AGENTS.md](../../topo/AGENTS.md) says how it runs):
 
 ```
-cd topo && python -m unittest discover -s tests
+make topo-test
 ```
 
 Then every package that reads the declaration:

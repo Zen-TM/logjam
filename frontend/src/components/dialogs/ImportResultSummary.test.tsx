@@ -9,7 +9,7 @@ afterEach(cleanup);
 it("lists dropped rows under their own heading, apart from left-empty fields", () => {
   render(
     <ImportResultSummary
-      headline={[{ count: 3, label: "created" }]}
+      headline={[{ count: 3, label: "Created" }]}
       skippedRows={["Row 4: latitude couldn't be read — skipped"]}
       warnings={["Row 2: depth was left empty"]}
     />,

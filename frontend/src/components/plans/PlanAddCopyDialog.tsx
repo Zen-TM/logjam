@@ -21,6 +21,7 @@ import {
   type StandaloneFile,
   type TripPlanItemKind,
   type TripPlanView,
+  t,
 } from "@logjam/shared";
 import {
   Button,
@@ -216,9 +217,11 @@ export default function PlanAddCopyDialog({
       }
       footer={
         <>
-          <Button onClick={onClose} disabled={busy} disabledReason="Adding…">
-            Cancel
-          </Button>
+          <Button
+            onClick={onClose}
+            disabled={busy}
+            disabledReason={t`Adding…`}
+          >{t`Cancel`}</Button>
           <Button type="submit" form={formId} variant="filled" busy={busy}>
             {tripPlanAddCopiesLabel(chosen.length)}
           </Button>

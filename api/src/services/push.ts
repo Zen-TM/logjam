@@ -14,41 +14,42 @@
 import prisma from "./prisma";
 import { logger } from "../lib/logger";
 import { getEnv } from "../lib/env";
-import { ANNOUNCEMENT } from "@logjam/shared";
+import { ANNOUNCEMENT, t } from "@logjam/shared";
+import { languageOfAccount, runInLanguage } from "../lib/requestLanguage";
 
 // Expo accepts up to 100 messages per request.
 const EXPO_PUSH_BATCH_LIMIT = 100;
 
 // Static, generic titles — no interpolation, ever.
-const PUSH_TITLES: Record<string, string> = {
-  friend_request: "New friend request",
-  friend_request_accepted: "Friend request accepted",
-  place_shared: "A place was shared with you",
-  topo_complete: "Topo processing complete",
-  topo_failed: "Topo processing failed",
-  topo_export_complete: "Map finished",
-  topo_export_skipped: "Auto-export skipped",
-  item_shared: "Something was shared with you",
-  file_sent: "A friend sent you a file",
-  egress_quota_warning: "Approaching your monthly download limit",
-  egress_quota_exceeded: "Monthly download limit reached",
+const PUSH_TITLES: Record<string, () => string> = {
+  friend_request: () => t`New friend request`,
+  friend_request_accepted: () => t`Friend request accepted`,
+  place_shared: () => t`A place was shared with you`,
+  topo_complete: () => t`Topo processing complete`,
+  topo_failed: () => t`Topo processing failed`,
+  topo_export_complete: () => t`Map finished`,
+  topo_export_skipped: () => t`Auto-export skipped`,
+  item_shared: () => t`Something was shared with you`,
+  file_sent: () => t`A friend sent you a file`,
+  egress_quota_warning: () => t`Approaching your monthly download limit`,
+  egress_quota_exceeded: () => t`Monthly download limit reached`,
   // Never the message's own title: that is free text, and the inbox has it.
   // Guard: push.unit.test.ts, "titles an announcement generically…".
-  announcement: ANNOUNCEMENT.untitled,
+  announcement: () => ANNOUNCEMENT.untitled,
   // ONE buzz for a whole bulk action, whatever it contained. Deliberately says
   // neither who nor how many: a count is not free text, but a title is built by
   // lookup and never by interpolation, and keeping that true BY CONSTRUCTION is
   // what stops the next call site reaching for a username. The inbox has the
   // numbers; this only has to get the user there.
-  bulk_shared: "New things were shared with you",
-  plan_invited: "You were invited to a trip plan",
-  plan_join_request: "Someone asked to join your plan",
-  plan_join_approved: "You're in",
-  plan_member_joined: "Someone joined your plan",
-  plan_access_ended: "A plan is no longer available",
+  bulk_shared: () => t`New things were shared with you`,
+  plan_invited: () => t`You were invited to a trip plan`,
+  plan_join_request: () => t`Someone asked to join your plan`,
+  plan_join_approved: () => t`You're in`,
+  plan_member_joined: () => t`Someone joined your plan`,
+  plan_access_ended: () => t`A plan is no longer available`,
 };
 
-const GENERIC_TITLE = "Logjam notification";
+const GENERIC_TITLE = () => t`Logjam notification`;
 
 /** Opaque reference IDs a push may carry — nothing else gets through. */
 export type PushData = {
@@ -91,7 +92,7 @@ export type ExpoPushMessage = {
 };
 
 export function pushTitleFor(type: string): string {
-  return PUSH_TITLES[type] ?? GENERIC_TITLE;
+  return (PUSH_TITLES[type] ?? GENERIC_TITLE)();
 }
 
 /**
@@ -149,11 +150,16 @@ export async function sendPushToUser(
   try {
     const devices = await prisma.deviceToken.findMany({
       where: { userId },
-      select: { token: true },
+      select: { token: true, user: { select: { uiPreferences: true } } },
     });
     if (devices.length === 0) return;
     const tokens = devices.map((d) => d.token);
-    const messages = buildPushMessages(tokens, data);
+    // Nobody asked, so there is no request to read a language from: the
+    // title is written in the one the account's client last ran in.
+    const messages = runInLanguage(
+      languageOfAccount(devices[0].user?.uiPreferences),
+      () => buildPushMessages(tokens, data),
+    );
 
     for (let i = 0; i < messages.length; i += EXPO_PUSH_BATCH_LIMIT) {
       const batchTokens = tokens.slice(i, i + EXPO_PUSH_BATCH_LIMIT);

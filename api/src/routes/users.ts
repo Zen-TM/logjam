@@ -16,8 +16,9 @@ import {
   USERNAME_MAX,
   USERNAME_MIN,
   USERNAME_PATTERN,
-  USERNAME_RULE,
-  USERNAME_TAKEN,
+  usernameRule,
+  usernameTaken,
+  type Language,
 } from "@logjam/shared";
 import { defsForUserResponse } from "../lib/customFieldDefs";
 import { EXPORT_SCHEMA_VERSION, loadExportSections } from "../lib/dataExport";
@@ -35,6 +36,7 @@ import { getMonthlyCreditUsage } from "../lib/computeCredits";
 import { getEgressUsage } from "../lib/egressQuota";
 import { CURRENT_CONSENT_VERSION } from "../constants/consent";
 import { getEnv } from "../lib/env";
+import { acceptedLanguages } from "../lib/requestLanguage";
 import { deleteS3Keys, deleteS3Prefix } from "../lib/s3Cleanup";
 import { deleteTopoJobObjects } from "../lib/topoUpload";
 import { handOverPlans } from "../lib/planItems";
@@ -247,7 +249,7 @@ router.get(
   usernameCheckLimiter,
   async (req, res: Response) => {
     const parsed = usernameSchema.safeParse(req.query.username);
-    if (!parsed.success) throw new AppError(400, USERNAME_RULE);
+    if (!parsed.success) throw new AppError(400, usernameRule());
     const rows = await prisma.$queryRaw<unknown[]>`
       SELECT 1 FROM users WHERE lower(username) = lower(${parsed.data}) LIMIT 1`;
     res.json({ available: rows.length === 0 });
@@ -364,6 +366,7 @@ router.patch(
       leaderboardOptIn,
       slopeBands,
       regions,
+      language,
       units,
       consentVersion,
     } = req.body as {
@@ -375,6 +378,7 @@ router.patch(
       leaderboardOptIn?: unknown;
       slopeBands?: unknown;
       regions?: unknown;
+      language?: unknown;
       units?: unknown;
       consentVersion?: unknown;
     };
@@ -415,7 +419,7 @@ router.patch(
     if (username !== undefined) {
       const parsed = usernameSchema.safeParse(username);
       if (!parsed.success) {
-        throw new AppError(400, USERNAME_RULE);
+        throw new AppError(400, usernameRule());
       }
       updates.username = parsed.data;
     }
@@ -428,6 +432,7 @@ router.patch(
       leaderboardOptIn !== undefined ||
       slopeBands !== undefined ||
       regions !== undefined ||
+      language !== undefined ||
       units !== undefined
     ) {
       // An older client may still send a retired id; it is stored as the
@@ -461,6 +466,12 @@ router.patch(
         slopeBands === undefined ? undefined : parseSlopeBands(slopeBands);
       if (nextSlopeBands === null) {
         throw malformed("Invalid slopeBands");
+      }
+      if (
+        language !== undefined &&
+        !acceptedLanguages().includes(language as Language)
+      ) {
+        throw malformed("Invalid language");
       }
       if (regions !== undefined) {
         if (
@@ -518,6 +529,7 @@ router.patch(
         ...(importMergePolicy !== undefined
           ? { importMergePolicy: normalizeImportMergePolicy(importMergePolicy) }
           : {}),
+        ...(language !== undefined ? { language: language as Language } : {}),
       };
     }
 
@@ -539,7 +551,7 @@ router.patch(
         // The username is the only unique column this route writes.
         // `meta.target` does not name the column under the driver adapter, so
         // any P2002 here indicates a taken username (users.test.ts).
-        throw new AppError(409, USERNAME_TAKEN);
+        throw new AppError(409, usernameTaken());
       }
       throw e;
     }

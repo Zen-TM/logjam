@@ -7,6 +7,7 @@ import {
   ApiError,
   computeBackoffMs,
   SYNC_GIVE_UP_AFTER_MS,
+  t,
 } from "@logjam/shared";
 
 import { isNoResponse } from "../api/noResponse";
@@ -270,7 +271,7 @@ export function requestSync(): Promise<void> {
         ).catch(() => {});
         setStatus({
           state: "error",
-          errorMessage: "This phone couldn't apply an update.",
+          errorMessage: t`This phone couldn't apply an update.`,
           errorKind: "applyFailed",
         });
         return;
@@ -287,7 +288,7 @@ export function requestSync(): Promise<void> {
         console.error(`sync: server has no ${err.method} ${err.path}`);
         setStatus({
           state: "error",
-          errorMessage: "This server doesn't support sync yet.",
+          errorMessage: t`This server doesn't support sync yet.`,
           errorKind: "unsupported",
         });
         return;
@@ -297,7 +298,7 @@ export function requestSync(): Promise<void> {
       // event triggers, so a flaky link recovers without user action.
       setStatus({
         state: "error",
-        errorMessage: "Couldn't sync. Will retry.",
+        errorMessage: t`Couldn't sync. Will try again.`,
         errorKind: "unreachable",
       });
       scheduleBackoffRetry();
@@ -345,7 +346,7 @@ function scheduleBackoffRetry(): void {
     // trap: a metered-disallowed connection would decline, the ladder would end
     // with nothing to restart it (`subscribeReconnect` is edge-triggered on
     // reachability, and cellular→Wi-Fi is not that edge), and the status line
-    // would sit on "Couldn't sync. Will retry." forever.
+    // would sit on "Couldn't sync. Will try again." forever.
     void requestSync();
   }, delay);
 }

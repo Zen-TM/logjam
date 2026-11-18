@@ -282,6 +282,7 @@ describe("the Land tenure row on Logjam Web", () => {
     render(
       <OverlayLegendRow
         legend={OVERLAY_LEGENDS.land}
+        toggleLabel="Show land tenure"
         checked={TERRAIN_LAYER_DEFAULTS.land}
         onToggle={onToggle}
       />,
@@ -302,6 +303,7 @@ describe("the Land tenure row on Logjam Web", () => {
     render(
       <OverlayLegendRow
         legend={OVERLAY_LEGENDS.land}
+        toggleLabel="Show land tenure"
         checked={false}
         onToggle={vi.fn()}
       />,
@@ -322,6 +324,7 @@ describe("the Fire history row on Logjam Web", () => {
     render(
       <OverlayLegendRow
         legend={OVERLAY_LEGENDS.fire}
+        toggleLabel="Show fire history"
         checked={TERRAIN_LAYER_DEFAULTS.fire}
         onToggle={onToggle}
       />,
@@ -342,6 +345,7 @@ describe("the Fire history row on Logjam Web", () => {
     render(
       <OverlayLegendRow
         legend={OVERLAY_LEGENDS.fire}
+        toggleLabel="Show fire history"
         checked={false}
         onToggle={vi.fn()}
       />,
@@ -372,6 +376,7 @@ describe("the Coverage row on Logjam Web", () => {
     render(
       <OverlayLegendRow
         legend={OVERLAY_LEGENDS.coverage}
+        toggleLabel="Show coverage"
         checked={TERRAIN_LAYER_DEFAULTS.coverage}
         onToggle={props.onToggle ?? vi.fn()}
         choice={{
@@ -416,6 +421,7 @@ describe("the Coverage row on Logjam Web", () => {
       return (
         <OverlayLegendRow
           legend={OVERLAY_LEGENDS.coverage}
+          toggleLabel="Show coverage"
           checked={value !== null}
           onToggle={vi.fn()}
           choice={{ value, onChange: setValue }}

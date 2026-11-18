@@ -11,7 +11,7 @@ import {
   stopGaugesForWipe,
 } from "./gaugeStorage";
 import { GAUGE_PREFIX } from "@logjam/shared";
-import { gaugeFixture } from "./gaugeFixture";
+import { gaugeFixture } from "./__fixtures__/gaugeFixture";
 
 const fs = vi.hoisted(() => ({ files: new Map<string, string>(), dirs: 0 }));
 vi.mock("expo-file-system/legacy", () => ({

@@ -16,6 +16,7 @@ import {
   formatDistanceM,
   formatSpeedMps,
   formatHeight,
+  isLiveReadStat,
   PAIRED_STAT_LABELS,
   pairedStatLayout,
   speedSeries,
@@ -26,6 +27,7 @@ import {
   trackStatRows,
   type ElevationProfile,
   type TrackDetail,
+  t,
 } from "@logjam/shared";
 
 import { spacing, makeStyles, muted } from "../theme";
@@ -91,7 +93,7 @@ export function TrackStatsBody({
       <Text style={styles.pending}>
         {loading
           ? TRACK_PROFILE_COPY.reading
-          : (emptyMessage ?? "No points recorded yet.")}
+          : (emptyMessage ?? t`No points recorded yet.`)}
       </Text>
     );
   }
@@ -107,8 +109,7 @@ export function TrackStatsBody({
     storedClimb,
   }).map((row) => ({
     ...row,
-    instrument:
-      elapsedMs != null && (row.label === "Time" || row.label === "Distance"),
+    instrument: elapsedMs != null && isLiveReadStat(row.label),
   }));
 
   // The stored climb and the chart below can come from different sources
@@ -148,7 +149,7 @@ export function TrackStatsBody({
             series={elevationSeries(elevation, detail.distanceM)}
             formatValue={formatHeight}
             formatX={formatDistanceM}
-            hint="Press or drag for heights."
+            hint={t`Press or drag for heights.`}
             accessibilityLabel={TRACK_PROFILE_COPY.elevationLabel}
           />
           {/* Which surface these heights came from. Said out loud because the
@@ -171,7 +172,7 @@ export function TrackStatsBody({
             // time into the recording (see SpeedSample), read out as the time
             // of day it was: "where were we at 2 pm" is the question asked.
             formatX={formatClock}
-            hint="Press or drag for speeds."
+            hint={t`Press or drag for speeds.`}
             accessibilityLabel={TRACK_PROFILE_COPY.speedLabel}
           />
         </View>

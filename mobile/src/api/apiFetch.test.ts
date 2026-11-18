@@ -180,3 +180,23 @@ describe("a caller's abort signal", () => {
     ).rejects.toThrow();
   });
 });
+
+describe("the language the API writes its refusals in", () => {
+  // Mutation: drop "Accept-Language" from baseHeaders, and every refusal
+  // comes back in English whatever language the phone runs in.
+  it("is the one the phone runs in, on every request", async () => {
+    const languageOf = globalThis as { LOGJAM_LANGUAGE?: string };
+    languageOf.LOGJAM_LANGUAGE = "en-US";
+    try {
+      fetchMock.mockResolvedValue(jsonResponse({ ok: true }));
+      await apiFetch("/notifications");
+      const headers = fetchMock.mock.calls[0][1].headers as Record<
+        string,
+        string
+      >;
+      expect(headers["Accept-Language"]).toBe("en-US");
+    } finally {
+      delete languageOf.LOGJAM_LANGUAGE;
+    }
+  });
+});

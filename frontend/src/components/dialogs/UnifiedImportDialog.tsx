@@ -38,6 +38,8 @@ import {
   type TripLogCustomFieldDef,
   type TripLogCustomFieldType,
   type ScopedCustomFieldDef,
+  plural,
+  t,
 } from "@logjam/shared";
 import {
   coordinateEntry,
@@ -86,11 +88,12 @@ import {
   placeRowDecision,
   preparePlaceRows,
   prepareTripRows,
+  skippedRowLine,
   skippedRowsNote,
-  splitSkippedRows,
   tripRowDecision,
   type PreparedPlaceRow,
   type PreparedTripRow,
+  type SkippedRow,
 } from "../../csvImport/prepareRows";
 import { messageFromError } from "../../errors/messageFromError";
 import { useToast } from "../feedback/ToastProvider";
@@ -158,6 +161,7 @@ type ImportOutcome =
       droppedRows: number;
       errors: string[];
       warnings: string[];
+      skippedRows: SkippedRow[];
     }
   | {
       kind: "triplog";
@@ -171,6 +175,7 @@ type ImportOutcome =
       droppedRows: number;
       errors: string[];
       warnings: string[];
+      skippedRows: SkippedRow[];
     };
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -201,7 +206,7 @@ function toMatchCandidate(c: TPlace): MatchCandidate {
 // own label — what the user called the field — and only the structural entry
 // needs spelling here.
 const STRUCTURAL_MERGE_LABELS: Record<string, string> = {
-  notes: "Notes",
+  notes: t`Notes`,
 };
 
 function mergeFieldLabel(
@@ -334,9 +339,10 @@ function UnifiedImportDialog({
   const [preparedPlaceRows, setPreparedPlaceRows] = useState<
     PreparedPlaceRow[]
   >([]);
-  // Per-field coercion warnings collected while preparing place rows,
-  // plus per-row "couldn't be read — skipped" entries.
+  // Per-field coercion warnings collected while preparing place rows, and the
+  // rows that couldn't be read, kept apart.
   const [placeWarnings, setPlaceWarnings] = useState<string[]>([]);
+  const [placeSkipped, setPlaceSkipped] = useState<SkippedRow[]>([]);
   // Source rows dropped entirely (missing name / unreadable lat-lon) before
   // reaching the server — reported in the outcome summary alongside
   // `created`/`merged`, distinct from the server's merge-skip count.
@@ -344,9 +350,10 @@ function UnifiedImportDialog({
   const [preparedTripRows, setPreparedTripRows] = useState<PreparedTripRow[]>(
     [],
   );
-  // Per-row coercion warnings collected while preparing trip rows,
-  // plus per-row "couldn't be read — skipped" entries.
+  // Per-row coercion warnings collected while preparing trip rows, and the
+  // rows that couldn't be read, kept apart.
   const [tripWarnings, setTripWarnings] = useState<string[]>([]);
+  const [tripSkipped, setTripSkipped] = useState<SkippedRow[]>([]);
   // Source rows dropped entirely (unreadable date) before reaching the server
   // — reported in the outcome summary alongside `imported`.
   const [tripDroppedRows, setTripDroppedRows] = useState<number>(0);
@@ -447,9 +454,11 @@ function UnifiedImportDialog({
     setActiveKind(null);
     setPreparedPlaceRows([]);
     setPlaceWarnings([]);
+    setPlaceSkipped([]);
     setPlaceDroppedRows(0);
     setPreparedTripRows([]);
     setTripWarnings([]);
+    setTripSkipped([]);
     setTripDroppedRows(0);
     setReviewState({
       decisions: {},
@@ -468,7 +477,7 @@ function UnifiedImportDialog({
   // ── File loading ────────────────────────────────────────────────────────────
 
   const importTypeName =
-    placeTypes.find((type) => type.id === importPlaceTypeId)?.name ?? "Place";
+    placeTypes.find((type) => type.id === importPlaceTypeId)?.name ?? t`Place`;
 
   /** The template for the chosen type, built and handed over in the browser —
    *  there is no server round trip because the definitions are already here. */
@@ -513,7 +522,7 @@ function UnifiedImportDialog({
     setError(null);
     if (/\.(gpx|kml|kmz|geojson)$/i.test(file.name)) {
       setError(
-        `"${file.name}" isn't a CSV. This importer reads CSV files of places and trips. To add a GPX, KML or GeoJSON file, open Ways and choose Add, then “${WAY_IMPORT.menu}”.`,
+        t`"${file.name}" isn't a CSV. This importer reads CSV files of places and trips. To add a GPX, KML or GeoJSON file, open Ways and choose Add, then “${WAY_IMPORT.menu}”.`,
       );
       return;
     }
@@ -523,7 +532,7 @@ function UnifiedImportDialog({
     // the row/column checks below even run.
     if (file.size > MAX_CSV_FILE_BYTES) {
       setError(
-        `"${file.name}" is too large (${(file.size / (1024 * 1024)).toFixed(1)} MB) — CSV imports are capped at ${MAX_CSV_FILE_BYTES / (1024 * 1024)} MB.`,
+        t`"${file.name}" is too large (${(file.size / (1024 * 1024)).toFixed(1)} MB) — CSV imports are capped at ${MAX_CSV_FILE_BYTES / (1024 * 1024)} MB.`,
       );
       return;
     }
@@ -535,7 +544,7 @@ function UnifiedImportDialog({
       setError(
         messageFromError(
           err,
-          "We couldn't read that file. Make sure it's a valid CSV and try again.",
+          t`We couldn't read that file. Make sure it's a valid CSV and try again.`,
         ),
       );
       return;
@@ -543,7 +552,7 @@ function UnifiedImportDialog({
 
     if (parsed.headers.length === 0 || parsed.rows.length === 0) {
       setError(
-        "That file has no data rows we could read. Make sure the first row is a header and there's at least one row of data.",
+        t`That file has no data rows we could read. Make sure the first row is a header and there's at least one row of data.`,
       );
       return;
     }
@@ -553,7 +562,12 @@ function UnifiedImportDialog({
     // from here on, so flag it rather than staying silent.
     if (parsed.parseErrors.length > 0) {
       toast.done(
-        `"${file.name}" had ${parsed.parseErrors.length} parsing ${parsed.parseErrors.length === 1 ? "issue" : "issues"} — some fields may be misaligned. Check the column mapping before importing.`,
+        plural(
+          parsed.parseErrors.length,
+          `"{0}" had # parsing issue — some fields may be misaligned. Check the column mapping before importing.`,
+          `"{0}" had # parsing issues — some fields may be misaligned. Check the column mapping before importing.`,
+          file.name,
+        ),
       );
       console.error("CSV parse issues in", file.name, parsed.parseErrors);
     }
@@ -561,7 +575,7 @@ function UnifiedImportDialog({
     const kind = detectFileKind(parsed.headers);
     if (kind === "unknown") {
       setError(
-        "This file doesn't look like a CSV place list or trip list. We couldn't find a coordinates column (for places) or a date column (for trips). Places need name, latitude, longitude; trip lists need a place name and date.",
+        t`This file doesn't look like a CSV place list or trip list. We couldn't find a coordinates column (for places) or a date column (for trips). Places need name, latitude, longitude; trip lists need a place name and date.`,
       );
       return;
     }
@@ -589,12 +603,12 @@ function UnifiedImportDialog({
       const landsIn = typeId ?? importPlaceTypeId;
       if (unknown) {
         toast.done(
-          `"${unknown}" isn't one of your place types, so the picker keeps the type you chose.`,
+          t`"${unknown}" isn't one of your place types, so the picker keeps the type you chose.`,
         );
       }
       if (several) {
         toast.done(
-          "This file has more than one place type, and they all import as the type you picked. Import one type per file to keep them apart.",
+          t`This file has more than one place type, and they all import as the type you picked. Import one type per file to keep them apart.`,
         );
       }
       setImportPlaceTypeId(landsIn);
@@ -702,12 +716,14 @@ function UnifiedImportDialog({
   );
 
   function buildPlaceRows() {
-    if (!placeFile) return { rows: [], warnings: [], droppedRows: 0 };
+    if (!placeFile)
+      return { rows: [], warnings: [], skippedRows: [], droppedRows: 0 };
     return preparePlaceRows(placeFile.rows, placeAssignments, placeFile.lines);
   }
 
   function buildTripRows() {
-    if (!tripFile) return { rows: [], warnings: [], droppedRows: 0 };
+    if (!tripFile)
+      return { rows: [], warnings: [], skippedRows: [], droppedRows: 0 };
     return prepareTripRows({
       headers: tripFile.headers,
       rows: tripFile.rows,
@@ -723,7 +739,12 @@ function UnifiedImportDialog({
   // initial map step (logbook-only or logbook-first) and after the place stage
   // of a combined import, where `candidates` are the freshly imported places.
   function startTripStage(candidates: MatchCandidate[]): boolean {
-    const { rows, warnings: tripRowWarnings, droppedRows } = buildTripRows();
+    const {
+      rows,
+      warnings: tripRowWarnings,
+      skippedRows,
+      droppedRows,
+    } = buildTripRows();
     setTripDroppedRows(droppedRows);
     if (rows.length === 0) {
       setError(NO_TRIP_ROWS_ERROR);
@@ -767,6 +788,7 @@ function UnifiedImportDialog({
     setActiveKind("triplog");
     setPreparedTripRows(rows);
     setTripWarnings(tripRowWarnings);
+    setTripSkipped(skippedRows);
     setReviewState({
       decisions,
       createForms,
@@ -784,8 +806,8 @@ function UnifiedImportDialog({
     if (!canProceedFromMap) {
       setError(
         placeFile && !placeMapValid
-          ? "Name, latitude and longitude are required for a place list."
-          : "A place name column and a date column are required for a trip list, and each new attribute needs a name.",
+          ? t`Name, latitude and longitude are required for a place list.`
+          : t`A place name column and a date column are required for a trip list, and each new attribute needs a name.`,
       );
       return;
     }
@@ -794,12 +816,13 @@ function UnifiedImportDialog({
 
     // Process the place file first so trips can match the just-imported places.
     if (placeFile && placeMapValid) {
-      const { rows, warnings, droppedRows } = buildPlaceRows();
+      const { rows, warnings, skippedRows, droppedRows } = buildPlaceRows();
       if (rows.length === 0) {
         setError(NO_PLACE_ROWS_ERROR);
         return;
       }
       setPlaceWarnings(warnings);
+      setPlaceSkipped(skippedRows);
       setPlaceDroppedRows(droppedRows);
       // Place files: auto-create on `none`; surface only the ambiguous middle.
       const decisions: Record<string, ReviewDecision> = {};
@@ -1031,7 +1054,7 @@ function UnifiedImportDialog({
     return errs.map((e) => {
       const prepared = preparedPlaceRows[e.rowIndex];
       const line = prepared ? prepared.rowIndex + 2 : e.rowIndex + 1;
-      return `Row ${line}: ${e.message}`;
+      return t`Row ${line}: ${e.message}`;
     });
   }
 
@@ -1062,6 +1085,7 @@ function UnifiedImportDialog({
             droppedRows: placeDroppedRows,
             errors: formatPlaceRowErrors(result.errors),
             warnings: placeWarnings,
+            skippedRows: placeSkipped,
           });
         }
         return;
@@ -1078,10 +1102,11 @@ function UnifiedImportDialog({
         droppedRows: placeDroppedRows,
         errors: formatPlaceRowErrors(result.errors),
         warnings: placeWarnings,
+        skippedRows: placeSkipped,
       });
     } catch (err) {
       console.error(err);
-      setError(messageFromError(err, "Couldn't import places. Try again."));
+      setError(messageFromError(err, t`Couldn't import places. Try again.`));
     } finally {
       setImporting(false);
     }
@@ -1160,11 +1185,12 @@ function UnifiedImportDialog({
           for (const e of result.errors) {
             rejectedRowIndexes.add(e.rowIndex);
             const rejected = createRows[e.rowIndex];
-            const label =
-              rejected?.form.name.trim() ||
-              rejected?.key ||
-              `row ${e.rowIndex + 1}`;
-            errors.push(`Couldn't create place "${label}": ${e.message}`);
+            const label = rejected?.form.name.trim() || rejected?.key;
+            errors.push(
+              label
+                ? t`Couldn't create place "${label}": ${e.message}`
+                : t`Couldn't create place "row ${e.rowIndex + 1}": ${e.message}`,
+            );
           }
           // Resolve ids from the freshly-fetched place list.
           const all = await apiFetch<TPlace[]>("/places");
@@ -1180,11 +1206,12 @@ function UnifiedImportDialog({
               candidates,
             );
             if (m.best) createdPlaceIdByKey[e.key] = m.best.candidate.id;
-            else errors.push(`Couldn't link the created place for "${e.key}".`);
+            else
+              errors.push(t`Couldn't link the created place for "${e.key}".`);
           });
         } catch (err) {
           console.error(err);
-          errors.push("Couldn't create one or more new places.");
+          errors.push(t`Couldn't create one or more new places.`);
         }
       }
 
@@ -1251,14 +1278,16 @@ function UnifiedImportDialog({
         errors: [
           ...errors,
           ...result.errors.map(
-            (e) => `Row ${sentRowCsvLines[e.index] ?? e.index + 1}: ${e.error}`,
+            (e) =>
+              t`Row ${sentRowCsvLines[e.index] ?? e.index + 1}: ${e.error}`,
           ),
         ],
         warnings: tripWarnings,
+        skippedRows: tripSkipped,
       });
     } catch (err) {
       console.error(err);
-      setError(messageFromError(err, "Couldn't import trips. Try again."));
+      setError(messageFromError(err, t`Couldn't import trips. Try again.`));
     } finally {
       setImporting(false);
     }
@@ -1276,7 +1305,7 @@ function UnifiedImportDialog({
       onClose();
     } catch (err) {
       console.error(err);
-      setError(messageFromError(err, "Couldn't undo this import. Try again."));
+      setError(messageFromError(err, t`Couldn't undo this import. Try again.`));
     } finally {
       setUndoing(false);
     }
@@ -1298,24 +1327,36 @@ function UnifiedImportDialog({
 
   // When both a place list and a logbook are queued, label which stage we're in.
   const bothFiles = !!placeFile && !!tripFile;
-  const stageSuffix =
-    bothFiles && !outcome
-      ? activeKind === "triplog"
-        ? " — trips (2 of 2)"
-        : " — places (1 of 2)"
-      : "";
-
+  const stepTitle =
+    step === "map"
+      ? t`Import from CSV`
+      : step === "review"
+        ? t`Review matches`
+        : t`Confirm import`;
+  // One whole message per (step, kind): a translated title is not a hole.
+  const tripsTitle =
+    step === "map"
+      ? t`Import from CSV — trips (2 of 2)`
+      : step === "review"
+        ? t`Review matches — trips (2 of 2)`
+        : t`Confirm import — trips (2 of 2)`;
+  const placesTitle =
+    step === "map"
+      ? t`Import from CSV — places (1 of 2)`
+      : step === "review"
+        ? t`Review matches — places (1 of 2)`
+        : t`Confirm import — places (1 of 2)`;
   const title = showingMergeSettings
-    ? "Merge settings"
+    ? t`Merge settings`
     : outcome
-      ? "Import complete"
+      ? t`Import complete`
       : importing
-        ? "Importing…"
-        : (step === "map"
-            ? "Import from CSV"
-            : step === "review"
-              ? "Review matches"
-              : "Confirm import") + stageSuffix;
+        ? t`Importing…`
+        : bothFiles
+          ? activeKind === "triplog"
+            ? tripsTitle
+            : placesTitle
+          : stepTitle;
 
   /** The file, and which kind the importer is treating it as. The kind is a
    *  two-option rail rather than a pair of toggle buttons: it is one value
@@ -1325,11 +1366,11 @@ function UnifiedImportDialog({
       <div className={classes.fileChip}>
         <span className={classes.fileName}>{loaded.fileName}</span>
         <ChipRail
-          label={`What ${loaded.fileName} is`}
+          label={t`What ${loaded.fileName} is`}
           value={loaded.kind}
           options={[
-            { value: "place", label: "Places" },
-            { value: "triplog", label: "Trips" },
+            { value: "place", label: t`Places` },
+            { value: "triplog", label: t`Trips` },
           ]}
           onChange={(next) => overrideKind(loaded, which, next as FileKind)}
         />
@@ -1341,10 +1382,10 @@ function UnifiedImportDialog({
   function renderColumnMapHeader() {
     return (
       <div className={classes.mapHeader} aria-hidden>
-        <span className={classes.mapHeaderCell}>Your file</span>
-        <span className={`${classes.mapHeaderCell} ${classes.mapHeaderRole}`}>
-          Logjam field
-        </span>
+        <span className={classes.mapHeaderCell}>{t`Your file`}</span>
+        <span
+          className={`${classes.mapHeaderCell} ${classes.mapHeaderRole}`}
+        >{t`Logjam field`}</span>
       </div>
     );
   }
@@ -1353,12 +1394,14 @@ function UnifiedImportDialog({
     return (
       <div className={classes.step}>
         {isMobile && (
-          <p className={classes.note}>
-            This tool is best used on a larger screen.
-          </p>
+          <p
+            className={classes.note}
+          >{t`This tool is best used on a larger screen.`}</p>
         )}
         {noPlacesYet && (
-          <ErrorBanner message="You have no places yet. Importing a trip list works best after you load the RopeWiki place database — your trips can then match against it. You can still import now and link trips later." />
+          <ErrorBanner
+            message={t`You have no places yet. Importing a trip list works best after you load the RopeWiki place database — your trips can then match against it. You can still import now and link trips later.`}
+          />
         )}
         {/* A real button, so the drop zone is reachable from the keyboard —
             it was a div with an onClick, which no key could ever press. The
@@ -1379,11 +1422,7 @@ function UnifiedImportDialog({
             aria-hidden
             className={classes.dropGlyph}
           />
-          <span>
-            Drop a CSV here, or click to browse. You can add a place list and a
-            trip list together. Every place in a file gets the one place type
-            you choose.
-          </span>
+          <span>{t`Drop a CSV here, or click to browse. You can add a place list and a trip list together. Every place in a file gets the one place type you choose.`}</span>
         </button>
         <input
           ref={fileInputRef}
@@ -1398,9 +1437,7 @@ function UnifiedImportDialog({
           <ErrorBanner message={error} onDismiss={() => setError(null)} />
         )}
         <p className={classes.note}>
-          A place list needs a name, latitude and longitude (grades and notes
-          are optional). A trip list needs a place name and a date (notes
-          optional). Need a starting point?{" "}
+          {t`A place list needs a name, latitude and longitude (grades and notes are optional). A trip list needs a place name and a date (notes optional). Need a starting point?`}{" "}
           {/* GENERATED from the chosen type's own definitions, not a static
               file: a static template promises what a place has, and that
               promise stopped being true the moment a place could be a
@@ -1415,17 +1452,13 @@ function UnifiedImportDialog({
             type="button"
             onClick={downloadPlaceTemplate}
             className={classes.inlineLink}
-          >
-            {importTypeName} template
-          </button>{" "}
+          >{t`${importTypeName} template`}</button>{" "}
           ·{" "}
           <a
             href="/templates/logbook-import-template.csv"
             download
             className={classes.inlineLink}
-          >
-            Trips template
-          </a>
+          >{t`Trips template`}</a>
         </p>
 
         {placeFile && (
@@ -1435,8 +1468,8 @@ function UnifiedImportDialog({
                 this type's fields, so choosing it afterwards would re-map
                 everything the user had just set. */}
             <Select
-              label="Place type"
-              hint="A file with a placeType column starts on that type; otherwise every place gets the type you choose."
+              label={t`Place type`}
+              hint={t`A file with a placeType column starts on that type; otherwise every place gets the type you choose.`}
               value={importPlaceTypeId}
               onChange={(event) => changeImportPlaceType(event.target.value)}
             >
@@ -1447,7 +1480,7 @@ function UnifiedImportDialog({
               ))}
             </Select>
             <SectionHeader
-              title="Place columns"
+              title={t`Place columns`}
               count={placeFile.headers.length}
             />
             {renderColumnMapHeader()}
@@ -1464,7 +1497,7 @@ function UnifiedImportDialog({
                     {header}
                   </span>
                   <Select
-                    label={`What "${header}" is`}
+                    label={t`What "${header}" is`}
                     hideLabel
                     className={classes.roleSelect}
                     value={role}
@@ -1476,7 +1509,9 @@ function UnifiedImportDialog({
                     }
                   >
                     {isCustomAttr && (
-                      <option value={role}>Attribute: {role.slice(5)}</option>
+                      <option
+                        value={role}
+                      >{t`Attribute: ${role.slice(5)}`}</option>
                     )}
                     {placeRoleOptions.map((r) => (
                       <option key={r} value={r}>
@@ -1494,13 +1529,13 @@ function UnifiedImportDialog({
             })}
             <p className={classes.note} role="status">
               {placeMapValid
-                ? "Name, latitude and longitude found — places will be matched by name and coordinates."
-                : "Name, latitude and longitude are required for a place list."}
+                ? t`Name, latitude and longitude found — places will be matched by name and coordinates.`
+                : t`Name, latitude and longitude are required for a place list.`}
             </p>
             {ignoredPlaceCols.length > 0 && (
-              <p className={classes.note}>
-                Ignored columns: {ignoredPlaceCols.join(", ")}
-              </p>
+              <p
+                className={classes.note}
+              >{t`Ignored columns: ${ignoredPlaceCols.join(", ")}`}</p>
             )}
           </div>
         )}
@@ -1509,7 +1544,7 @@ function UnifiedImportDialog({
           <div className={classes.fileSection}>
             {renderFileChip(tripFile, "triplog")}
             <SectionHeader
-              title="Trip columns"
+              title={t`Trip columns`}
               count={tripFile.headers.length}
             />
             {renderColumnMapHeader()}
@@ -1526,7 +1561,7 @@ function UnifiedImportDialog({
                       {header}
                     </span>
                     <Select
-                      label={`What "${header}" is`}
+                      label={t`What "${header}" is`}
                       hideLabel
                       className={classes.roleSelect}
                       value={role}
@@ -1537,29 +1572,30 @@ function UnifiedImportDialog({
                         }))
                       }
                     >
-                      <option value="name">Place name</option>
-                      <option value="date">Date</option>
-                      <option value="notes">Notes</option>
-                      <option value="appendNotes">Add to notes</option>
-                      <option value="type">Type</option>
+                      <option value="name">{t`Place name`}</option>
+                      <option value="date">{t`Date`}</option>
+                      <option value="notes">{t`Notes`}</option>
+                      <option value="appendNotes">{t`Add to notes`}</option>
+                      <option value="type">{t`Type`}</option>
                       {customFieldDefs.map((d) => (
-                        <option key={d.key} value={`cf:${d.key}`}>
-                          Field: {d.label}
-                        </option>
+                        <option
+                          key={d.key}
+                          value={`cf:${d.key}`}
+                        >{t`Field: ${d.label}`}</option>
                       ))}
-                      <option value="new-cf">Import as a new attribute…</option>
-                      <option value="discard">Ignore</option>
+                      <option value="new-cf">{t`Import as a new attribute…`}</option>
+                      <option value="discard">{t`Ignore`}</option>
                     </Select>
                   </div>
                   {role === "new-cf" && (
                     <div className={classes.subForm}>
                       <TextField
-                        label="Attribute name"
+                        label={t`Attribute name`}
                         value={form.label}
                         error={
                           form.label.trim()
                             ? null
-                            : "Name this attribute, or ignore the column."
+                            : t`Name this attribute, or ignore the column.`
                         }
                         onChange={(event) =>
                           setTripNewCfForms((prev) => ({
@@ -1569,7 +1605,7 @@ function UnifiedImportDialog({
                         }
                       />
                       <Select
-                        label="Type"
+                        label={t`Type`}
                         value={form.type}
                         onChange={(event) =>
                           setTripNewCfForms((prev) => ({
@@ -1595,25 +1631,24 @@ function UnifiedImportDialog({
             })}
             <p className={classes.note} role="status">
               {tripMapValid
-                ? "Place name and date found — trips will match places by name."
-                : "A place name column and a date column are required for a trip list."}
+                ? t`Place name and date found — trips will match places by name.`
+                : t`A place name column and a date column are required for a trip list.`}
             </p>
             {ignoredTripCols.length > 0 && (
-              <p className={classes.note}>
-                Ignored columns: {ignoredTripCols.join(", ")}
-              </p>
+              <p
+                className={classes.note}
+              >{t`Ignored columns: ${ignoredTripCols.join(", ")}`}</p>
             )}
             {tripMapValid && dateAmbiguous && (
-              <p className={classes.note} role="status">
-                Dates like 02/03/2020 can be read day-first or month-first.
-                Logjam Web is reading them as {DATE_FORMAT_LABELS[dateFormat]};
-                change the Date format below if that's wrong.
-              </p>
+              <p
+                className={classes.note}
+                role="status"
+              >{t`Dates like 02/03/2020 can be read day-first or month-first. Logjam Web is reading them as ${DATE_FORMAT_LABELS[dateFormat]}; change the Date format below if that's wrong.`}</p>
             )}
             {tripMapValid && (
               <Select
-                label="Date format"
-                hint="How the dates in your file are written. Check this against a row you know."
+                label={t`Date format`}
+                hint={t`How the dates in your file are written. Check this against a row you know.`}
                 value={dateFormat}
                 onChange={(event) =>
                   setDateFormat(event.target.value as DateFormat)
@@ -1643,16 +1678,16 @@ function UnifiedImportDialog({
     return (
       <div className={classes.createForm}>
         <TextField
-          label="Place name"
+          label={t`Place name`}
           value={f.name}
-          error={f.name.trim() ? null : "A new place needs a name."}
+          error={f.name.trim() ? null : t`A new place needs a name.`}
           onChange={(event) =>
             updateCreateForm(key, { name: event.target.value })
           }
         />
         <div className={classes.coordRow}>
           <TextField
-            label="Latitude"
+            label={t`Latitude`}
             className={classes.coordField}
             value={f.latitude}
             placeholder="-33.123456"
@@ -1660,7 +1695,7 @@ function UnifiedImportDialog({
             error={
               f.latitude.trim() === "" || !isNaN(Number(f.latitude))
                 ? null
-                : "Decimal degrees."
+                : t`Decimal degrees.`
             }
             onChange={(event) =>
               updateCreateForm(
@@ -1670,7 +1705,7 @@ function UnifiedImportDialog({
             }
           />
           <TextField
-            label="Longitude"
+            label={t`Longitude`}
             className={classes.coordField}
             value={f.longitude}
             placeholder="150.123456"
@@ -1678,7 +1713,7 @@ function UnifiedImportDialog({
             error={
               f.longitude.trim() === "" || !isNaN(Number(f.longitude))
                 ? null
-                : "Decimal degrees."
+                : t`Decimal degrees.`
             }
             onChange={(event) =>
               updateCreateForm(
@@ -1692,9 +1727,7 @@ function UnifiedImportDialog({
               variant="outline"
               icon="place"
               onClick={() => handlePickCoordsFor(key)}
-            >
-              Pick on map
-            </Button>
+            >{t`Pick on map`}</Button>
           </FieldBeside>
         </div>
       </div>
@@ -1706,14 +1739,24 @@ function UnifiedImportDialog({
       <div className={classes.step}>
         <p className={classes.lede}>
           {activeKind === "place"
-            ? "These place names matched more than one option, or matched something far away. Choose what to do with each."
-            : "These place names couldn't be matched confidently. Link them, create a new place, import the trip without a place, or discard it."}
+            ? t`These place names matched more than one option, or matched something far away. Choose what to do with each.`
+            : t`These place names couldn't be matched confidently. Link them, create a new place, import the trip without a place, or discard it.`}
         </p>
         {autoResolvedCount > 0 && (
           <p className={classes.note}>
             {activeKind === "place"
-              ? `Plus ${autoResolvedCount} more ${autoResolvedCount === 1 ? "place" : "places"} matched confidently (new or existing) and will be imported automatically when you apply — only the ${surfacedKeys.length} above need a decision.`
-              : `Plus ${autoResolvedCount} more ${autoResolvedCount === 1 ? "trip" : "trips"} matched a place confidently (or have no place) and will be imported automatically when you apply — only the ${surfacedKeys.length} above need a decision.`}
+              ? plural(
+                  autoResolvedCount,
+                  "Plus # more place matched confidently (new or existing) and will be imported automatically when you apply — only the {0} above need a decision.",
+                  "Plus # more places matched confidently (new or existing) and will be imported automatically when you apply — only the {0} above need a decision.",
+                  surfacedKeys.length,
+                )
+              : plural(
+                  autoResolvedCount,
+                  "Plus # more trip matched a place confidently (or have no place) and will be imported automatically when you apply — only the {0} above need a decision.",
+                  "Plus # more trips matched a place confidently (or have no place) and will be imported automatically when you apply — only the {0} above need a decision.",
+                  surfacedKeys.length,
+                )}
           </p>
         )}
         <MatchReview
@@ -1738,23 +1781,20 @@ function UnifiedImportDialog({
   function renderMergeSettings() {
     return (
       <div className={classes.step}>
-        <p className={classes.lede}>
-          When a row matches an existing place, keep the existing value or use
-          the value from your file.
-        </p>
-        <p className={classes.note}>
-          These only apply where BOTH sides have a value: an empty field always
-          fills in from your file, and an empty cell in your file never clears
-          what's already there. Names and coordinates never change.
-        </p>
+        <p
+          className={classes.lede}
+        >{t`When a row matches an existing place, keep the existing value or use the value from your file.`}</p>
+        <p
+          className={classes.note}
+        >{t`These only apply where BOTH sides have a value: an empty field always fills in from your file, and an empty cell in your file never clears what's already there. Names and coordinates never change.`}</p>
         {mergeableFields.map((field) => (
           <SwitchRow
             key={field}
             title={mergeFieldLabel(field, placeDefsForImportType)}
             description={
               mergePolicy[field] === "useIncoming"
-                ? "Use the value from your file"
-                : "Keep what's already there"
+                ? t`Use the value from your file`
+                : t`Keep what's already there`
             }
             checked={mergePolicy[field] === "useIncoming"}
             onChange={(next) => updateMergeField(field, next)}
@@ -1769,19 +1809,19 @@ function UnifiedImportDialog({
       const headline: HeadlineCount[] =
         outcome.kind === "place"
           ? [
-              { count: outcome.created, label: "created" },
-              { count: outcome.merged, label: "merged" },
+              { count: outcome.created, label: t`Created` },
+              { count: outcome.merged, label: t`Merged` },
               // Rows that couldn't be read are the "Skipped rows" section under
               // the tiles, counted there once. `skipped` is the server's
               // merge-policy count, a different thing.
-              { count: outcome.skipped, label: "kept as they were" },
+              { count: outcome.skipped, label: t`Kept as they were` },
             ]
           : [
-              { count: outcome.imported, label: "imported" },
-              { count: outcome.updated, label: "updated" },
-              { count: outcome.linked, label: "linked to a place" },
-              { count: outcome.noPlace, label: "without a place" },
-              { count: outcome.discarded, label: "discarded" },
+              { count: outcome.imported, label: t`Imported` },
+              { count: outcome.updated, label: t`Updated` },
+              { count: outcome.linked, label: t`Linked to a place` },
+              { count: outcome.noPlace, label: t`Without a place` },
+              { count: outcome.discarded, label: t`Discarded` },
             ];
       // A merge folds an imported row into a place that already existed, which
       // is the one outcome the headline count alone can't be checked against
@@ -1792,14 +1832,14 @@ function UnifiedImportDialog({
         details.push({
           items: outcome.merges.map((m) => `${m.sourceName} → ${m.targetName}`),
         });
-        detailsLabel = `${outcome.merges.length} ${
-          outcome.merges.length === 1 ? "place" : "places"
-        } merged into existing entries`;
+        detailsLabel = plural(
+          outcome.merges.length,
+          "# place merged into existing entries",
+          "# places merged into existing entries",
+        );
       }
-      const { skipped: skippedRows, leftEmpty } = splitSkippedRows(
-        outcome.warnings,
-      );
-      const warnings = leftEmpty.length > 0 ? leftEmpty : undefined;
+      const warnings =
+        outcome.warnings.length > 0 ? outcome.warnings : undefined;
       // ImportResultSummary hides the Undo button when every headline count is
       // zero, so only what the import changed decides it.
       const hasUndoableChange =
@@ -1814,7 +1854,7 @@ function UnifiedImportDialog({
           details={details.length > 0 ? details : undefined}
           detailsLabel={detailsLabel}
           warnings={warnings}
-          skippedRows={skippedRows}
+          skippedRows={outcome.skippedRows.map(skippedRowLine)}
           errors={outcome.errors.length > 0 ? outcome.errors : undefined}
           onUndo={hasUndoableChange ? () => setConfirmingUndo(true) : undefined}
           undoing={undoing}
@@ -1825,13 +1865,20 @@ function UnifiedImportDialog({
     // Pre-import preview
     const ready =
       activeKind === "place"
-        ? `${preparedPlaceRows.length} place row${preparedPlaceRows.length !== 1 ? "s" : ""} ready to import.`
-        : `${preparedTripRows.length} trip${preparedTripRows.length !== 1 ? "s" : ""} ready to import.`;
+        ? plural(
+            preparedPlaceRows.length,
+            "# place row ready to import.",
+            "# place rows ready to import.",
+          )
+        : plural(
+            preparedTripRows.length,
+            "# trip ready to import.",
+            "# trips ready to import.",
+          );
     const skippedNote = skippedRowsNote(
-      splitSkippedRows(activeKind === "place" ? placeWarnings : tripWarnings)
-        .skipped,
+      activeKind === "place" ? placeSkipped : tripSkipped,
     );
-    const preview = skippedNote ? `${ready} ${skippedNote}` : ready;
+    const preview = [ready, skippedNote].filter(Boolean).join(" ");
 
     // Merge settings only mean something when a row folds into a place.
     const willMerge =
@@ -1852,11 +1899,16 @@ function UnifiedImportDialog({
 
         {activeKind === "place" && willMerge && (
           <Row
-            title="Merge settings"
+            title={t`Merge settings`}
             subtitle={
               usingIncoming === 0
-                ? "A row that matches an existing place keeps every value it already has"
-                : `Uses the value from your file for ${usingIncoming} of ${mergeableFields.length} fields`
+                ? t`A row that matches an existing place keeps every value it already has`
+                : plural(
+                    mergeableFields.length,
+                    "Uses the value from your file for {0} of # field",
+                    "Uses the value from your file for {0} of # fields",
+                    usingIncoming,
+                  )
             }
             onOpen={() => setShowingMergeSettings(true)}
             trailing={
@@ -1893,11 +1945,9 @@ function UnifiedImportDialog({
     if (importing) {
       return (
         <div className={classes.step}>
-          <p className={classes.lede} role="status">
-            Importing…
-          </p>
+          <p className={classes.lede} role="status">{t`Importing…`}</p>
           {/* No total to count against — a sweep, not a value (DESIGN.md). */}
-          <ProgressBar label="Importing" />
+          <ProgressBar label={t`Importing`} />
         </div>
       );
     }
@@ -1915,46 +1965,36 @@ function UnifiedImportDialog({
           variant="filled"
           icon="done"
           onClick={() => setShowingMergeSettings(false)}
-        >
-          Done
-        </Button>
+        >{t`Done`}</Button>
       );
     }
     if (importing) return null;
     if (outcome) {
-      return (
-        <Button variant="filled" onClick={onClose}>
-          Done
-        </Button>
-      );
+      return <Button variant="filled" onClick={onClose}>{t`Done`}</Button>;
     }
     if (step === "map") {
       return (
         <>
-          <Button onClick={requestClose}>{onBack ? "Back" : "Cancel"}</Button>
-          <Button variant="filled" onClick={handleMapNext}>
-            Next
-          </Button>
+          <Button onClick={requestClose}>{onBack ? t`Back` : t`Cancel`}</Button>
+          <Button variant="filled" onClick={handleMapNext}>{t`Next`}</Button>
         </>
       );
     }
     if (step === "review") {
       return (
         <>
-          <Button onClick={() => setStep("map")}>Back</Button>
+          <Button onClick={() => setStep("map")}>{t`Back`}</Button>
           <Button
             variant="filled"
             onClick={() => {
               if (!reviewValid) {
-                setError("A new place below needs a name and coordinates.");
+                setError(t`A new place below needs a name and coordinates.`);
                 return;
               }
               setError(null);
               setStep("confirm");
             }}
-          >
-            Next
-          </Button>
+          >{t`Next`}</Button>
         </>
       );
     }
@@ -1963,17 +2003,13 @@ function UnifiedImportDialog({
       <>
         <Button
           onClick={() => setStep(surfacedKeys.length > 0 ? "review" : "map")}
-        >
-          Back
-        </Button>
+        >{t`Back`}</Button>
         <Button
           variant="filled"
           onClick={
             activeKind === "place" ? handleImportPlaces : handleImportTrips
           }
-        >
-          Import
-        </Button>
+        >{t`Import`}</Button>
       </>
     );
   }
@@ -2005,10 +2041,9 @@ function UnifiedImportDialog({
       <ConfirmDialog
         open={confirmingUndo}
         copy={{
-          confirmTitle: "Undo this import?",
-          confirmBody:
-            "Every place and trip this import created is deleted. For a day after the import, places and trips it changed also go back to the values they had before it, except fields you've changed since, which stay as you left them. This can't be undone.",
-          confirmLabel: "Undo this import",
+          confirmTitle: t`Undo this import?`,
+          confirmBody: t`Every place and trip this import created is deleted. For a day after the import, places and trips it changed also go back to the values they had before it, except fields you've changed since, which stay as you left them. This can't be undone.`,
+          confirmLabel: t`Undo this import`,
           tone: "destructive",
           icon: "undo",
         }}

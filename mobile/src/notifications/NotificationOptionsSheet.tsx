@@ -38,6 +38,7 @@ import {
   notificationPlaceId,
   notificationPlanTarget,
   notificationVerb,
+  t,
 } from "@logjam/shared";
 
 export function NotificationOptionsSheet({
@@ -100,7 +101,7 @@ export function NotificationOptionsSheet({
         if (
           await confirm({
             ...notificationDeleteConfirm(1),
-            confirmLabel: "Delete",
+            confirmLabel: t`Delete`,
             tone: "destructive",
           })
         )

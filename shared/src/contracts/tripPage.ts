@@ -3,10 +3,11 @@
 // all behind the ⋯: the page has no verb it puts first.
 import { TRIP_FORM } from "./tripForm.js";
 import type { ScreenContract } from "./types.js";
+import { t } from "../i18n.js";
 
 export const TRIP_PAGE = {
   id: "logs.tripPage",
-  question: "What did I do that day?",
+  question: t`What did I do that day?`,
   sections: [
     // The date, the title and the trip's types.
     { key: "hero" },
@@ -22,18 +23,18 @@ export const TRIP_PAGE = {
     { key: "routes" },
   ],
   copy: {
-    places: "Places",
-    gauge: "River gauge",
+    places: t`Places`,
+    gauge: t`River gauge`,
     photos: TRIP_FORM.copy.photos,
     routes: TRIP_FORM.copy.routes,
     notes: TRIP_FORM.copy.notes,
     attributes: TRIP_FORM.copy.attributes,
 
-    noType: "No type",
+    noType: t`No type`,
     // An empty slot gets a short label, not a lesson (UX §11).
-    placesEmpty: "No places linked.",
-    photosEmpty: "No photos yet.",
-    routesEmpty: "No routes yet.",
-    notesEmpty: "No notes yet.",
+    placesEmpty: t`No places linked.`,
+    photosEmpty: t`No photos yet.`,
+    routesEmpty: t`No routes yet.`,
+    notesEmpty: t`No notes yet.`,
   },
 } as const satisfies ScreenContract;

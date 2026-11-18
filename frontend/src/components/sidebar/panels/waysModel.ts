@@ -17,6 +17,7 @@ import {
   ROUTE_NAME_MAX_LENGTH,
   routeLengthM,
   type StandaloneFile,
+  t,
 } from "@logjam/shared";
 import type { PlaceTrack, TRoute } from "../../../placeUtils";
 
@@ -255,7 +256,7 @@ export function wayKindCounts(
 export function wayNameError(name: string, saving: boolean): string | null {
   const trimmed = name.trim();
   if (trimmed.length > ROUTE_NAME_MAX_LENGTH)
-    return `Must be at most ${ROUTE_NAME_MAX_LENGTH} characters`;
-  if (saving && trimmed.length === 0) return "Name is required";
+    return t`Must be at most ${ROUTE_NAME_MAX_LENGTH} characters`;
+  if (saving && trimmed.length === 0) return t`Name is required`;
   return null;
 }

@@ -13,9 +13,10 @@ import {
   parseTripPlanPlacePatch,
   parseTripPlanRoutePatch,
   say,
-  TRIP_PLAN_CHANGED_SENTENCE,
+  tripPlanChangedSentence,
   validateRoutePayload,
   type TripPlanItemKind,
+  type UserSentence,
 } from "@logjam/shared";
 import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 import prisma from "../services/prisma";
@@ -47,7 +48,9 @@ import { copyRouteFor } from "./routes";
 
 const router = Router({ mergeParams: true });
 
-const NOT_YOURS = say`You can change what you added. A leader or an editor can change anything.`;
+function notYourItem(): UserSentence {
+  return say`You can change what you added. A leader or an editor can change anything.`;
+}
 
 /** The item kind in a path; anything else is an item that isn't there. */
 function kindParam(value: unknown): TripPlanItemKind {
@@ -162,7 +165,7 @@ router.delete(
     const id = getParam(req.params.itemId);
     const row = await planRow(access.plan.id, kind, id);
     if (!canChangeItem(access, row, user.id))
-      throw new AppError(403, NOT_YOURS);
+      throw new AppError(403, notYourItem());
     await deletePlanItem(access.plan.id, kind, id);
     res.status(204).send();
   },
@@ -181,7 +184,7 @@ router.patch(
     const id = getParam(req.params.itemId);
     const row = await planRow(access.plan.id, kind, id);
     if (!canChangeItem(access, row, user.id))
-      throw new AppError(403, NOT_YOURS);
+      throw new AppError(403, notYourItem());
     await editPlanItem(access.plan.id, kind, row, req.body);
     // A delete can land between the edit's commit and this read.
     const items = await loadPlanItems(access.plan.id, { kind, id });
@@ -209,7 +212,7 @@ router.patch(
 // then validated as the owner's own routes validate it, a place's values
 // against its system type's definitions.
 function changed(): AppError {
-  return new AppError(409, TRIP_PLAN_CHANGED_SENTENCE);
+  return new AppError(409, tripPlanChangedSentence());
 }
 
 /** Run `apply` on the item's current row, under the plan's lock. */

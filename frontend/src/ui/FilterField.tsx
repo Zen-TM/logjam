@@ -1,6 +1,7 @@
 import { useId, type ReactNode } from "react";
 import { IconButton } from "./Button";
 import classes from "./FilterField.module.css";
+import { t } from "@logjam/shared";
 
 /**
  * One filter in a sheet: its label, what it is set to, a clear button while it
@@ -39,7 +40,7 @@ export function FilterField({
           <IconButton
             icon="close"
             size={16}
-            label={`Clear the ${label} filter`}
+            label={t`Clear the ${label} filter`}
             onClick={onClear}
           />
         )}

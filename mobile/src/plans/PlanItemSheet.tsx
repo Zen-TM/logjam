@@ -35,6 +35,7 @@ import {
   displayUnits,
   itemElevationLabel,
   lengthFromInput,
+  t,
 } from "@logjam/shared";
 
 import { unavailableReasonText } from "../auth/capabilities";
@@ -266,7 +267,7 @@ export function PlanItemSheet({
       }}
       title={
         dateKey
-          ? (dateDef?.label ?? "Date")
+          ? (dateDef?.label ?? t`Date`)
           : editing
             ? item?.kind === "place"
               ? copy.itemEditPlace
@@ -323,7 +324,7 @@ export function PlanItemSheet({
               blank turns that into a wrong answer. */}
           {dateValue ? (
             <Button
-              label="Clear date"
+              label={t`Clear date`}
               icon="close"
               variant="ghost"
               onPress={() => {

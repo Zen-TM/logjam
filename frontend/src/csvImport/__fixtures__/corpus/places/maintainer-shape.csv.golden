@@ -181,8 +181,16 @@
   "warnings": [
     "Row 7: V Grade \"9\" is above the accepted range 1–7 — the file may use a different scale — left empty",
     "Row 7: Quality \"7\" is above the accepted range 1–5 — the file may use a different scale — left empty",
-    "Row 8: latitude \"\" couldn't be read — skipped",
     "Row 9: Pitches \"2.5\" isn't a whole number — left empty"
+  ],
+  "skippedRows": [
+    {
+      "line": 8,
+      "reason": {
+        "kind": "latitude",
+        "raw": ""
+      }
+    }
   ],
   "droppedRows": 1,
   "matches": [

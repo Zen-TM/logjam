@@ -15,6 +15,7 @@ import {
   slopeScale,
   type SlopeBand,
   type SlopeSettings as SlopeSettingsValue,
+  t,
 } from "@logjam/shared";
 import {
   Button,
@@ -33,9 +34,7 @@ interface Props {
   onChange: (next: SlopeSettingsValue) => void;
 }
 
-const ANGLE_TOOLTIP =
-  "Degrees from flat. An easy walk is under 10°, a steep scramble around 30°, and a cliff 45° or " +
-  "more. Each band starts where the one below it ends, so its neighbour follows what you set here.";
+const ANGLE_TOOLTIP = t`Degrees from flat. An easy walk is under 10°, a steep scramble around 30°, and a cliff 45° or more. Each band starts where the one below it ends, so its neighbour follows what you set here.`;
 
 /**
  * Terrain coloured by steepness: a table of bands, its columns headed once
@@ -76,13 +75,13 @@ export default function SlopeSettings({ value, onChange }: Props) {
         className={styles.insertRow}
         title={
           room
-            ? "Add a band here"
-            : "Eight bands is the most a LiDAR map can have"
+            ? t`Add a band here`
+            : t`Eight bands is the most a LiDAR map can have`
         }
         aria-label={
           room
-            ? "Add a band here"
-            : "Eight bands is the most a LiDAR map can have"
+            ? t`Add a band here`
+            : t`Eight bands is the most a LiDAR map can have`
         }
         disabled={!room}
         onClick={() => insertAt(position)}
@@ -108,9 +107,9 @@ export default function SlopeSettings({ value, onChange }: Props) {
 
       <div className={styles.scaleRow}>
         <span className={styles.scaleEnd}>
-          Start
+          {t`Start`}
           <ColourField
-            label="Scale start colour (the shallowest band)"
+            label={t`Scale start colour (the shallowest band)`}
             hideLabel
             value={scaleStart}
             onChange={(colour) => setScale(colour, scaleEnd)}
@@ -122,9 +121,9 @@ export default function SlopeSettings({ value, onChange }: Props) {
               →
             </span>
             <span className={styles.scaleEnd}>
-              End
+              {t`End`}
               <ColourField
-                label="Scale end colour (the steepest band)"
+                label={t`Scale end colour (the steepest band)`}
                 hideLabel
                 value={scaleEnd}
                 onChange={(colour) => setScale(scaleStart, colour)}
@@ -139,26 +138,25 @@ export default function SlopeSettings({ value, onChange }: Props) {
           onClick={() =>
             setScale(DEFAULT_SLOPE_SCALE.start, DEFAULT_SLOPE_SCALE.end)
           }
-        >
-          Reset colours
-        </Button>
+        >{t`Reset colours`}</Button>
       </div>
 
       <div className={styles.bandTable}>
         {/* One glyph, on the angle that is actually edited: the lower one is
             the band below's upper, shown rather than asked for. */}
-        <span className={styles.head}>From °</span>
+        <span className={styles.head}>{t`From °`}</span>
         <span className={styles.head}>
-          To °<InfoTip label="an angle" content={ANGLE_TOOLTIP} />
+          {t`To °`}
+          <InfoTip label={t`About an angle`} content={ANGLE_TOOLTIP} />
         </span>
-        <span className={styles.head}>Colour</span>
+        <span className={styles.head}>{t`Colour`}</span>
         <span />
 
         {/* The transparency threshold is band[0].fromDeg: the only boundary
             whose band is not drawn at all. */}
         <span className={styles.fixedCell}>0</span>
         <LiveNumberField
-          label="Transparency threshold in degrees"
+          label={t`Transparency threshold in degrees`}
           hideLabel
           className={styles.numberCell}
           value={bands[0].fromDeg}
@@ -166,7 +164,7 @@ export default function SlopeSettings({ value, onChange }: Props) {
           explain={explain("threshold")}
           onCommit={(deg) => commitBands(setSlopeThreshold(bands, deg))}
         />
-        <span className={styles.fixedCell}>Transparent</span>
+        <span className={styles.fixedCell}>{t`Transparent`}</span>
         <span />
 
         {insertControl(0)}
@@ -174,7 +172,7 @@ export default function SlopeSettings({ value, onChange }: Props) {
           <Fragment key={idx}>
             <span className={styles.fixedCell}>{band.fromDeg}</span>
             <LiveNumberField
-              label={`Band ${idx + 1} upper angle in degrees`}
+              label={t`Band ${idx + 1} upper angle in degrees`}
               hideLabel
               className={styles.numberCell}
               value={band.toDeg}
@@ -185,7 +183,7 @@ export default function SlopeSettings({ value, onChange }: Props) {
             <span
               className={styles.bandSwatch}
               role="img"
-              aria-label={`Band ${idx + 1} colour, taken from the scale`}
+              aria-label={t`Band ${idx + 1} colour, taken from the scale`}
             >
               <span
                 className={styles.bandSwatchFill}
@@ -199,7 +197,7 @@ export default function SlopeSettings({ value, onChange }: Props) {
             {bands.length > 1 ? (
               <IconButton
                 icon="delete"
-                label={`Remove band ${idx + 1}`}
+                label={t`Remove band ${idx + 1}`}
                 onClick={() => commitBands(removeSlopeBand(bands, idx))}
               />
             ) : (

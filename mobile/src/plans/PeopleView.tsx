@@ -24,11 +24,12 @@ import {
   tripPlanRemovedMessage,
   tripPlanRoleWord,
   PLAN_ROLE_OF_VERB,
-  TRIP_PLAN_JOIN,
   TRIP_PLAN_PAGE,
   type PlanPersonActionId,
   type TripPlanMemberView,
   type TripPlanView,
+  plural,
+  t,
 } from "@logjam/shared";
 
 import { unavailableReasonText } from "../auth/capabilities";
@@ -50,7 +51,7 @@ import { afterPlanWrite } from "./plansCache";
 
 const copy = TRIP_PLAN_PAGE.copy;
 const OFFLINE = unavailableReasonText("needs-connection");
-const WORKING = "Working…";
+const WORKING = t`Working…`;
 
 export function PeopleView({
   plan,
@@ -122,12 +123,18 @@ export function PeopleView({
       files.count > 0 &&
       (await confirm(
         {
-          confirmTitle: `Delete ${member.user.username}'s files too?`,
-          confirmBody: `Their files (${files.count} ${files.count === 1 ? "file" : "files"}, ${formatBytes(files.bytes)}) otherwise count against your storage. ${member.user.username} is removed either way.`,
-          confirmLabel: "Delete files",
+          confirmTitle: t`Delete ${member.user.username}'s files too?`,
+          confirmBody: plural(
+            files.count,
+            "Their files (# file, {0}) otherwise count against your storage. {1} is removed either way.",
+            "Their files (# files, {0}) otherwise count against your storage. {1} is removed either way.",
+            formatBytes(files.bytes),
+            member.user.username,
+          ),
+          confirmLabel: t`Delete files`,
           tone: "destructive",
         },
-        { cancelLabel: "Keep files" },
+        { cancelLabel: t`Keep files` },
       ));
     go(deleteFiles);
   };
@@ -293,7 +300,7 @@ export function PeopleView({
             !online
               ? OFFLINE
               : member.invitedBy
-                ? `${TRIP_PLAN_JOIN.copy.invitedBy} ${member.invitedBy.username}`
+                ? t`Invited by ${member.invitedBy.username}`
                 : undefined
           }
           right={

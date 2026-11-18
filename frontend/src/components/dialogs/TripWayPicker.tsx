@@ -25,6 +25,7 @@ import {
   routesMatching,
   TRIP_FORM,
   type StandaloneFile,
+  t,
 } from "@logjam/shared";
 import { CurrentUserIdContext } from "../../CurrentUserIdContext";
 import { useRoutes, useStandaloneFiles } from "../../placeUtils";
@@ -87,7 +88,7 @@ export default function TripWayPicker({
 
   const fileList = (source: "track" | "import") => {
     const list = tripFiles(files, source);
-    if (!loaded) return <p className={classes.hint}>Loading…</p>;
+    if (!loaded) return <p className={classes.hint}>{t`Loading…`}</p>;
     if (loadError) return <ErrorBanner message={loadError} />;
     if (list.length === 0)
       return (
@@ -177,10 +178,8 @@ export default function TripWayPicker({
           icon="back"
           onClick={back}
           disabled={busy}
-          disabledReason="Adding…"
-        >
-          Back
-        </Button>
+          disabledReason={t`Adding…`}
+        >{t`Back`}</Button>
       )}
 
       {mode === "routes" && (

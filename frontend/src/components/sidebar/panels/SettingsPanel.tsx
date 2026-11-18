@@ -8,6 +8,7 @@ import {
   normalizeUserUiPreferences,
   notificationGroupLead,
   NOTIFICATION_PREFERENCES,
+  offeredHere,
   offersRegionChoice,
   offersUnitsChoice,
   ownAttributeCountLabel,
@@ -16,6 +17,7 @@ import {
   regionOffRefusal,
   REGIONS,
   SETTINGS,
+  showsLanguageChoice,
   toggleRegion,
   UNITS_CHOICE,
   unitsOf,
@@ -25,6 +27,8 @@ import {
   type NotificationPreferences,
   type ScopedCustomFieldDef,
   type Units,
+  rich,
+  t,
 } from "@logjam/shared";
 
 import {
@@ -46,8 +50,10 @@ import {
   ErrorState,
   LoadingState,
 } from "../../../ui";
+import { Rich } from "../../../ui/rich";
 import CustomFieldSection from "./CustomFieldSection";
 import PlaceTypeSection from "./PlaceTypeSection";
+import LanguageChooser from "./LanguageChooser";
 import ThemeChooser from "./ThemeChooser";
 import classes from "./SettingsPanel.module.css";
 
@@ -103,6 +109,7 @@ function SettingsPanel({
   regions?: readonly Region[];
 }) {
   const toast = useToast();
+  const languages = offeredHere(regions);
   const [page, setPage] = useState<ListPage | null>(null);
   const [notifPrefs, setNotifPrefs] = useState<NotificationPreferences | null>(
     null,
@@ -164,7 +171,7 @@ function SettingsPanel({
         [key]: previous[key],
       }));
       toast.error(
-        messageFromError(err, "Couldn't save that notification setting."),
+        messageFromError(err, t`Couldn't save that notification setting.`),
       );
     } finally {
       setNotifSavingKey((current) => (current === key ? null : current));
@@ -259,7 +266,7 @@ function SettingsPanel({
     return (
       <CustomFieldSection
         entity={isTrip ? "trip-log" : "place"}
-        title={isTrip ? "Trip attributes" : "Place attributes"}
+        title={isTrip ? t`Trip attributes` : t`Place attributes`}
         rowNoun={isTrip ? "trip" : "place"}
         loading={!currentUser}
         defs={isTrip ? customFieldDefs : placeCustomFieldDefs}
@@ -319,6 +326,9 @@ function SettingsPanel({
             )}
           </>
         ) : null}
+        {showsLanguageChoice(languages) ? (
+          <LanguageChooser offered={languages} />
+        ) : null}
       </>
     ),
     regions: () =>
@@ -340,7 +350,7 @@ function SettingsPanel({
                   // One at a time: a failed save rolls back to the choice before
                   // it, which would undo a toggle made mid-save.
                   disabled={regionsSaving || refused !== null}
-                  disabledReason={refused ?? "Saving…"}
+                  disabledReason={refused ?? t`Saving…`}
                   onChange={() => handleToggleRegion(region.id)}
                 />
               );
@@ -370,7 +380,7 @@ function SettingsPanel({
                     title={label}
                     checked={notifPrefs[key]}
                     disabled={notifSavingKey === key}
-                    disabledReason="Saving…"
+                    disabledReason={t`Saving…`}
                     onChange={() => handleToggleNotif(key)}
                   />
                 ))}
@@ -395,7 +405,7 @@ function SettingsPanel({
                   description={COPY_MEDIA_SETTING.hint}
                   checked={copyMedia}
                   disabled={copyMediaSaving}
-                  disabledReason="Saving…"
+                  disabledReason={t`Saving…`}
                   onChange={handleToggleCopyMedia}
                 />
               )}
@@ -409,7 +419,7 @@ function SettingsPanel({
                   description={LEADERBOARD_SETTING.hint}
                   checked={leaderboardOptIn}
                   disabled={leaderboardSaving}
-                  disabledReason="Saving…"
+                  disabledReason={t`Saving…`}
                   onChange={handleToggleLeaderboard}
                 />
               )}
@@ -419,26 +429,31 @@ function SettingsPanel({
         {/* The closing note, where Logjam GPS ends this page with what is kept
             on the phone. */}
         <p className={classes.privacy}>
-          Only you see your places unless you share one with a friend. Nothing
-          here leaves your account. Read the{" "}
-          <a
-            className={classes.privacyLink}
-            href="/tos.html"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Terms
-          </a>{" "}
-          and{" "}
-          <a
-            className={classes.privacyLink}
-            href="/privacy.html"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Privacy policy
-          </a>
-          .
+          <Rich
+            parts={rich`Only you see your places unless you share one with a friend. Nothing here leaves your account. Read the <tos>Terms</tos> and <privacy>Privacy policy</privacy>.`}
+            tags={{
+              tos: (text) => (
+                <a
+                  className={classes.privacyLink}
+                  href="/tos.html"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  {text}
+                </a>
+              ),
+              privacy: (text) => (
+                <a
+                  className={classes.privacyLink}
+                  href="/privacy.html"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  {text}
+                </a>
+              ),
+            }}
+          />
         </p>
       </>
     ),

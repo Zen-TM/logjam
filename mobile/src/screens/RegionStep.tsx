@@ -4,7 +4,7 @@
 import { useState } from "react";
 import { ScrollView, Text } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { REGION_CHOICE, REGIONS, type Region } from "@logjam/shared";
+import { REGION_CHOICE, REGIONS, type Region, t } from "@logjam/shared";
 
 import type { AccountState } from "../auth/capabilities";
 import { chooseRegions, useRegionsSending } from "../regionsPreference";
@@ -82,11 +82,11 @@ export function RegionStep({
       ) : null}
       <Button {...regionContinueProps(sending, send)} />
       <Button
-        label="Sign out"
+        label={t`Sign out`}
         variant="ghost"
         onPress={onSignOut}
         disabled={sending}
-        disabledReason="Saving your regions…"
+        disabledReason={t`Saving your regions…`}
       />
     </ScrollView>
   );

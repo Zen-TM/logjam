@@ -1,5 +1,6 @@
-import { describe, it, expect } from "vitest";
+import { afterEach, describe, it, expect } from "vitest";
 import type { FriendShareRow } from "./sharing.js";
+import { inTimeZone } from "./timeZone.testHelper.js";
 
 import {
   buildShareCards,
@@ -45,6 +46,18 @@ describe("buildShareCards", () => {
     expect(card.subtitle).toMatch(/^Place · shared /);
   });
 
+  // Mutation: write `formatShareDay` with `utcDay` for `localDay`, and a share
+  // at 04:00 UTC on the 12th reads as the 12th in Los Angeles, where it is the 11th.
+  it("names the day it was shared as a short day and month", () => {
+    inTimeZone("America/Los_Angeles", () => {
+      const [card] = buildShareCards([PLACE], {
+        direction: "theySee",
+        friendName: FRIEND,
+      });
+      expect(card.subtitle).toBe("Place · shared 11 Aug");
+    });
+  });
+
   // An untitled job still needs something to tap. The wording comes from
   // `shareRowTitle` in shared, so both clients say the same thing.
   it("names an untitled job rather than rendering an empty row", () => {
@@ -52,7 +65,7 @@ describe("buildShareCards", () => {
       direction: "theySee",
       friendName: FRIEND,
     });
-    expect(card.title).toBe("Untitled topo");
+    expect(card.title).toBe("Untitled sharpened area");
   });
 
   // My own grants: there is nothing to copy (it is already mine) and nothing to
@@ -281,7 +294,7 @@ describe("copyConfirm", () => {
       count: 1,
       friendName: FRIEND,
       itemName: "Claustral",
-      kindLabel: "place",
+      entityType: "place",
     });
     expect(confirm.title).toBe("Save a copy?");
     expect(confirm.body).toContain("“Claustral”");
@@ -300,7 +313,7 @@ describe("copyConfirm", () => {
         count: 1,
         friendName: FRIEND,
         itemName: "X",
-        kindLabel: "place",
+        entityType: "place",
       }).body,
     ).toContain("with its route");
     expect(
@@ -308,9 +321,26 @@ describe("copyConfirm", () => {
         count: 1,
         friendName: FRIEND,
         itemName: "X",
-        kindLabel: "route",
+        entityType: "route",
       }).body,
     ).not.toContain("with its route");
+  });
+
+  // Mutation: compare the entity type with a translated word
+  // (`args.entityType === t\`place\``), or fall back to `kindLabel`: the
+  // pseudo-language's route sentence stops differing between a place and a route.
+  describe("in a language other than English", () => {
+    afterEach(() => {
+      delete (globalThis as { LOGJAM_LANGUAGE?: string }).LOGJAM_LANGUAGE;
+    });
+
+    it("still promises the route only on a place", () => {
+      (globalThis as { LOGJAM_LANGUAGE?: string }).LOGJAM_LANGUAGE = "en-XA";
+      const body = (entityType: string) =>
+        copyConfirm({ count: 1, itemName: "X", entityType }).body;
+      expect(body("place")).not.toBe(body("route"));
+      expect(body("place")).toContain("⟦");
+    });
   });
 
   it("counts in the plural without naming rows or kinds", () => {
@@ -321,13 +351,21 @@ describe("copyConfirm", () => {
     expect(confirm.body).toContain("stay if bob stops sharing");
   });
 
+  // Mutation: write the first form of that plural in `copyConfirm` as
+  // "# items are copied into your own account."
+  it("says one item is copied when a count of 1 has no name", () => {
+    const confirm = copyConfirm({ count: 1, friendName: FRIEND });
+    expect(confirm.body).toContain("1 item is copied into your own account.");
+    expect(confirm.body).not.toContain("1 items");
+  });
+
   // When item sheets know no username, "the owner" starts a sentence and must
   // be capitalised: "The owner's original is untouched."
   it("capitalises the unnamed owner where it starts a sentence", () => {
     const body = copyConfirm({
       count: 1,
       itemName: "Claustral",
-      kindLabel: "place",
+      entityType: "place",
     }).body;
     expect(body).toContain("stays if the owner stops sharing");
     expect(body).toContain("The owner's original is untouched");

@@ -1,5 +1,6 @@
 import Papa from "papaparse";
 import { splitCombinedCoordinates } from "./combinedCoordinates";
+import { t } from "@logjam/shared";
 
 export type ParsedCsv = {
   headers: string[];
@@ -27,7 +28,7 @@ function renamedHeaderNotices(
   if (!renamedHeaders) return [];
   return Object.entries(renamedHeaders).map(
     ([renamed, original]) =>
-      `Column "${original}" appeared more than once — the extra one was renamed "${renamed}"`,
+      t`Column "${original}" appeared more than once — the extra one was renamed "${renamed}"`,
   );
 }
 

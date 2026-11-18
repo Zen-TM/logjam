@@ -50,6 +50,7 @@ import {
   type TripPlanItemKind,
   type TripPlanSectionView,
   type TripPlanView,
+  t,
 } from "@logjam/shared";
 import {
   Button,
@@ -363,7 +364,7 @@ export default function PlanDetailPanel({
   });
   const canBuildForms = addVerbs.some((verb) => verb.id === "form");
   const formsFull = plan.forms.length >= TRIP_PLAN_MAX_FORMS;
-  const formsFullReason = `${TRIP_PLAN_MAX_FORMS} forms at most`;
+  const formsFullReason = t`${TRIP_PLAN_MAX_FORMS} forms at most`;
 
   const counts = tripPlanCounts(plan);
 
@@ -555,7 +556,7 @@ export default function PlanDetailPanel({
                 </h3>
                 {sectionVerbs(index).length > 0 && (
                   <Menu
-                    label={`Actions for ${section.title}`}
+                    label={t`Actions for ${section.title}`}
                     title={section.title}
                     placement="bottom-end"
                     entries={menuEntries(sectionVerbs(index), (id) =>
@@ -565,7 +566,7 @@ export default function PlanDetailPanel({
                       <IconButton
                         {...props}
                         icon="overflow"
-                        label={`Actions for ${section.title}`}
+                        label={t`Actions for ${section.title}`}
                       />
                     )}
                   />

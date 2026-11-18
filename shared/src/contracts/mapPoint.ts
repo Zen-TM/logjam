@@ -26,11 +26,12 @@ import type { IconIdea } from "../icons.js";
 import { MAP_MEASURE, MAP_MEASURE_ICON } from "./mapMeasure.js";
 import type { ContractPlatform, ScreenContract } from "./types.js";
 import { WEATHER } from "./weather.js";
+import { t } from "../i18n.js";
 
 export const MAP_POINT = {
   id: "map.point",
-  question: "What is at this spot?",
-  title: "This point",
+  question: t`What is at this spot?`,
+  title: t`This point`,
   sections: [
     { key: "position" },
     { key: "elevation" },
@@ -39,12 +40,12 @@ export const MAP_POINT = {
     {
       key: "accuracy",
       on: "gps",
-      reason: "a call for help is made from the field",
+      reason: t`a call for help is made from the field`,
     },
     {
       key: "fixAge",
       on: "gps",
-      reason: "a call for help is made from the field",
+      reason: t`a call for help is made from the field`,
     },
     // Both need a location fix the device ALREADY has: neither client asks for
     // one to show them.
@@ -62,44 +63,44 @@ export const MAP_POINT = {
     { key: "coverage" },
   ],
   copy: {
-    position: "Position",
-    elevation: "Elevation",
-    distance: "Distance",
-    bearing: "Bearing",
-    slope: "Slope",
-    land: "Land tenure",
-    fire: "Last burnt",
-    coverage: "Coverage",
-    accuracy: "Accuracy",
-    fixAge: "Updated",
+    position: t`Position`,
+    elevation: t`Elevation`,
+    distance: t`Distance`,
+    bearing: t`Bearing`,
+    slope: t`Slope`,
+    land: t`Land tenure`,
+    fire: t`Last burnt`,
+    coverage: t`Coverage`,
+    accuracy: t`Accuracy`,
+    fixAge: t`Updated`,
     // The title when the point is the viewer's own fix.
-    fixTitle: "Your position",
+    fixTitle: t`Your position`,
     // The press-and-hold sheet's title: what can go at the point.
-    holdTitle: "What goes here?",
+    holdTitle: t`What goes here?`,
     // The one button on the tap panel that opens the verbs, and their title.
-    options: "Options",
-    backToPoint: "Back to this point",
-    notReported: "Not reported",
+    options: t`Options`,
+    backToPoint: t`Back to this point`,
+    notReported: t`Not reported`,
     // The receiver's own height, when no terrain figure arrives for a fix.
-    gpsAltitude: "GPS altitude",
-    elevationChecking: "Checking…",
+    gpsAltitude: t`GPS altitude`,
+    elevationChecking: t`Checking…`,
     // Says which of the reasons it is: a "—" opened in a gorge reads as a bug
     // rather than as the terrain being a connection away.
-    elevationNeedsConnection: "Needs a connection",
+    elevationNeedsConnection: t`Needs a connection`,
     // The marker verb's subtitle once "synced" is not yet true: the phone is
     // offline, a change is still queued, or there is no account to sync to.
-    markerSavedHere: "Saved on this phone",
-    coordinatesCopied: "Coordinates copied.",
+    markerSavedHere: t`Saved on this phone`,
+    coordinatesCopied: t`Coordinates copied.`,
   },
 } as const satisfies ScreenContract;
 
 /** Location search has one placeholder on both clients. */
-export const MAP_SEARCH_PLACEHOLDER = "Search places and locations";
+export const MAP_SEARCH_PLACEHOLDER = t`Search places and locations`;
 
 /** The words that differ only by how each medium presses. */
 export const MAP_POINT_NO_FIX_NOTE: Record<ContractPlatform, string> = {
-  web: "Press the locate button to see the distance.",
-  gps: "Tap the locate button to see the distance.",
+  web: t`Press the locate button to see the distance.`,
+  gps: t`Tap the locate button to see the distance.`,
 };
 
 type PointVerbDeclaration = {
@@ -127,33 +128,31 @@ export const MAP_POINT_VERBS = [
   {
     id: "navigate",
     icon: "navigateTo",
-    label: "Navigate to this point",
-    subtitle: "Live distance and bearing — nothing saved",
+    label: t`Navigate to this point`,
+    subtitle: t`Live distance and bearing — nothing saved`,
     hold: "gps",
     on: "gps",
-    reason:
-      "Logjam Web is used at a desk, and a browser on a desk has nowhere to navigate to. Measure from here is its stand-in: the same distance, asked once.",
+    reason: t`Logjam Web is used at a desk, and a browser on a desk has nowhere to navigate to. Measure from here is its stand-in: the same distance, asked once.`,
   },
   {
     id: "dropMarker",
     icon: "flag",
-    label: "Drop a marker here",
-    subtitle: "Saved, and synced",
+    label: t`Drop a marker here`,
+    subtitle: t`Saved, and synced`,
     hold: "gps",
     on: "gps",
-    reason:
-      "A marker is a quick pin with no form. Logjam Web's place form takes a name and a type, so its verb is Add a place here.",
+    reason: t`A marker is a quick pin with no form. Logjam Web's place form takes a name and a type, so its verb is Add a place here.`,
   },
   {
     id: "drawRoute",
     icon: "draw",
-    label: "Draw a route from here",
+    label: t`Draw a route from here`,
     hold: "gps",
   },
   {
     id: "addPlace",
     icon: "addPlace",
-    label: "Add a place here",
+    label: t`Add a place here`,
     hold: "gps",
   },
   {
@@ -172,7 +171,7 @@ export const MAP_POINT_VERBS = [
  * to one point, nothing along a line. Recorded so nobody fakes it with that.
  */
 export const MAP_POINT_GAPS = {
-  routeFollowing: "Distance remaining and off-route warnings along a route.",
+  routeFollowing: t`Distance remaining and off-route warnings along a route.`,
 } as const;
 
 export type MapPointVerbId = (typeof MAP_POINT_VERBS)[number]["id"];
@@ -283,8 +282,8 @@ export function mapPointPosition(point: MapPointCoord): string {
 /** "12 s ago": how old a fix is, to the second while that matters. */
 export function fixAgeLabel(ageMs: number): string {
   const seconds = Math.max(0, Math.round(ageMs / 1000));
-  if (seconds < 5) return "just now";
-  if (seconds < 60) return `${seconds} s ago`;
+  if (seconds < 5) return t`just now`;
+  if (seconds < 60) return t`${seconds} s ago`;
   return gaugeAgo(0, ageMs);
 }
 

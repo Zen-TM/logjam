@@ -25,6 +25,7 @@ import {
   type LonLatBox,
   type PlaceResult,
   MAP_SEARCH_PLACEHOLDER,
+  t,
 } from "@logjam/shared";
 import { searchPlaceRegistry, type TPlace } from "../../placeUtils";
 import { messageFromError } from "../../errors/messageFromError";
@@ -340,7 +341,7 @@ export default function MapSearchBox({
           type="text"
           disabled={disabled}
           role="combobox"
-          aria-label="Search places and locations"
+          aria-label={t`Search places and locations`}
           aria-expanded={open}
           aria-controls={listId}
           aria-autocomplete="list"
@@ -398,7 +399,7 @@ export default function MapSearchBox({
           <ul
             id={listId}
             role="listbox"
-            aria-label="Search results"
+            aria-label={t`Search results`}
             className={classes.list}
           >
             {options.map((option, index) => {
@@ -452,7 +453,7 @@ export default function MapSearchBox({
                   <Icon idea={icon} size={16} className={classes.optionGlyph} />
                   <span className={classes.optionLabel}>{label}</span>
                   {option.kind === "place" && option.shared && (
-                    <span className={classes.optionMeta}>Shared</span>
+                    <span className={classes.optionMeta}>{t`Shared`}</span>
                   )}
                   {detail && (
                     <span className={classes.optionMeta}>{detail}</span>

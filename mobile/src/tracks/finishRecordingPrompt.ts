@@ -28,6 +28,7 @@ import {
 import { listLoggedTrackIds } from "../sync/mirrorStore";
 import { getTrack } from "./tracksDb";
 import { recordedTrackSource, type TripTrackSource } from "./tripTrackSource";
+import { t } from "@logjam/shared";
 
 type Listener = (message: Omit<ToastMessage, "nonce">) => void;
 const listeners = new Set<Listener>();
@@ -64,7 +65,7 @@ export function onLogTripRequest(listener: LogTripListener): () => void {
  * queued recordings upload when they link one, and the notice is waiting for
  * the first recording they finish after that.
  */
-const SAVED_NOTICE = "Saved on this phone. It goes up when you have signal.";
+const SAVED_NOTICE = t`Saved on this phone. It goes up when you have signal.`;
 
 const isGuest = () => readEntryChoice() === "guest";
 
@@ -94,11 +95,11 @@ async function announceFinished(trackId: string, queued: boolean) {
       ? recordedTrackSource(track)
       : null;
   toast(
-    notice ? SAVED_NOTICE : "Recording saved.",
+    notice ? SAVED_NOTICE : t`Recording saved.`,
     "done",
     source
       ? {
-          label: "Log a trip",
+          label: t`Log a trip`,
           onPress: () => {
             for (const listener of logTripListeners) listener(source);
           },
@@ -114,10 +115,9 @@ async function announceFinished(trackId: string, queued: boolean) {
  */
 function reportBackupFailure(trackId: string): void {
   void confirm({
-    confirmTitle: "Track saved, backup didn't start",
-    confirmBody:
-      "Your recording is safe on this phone. Logjam GPS couldn't copy it to your Logjam account.",
-    confirmLabel: "Try again",
+    confirmTitle: t`Track saved, backup didn't start`,
+    confirmBody: t`Your recording is safe on this phone. Logjam GPS couldn't copy it to your Logjam account.`,
+    confirmLabel: t`Try again`,
     tone: "filled",
   }).then((again) => {
     if (!again) return;
@@ -144,9 +144,9 @@ export function confirmFinishRecording(
   onError?: (message: string) => void,
 ) {
   void confirm({
-    confirmTitle: "Finish recording?",
-    confirmBody: "The track is saved on this phone.",
-    confirmLabel: "Finish",
+    confirmTitle: t`Finish recording?`,
+    confirmBody: t`The track is saved on this phone.`,
+    confirmLabel: t`Finish`,
     tone: "filled",
   }).then(async (finish) => {
     // Answered after another dialog (a queued Discard) already ended it.
@@ -166,7 +166,7 @@ export function confirmFinishRecording(
           return;
         }
         console.error(err);
-        const message = "Couldn't save the track.";
+        const message = t`Couldn't save the track.`;
         if (onError) onError(message);
         else toast(message, "error");
       },
@@ -184,10 +184,9 @@ export function confirmDiscardRecording(
   onError: (message: string) => void,
 ) {
   void confirm({
-    confirmTitle: "Discard this recording?",
-    confirmBody:
-      "Every point recorded so far is deleted. This can't be undone.",
-    confirmLabel: "Discard",
+    confirmTitle: t`Discard this recording?`,
+    confirmBody: t`Every point recorded so far is deleted. This can't be undone.`,
+    confirmLabel: t`Discard`,
     tone: "destructive",
   }).then(async (discard) => {
     // Answered after another dialog (a queued Finish) already ended it: the
@@ -197,7 +196,7 @@ export function confirmDiscardRecording(
     // subject may still exist, with nothing telling them it didn't work.
     discardTrackRecording(trackId).then(onDiscarded, (err: unknown) => {
       console.error(err);
-      onError("Couldn't delete the recording.");
+      onError(t`Couldn't delete the recording.`);
     });
   });
 }

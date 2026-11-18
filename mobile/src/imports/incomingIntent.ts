@@ -6,6 +6,8 @@
 // PRIVACY: the flow is identical to the picker imports — entirely
 // device-local, no coordinates leave the device, errors are static strings.
 
+import { t } from "@logjam/shared";
+
 export type IncomingFileKind = "pdf" | "gpx" | "kml" | "kmz" | "geojson";
 
 /** Sniff the file kind from its leading bytes. Null ⇒ unsupported. */
@@ -48,7 +50,10 @@ export function classifyIncomingBytes(
 export function syntheticNameFor(
   kind: Exclude<IncomingFileKind, "pdf">,
 ): string {
-  return `Shared file.${kind}`;
+  // The words are the name's own from here on; `.${kind}` is what the parser
+  // dispatches on.
+  const words = t`Shared file`;
+  return `${words}.${kind}`;
 }
 
 /** True for URIs that carry a document (not app-scheme deep links). */

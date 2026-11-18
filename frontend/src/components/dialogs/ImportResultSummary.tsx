@@ -7,6 +7,7 @@
 // came for cannot be a click away.
 import { Button, SectionHeader, StatGrid, type Stat } from "../../ui";
 import classes from "./ImportResultSummary.module.css";
+import { t } from "@logjam/shared";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -68,7 +69,7 @@ function headlineStats(headline: HeadlineCount[]): Stat[] {
     .map((tally) => ({
       // The label carries the verb, the value the number — the same way a
       // route's figures read.
-      label: tally.label.charAt(0).toUpperCase() + tally.label.slice(1),
+      label: tally.label,
       value: String(tally.count),
     }));
 }
@@ -78,7 +79,7 @@ function headlineStats(headline: HeadlineCount[]): Stat[] {
 function ImportResultSummary({
   headline,
   details,
-  detailsLabel = "Details",
+  detailsLabel = t`Details`,
   errors,
   warnings,
   skippedRows,
@@ -98,12 +99,12 @@ function ImportResultSummary({
       {stats.length > 0 ? (
         <StatGrid stats={stats} />
       ) : (
-        <p className={classes.nothing}>No changes made.</p>
+        <p className={classes.nothing}>{t`No changes made.`}</p>
       )}
 
       {hasSkipped && (
         <section className={classes.section}>
-          <SectionHeader title="Skipped rows" count={skippedRows!.length} />
+          <SectionHeader title={t`Skipped rows`} count={skippedRows!.length} />
           <ul className={`${classes.detailList} ${classes.warningList}`}>
             {skippedRows!.map((line, i) => (
               <li key={i} className={classes.detailItem}>
@@ -117,7 +118,7 @@ function ImportResultSummary({
 
       {hasWarnings && (
         <section className={classes.section}>
-          <SectionHeader title="Left empty" count={warnings!.length} />
+          <SectionHeader title={t`Left empty`} count={warnings!.length} />
           <ul className={`${classes.detailList} ${classes.warningList}`}>
             {warnings!.map((warningMessage, i) => (
               <li key={i} className={classes.detailItem}>
@@ -131,7 +132,7 @@ function ImportResultSummary({
 
       {hasErrors && (
         <section className={classes.section}>
-          <SectionHeader title="Problems" count={errors!.length} />
+          <SectionHeader title={t`Problems`} count={errors!.length} />
           <ul className={`${classes.detailList} ${classes.errorList}`}>
             {errors!.map((errMsg, i) => (
               <li key={i} className={classes.detailItem}>
@@ -175,7 +176,7 @@ function ImportResultSummary({
           onClick={onUndo}
           busy={undoing}
         >
-          {undoing ? "Undoing…" : "Undo this import"}
+          {undoing ? t`Undoing…` : t`Undo this import`}
         </Button>
       )}
     </div>

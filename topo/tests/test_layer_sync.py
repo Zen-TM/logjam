@@ -2,7 +2,7 @@
 `shared/src/topoSettings.ts` (listed below), so they cannot drift silently.
 
 Pure text parsing — no GDAL/PDAL, no worker import. Runs on the dev host via
-`python -m unittest discover -s tests`.
+`make topo-test`.
 """
 
 import ast
@@ -15,10 +15,10 @@ _TOPO_SETTINGS = os.path.join(_HERE, "..", "..", "shared", "src", "topoSettings.
 
 # One TOPO_LAYERS entry, on one line or several (the formatter then adds a
 # trailing comma):
-#   { name: "x", label: "...", format: "raster", surveyPick: "density" }
+#   { name: "x", label: t`...`, format: "raster", surveyPick: "density" }
 _TS_ENTRY = re.compile(
     r'\{\s*name:\s*"(?P<name>[^"]+)"\s*,\s*'
-    r'label:\s*"[^"]+"\s*,\s*'
+    r'label:\s*(?:t`[^`]+`|"[^"]+")\s*,\s*'
     r'format:\s*"(?P<format>[^"]+)"\s*,\s*'
     r'surveyPick:\s*"(?P<surveyPick>[^"]+)"\s*,?\s*\}'
 )

@@ -50,6 +50,7 @@ import {
   TRACK_COLORS,
   trackColorName,
   type SnapMode,
+  t,
 } from "@logjam/shared";
 
 import {
@@ -66,7 +67,7 @@ import { ElevationReadout } from "./ElevationReadout";
 import { SnapPicker } from "./SnapPicker";
 import { useElevationProfile } from "./useElevationProfile";
 
-const SAVING = "Saving…";
+const SAVING = t`Saving…`;
 const VERBS = Object.fromEntries(
   mapMeasureVerbs("gps").map((verb) => [verb.id, verb]),
 ) as Record<MapMeasureVerbId, MapMeasureVerb>;
@@ -138,7 +139,7 @@ export function DraftToolPanel({
           {anchorCount === 0
             ? tool === "measure"
               ? MAP_MEASURE_START_NOTE.gps
-              : "Tap the map to start"
+              : t`Tap the map to start`
             : mapMeasurePointsLabel(anchorCount)}
         </Text>
         <View style={styles.spacer} />
@@ -146,14 +147,15 @@ export function DraftToolPanel({
       <ElevationReadout profile={profile} loading={loading} />
 
       {editingName ? (
-        <Text style={styles.editing} numberOfLines={1}>
-          Editing “{editingName}”
-        </Text>
+        <Text
+          style={styles.editing}
+          numberOfLines={1}
+        >{t`Editing “${editingName}”`}</Text>
       ) : null}
 
       {atCap ? (
         <FieldError
-          message={`Maximum of ${MAX_ROUTE_POINTS} points reached.`}
+          message={t`Maximum of ${MAX_ROUTE_POINTS} points reached.`}
         />
       ) : null}
 
@@ -167,14 +169,14 @@ export function DraftToolPanel({
             icon="undo"
             accessibilityLabel={VERBS.undo.label}
             disabled={!canUndo || saving}
-            disabledReason={saving ? SAVING : "Nothing to undo"}
+            disabledReason={saving ? SAVING : t`Nothing to undo`}
             onPress={onUndo}
           />
           <IconButton
             icon="delete"
             accessibilityLabel={VERBS.clear.label}
             disabled={points.length === 0 || saving}
-            disabledReason={saving ? SAVING : "Nothing to clear"}
+            disabledReason={saving ? SAVING : t`Nothing to clear`}
             onPress={onClear}
           />
           <Button
@@ -191,9 +193,9 @@ export function DraftToolPanel({
           {onReverse ? (
             <IconButton
               icon="reverse"
-              accessibilityLabel="Reverse the direction of this route"
+              accessibilityLabel={t`Reverse the direction of this route`}
               disabled={!hasLine || saving}
-              disabledReason={saving ? SAVING : "Needs two points"}
+              disabledReason={saving ? SAVING : t`Needs two points`}
               onPress={onReverse}
             />
           ) : null}
@@ -204,7 +206,7 @@ export function DraftToolPanel({
               side of it and stays a real tap target. */}
           {onColorChange ? (
             <ColourField
-              label="Route colour"
+              label={t`Route colour`}
               hideLabel
               palette={TRACK_COLORS}
               value={color ?? theme.accent}
@@ -216,7 +218,7 @@ export function DraftToolPanel({
           <IconButton
             icon="close"
             accessibilityLabel={
-              tool === "measure" ? VERBS.leave.label : "Cancel drawing"
+              tool === "measure" ? VERBS.leave.label : t`Cancel drawing`
             }
             disabled={saving}
             disabledReason={SAVING}
@@ -224,11 +226,11 @@ export function DraftToolPanel({
           />
           {onSave ? (
             <Button
-              label={saving ? "Saving…" : "Save"}
+              label={saving ? t`Saving…` : t`Save`}
               icon="done"
               compact
               disabled={!hasLine || saving}
-              disabledReason={saving ? SAVING : "Needs two points"}
+              disabledReason={saving ? SAVING : t`Needs two points`}
               onPress={onSave}
             />
           ) : null}

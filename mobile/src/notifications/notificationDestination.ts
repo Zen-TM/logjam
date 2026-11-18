@@ -18,7 +18,7 @@
 //
 // PRIVACY: ids and a category, both already in the payload the row renders.
 // Nothing new is read, resolved or logged.
-import { isSharableEntityType } from "@logjam/shared";
+import { isSharableEntityType, t } from "@logjam/shared";
 
 import type { TNotification } from "../api/types";
 import {
@@ -50,7 +50,7 @@ function saved(
   filter: SavedCategory,
   highlightKey: string | null,
 ): NotificationDestination {
-  return { tab: "saved", label: "View in Saved", filter, highlightKey };
+  return { tab: "saved", label: t`View in Saved`, filter, highlightKey };
 }
 
 /**
@@ -67,7 +67,7 @@ export function notificationDestination(
     // to see who is asking, the accepted one to see the friend you now have.
     case "friend_request":
     case "friend_request_accepted":
-      return { tab: "friends", label: "View in Friends" };
+      return { tab: "friends", label: t`View in Friends` };
 
     case "item_shared": {
       const entityType = str(payload, "entityType");

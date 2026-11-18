@@ -22,6 +22,7 @@ import {
   regionRejectedLine,
   sourceUnavailableLine,
 } from "./regionJobStatus";
+import { plural, t } from "@logjam/shared";
 
 export function RegionDownloadRow({ job }: { job: RegionJob }) {
   const theme = useTheme();
@@ -30,16 +31,20 @@ export function RegionDownloadRow({ job }: { job: RegionJob }) {
   const { progress, state, spec } = job;
 
   const subtitle = (() => {
-    if (state.kind === "queued") return "Waiting its turn";
+    if (state.kind === "queued") return t`Waiting its turn`;
     if (state.kind === "ready") {
       return state.gaps > 0
-        ? `Saved · ${state.gaps} tiles unavailable`
-        : "Saved";
+        ? plural(
+            state.gaps,
+            "Saved · # map piece unavailable",
+            "Saved · # map pieces unavailable",
+          )
+        : t`Saved`;
     }
     if (state.kind === "failed") {
       switch (state.code) {
         case "provider-errors":
-          return "Too many tiles wouldn't load. Try again later.";
+          return t`Too much map data wouldn't load. Try again later.`;
         case "region-rejected":
           return regionRejectedLine(state.detail);
         case "source-unavailable":
@@ -49,32 +54,34 @@ export function RegionDownloadRow({ job }: { job: RegionJob }) {
           // The detail is the message from the exception that ended the run,
           // scrubbed (see failureDetail).
           return state.detail
-            ? `Download didn't finish: ${state.detail}`
-            : "Download didn't finish. Try again.";
+            ? t`Download didn't finish: ${state.detail}`
+            : t`Download didn't finish. Try again.`;
       }
     }
     if (state.kind === "paused") {
       switch (state.reason) {
         case "connectivity":
-          return "Paused — waiting for Wi-Fi";
+          return t`Paused — waiting for Wi-Fi`;
         case "background":
-          return "Paused — the maps stopped loading";
+          return t`Paused — the maps stopped loading`;
         case "provider-backoff":
-          return "Paused — the map service is busy";
+          return t`Paused — the map service is busy`;
         default:
-          return "Paused";
+          return t`Paused`;
       }
     }
     // The vector clip counts bytes, not tiles: it is one file, so a tile
     // tally would read "0 of 0" for its whole run.
     if (progress.tilesTotal === 0) {
       return progress.bytesTotal > 0
-        ? `${formatBytes(progress.bytesDone)} of ${formatBytes(progress.bytesTotal)}`
-        : "Starting…";
+        ? t`${formatBytes(progress.bytesDone)} of ${formatBytes(progress.bytesTotal)}`
+        : t`Starting…`;
     }
-    const gaps =
-      progress.tilesGap > 0 ? ` · ${progress.tilesGap} not available` : "";
-    return `${progress.tilesDone.toLocaleString()} of ${progress.tilesTotal.toLocaleString()} tiles${gaps}`;
+    const done = progress.tilesDone.toLocaleString();
+    const total = progress.tilesTotal.toLocaleString();
+    return progress.tilesGap > 0
+      ? t`${done} of ${total} map pieces · ${progress.tilesGap} not available`
+      : t`${done} of ${total} map pieces`;
   })();
 
   const barFraction =
@@ -107,7 +114,7 @@ export function RegionDownloadRow({ job }: { job: RegionJob }) {
             {state.kind === "downloading" ? (
               canPause(job) ? (
                 <Button
-                  label="Pause"
+                  label={t`Pause`}
                   variant="ghost"
                   compact
                   onPress={() => pauseRegionDownload(spec.id)}
@@ -118,14 +125,14 @@ export function RegionDownloadRow({ job }: { job: RegionJob }) {
               // Retrying a rejected area, or an endpoint that is down, repeats
               // the same failure; the row's sentence says what to do instead.
               <Button
-                label="Resume"
+                label={t`Resume`}
                 variant="outlineAccent"
                 compact
                 onPress={() => resumeRegionDownload(spec.id)}
               />
             )}
             <Button
-              label={state.kind === "failed" ? "Discard" : "Stop"}
+              label={state.kind === "failed" ? t`Discard` : t`Stop`}
               variant="ghost"
               compact
               onPress={() => {
@@ -134,12 +141,12 @@ export function RegionDownloadRow({ job }: { job: RegionJob }) {
                   if (
                     await confirm({
                       confirmTitle: failed
-                        ? "Discard this download?"
-                        : "Stop this download?",
+                        ? t`Discard this download?`
+                        : t`Stop this download?`,
                       confirmBody: spec.update
-                        ? "The map you have saved stays as it is."
-                        : "The download so far will be deleted from this phone.",
-                      confirmLabel: failed ? "Discard" : "Stop",
+                        ? t`The map you have saved stays as it is.`
+                        : t`The download so far will be deleted from this phone.`,
+                      confirmLabel: failed ? t`Discard` : t`Stop`,
                       tone: "destructive",
                     })
                   )

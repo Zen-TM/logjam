@@ -39,6 +39,7 @@ import {
 } from "./mediaUpload";
 import { upsertPlace, upsertPlaceLink, upsertTrip } from "./mirrorStore";
 import { getSyncDb, notifyMirrorChanged } from "./syncDb";
+import type { SyncErrorCode } from "./parkedError";
 
 /**
  * An op's last error record, which is also where its failure tally lives
@@ -465,8 +466,7 @@ async function flushMediaOps(): Promise<boolean> {
           "UPDATE outbox SET state = 'blocked', error_json = ? WHERE seq = ?",
           JSON.stringify({
             code: transient ? status : 0,
-            message:
-              "This upload keeps failing on this phone. Try again or discard it.",
+            reason: "keeps_failing" satisfies SyncErrorCode,
           }),
           row.seq,
         );

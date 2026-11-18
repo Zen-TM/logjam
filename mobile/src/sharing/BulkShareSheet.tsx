@@ -26,6 +26,7 @@ import {
   type BulkShareCandidate,
   type BulkShareOutcome,
 } from "./bulkShareTargets";
+import { t } from "@logjam/shared";
 
 /**
  * The selection bar's share verb, for the bar's `extra` slot.
@@ -53,7 +54,7 @@ export function BulkShareButton({
   return (
     <IconButton
       icon="shareFriend"
-      accessibilityLabel="Share the selected items"
+      accessibilityLabel={t`Share the selected items`}
       color={disabled ? theme.textMuted : theme.accent}
       onPress={onPress}
     />
@@ -98,7 +99,7 @@ export function BulkShareSheet<C extends BulkShareCandidate>({
     target: visible ? { kind: "bulk", plan } : null,
     // Unused by the bulk branch — a selection has no one name — but the panel
     // needs the prop for its title fallback when there is no target at all.
-    itemLabel: "these items",
+    itemLabel: t`these items`,
     online,
     enabled: visible,
     active: visible,

@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   TOPO_UPLOAD_PART_URL_TTL_SECONDS,
   TOPO_UPLOAD_SIGN_MAX,
+  t,
 } from "@logjam/shared";
 import { ApiError } from "../../errors/ApiError";
 import { messageFromError } from "../../errors/messageFromError";
@@ -137,8 +138,7 @@ export async function sendTopoParts(
   session.completed = true;
 }
 
-export const UPLOAD_STOPPED =
-  "The upload stopped. Check your connection, then choose Make it again to carry on from where it stopped.";
+export const UPLOAD_STOPPED = t`The upload stopped. Check your connection, then choose Make it again to carry on from where it stopped.`;
 
 /** What to tell the user when `submit` failed, before or after the ZIP was
  *  all `uploaded`. A dropped connection carries no server sentence, and the
@@ -147,7 +147,7 @@ export function submitFailureMessage(error: unknown, uploaded: boolean) {
   if (!uploaded && !(error instanceof ApiError)) return UPLOAD_STOPPED;
   return messageFromError(
     error,
-    uploaded ? "Couldn't submit. Try again." : UPLOAD_STOPPED,
+    uploaded ? t`Couldn't submit. Try again.` : UPLOAD_STOPPED,
   );
 }
 

@@ -1,3 +1,4 @@
+import { t } from "@logjam/shared";
 import { Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -87,7 +88,7 @@ export function Hero({
         <View style={styles.backRow}>
           <IconButton
             icon="back"
-            accessibilityLabel={`Back to ${backLabel}`}
+            accessibilityLabel={t`Back to ${backLabel}`}
             color={theme.text}
             onPress={onBack}
           />
@@ -148,7 +149,7 @@ function CompactHero({
             {onBack ? (
               <IconButton
                 icon="back"
-                accessibilityLabel={`Back to ${backLabel}`}
+                accessibilityLabel={t`Back to ${backLabel ?? ""}`}
                 color={theme.text}
                 onPress={onBack}
               />

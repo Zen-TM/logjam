@@ -98,8 +98,15 @@
       "customFields": {}
     }
   ],
-  "warnings": [
-    "Row 4: date \"not sure of the exact date\" couldn't be read — skipped"
+  "warnings": [],
+  "skippedRows": [
+    {
+      "line": 4,
+      "reason": {
+        "kind": "date",
+        "raw": "not sure of the exact date"
+      }
+    }
   ],
   "droppedRows": 1,
   "matches": [

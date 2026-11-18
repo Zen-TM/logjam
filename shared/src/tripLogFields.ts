@@ -7,6 +7,7 @@ import {
   stopLabel,
 } from "./placeTypes.js";
 import { lengthFromInput, lengthInputText, lengthUnitLabel } from "./units.js";
+import { t } from "./i18n.js";
 
 /**
  * The two surfaces a custom field can belong to. One declaration for the API's
@@ -45,12 +46,12 @@ export const ATTRIBUTE_NOUN = {
   /** Carried rather than composed: "a"/"an" does not follow from the noun, and
    *  a rename that leaves "a attribute" behind is the classic way this kind of
    *  constant half-works. */
-  add: "Add an attribute",
+  add: t`Add an attribute`,
 } as const;
 
 /** A route section's title on every page and form: a place holds one route, a
  *  trip any number. */
-export const ROUTE_NOUN = { one: "Route", many: "Routes" } as const;
+export const ROUTE_NOUN = { one: t`Route`, many: t`Routes` } as const;
 
 export type TripLogCustomFieldType =
   | "string"
@@ -269,11 +270,11 @@ export const CUSTOM_FIELD_TYPES: {
   value: TripLogCustomFieldType;
   label: string;
 }[] = [
-  { value: "string", label: "Text" },
-  { value: "integer", label: "Integer" },
-  { value: "float", label: "Decimal" },
-  { value: "date", label: "Date" },
-  { value: "boolean", label: "Yes / No" },
+  { value: "string", label: t`Text` },
+  { value: "integer", label: t`Integer` },
+  { value: "float", label: t`Decimal` },
+  { value: "date", label: t`Date` },
+  { value: "boolean", label: t`Yes / No` },
 ];
 
 export const VALID_CUSTOM_FIELD_TYPES = new Set<string>([
@@ -298,7 +299,7 @@ export function customFieldDisplayLabel(def: TripLogCustomFieldDef): string {
   if (def.min != null)
     return withLengthUnit(def.key, `${def.label} (${def.min}+)`);
   if (def.max != null)
-    return withLengthUnit(def.key, `${def.label} (up to ${def.max})`);
+    return withLengthUnit(def.key, t`${def.label} (up to ${def.max})`);
   return withLengthUnit(def.key, def.label);
 }
 
@@ -445,9 +446,9 @@ export function renameCustomFieldLabel(
   newLabel: string,
 ): { defs: TripLogCustomFieldDef[] } | { error: string } {
   const label = newLabel.trim();
-  if (!label) return { error: "Label is required." };
+  if (!label) return { error: t`Label is required.` };
   const target = defs.find((d) => d.key === key);
-  if (!target) return { error: "That field no longer exists." };
+  if (!target) return { error: t`That field no longer exists.` };
   if (target.label === label) return { defs };
   return {
     defs: defs.map((d) => (d.key === key ? { ...d, label } : d)),
@@ -478,17 +479,17 @@ export function buildCustomFieldDef(
   existingDefs: TripLogCustomFieldDef[],
 ): { def: TripLogCustomFieldDef } | { error: string; field?: "bounds" } {
   const label = draft.label.trim();
-  if (!label) return { error: "Label is required." };
+  if (!label) return { error: t`Label is required.` };
 
   const key = makeCustomFieldKey(label);
   if (existingDefs.some((d) => d.key === key)) {
-    return { error: `A field with the key "${key}" already exists.` };
+    return { error: t`A field with the key "${key}" already exists.` };
   }
   // The key is minted from the FIRST label and survives a rename, so a key
   // check alone lets a new "Depth" in beside one that was renamed to "Depth".
   if (existingDefs.some((d) => nameKey(d.label) === nameKey(label))) {
     return {
-      error: `You already have an ${ATTRIBUTE_NOUN.one} called "${label}".`,
+      error: t`You already have an ${ATTRIBUTE_NOUN.one} called "${label}".`,
     };
   }
 
@@ -498,7 +499,7 @@ export function buildCustomFieldDef(
   if (isNumeric && draft.bounded) {
     if (draft.min.trim() === "" || draft.max.trim() === "") {
       return {
-        error: "Both min and max are required for a bounded field.",
+        error: t`Both min and max are required for a bounded field.`,
         field: "bounds",
       };
     }
@@ -511,10 +512,10 @@ export function buildCustomFieldDef(
         ? parseInt(draft.max, 10)
         : parseFloat(draft.max);
     if (!isFinite(min) || !isFinite(max)) {
-      return { error: "Min and max must be valid numbers.", field: "bounds" };
+      return { error: t`Min and max must be valid numbers.`, field: "bounds" };
     }
     if (min >= max) {
-      return { error: "Minimum must be less than maximum.", field: "bounds" };
+      return { error: t`Minimum must be less than maximum.`, field: "bounds" };
     }
     bounds = { min, max };
   }

@@ -41,6 +41,8 @@ import {
   type TripSortKey,
   type TripVerbId,
   tripTitle,
+  plural,
+  t,
 } from "@logjam/shared";
 import type { TPlace, TTripLog } from "../../../placeUtils";
 import { bulkDeleteTripLogs, deleteTripLog } from "../../../placeUtils";
@@ -80,9 +82,6 @@ import classes from "./TripLogsPanel.module.css";
 const ALL_TYPES = "";
 
 const { copy } = TRIPS_LIST;
-
-const plural = (count: number, noun: string) =>
-  `${count} ${noun}${count === 1 ? "" : "s"}`;
 
 /**
  * Logs: "what have I done?" (Logjam GPS's `LogsScreen`). The hero answers with
@@ -252,7 +251,7 @@ function TripLogsPanel({
       (trip) => trip.types.length === 0,
     ).length;
     return [
-      { value: ALL_TYPES, label: "All", count: withoutType.length },
+      { value: ALL_TYPES, label: t`All`, count: withoutType.length },
       // Busiest activity first; ties alphabetical so the order is stable.
       ...distinctTypes
         .map((type) => ({
@@ -276,7 +275,7 @@ function TripLogsPanel({
         ? [
             {
               value: NO_TYPE_FILTER_VALUE,
-              label: "No type",
+              label: t`No type`,
               icon: tripTypeLook(null).icon,
               hue: tripTypeLook(null).hue,
               count: untyped,
@@ -398,8 +397,8 @@ function TripLogsPanel({
         messageFromError(
           err,
           ids.length === 1
-            ? "Couldn't delete that trip."
-            : "Couldn't delete those trips.",
+            ? t`Couldn't delete that trip.`
+            : t`Couldn't delete those trips.`,
         ),
       );
     } finally {
@@ -448,7 +447,11 @@ function TripLogsPanel({
       icon="filter"
       label={
         sheetFilterCount > 0
-          ? `${TRIPS_FILTER_SHEET.title}, ${plural(sheetFilterCount, "filter")} active`
+          ? plural(
+              sheetFilterCount,
+              "Sort and filter, # filter active",
+              "Sort and filter, # filters active",
+            )
           : TRIPS_FILTER_SHEET.title
       }
       tone={sheetFilterCount > 0 || sheetOpen ? "filled" : "default"}
@@ -511,9 +514,7 @@ function TripLogsPanel({
           <SelectionVerb
             danger
             onClick={() => setPendingDelete(selected.map((trip) => trip.id))}
-          >
-            Delete
-          </SelectionVerb>
+          >{t`Delete`}</SelectionVerb>
         </SelectionBar>
       ) : (
         tripLogs.length > 0 && (
@@ -538,7 +539,9 @@ function TripLogsPanel({
         title={title}
         subtitle={[
           formatTripDate(trip.date),
-          trip.places.length > 1 ? plural(trip.places.length, "place") : null,
+          trip.places.length > 1
+            ? plural(trip.places.length, "# place", "# places")
+            : null,
         ]
           .filter(Boolean)
           .join(" · ")}
@@ -553,7 +556,7 @@ function TripLogsPanel({
         leading={
           <TileCheckbox
             tile={<IconTile icon={look.icon} hue={look.hue} />}
-            label={`Select ${title}`}
+            label={t`Select ${title}`}
             checked={isSelected}
             selecting={selecting}
             onToggle={(extendRange) => toggleSelected(trip.id, extendRange)}
@@ -573,7 +576,7 @@ function TripLogsPanel({
             )}
             {!selecting && (
               <Menu
-                label={`Actions for ${title}`}
+                label={t`Actions for ${title}`}
                 title={title}
                 placement="right-start"
                 entries={rowEntries(trip)}
@@ -581,7 +584,7 @@ function TripLogsPanel({
                   <IconButton
                     {...props}
                     icon="overflow"
-                    label={`Actions for ${title}`}
+                    label={t`Actions for ${title}`}
                   />
                 )}
               />
@@ -748,10 +751,9 @@ function TripLogsPanel({
     // The server caps the trip list; say when this is a truncated view so the
     // oldest trips aren't silently hidden.
     truncated: tripLogsTotal != null && tripLogsTotal > tripLogs.length && (
-      <p className={classes.note}>
-        Showing your {tripLogs.length} most recent trips of {tripLogsTotal}.
-        Older ones aren't loaded.
-      </p>
+      <p
+        className={classes.note}
+      >{t`Showing your ${tripLogs.length} most recent trips of ${tripLogsTotal}. Older ones aren't loaded.`}</p>
     ),
     list,
   };

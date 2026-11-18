@@ -37,8 +37,9 @@ import {
   TRIP_PLAN_JOIN,
   signUpFormProblem,
   USERNAME_HINT,
-  USERNAME_TAKEN,
+  usernameTaken,
   verifyIntro,
+  t,
 } from "@logjam/shared";
 import { usernameAvailable } from "../placeUtils";
 import { friendInvite, planInvite } from "../pendingInvite";
@@ -127,9 +128,7 @@ function RedirectCard({
           busy={redirecting}
           onClick={handleClick}
           className={classes.submit}
-        >
-          Sign in or create an account
-        </Button>
+        >{t`Sign in or create an account`}</Button>
       </div>
     </Frame>
   );
@@ -194,7 +193,7 @@ function CognitoForms({
       setResendSuccess(true);
     } catch (err) {
       console.error(err);
-      setLocalError(messageFromError(err, "Couldn't resend code. Try again."));
+      setLocalError(messageFromError(err, t`Couldn't resend code. Try again.`));
       setResendCooldown(0);
     }
   }
@@ -214,7 +213,7 @@ function CognitoForms({
     const free = await usernameAvailable(asked.trim());
     // The field may have moved on while this was out.
     if (!free && asked === usernameNow.current) {
-      setUsernameError(USERNAME_TAKEN);
+      setUsernameError(usernameTaken());
     }
     return free;
   }
@@ -223,14 +222,14 @@ function CognitoForms({
     e.preventDefault();
     setLocalError(null);
     if (!isValidEmailFormat(email)) {
-      setEmailError("Enter a valid email address.");
+      setEmailError(t`Enter a valid email address.`);
       return;
     }
     setEmailError(null);
     // Unchecked by `noValidate`, and Cognito's refusal of a blank would hand
     // over to the provider's page.
     if (!password) {
-      setLocalError("Enter your password.");
+      setLocalError(t`Enter your password.`);
       return;
     }
     setSubmitting(true);
@@ -244,12 +243,12 @@ function CognitoForms({
         await resendSignUpCode(email).catch((resendErr) => {
           console.error(resendErr);
           setLocalError(
-            messageFromError(resendErr, "Couldn't resend code. Try again."),
+            messageFromError(resendErr, t`Couldn't resend code. Try again.`),
           );
         });
       } else {
         console.error(err);
-        setLocalError(messageFromError(err, "Couldn't sign in. Try again."));
+        setLocalError(messageFromError(err, t`Couldn't sign in. Try again.`));
       }
     }
     setSubmitting(false);
@@ -286,7 +285,7 @@ function CognitoForms({
       goTo("confirmSignUp");
     } catch (err) {
       console.error(err);
-      setLocalError(messageFromError(err, "Couldn't sign up. Try again."));
+      setLocalError(messageFromError(err, t`Couldn't sign up. Try again.`));
     }
     setSubmitting(false);
   }
@@ -300,7 +299,7 @@ function CognitoForms({
     } catch (err) {
       console.error(err);
       setLocalError(
-        messageFromError(err, "Couldn't confirm your code. Try again."),
+        messageFromError(err, t`Couldn't confirm your code. Try again.`),
       );
       setSubmitting(false);
       return;
@@ -314,7 +313,7 @@ function CognitoForms({
     } catch (err) {
       console.error(err);
       goTo("signIn");
-      setLocalError(messageFromError(err, "Couldn't sign in. Try again."));
+      setLocalError(messageFromError(err, t`Couldn't sign in. Try again.`));
     }
     setSubmitting(false);
   }
@@ -323,7 +322,7 @@ function CognitoForms({
     e.preventDefault();
     setLocalError(null);
     if (!isValidEmailFormat(email)) {
-      setEmailError("Enter a valid email address.");
+      setEmailError(t`Enter a valid email address.`);
       return;
     }
     setEmailError(null);
@@ -334,7 +333,7 @@ function CognitoForms({
     } catch (err) {
       console.error(err);
       setLocalError(
-        messageFromError(err, "Couldn't send reset code. Try again."),
+        messageFromError(err, t`Couldn't send reset code. Try again.`),
       );
     }
     setSubmitting(false);
@@ -344,12 +343,12 @@ function CognitoForms({
     e.preventDefault();
     setLocalError(null);
     if (newPassword !== confirmNewPassword) {
-      setLocalError("Passwords do not match");
+      setLocalError(t`Passwords do not match`);
       return;
     }
     if (!isValidPassword(newPassword)) {
       setLocalError(
-        "Password must be at least 8 characters and include uppercase, lowercase, number, and symbol",
+        t`Password must be at least 8 characters and include uppercase, lowercase, number, and symbol`,
       );
       return;
     }
@@ -361,7 +360,7 @@ function CognitoForms({
     } catch (err) {
       console.error(err);
       setLocalError(
-        messageFromError(err, "Couldn't reset password. Try again."),
+        messageFromError(err, t`Couldn't reset password. Try again.`),
       );
     }
     setSubmitting(false);
@@ -374,7 +373,7 @@ function CognitoForms({
           <Brand />
           <p className={classes.subtitle}>{verifyIntro(email)}</p>
           <TextField
-            label="Verification code"
+            label={t`Verification code`}
             value={code}
             onChange={(e) => setCode(e.target.value)}
             required
@@ -384,9 +383,10 @@ function CognitoForms({
           />
           {displayError && <ErrorBanner message={displayError} />}
           {resendSuccess && (
-            <p className={classes.successBanner} role="status">
-              New code sent — check your email (check spam).
-            </p>
+            <p
+              className={classes.successBanner}
+              role="status"
+            >{t`New code sent — check your email (check spam).`}</p>
           )}
           <Button
             type="submit"
@@ -394,12 +394,12 @@ function CognitoForms({
             busy={submitting}
             className={classes.submit}
           >
-            {submitting ? "Verifying…" : "Verify"}
+            {submitting ? t`Verifying…` : t`Verify`}
           </Button>
           <Button
             type="button"
             disabled={resendCooldown > 0}
-            disabledReason={`Wait ${resendCooldown}s before asking again`}
+            disabledReason={t`Wait ${resendCooldown}s before asking again`}
             onClick={handleResendCode}
             className={classes.submit}
           >
@@ -423,7 +423,7 @@ function CognitoForms({
           <Brand />
           <p className={classes.subtitle}>{SIGN_IN_COPY.resetIntro}</p>
           <TextField
-            label="Email"
+            label={t`Email`}
             type="email"
             value={email}
             onChange={(e) => {
@@ -442,16 +442,14 @@ function CognitoForms({
             busy={submitting}
             className={classes.submit}
           >
-            {submitting ? "Sending…" : "Send reset code"}
+            {submitting ? t`Sending…` : t`Send reset code`}
           </Button>
           <p className={classes.switchText}>
             <button
               type="button"
               className={classes.link}
               onClick={() => goTo("signIn")}
-            >
-              Back to sign in
-            </button>
+            >{t`Back to sign in`}</button>
           </p>
         </form>
       </Frame>
@@ -467,11 +465,11 @@ function CognitoForms({
           onSubmit={handleConfirmForgotPassword}
         >
           <Brand />
-          <p className={classes.subtitle}>
-            Check your email for a reset code, then choose a new password
-          </p>
+          <p
+            className={classes.subtitle}
+          >{t`Check your email for a reset code, then choose a new password`}</p>
           <TextField
-            label="Reset code"
+            label={t`Reset code`}
             value={code}
             onChange={(e) => setCode(e.target.value)}
             required
@@ -480,7 +478,7 @@ function CognitoForms({
             inputMode="numeric"
           />
           <TextField
-            label="New password"
+            label={t`New password`}
             type="password"
             value={newPassword}
             onChange={(e) => setNewPassword(e.target.value)}
@@ -489,7 +487,7 @@ function CognitoForms({
             autoComplete="new-password"
           />
           <TextField
-            label="Confirm new password"
+            label={t`Confirm new password`}
             type="password"
             value={confirmNewPassword}
             onChange={(e) => setConfirmNewPassword(e.target.value)}
@@ -503,16 +501,14 @@ function CognitoForms({
             busy={submitting}
             className={classes.submit}
           >
-            {submitting ? "Resetting…" : "Reset password"}
+            {submitting ? t`Resetting…` : t`Reset password`}
           </Button>
           <p className={classes.switchText}>
             <button
               type="button"
               className={classes.link}
               onClick={() => goTo("signIn")}
-            >
-              Back to sign in
-            </button>
+            >{t`Back to sign in`}</button>
           </p>
         </form>
       </Frame>
@@ -527,7 +523,7 @@ function CognitoForms({
           <Intro />
           <InviteNote />
           <TextField
-            label="Name"
+            label={t`Name`}
             value={name}
             onChange={(e) => setName(e.target.value)}
             required
@@ -535,7 +531,7 @@ function CognitoForms({
             autoComplete="name"
           />
           <TextField
-            label="Email"
+            label={t`Email`}
             type="email"
             value={email}
             onChange={(e) => {
@@ -547,7 +543,7 @@ function CognitoForms({
             autoComplete="email"
           />
           <TextField
-            label="Username"
+            label={t`Username`}
             value={username}
             onChange={(e) => {
               setUsername(e.target.value);
@@ -563,7 +559,7 @@ function CognitoForms({
             autoComplete="username"
           />
           <TextField
-            label="Password"
+            label={t`Password`}
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
@@ -572,7 +568,7 @@ function CognitoForms({
             autoComplete="new-password"
           />
           <TextField
-            label="Confirm password"
+            label={t`Confirm password`}
             type="password"
             value={confirmPassword}
             onChange={(e) => setConfirmPassword(e.target.value)}
@@ -621,12 +617,13 @@ function CognitoForms({
         <Intro />
         <InviteNote />
         {resetSuccess && (
-          <p className={classes.successBanner} role="status">
-            Password reset. Sign in to continue.
-          </p>
+          <p
+            className={classes.successBanner}
+            role="status"
+          >{t`Password reset. Sign in to continue.`}</p>
         )}
         <TextField
-          label="Email"
+          label={t`Email`}
           type="email"
           value={email}
           onChange={(e) => {
@@ -640,7 +637,7 @@ function CognitoForms({
           autoComplete="email"
         />
         <TextField
-          label="Password"
+          label={t`Password`}
           type="password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
@@ -654,16 +651,14 @@ function CognitoForms({
           busy={submitting}
           className={classes.submit}
         >
-          {submitting ? "Signing in…" : "Sign in"}
+          {submitting ? t`Signing in…` : t`Sign in`}
         </Button>
         <p className={classes.switchText}>
           <button
             type="button"
             className={classes.link}
             onClick={() => goTo("forgotPassword")}
-          >
-            Forgot password?
-          </button>
+          >{t`Forgot password?`}</button>
         </p>
         <p className={classes.switchText}>
           <button

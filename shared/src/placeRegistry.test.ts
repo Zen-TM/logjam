@@ -1,7 +1,9 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+
+import { setLanguageResolver } from "./i18n.js";
 
 import {
   indexPlaceRegistry,
@@ -184,10 +186,19 @@ describe("placeResultDetail", () => {
 });
 
 describe("placeKindLabel", () => {
+  afterEach(() => setLanguageResolver(() => undefined));
+
   it("names the kinds whose OSM value reads wrong, and reads the rest", () => {
     expect(placeKindLabel("highway=residential")).toBe("Street");
     expect(placeKindLabel("waterway=stream")).toBe("Creek");
     expect(placeKindLabel("tourism=camp_site")).toBe("Camp site");
+  });
+
+  // Mutation: write `kindLabels` in placeRegistry.ts as a constant (`const kindLabels = { … }`) read at import.
+  it("follows the language in force when it is called, which the API sends", () => {
+    setLanguageResolver(() => "en-XA");
+    expect(placeKindLabel("waterway=stream")).toMatch(/^⟦.*⟧$/u);
+    expect(placeKindLabel("natural=yes")).toMatch(/^⟦.*⟧$/u);
   });
 
   it("names a `key=yes` kind by its key", () => {

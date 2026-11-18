@@ -21,6 +21,7 @@
 // Its own RN-free module, like every other decision in this directory, so the
 // message logic has a test.
 import type { TNotification } from "../api/types";
+import { plural, t } from "@logjam/shared";
 
 export type BatchFileActionKind = "accept" | "decline";
 
@@ -89,8 +90,10 @@ export function batchFileActionMessage(outcome: BatchFileActionOutcome): {
     return {
       text:
         kind === "accept"
-          ? `Couldn't save ${countOf(total, "file")}.`
-          : `Couldn't decline ${total === 1 ? "that" : "those"}.`,
+          ? plural(total, "Couldn't save # file.", "Couldn't save # files.")
+          : total === 1
+            ? t`Couldn't decline that.`
+            : t`Couldn't decline those.`,
       tone: "error",
     };
   }
@@ -98,20 +101,26 @@ export function batchFileActionMessage(outcome: BatchFileActionOutcome): {
     return {
       text:
         kind === "accept"
-          ? `Saved ${done} of ${total} — ${countOf(failed, "file")} couldn't be saved. Try those again from the list.`
-          : `Declined ${done} of ${total} — ${failed} couldn't be.`,
+          ? plural(
+              failed,
+              "Saved {0} of {1} — # file couldn't be saved. Try those again from the list.",
+              "Saved {0} of {1} — # files couldn't be saved. Try those again from the list.",
+              done,
+              total,
+            )
+          : t`Declined ${done} of ${total} — ${failed} couldn't be.`,
       tone: "error",
     };
   }
   return {
     text:
       kind === "accept"
-        ? `Saved ${countOf(done, "file")} — find ${done === 1 ? "it" : "them"} in Saved.`
-        : `Declined ${countOf(done, "file")}.`,
+        ? plural(
+            done,
+            "Saved # file — find it in Saved.",
+            "Saved # files — find them in Saved.",
+          )
+        : plural(done, "Declined # file.", "Declined # files."),
     tone: "done",
   };
-}
-
-function countOf(count: number, noun: string): string {
-  return `${count} ${noun}${count === 1 ? "" : "s"}`;
 }

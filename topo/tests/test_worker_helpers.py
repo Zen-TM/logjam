@@ -106,8 +106,11 @@ class TestSafeErrorMessage(unittest.TestCase):
             os.path.dirname(__file__), "../../api/src/lib/failureCopy.ts"
         )
         with open(path, encoding="utf-8") as f:
-            declared = re.search(r"TOPO_UNREADABLE_MESSAGE = say`(.*)`;", f.read())
-        self.assertIsNotNone(declared, "no TOPO_UNREADABLE_MESSAGE in failureCopy.ts")
+            declared = re.search(
+                r"function topoUnreadableMessage\(\): UserSentence \{\s*return say`(.*)`;",
+                f.read(),
+            )
+        self.assertIsNotNone(declared, "no topoUnreadableMessage in failureCopy.ts")
         self.assertEqual(worker.UNREADABLE, declared.group(1))
         self.assertNotRegex(worker.UNREADABLE, r"ELVIS|NSW")
 

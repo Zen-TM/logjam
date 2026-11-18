@@ -7,7 +7,14 @@
 // of row, newest first, with the words for where it has got to. The tile's glyph
 // and hue already say which kind a row is, and a list that scrolls has no
 // reason to hide its fourth item.
-import { formatBytes, formatMinutes, LIDAR_JOB_COPY } from "@logjam/shared";
+import {
+  formatBytes,
+  formatMinutes,
+  LIDAR_JOB_COPY,
+  formatDayMonthYear,
+  localDay,
+  t,
+} from "@logjam/shared";
 import type { TopoJob } from "../../dialogs/TopoDialog";
 import { type Glyph } from "../../../ui";
 
@@ -28,7 +35,7 @@ export const MAP_IDENTITY: Record<
   topo: {
     icon: "lidar",
     hue: "var(--hue-overlay)",
-    label: "LiDAR map",
+    label: t`LiDAR map`,
   },
   // A finished LiDAR job: the Terrain layers made sharper over its area.
   sharpened: {
@@ -37,9 +44,6 @@ export const MAP_IDENTITY: Record<
     label: LIDAR_JOB_COPY.noun,
   },
 };
-
-export const plural = (count: number, noun: string) =>
-  `${count} ${noun}${count === 1 ? "" : "s"}`;
 
 /**
  * Hand a finished file to the browser. The URL is presigned and short-lived,
@@ -66,11 +70,7 @@ export type MakingItem = {
 
 /** "8 Sept 2026". A true timestamp, so local time is right; only a date-only value is UTC (frontend/AGENTS.md). */
 export function formatDay(iso: string): string {
-  return new Date(iso).toLocaleDateString(undefined, {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
+  return formatDayMonthYear(localDay(new Date(iso)));
 }
 
 /** A topo's name: what the user called it, or the day it was made. */
@@ -96,7 +96,7 @@ export function fileSubtitle(parts: {
     .join(" · ");
 }
 
-const FAILED = "Couldn't be made";
+const FAILED = t`Couldn't be made`;
 
 /** "Making · about 5 min", or the verb alone while no estimate exists (rows
  *  made before the estimator, or a zero). */
@@ -116,11 +116,11 @@ export function toposBeingMade(
     title: topoLabel(job),
     detail:
       job.status === "uploading"
-        ? "Uploading"
+        ? t`Uploading`
         : job.status === "pending"
-          ? "Queued"
+          ? t`Queued`
           : job.status === "processing"
-            ? withEstimate("Processing", job.estimatedSeconds)
+            ? withEstimate(t`Processing`, job.estimatedSeconds)
             : (job.errorMessage ?? FAILED),
     failed: job.status === "failed",
     createdAt: job.createdAt,

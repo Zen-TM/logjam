@@ -14,6 +14,7 @@ import {
   type RegionBbox,
   type SharpenedOverlay,
   type TerrainArchiveLayer,
+  t,
 } from "@logjam/shared";
 
 import { tileRectCovering, type TileRect } from "../map/terrainRoutes";
@@ -55,9 +56,9 @@ export function areaRangeIn(
 }
 
 const LABEL: Record<TerrainArchiveLayer, string> = {
-  heights: "Sharpened heights",
-  slope: "Sharpened slope",
-  contours: "Sharpened contours",
+  heights: t`Sharpened heights`,
+  slope: t`Sharpened slope`,
+  contours: t`Sharpened contours`,
 };
 
 /** The clips of every area `bbox` reaches; none for an area it misses. */

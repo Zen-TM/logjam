@@ -272,7 +272,7 @@ export function parseGridReference(
       Math.abs(wrapLon(lon - NZTM_ZONE.centralMeridian)) > 15
     )
       return null;
-    return { lat, lon, label: `NZTM ${easting} ${northing}` };
+    return { lat, lon, label: `${GRID_NAMES.nztm2000} ${easting} ${northing}` };
   }
   const g = REFERENCE.exec(text);
   if (!g) return null;

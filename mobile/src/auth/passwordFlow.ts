@@ -9,6 +9,7 @@ import {
   failureStaysOnForm,
   messageFromError,
   parseCognitoIssuer,
+  t,
 } from "@logjam/shared";
 
 import { fetchCurrentUser, updateConsent } from "../api/queries";
@@ -16,8 +17,8 @@ import { isReachableNow } from "../map/connectivity";
 import { finishSignIn } from "./finishSignIn";
 import { signInWithPassword } from "./oidcSession";
 
-export const OFFLINE_SIGN_IN = "No connection. Connect to sign in.";
-export const WEAK_LINK_SIGN_IN = "Couldn't reach sign-in. Try again.";
+export const OFFLINE_SIGN_IN = t`No connection. Connect to sign in.`;
+export const WEAK_LINK_SIGN_IN = t`Couldn't reach sign-in. Try again.`;
 
 // A slow or dropped link, or Cognito itself down: nothing about this attempt or
 // this app client, and the browser sheet would fail on the same link.
@@ -70,7 +71,7 @@ export async function signInWithPasswordFlow(
       return {
         type: "form",
         message: online
-          ? messageFromError(err, "Couldn't sign in. Try again.")
+          ? messageFromError(err, t`Couldn't sign in. Try again.`)
           : OFFLINE_SIGN_IN,
         unconfirmed:
           err instanceof Error && err.name === "UserNotConfirmedException",

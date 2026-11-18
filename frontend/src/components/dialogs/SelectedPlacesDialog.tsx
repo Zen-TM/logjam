@@ -4,8 +4,10 @@ import {
   noFriendsMatch,
   noFriendsMessage,
   PLACE_EXPORT_FORMATS,
+  plural,
   sharePromise,
   type TripLogCustomFieldDef,
+  t,
 } from "@logjam/shared";
 import type { TPlace, TPlaceType, TFriend } from "../../placeUtils";
 import { bulkSharePlaces } from "../../placeUtils";
@@ -27,9 +29,6 @@ import {
   Icon,
 } from "../../ui";
 import classes from "./SelectedPlacesDialog.module.css";
-
-const plural = (count: number, noun: string) =>
-  `${count} ${noun}${count === 1 ? "" : "s"}`;
 
 /**
  * Take the places just picked out as a file, or hand them to friends. One verb
@@ -130,14 +129,14 @@ function SelectedPlacesDialog({
       onClose();
       toast.done(
         result.granted > 0
-          ? `Shared ${plural(ownedPlaces.length, "place")} with ${plural(shareFriendIds.length, "friend")}.`
-          : "They already have these.",
+          ? t`Shared ${plural(ownedPlaces.length, "# place", "# places")} with ${plural(shareFriendIds.length, "# friend", "# friends")}.`
+          : t`They already have these.`,
       );
     } catch (err) {
       // The dialog stays open with the picks intact, so a retry is one press.
       console.error(err);
       setShareError(
-        messageFromError(err, "Couldn't share places. Please try again."),
+        messageFromError(err, t`Couldn't share places. Try again.`),
       );
     } finally {
       setSharing(false);
@@ -162,22 +161,35 @@ function SelectedPlacesDialog({
   return (
     <Dialog
       open={open}
-      title={`${mode === "share" ? "Share" : "Export"} ${plural(selectedPlaces.length, "place")}`}
+      title={
+        mode === "share"
+          ? plural(selectedPlaces.length, "Share # place", "Share # places")
+          : plural(selectedPlaces.length, "Export # place", "Export # places")
+      }
       size="large"
       dismissible={!busy}
       onClose={onClose}
       footer={
-        <Button onClick={onClose} disabled={busy} disabledReason="Working…">
-          Close
-        </Button>
+        <Button
+          onClick={onClose}
+          disabled={busy}
+          disabledReason={t`Working…`}
+        >{t`Close`}</Button>
       }
     >
       <div className={classes.body}>
         <section className={classes.group}>
-          <SectionHeader title="These places" count={selectedPlaces.length} />
+          <SectionHeader
+            title={t`These places`}
+            count={selectedPlaces.length}
+          />
           {mode === "share" && sharedCount > 0 && (
             <p className={classes.note}>
-              {plural(sharedCount, "place")} shared with you can't be shared on.
+              {plural(
+                sharedCount,
+                "# place shared with you can't be shared on.",
+                "# places shared with you can't be shared on.",
+              )}
             </p>
           )}
           {selectedPlaces.map((place) => (
@@ -195,12 +207,12 @@ function SelectedPlacesDialog({
               }
               title={place.name}
               subtitle={
-                ownedPlaceIds.has(place.id) ? undefined : "Shared with you"
+                ownedPlaceIds.has(place.id) ? undefined : t`Shared with you`
               }
               trailing={
                 <IconButton
                   icon="remove"
-                  label={`Take ${place.name} out of the selection`}
+                  label={t`Take ${place.name} out of the selection`}
                   onClick={() => onRemovePlace(place.id)}
                 />
               }
@@ -208,8 +220,8 @@ function SelectedPlacesDialog({
           ))}
 
           <SearchField
-            label="Add another place"
-            placeholder="Search your places"
+            label={t`Add another place`}
+            placeholder={t`Search your places`}
             value={placeSearch}
             onChange={(event) => setPlaceSearch(event.target.value)}
             onKeyDown={(event) => {
@@ -232,7 +244,7 @@ function SelectedPlacesDialog({
                   ? place.altNames.join(", ")
                   : undefined
               }
-              description="Press to add it to the selection"
+              description={t`Press to add it to the selection`}
               onOpen={() => {
                 onAddPlace(place.id);
                 setPlaceSearch("");
@@ -243,10 +255,10 @@ function SelectedPlacesDialog({
 
         {mode === "export" && (
           <section className={classes.group}>
-            <SectionHeader title="Export" />
+            <SectionHeader title={t`Export`} />
             <div className={classes.exportRow}>
               <Select
-                label="Format"
+                label={t`Format`}
                 className={classes.format}
                 value={exportFormat}
                 onChange={(event) =>
@@ -263,21 +275,19 @@ function SelectedPlacesDialog({
                 variant="outline"
                 onClick={handleExport}
                 disabled={busy}
-                disabledReason="Working…"
-              >
-                Download
-              </Button>
+                disabledReason={t`Working…`}
+              >{t`Download`}</Button>
             </div>
           </section>
         )}
 
         {mode === "share" && (
           <section className={classes.group}>
-            <SectionHeader title="Share with" />
+            <SectionHeader title={t`Share with`} />
             {ownedPlaces.length === 0 ? (
-              <p className={classes.note}>
-                Sharing is for your own places, and none of these are yours.
-              </p>
+              <p
+                className={classes.note}
+              >{t`Sharing is for your own places, and none of these are yours.`}</p>
             ) : friends.length === 0 ? (
               <p className={classes.note}>{noFriendsMessage("share").body}</p>
             ) : (
@@ -297,9 +307,9 @@ function SelectedPlacesDialog({
                           trailing={
                             <IconButton
                               icon="unshare"
-                              label={`Don't share with ${friend.username}`}
+                              label={t`Don't share with ${friend.username}`}
                               disabled={busy}
-                              disabledReason="Working…"
+                              disabledReason={t`Working…`}
                               onClick={() =>
                                 setShareFriendIds(
                                   shareFriendIds.filter(
@@ -315,8 +325,8 @@ function SelectedPlacesDialog({
                   </>
                 )}
                 <SearchField
-                  label="Search friends"
-                  placeholder="Search friends"
+                  label={t`Search friends`}
+                  placeholder={t`Search friends`}
                   value={shareSearch}
                   onChange={(event) => setShareSearch(event.target.value)}
                 />
@@ -324,7 +334,7 @@ function SelectedPlacesDialog({
                   <p className={classes.note}>
                     {shareSearch.trim()
                       ? noFriendsMatch(shareSearch)
-                      : "Everyone you know is ticked."}
+                      : t`Everyone you know is ticked.`}
                   </p>
                 ) : (
                   matchingFriends.map((friend) => (
@@ -332,7 +342,7 @@ function SelectedPlacesDialog({
                       key={friend.id}
                       leading={<Avatar username={friend.username} />}
                       title={friend.username}
-                      description="Press to add them"
+                      description={t`Press to add them`}
                       disabled={busy}
                       onOpen={() => {
                         setShareFriendIds([...shareFriendIds, friend.id]);
@@ -354,13 +364,17 @@ function SelectedPlacesDialog({
                   busy={sharing}
                   disabled={busy || shareFriendIds.length === 0}
                   disabledReason={
-                    sharing ? "Working…" : "Pick a friend to share with"
+                    sharing ? t`Working…` : t`Pick a friend to share with`
                   }
                   onClick={handleShare}
                 >
                   {shareFriendIds.length === 0
-                    ? "Share"
-                    : `Share with ${plural(shareFriendIds.length, "friend")}`}
+                    ? t`Share`
+                    : plural(
+                        shareFriendIds.length,
+                        "Share with # friend",
+                        "Share with # friends",
+                      )}
                 </Button>
               </>
             )}

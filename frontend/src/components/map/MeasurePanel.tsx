@@ -9,6 +9,7 @@ import {
   pairedStatLayout,
   type MapMeasureVerbId,
   type SnapMode,
+  t,
 } from "@logjam/shared";
 import { useElevationProfile } from "../../placeUtils";
 import { FieldError, Hero, IconButton, StatGrid } from "../../ui";
@@ -59,11 +60,11 @@ export function MeasurePanel({
     MapMeasureVerbId,
     { run: () => void; disabled: boolean; reason: string }
   > = {
-    undo: { run: onUndo, disabled: !canUndo, reason: "Nothing to undo" },
+    undo: { run: onUndo, disabled: !canUndo, reason: t`Nothing to undo` },
     clear: {
       run: onClear,
       disabled: points.length === 0,
-      reason: "Nothing to clear",
+      reason: t`Nothing to clear`,
     },
     // Logjam GPS's way out; here it is the hero's ×.
     leave: { run: onClose, disabled: false, reason: "" },
@@ -83,7 +84,7 @@ export function MeasurePanel({
           distance={mapMeasureFacts({ points, terrain })[0].value}
           onUndo={onUndo}
           undoDisabled={!canUndo}
-          undoReason="Nothing to undo"
+          undoReason={t`Nothing to undo`}
         />
       ) : (
         <>
@@ -109,7 +110,7 @@ export function MeasurePanel({
 
             {atCap && (
               <FieldError
-                message={`Maximum of ${MAX_ROUTE_POINTS} points reached.`}
+                message={t`Maximum of ${MAX_ROUTE_POINTS} points reached.`}
               />
             )}
           </div>

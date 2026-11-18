@@ -38,10 +38,11 @@ import { directShareRevokeTombstones, writeTombstones } from "./syncTombstones";
 export type ShareRole = "owner" | "shared" | "none";
 
 /** Per-type "not found" text. Deliberately the same string a real miss gets. */
-const NOT_FOUND_MESSAGE: Record<SharableEntityType, UserSentence> = {
-  route: say`Couldn't find that route.`,
-  topoJob: say`Couldn't find that LiDAR map.`,
-};
+function notFoundMessage(entityType: SharableEntityType): UserSentence {
+  return entityType === "route"
+    ? say`Couldn't find that route.`
+    : say`Couldn't find that LiDAR map.`;
+}
 
 /**
  * Does a direct Share row grant this user access to this entity?
@@ -132,7 +133,7 @@ export function requireShareAccess(
   role: ShareRole,
   entityType: SharableEntityType,
 ): Exclude<ShareRole, "none"> {
-  if (role === "none") throw new AppError(404, NOT_FOUND_MESSAGE[entityType]);
+  if (role === "none") throw new AppError(404, notFoundMessage(entityType));
   return role;
 }
 
@@ -147,7 +148,7 @@ export function requireShareOwner(
   entityType: SharableEntityType,
   forbiddenMessage: UserSentence,
 ): void {
-  if (role === "none") throw new AppError(404, NOT_FOUND_MESSAGE[entityType]);
+  if (role === "none") throw new AppError(404, notFoundMessage(entityType));
   if (role !== "owner") throw new AppError(403, forbiddenMessage);
 }
 
@@ -204,7 +205,7 @@ export async function requireEntityOwner(
   forbiddenMessage: UserSentence,
 ): Promise<{ ownerId: string }> {
   const loaded = await loadEntityRole(userId, entityType, entityId);
-  if (!loaded) throw new AppError(404, NOT_FOUND_MESSAGE[entityType]);
+  if (!loaded) throw new AppError(404, notFoundMessage(entityType));
   requireShareOwner(loaded.role, entityType, forbiddenMessage);
   return { ownerId: loaded.ownerId };
 }

@@ -28,6 +28,8 @@ import {
   type TripPlanTripLogPrefill,
   type ScopedCustomFieldDef,
   displayUnits,
+  plural,
+  t,
 } from "@logjam/shared";
 
 import {
@@ -575,17 +577,17 @@ export function TripEditSheet({
   const title =
     mode === "date"
       ? dateTarget.kind === "trip"
-        ? "Trip date"
+        ? t`Trip date`
         : (visibleFieldDefs.find((def) => def.key === dateTarget.key)?.label ??
           TRIP_FORM.copy.date)
       : mode === "places"
-        ? "Places on this trip"
+        ? t`Places on this trip`
         : mode === "fields"
-          ? `Your trip ${ATTRIBUTE_NOUN.many}`
+          ? t`Your trip attributes`
           : mode === "fieldForm"
             ? editingField
               ? editingField.label
-              : `New trip ${ATTRIBUTE_NOUN.one}`
+              : t`New trip attribute`
             : editing
               ? TRIP_FORM.copy.editTitle
               : TRIP_FORM.copy.addTitle;
@@ -612,9 +614,7 @@ export function TripEditSheet({
         <Row
           icon="place"
           title={derivedTitle ?? TRIP_FORM.copy.noPlaces}
-          subtitle={
-            selected.length === 1 ? "1 place" : `${selected.length} places`
-          }
+          subtitle={plural(selected.length, "# place", "# places")}
           titleNumberOfLines={2}
           chevron
           onPress={() => setMode("places")}
@@ -655,7 +655,7 @@ export function TripEditSheet({
           selected={types}
           onToggle={toggleType}
           onAdd={addType}
-          addPlaceholder="Other"
+          addPlaceholder={t`Other`}
           disabledValues={linkedCanyon ? CANYONING_LOCKED : undefined}
           // Chips stay in stable order rather than moving to show which type
           // leads, so the one that picks the trip's glyph and hue is starred —
@@ -703,11 +703,11 @@ export function TripEditSheet({
               door is open with no account and no signal, for everyone. */}
         <Row
           icon="tag"
-          title={`Your trip ${ATTRIBUTE_NOUN.many}`}
+          title={t`Your trip attributes`}
           subtitle={
             customFieldDefs.length === 0
-              ? "Add your own — water level, party size, anything"
-              : `${customFieldDefs.length} ${customFieldDefs.length === 1 ? ATTRIBUTE_NOUN.one : ATTRIBUTE_NOUN.many}`
+              ? t`Add your own — water level, party size, anything`
+              : plural(customFieldDefs.length, "# attribute", "# attributes")
           }
           chevron
           onPress={() => setMode("fields")}
@@ -811,7 +811,11 @@ export function TripEditSheet({
               }}
             />
           ) : (
-            <Button label="Done" icon="done" onPress={() => setMode("form")} />
+            <Button
+              label={t`Done`}
+              icon="done"
+              onPress={() => setMode("form")}
+            />
           )
         }
       >
@@ -836,7 +840,7 @@ export function TripEditSheet({
               answer — the same reason a rail starts with "—". */}
             {dateTarget.kind === "field" && fieldValues[dateTarget.key] ? (
               <Button
-                label="Clear date"
+                label={t`Clear date`}
                 icon="close"
                 variant="ghost"
                 onPress={() => {
@@ -954,36 +958,36 @@ function PlacePicker({
           style={styles.searchInput}
           value={search}
           onChangeText={onSearch}
-          placeholder="Search your places"
+          placeholder={t`Search your places`}
           placeholderTextColor={theme.textMuted}
-          accessibilityLabel="Search your places"
+          accessibilityLabel={t`Search your places`}
           autoCapitalize="none"
         />
       </View>
 
       {pinned.length > 0 ? (
         <>
-          <SectionHeader title={`On this trip · ${pinned.length}`} />
+          <SectionHeader title={t`On this trip · ${pinned.length}`} />
           {pinned.map((place, index) => (
             <Row
               key={place.id}
               icon="done"
               hue={theme.accent}
               title={place.name}
-              subtitle={`${index + 1} of ${pinned.length}`}
+              subtitle={t`${index + 1} of ${pinned.length}`}
               onPress={() => onToggle(place)}
-              accessibilityLabel={`Remove ${place.name} from this trip`}
+              accessibilityLabel={t`Remove ${place.name} from this trip`}
             />
           ))}
         </>
       ) : null}
 
-      <SectionHeader title={query ? "Matches" : "Your places"} />
+      <SectionHeader title={query ? t`Matches` : t`Your places`} />
       {matches.length === 0 ? (
         <Text style={styles.hint}>
           {places.length === 0
-            ? "No places saved on this device yet. You can log the trip now and link a place later."
-            : "Nothing matches that name."}
+            ? t`No places saved on this device yet. You can log the trip now and link a place later.`
+            : t`Nothing matches that name.`}
         </Text>
       ) : (
         matches.map((place) => (
@@ -993,7 +997,7 @@ function PlacePicker({
             hue={theme.neutral}
             title={place.name}
             onPress={() => onToggle(place)}
-            accessibilityLabel={`Add ${place.name} to this trip`}
+            accessibilityLabel={t`Add ${place.name} to this trip`}
           />
         ))
       )}

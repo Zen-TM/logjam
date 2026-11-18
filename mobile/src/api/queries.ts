@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from "react";
 import {
   messageFromError,
   usernameAvailable,
+  type Language,
   type TripLogCustomFieldDef,
 } from "@logjam/shared";
 
@@ -92,6 +93,14 @@ const CUSTOM_FIELD_ROUTES = {
     removedKey: "removedFromPlaceCount",
   },
 } as const;
+
+/** Tell the account which language this phone runs in (`uiPreferences.language`), for the messages sent with nobody asking. */
+export function recordLanguage(language: Language): Promise<TUser> {
+  return apiFetch<TUser>("/users/me", {
+    method: "PATCH",
+    body: { language },
+  });
+}
 
 export function updateCustomFieldDefs(
   entity: CustomFieldEntity,

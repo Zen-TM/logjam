@@ -10,7 +10,7 @@ import {
   formatElevationM,
   mapPointPosition,
   messageFromError,
-  pluralCount,
+  plural,
   userFieldValues,
   PLACE_PAGE,
   SYSTEM_FIELD_DEFS,
@@ -168,7 +168,7 @@ export function PlanPlaceSheet({
               <SectionHeader title={PLACE_PAGE.copy.photos} />
               <Row
                 icon="photo"
-                title={pluralCount(place.media.length, "photo")}
+                title={plural(place.media.length, "# photo", "# photos")}
                 subtitle={
                   photos.length > 0
                     ? undefined

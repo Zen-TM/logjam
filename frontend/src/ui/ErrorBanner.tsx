@@ -1,5 +1,6 @@
 import classes from "./ErrorBanner.module.css";
 import { Icon } from "./Icon";
+import { t } from "@logjam/shared";
 
 type Props = {
   message: string;
@@ -20,18 +21,14 @@ export function ErrorBanner({ message, onRetry, onDismiss }: Props) {
                 className={classes.retryBtn}
                 onClick={onRetry}
                 type="button"
-              >
-                Try again
-              </button>
+              >{t`Try again`}</button>
             )}
             {onDismiss && (
               <button
                 className={classes.dismissBtn}
                 onClick={onDismiss}
                 type="button"
-              >
-                Dismiss
-              </button>
+              >{t`Dismiss`}</button>
             )}
           </div>
         )}

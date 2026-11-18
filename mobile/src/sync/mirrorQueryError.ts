@@ -10,7 +10,7 @@ import type { SyncStatus } from "./syncEngine";
  * `unreachable` — offline, a 5xx — is not an error a screen should report. Offline is a normal state for this app
  * (DESIGN.md), the status persists between attempts so it is true for as
  * long as the user has no signal, and the message ("Couldn't sync. Will
- * retry.") offers nothing to do about it. Reporting it would put a permanent
+ * try again.") offers nothing to do about it. Reporting it would put a permanent
  * full-screen `ErrorState` in front of Places and Logs on a first run with no
  * signal — i.e. Logjam GPS refusing to open in exactly the place it is meant
  * to work. The honest, non-alarming report of that condition already exists

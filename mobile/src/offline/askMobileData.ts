@@ -2,6 +2,7 @@ import NetInfo from "@react-native-community/netinfo";
 
 import { confirm } from "../ui";
 import { isExpensive } from "./networkPolicy";
+import { t } from "@logjam/shared";
 
 /**
  * Whether this download may use mobile data, asked here at the tap rather than
@@ -14,9 +15,9 @@ import { isExpensive } from "./networkPolicy";
 export async function askAllowCellular(): Promise<boolean | null> {
   if (!isExpensive(await NetInfo.fetch())) return false;
   const allowed = await confirm({
-    confirmTitle: "Use mobile data?",
-    confirmBody: "This download will use your mobile data.",
-    confirmLabel: "Download",
+    confirmTitle: t`Use mobile data?`,
+    confirmBody: t`This download will use your mobile data.`,
+    confirmLabel: t`Download`,
     tone: "filled",
   });
   return allowed ? true : null;

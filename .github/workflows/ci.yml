@@ -390,7 +390,7 @@ jobs:
         env:
           E2E_PREVIEW: "1"
           VITE_AUTH_MODE: fake
-        run: npx playwright test e2e/smoke.spec.ts e2e/a11y.spec.ts e2e/export-area.spec.ts e2e/geopdf-dialog.spec.ts e2e/confirms.spec.ts e2e/sim-regions-stub.spec.ts e2e/not-available-here.spec.ts e2e/sharpen-region.spec.ts --workers=2 --reporter=list,github,html
+        run: npx playwright test e2e/smoke.spec.ts e2e/a11y.spec.ts e2e/export-area.spec.ts e2e/geopdf-dialog.spec.ts e2e/confirms.spec.ts e2e/sim-regions-stub.spec.ts e2e/not-available-here.spec.ts e2e/us-english.spec.ts e2e/sharpen-region.spec.ts e2e/makeamap-region.spec.ts --workers=2 --reporter=list,github,html
       # These write to the seeded account and take it back, which leaves sync
       # tombstones (api/src/__tests__/_seedBaseline.ts says what that costs a
       # later integration run): after the integration suite, never before it.
@@ -406,6 +406,143 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
         with:
           name: playwright-artifacts
+          path: |
+            frontend/playwright-report/
+            frontend/test-results/
+      - name: API log (on failure)
+        if: failure()
+        run: cat "$RUNNER_TEMP/api.log"
+
+  web-pseudo:
+    # Logjam Web walked in the pseudo-language (frontend/e2e/pseudo.spec.ts):
+    # text on screen that did not go through the catalogue, and a label wider
+    # than its control. It stands up api-integration's stack again, since the
+    # walk reads the seeded account; rollback-compat-mirrors-ci.py fails when
+    # the services, env or wait steps here differ from that job's. Not a
+    # required check: check-required-checks.py (NOT_REQUIRED) says why.
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.api_integration != 'false' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:18.7-trixie
+        env:
+          POSTGRES_USER: logjam
+          POSTGRES_PASSWORD: logjam
+          POSTGRES_DB: logjam
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U logjam"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      ministack:
+        image: ministackorg/ministack:1.5.40@sha256:a415d58e257931ddfd2678bfba915d6dea9508c3103df74fa90efdd6535c035c
+        env:
+          SERVICES: s3
+          DEFAULT_REGION: ap-southeast-2
+          AWS_DEFAULT_REGION: ap-southeast-2
+        ports:
+          - 4566:4566
+    env:
+      NODE_ENV: development
+      AUTH_MODE: fake
+      FAKE_USER_SUB: fake-alice-sub
+      PORT: 8080
+      API_URL: http://localhost:8080
+      MIN_MOBILE_VERSION: "0.1.0"
+      DB_HOST: localhost
+      DB_PORT: 5432
+      DB_NAME: logjam
+      DB_USER: logjam
+      DB_PASSWORD: logjam
+      AWS_ENDPOINT_URL: http://localhost:4566
+      AWS_REGION: ap-southeast-2
+      AWS_DEFAULT_REGION: ap-southeast-2
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      S3_BUCKET_MEDIA: logjam-media-local
+      S3_BUCKET_TOPO: logjam-topo-local
+      TOPO_CDN_BASE_URL: http://localhost:4566/logjam-topo-local
+      CORS_ORIGIN: http://localhost:5173
+      EXPO_PUSH_URL: http://localhost:9099
+      ECS_SECURITY_GROUPS: sg-local
+      RATE_LIMIT_GLOBAL_MAX: 1000000
+      RATE_LIMIT_USER_PATCH_MAX: 1000000
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26
+          cache: npm
+          cache-dependency-path: |
+            api/package-lock.json
+            frontend/package-lock.json
+      - name: Build shared
+        working-directory: shared
+        run: npm ci && npm run build
+      - name: Install
+        working-directory: api
+        run: npm ci
+      - name: Prisma generate
+        working-directory: api
+        run: npx prisma generate
+      - name: Migrate
+        working-directory: api
+        run: npx prisma migrate deploy
+      - name: Wait for MiniStack and create buckets
+        run: |
+          for i in $(seq 1 60); do
+            if curl -sf http://localhost:4566/_localstack/health | grep -q '"s3": "available"'; then
+              echo "ministack ready"; break
+            fi
+            if [ "$i" = 60 ]; then echo "ministack never became ready"; exit 1; fi
+            sleep 2
+          done
+          aws --endpoint-url=http://localhost:4566 s3 mb "s3://$S3_BUCKET_MEDIA"
+          aws --endpoint-url=http://localhost:4566 s3 mb "s3://$S3_BUCKET_TOPO"
+      - name: Seed
+        working-directory: api
+        run: npx prisma db seed
+      - name: Build API
+        working-directory: api
+        run: npm run build
+      - name: Start API
+        working-directory: api
+        run: |
+          node dist/index.js > "$RUNNER_TEMP/api.log" 2>&1 &
+          echo $! > "$RUNNER_TEMP/api.pid"
+      - name: Wait for API
+        run: |
+          for _ in $(seq 1 60); do
+            if ! kill -0 "$(cat "$RUNNER_TEMP/api.pid")" 2>/dev/null; then
+              echo "API process exited during startup:"; cat "$RUNNER_TEMP/api.log"; exit 1
+            fi
+            if curl -sf http://localhost:8080/health > /dev/null; then
+              echo "API ready"; exit 0
+            fi
+            sleep 1
+          done
+          echo "API never answered on :8080:"; cat "$RUNNER_TEMP/api.log"; exit 1
+      - name: Install frontend
+        working-directory: frontend
+        run: npm ci
+      # Served by Vite's dev servers, which Playwright starts (no E2E_PREVIEW,
+      # so no build step): the walk loads the page only three times.
+      - name: Playwright pseudo-language walk
+        working-directory: frontend
+        env:
+          VITE_AUTH_MODE: fake
+        run: npx playwright test e2e/pseudo.spec.ts --workers=1 --reporter=list,github,html
+      # Always: the report holds a screenshot of every screen in the
+      # pseudo-language, which is how a person reads what the walk cannot judge.
+      - name: Upload the walk's report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
+        with:
+          name: pseudo-walk
           path: |
             frontend/playwright-report/
             frontend/test-results/

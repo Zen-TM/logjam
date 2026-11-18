@@ -7,6 +7,7 @@ import { Text, View } from "react-native";
 import { spacing, makeStyles, useTheme } from "../theme";
 import { IconButton } from "./IconButton";
 import { CHIP_RAIL_HEIGHT } from "./ChipRail";
+import { t } from "@logjam/shared";
 
 export function SelectionBar({
   countLabel,
@@ -16,7 +17,7 @@ export function SelectionBar({
   onSelectAll,
   onDelete,
   deleteIcon = "delete",
-  deleteLabel = "Delete the selected items",
+  deleteLabel = t`Delete the selected items`,
   deleteDisabledReason,
   destructive = true,
 }: {
@@ -66,7 +67,7 @@ export function SelectionBar({
     <View style={styles.bar}>
       <IconButton
         icon="close"
-        accessibilityLabel="Clear selection"
+        accessibilityLabel={t`Clear selection`}
         onPress={onClear}
       />
       <Text style={styles.count} numberOfLines={1}>
@@ -75,7 +76,7 @@ export function SelectionBar({
       {showSelectAll ? (
         <IconButton
           icon="selectAll"
-          accessibilityLabel="Select everything in this list"
+          accessibilityLabel={t`Select everything in this list`}
           onPress={onSelectAll}
         />
       ) : null}

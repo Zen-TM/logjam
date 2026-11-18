@@ -52,6 +52,7 @@ import {
   messageFromError,
   noFriendsMatch,
   noFriendsMessage,
+  plural,
   SEND_COPY,
   sendCopyLabel,
   SHARE_SHEET,
@@ -59,6 +60,7 @@ import {
   type SectionKeysOn,
   type SharableEntityType,
   type SharePromiseKind,
+  t,
 } from "@logjam/shared";
 
 import { useAccountState } from "../auth/AccountStateContext";
@@ -287,8 +289,8 @@ export function useSharePanel({
     itemLabel,
     revokeBody: (): string =>
       placeId
-        ? `They'll lose access to ${itemLabel} and its photos.`
-        : `They'll no longer see ${itemLabel}.`,
+        ? t`They'll lose access to ${itemLabel} and its photos.`
+        : t`They'll no longer see ${itemLabel}.`,
   });
 
   const friends = useFriendList({ active: active && target != null, online });
@@ -326,7 +328,7 @@ export function useSharePanel({
       onSent?.(selected.size);
     } catch (err) {
       console.error(err);
-      setSendError(messageFromError(err, "Couldn't send that file."));
+      setSendError(messageFromError(err, t`Couldn't send that file.`));
     } finally {
       // The track scratch file goes whether the send worked or not; an
       // import's stored original has no cleanup and is never touched.
@@ -356,7 +358,7 @@ export function useSharePanel({
       // means something outside both legs broke. Say so plainly rather than
       // leaving the sheet looking busy forever.
       console.error(err);
-      setSendError(messageFromError(err, "Couldn't share those items."));
+      setSendError(messageFromError(err, t`Couldn't share those items.`));
     } finally {
       setBulkProgress(null);
       setSending(false);
@@ -439,7 +441,11 @@ export function useSharePanel({
           {plan.copies.length > 0 ? (
             <PromiseBanner
               tone="copy"
-              text={`${plan.copies.length === 1 ? "One item" : `${plan.copies.length} of these`} can only be sent as a copy — those become theirs to keep, and you can't take them back.`}
+              text={plural(
+                plan.copies.length,
+                "One item can only be sent as a copy — those become theirs to keep, and you can't take them back.",
+                "# of these can only be sent as a copy — those become theirs to keep, and you can't take them back.",
+              )}
             />
           ) : null}
           {search}
@@ -474,10 +480,10 @@ export function useSharePanel({
             }
             disabledReason={
               sending
-                ? "Sending…"
+                ? t`Sending…`
                 : selected.size === 0
-                  ? "Pick at least one friend"
-                  : "None of these can be shared"
+                  ? t`Pick at least one friend`
+                  : t`None of these can be shared`
             }
           />
         </View>
@@ -492,7 +498,7 @@ export function useSharePanel({
     // no endpoint that would answer, and offline it cannot work at all.
     if (friends.status.status === "unavailable") {
       return {
-        title: `Send a copy of ${itemLabel}`,
+        title: t`Send a copy of ${itemLabel}`,
         body: (
           <ClosedDoor text={unavailableReasonText(friends.status.reason)} />
         ),
@@ -529,7 +535,7 @@ export function useSharePanel({
       ),
     };
     return {
-      title: `Send a copy of ${itemLabel}`,
+      title: t`Send a copy of ${itemLabel}`,
       sharing,
       body: (
         <View style={styles.body}>
@@ -551,7 +557,7 @@ export function useSharePanel({
             icon="send"
             onPress={() => void send()}
             disabled={selected.size === 0 || sending}
-            disabledReason={sending ? "Sending…" : "Pick at least one friend"}
+            disabledReason={sending ? t`Sending…` : t`Pick at least one friend`}
             loading={sending}
           />
         </View>
@@ -561,10 +567,10 @@ export function useSharePanel({
 
   if (!sharing.canShare) {
     return {
-      title: `Share ${itemLabel}`,
+      title: t`Share ${itemLabel}`,
       body: (
         <ClosedDoor
-          text={shareRowSubtitle(sharing) ?? "Sharing isn't available."}
+          text={shareRowSubtitle(sharing) ?? t`Sharing isn't available.`}
         />
       ),
       footer: null,
@@ -636,7 +642,7 @@ export function useSharePanel({
   };
 
   return {
-    title: `Share ${itemLabel}`,
+    title: t`Share ${itemLabel}`,
     sharing,
     footer: null,
     body: (
@@ -705,7 +711,7 @@ function useFriendList({
       } catch (err) {
         console.error(err);
         if (!cancelled)
-          setError(messageFromError(err, "Couldn't load friends."));
+          setError(messageFromError(err, t`Couldn't load friends.`));
       }
     })();
     return () => {
@@ -772,8 +778,10 @@ function FriendRows({
             selected={selected}
             accessibilityLabel={
               mode === "select"
-                ? `${friend.username}${selected ? ", selected" : ""}`
-                : `Share with ${friend.username}`
+                ? selected
+                  ? t`${friend.username}, selected`
+                  : friend.username
+                : t`Share with ${friend.username}`
             }
             onPress={
               disabled || busy || (mode === "grant" && busyId != null)
@@ -871,9 +879,9 @@ function SearchField({
         value={value}
         onChangeText={onChangeText}
         editable={!disabled}
-        placeholder="Search friends"
+        placeholder={t`Search friends`}
         placeholderTextColor={theme.textMuted}
-        accessibilityLabel="Search friends"
+        accessibilityLabel={t`Search friends`}
         autoCapitalize="none"
         autoCorrect={false}
         returnKeyType="search"
@@ -881,7 +889,7 @@ function SearchField({
       {value.length > 0 ? (
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Clear search"
+          accessibilityLabel={t`Clear search`}
           onPress={() => onChangeText("")}
         >
           <Icon idea="close" size={18} color={theme.textMuted} />

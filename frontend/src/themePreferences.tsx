@@ -16,6 +16,7 @@ import {
   THEME_SCHEME_ORDER,
   type ThemeScheme,
   type ThemeSchemeId,
+  t,
 } from "@logjam/shared";
 import { fetchCurrentUser, updateCurrentUserThemeScheme } from "./placeUtils";
 import { messageFromError } from "./errors/messageFromError";
@@ -94,7 +95,7 @@ export function ThemePreferencesProvider({
       } catch (err) {
         console.error(err);
         setSchemeId(previous);
-        setError(messageFromError(err, "Couldn't save theme. Try again."));
+        setError(messageFromError(err, t`Couldn't save theme. Try again.`));
       } finally {
         setIsSaving(false);
       }

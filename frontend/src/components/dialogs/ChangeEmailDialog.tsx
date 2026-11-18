@@ -2,21 +2,24 @@ import {
   ACCOUNT,
   confirmEmailChange,
   requestEmailChange,
+  rich,
   SIGN_IN_COPY,
+  t,
 } from "@logjam/shared";
 import { useId, useState } from "react";
 import { accessToken, issuerUrl } from "../../auth/oidc";
 import { messageFromError } from "../../errors/messageFromError";
 import { isValidEmailFormat } from "../../emailValidation";
-import { Button, Dialog, TextField, ErrorBanner } from "../../ui";
+import { Button, Dialog, ErrorBanner, TextField } from "../../ui";
+import { Rich } from "../../ui/rich";
 import classes from "./ChangeEmailDialog.module.css";
 
 type Stage = "input" | "verify" | "done";
 
 const TITLES: Record<Stage, string> = {
   input: ACCOUNT.copy.changeEmail,
-  verify: "Verify new email",
-  done: "Email updated",
+  verify: t`Verify new email`,
+  done: t`Email updated`,
 };
 
 /**
@@ -71,15 +74,15 @@ function ChangeEmailForm({
   async function handleSendCode() {
     const trimmed = newEmail.trim();
     if (!trimmed) {
-      setEmailError("Enter your new email address.");
+      setEmailError(t`Enter your new email address.`);
       return;
     }
     if (!isValidEmailFormat(trimmed)) {
-      setEmailError("Enter a valid email address.");
+      setEmailError(t`Enter a valid email address.`);
       return;
     }
     if (currentEmail && trimmed.toLowerCase() === currentEmail.toLowerCase()) {
-      setEmailError("That's already your email address.");
+      setEmailError(t`That's already your email address.`);
       return;
     }
     setEmailError(null);
@@ -94,7 +97,7 @@ function ChangeEmailForm({
       setError(
         messageFromError(
           err,
-          "Couldn't send the verification code. Try again.",
+          t`Couldn't send the verification code. Try again.`,
         ),
       );
     } finally {
@@ -112,7 +115,7 @@ function ChangeEmailForm({
       setError(
         messageFromError(
           err,
-          "Couldn't resend the verification code. Try again.",
+          t`Couldn't resend the verification code. Try again.`,
         ),
       );
     } finally {
@@ -123,7 +126,7 @@ function ChangeEmailForm({
   async function handleConfirm() {
     const trimmedCode = code.trim();
     if (!trimmedCode) {
-      setCodeError("Enter the code we sent you.");
+      setCodeError(t`Enter the code we sent you.`);
       return;
     }
     setBusy(true);
@@ -134,7 +137,7 @@ function ChangeEmailForm({
       onSuccess(pendingEmail);
     } catch (err) {
       console.error(err);
-      setError(messageFromError(err, "Incorrect or expired code. Try again."));
+      setError(messageFromError(err, t`Incorrect or expired code. Try again.`));
     } finally {
       setBusy(false);
     }
@@ -148,19 +151,19 @@ function ChangeEmailForm({
       dismissible={!busy}
       footer={
         stage === "done" ? (
-          <Button variant="filled" onClick={onClose}>
-            Close
-          </Button>
+          <Button variant="filled" onClick={onClose}>{t`Close`}</Button>
         ) : (
           <>
-            <Button onClick={onClose} disabled={busy} disabledReason="Working…">
-              Cancel
-            </Button>
+            <Button
+              onClick={onClose}
+              disabled={busy}
+              disabledReason={t`Working…`}
+            >{t`Cancel`}</Button>
             {stage === "verify" && (
               <Button
                 onClick={handleResend}
                 disabled={busy}
-                disabledReason="Working…"
+                disabledReason={t`Working…`}
               >
                 {SIGN_IN_COPY.resendCode}
               </Button>
@@ -185,10 +188,9 @@ function ChangeEmailForm({
       >
         {stage === "input" && (
           <>
-            <p className={classes.note}>
-              We send a code to the new address to check it reaches you. You
-              sign in with it from then on.
-            </p>
+            <p
+              className={classes.note}
+            >{t`We send a code to the new address to check it reaches you. You sign in with it from then on.`}</p>
             <TextField
               label={ACCOUNT.copy.newEmail}
               type="email"
@@ -207,8 +209,12 @@ function ChangeEmailForm({
         {stage === "verify" && (
           <>
             <p className={classes.note}>
-              A code went to <b className={classes.address}>{pendingEmail}</b>.
-              Check the spam folder if it hasn't arrived.
+              <Rich
+                parts={rich`A code went to <b>${pendingEmail}</b>. Check the spam folder if it hasn't arrived.`}
+                tags={{
+                  b: (text) => <b className={classes.address}>{text}</b>,
+                }}
+              />
             </p>
             <TextField
               label={ACCOUNT.copy.verificationCode}
@@ -229,8 +235,10 @@ function ChangeEmailForm({
 
         {stage === "done" && (
           <p className={classes.note}>
-            Your email is now <b className={classes.address}>{pendingEmail}</b>.
-            Sign in with it next time.
+            <Rich
+              parts={rich`Your email is now <b>${pendingEmail}</b>. Sign in with it next time.`}
+              tags={{ b: (text) => <b className={classes.address}>{text}</b> }}
+            />
           </p>
         )}
 

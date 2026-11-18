@@ -19,6 +19,7 @@
 // cannot import TypeScript. `api/src/lib/systemRowMigration.unit.test.ts` reads
 // the migration and fails if the two ever disagree.
 
+import { t } from "./i18n.js";
 import { isUuidV4 } from "./sync.js";
 import { quote, say, type UserSentence } from "./userSentence.js";
 import type { TripLogCustomFieldType } from "./tripLogFields.js";
@@ -94,7 +95,7 @@ export function placeTypeNameError(
   types: readonly { id: string; name: string }[],
   editing?: { id: string; name: string } | null,
 ): string | null {
-  if (!name.trim()) return "A place type needs a name.";
+  if (!name.trim()) return t`A place type needs a name.`;
   if (editing && nameKey(editing.name) === nameKey(name)) return null;
   return placeTypeNameTaken(name, types, editing?.id)
     ? placeTypeNameTakenError(name)
@@ -303,25 +304,25 @@ export type PlaceTypeColor = (typeof PLACE_TYPE_COLORS)[number];
  * palette unnamed.
  */
 export const PLACE_TYPE_COLOR_NAMES: Record<PlaceTypeColor, string> = {
-  "#E4C5AA": "Banksia orange",
-  "#E3D0AB": "Ochre",
-  "#E2D9AC": "Wattle",
-  "#D5DCB2": "Lichen",
-  "#BED9B5": "Scrub green",
-  "#B5D9C4": "Fern",
-  "#B5D9D6": "Pool teal",
-  "#B7D0E1": "Water blue",
-  "#B9C2DF": "Dusk blue",
-  "#E1B7C5": "Heath pink",
-  "#E1BCB7": "Clay rose",
-  "#CDC8C1": "Stone",
+  "#E4C5AA": t`Banksia orange`,
+  "#E3D0AB": t`Ochre`,
+  "#E2D9AC": t`Wattle`,
+  "#D5DCB2": t`Lichen`,
+  "#BED9B5": t`Scrub green`,
+  "#B5D9C4": t`Fern`,
+  "#B5D9D6": t`Pool teal`,
+  "#B7D0E1": t`Water blue`,
+  "#B9C2DF": t`Dusk blue`,
+  "#E1B7C5": t`Heath pink`,
+  "#E1BCB7": t`Clay rose`,
+  "#CDC8C1": t`Stone`,
 };
 
 /** The spoken name of a type's colour. A colour outside the palette comes back
  *  AS ITS HEX rather than as "Custom", the same way `trackColorName` does:
  *  unhelpful is better than wrong. */
 export function placeTypeColorName(color: string | null | undefined): string {
-  if (!color) return "No colour";
+  if (!color) return t`No colour`;
   return PLACE_TYPE_COLOR_NAMES[color.toUpperCase() as PlaceTypeColor] ?? color;
 }
 

@@ -5,6 +5,7 @@ import {
   say,
   type CanyonGradeSystem,
   type Region,
+  type UserSentence,
 } from "@logjam/shared";
 
 import { AppError } from "../middleware/errorHandler";
@@ -577,7 +578,9 @@ export async function fetchAndParseRopeWiki(
  * Carried rather than composed: the same failure must not read two ways
  * depending on which door it came through.
  */
-export const ROPEWIKI_UNAVAILABLE = say`RopeWiki's canyon list isn't available right now.`;
+export function ropeWikiUnavailable(): UserSentence {
+  return say`RopeWiki's canyon list isn't available right now.`;
+}
 
 /**
  * Parse a RopeWiki Special:Ask CSV export into places plus per-row errors.
@@ -611,7 +614,7 @@ export function parseRopeWikiCsv(
   if (records.length < 2) {
     throw new AppError(
       503,
-      ROPEWIKI_UNAVAILABLE,
+      ropeWikiUnavailable(),
       undefined,
       "RopeWiki CSV is empty or has no data rows",
     );
@@ -624,7 +627,7 @@ export function parseRopeWikiCsv(
     if (i === -1) {
       throw new AppError(
         503,
-        ROPEWIKI_UNAVAILABLE,
+        ropeWikiUnavailable(),
         undefined,
         `RopeWiki CSV missing required column: ${name}`,
       );

@@ -68,6 +68,8 @@ import {
   type OverlayTerrainKey,
   type SectionKeysOn,
   type TerrainSwitchKey,
+  plural,
+  t,
 } from "@logjam/shared";
 
 import { type LayersOpen } from "./layersOpen";
@@ -438,7 +440,7 @@ function BasemapTab({
                 serverDown
                   ? BASEMAP_UNAVAILABLE_LABEL
                   : offline
-                    ? "Needs a connection"
+                    ? t`Needs a connection`
                     : undefined
               }
               disabled={unavailable}
@@ -646,14 +648,18 @@ function LayerRow({ entry }: { entry: LayerToggleEntry }) {
           title={entry.title}
           subtitle={entry.note}
           onPress={() => setExpanded((current) => !current)}
-          accessibilityLabel={`${entry.title} — ${expanded ? "hide" : "show"} the list`}
+          accessibilityLabel={
+            expanded
+              ? t`${entry.title} — hide the list`
+              : t`${entry.title} — show the list`
+          }
           right={
             <View style={styles.trailing}>
               <Text style={styles.count}>{entry.count}</Text>
               <Toggle
                 checked={entry.value}
                 onChange={entry.onChange}
-                accessibilityLabel={`Show ${entry.title}`}
+                accessibilityLabel={t`Show ${entry.title}`}
               />
               <Icon
                 idea={expanded ? "collapse" : "expand"}
@@ -874,34 +880,30 @@ function OfflineTab({
       <Row
         icon="saveOffline"
         hue={assetHue.region}
-        title="Save an offline map"
-        subtitle={online ? "Pick an area and the maps" : "Needs a connection"}
+        title={t`Save an offline map`}
+        subtitle={online ? t`Pick an area and the maps` : t`Needs a connection`}
         disabled={!online}
         onPress={onSaveArea}
       />
       <SwitchRow
         icon="offline"
         hue={assetHue.region}
-        title="Use only saved maps"
-        description="Even when you have signal"
+        title={t`Use only saved maps`}
+        description={t`Even when you have signal`}
         descriptionNumberOfLines={2}
         checked={offlineOnly}
         onChange={onOfflineOnlyChange}
       />
 
-      <SectionHeader title="On this phone" />
+      <SectionHeader title={t`On this phone`} />
       <Row
         icon="device"
         hue={assetHue.region}
-        title={
-          savedRegions.length === 1
-            ? "1 offline map"
-            : `${savedRegions.length} offline maps`
-        }
+        title={plural(savedRegions.length, "# offline map", "# offline maps")}
         subtitle={
           savedRegions.length === 0
-            ? "Save an offline map to use maps with no signal"
-            : `${(savedBytes / 1024 / 1024).toFixed(0)} MB · rename or delete in Saved`
+            ? t`Save an offline map to use maps with no signal`
+            : t`${(savedBytes / 1024 / 1024).toFixed(0)} MB · rename or delete in Saved`
         }
         // Lands on Saved's Regions filter, not its everything-list: a pointer
         // that makes the user find the thing again is not a pointer.

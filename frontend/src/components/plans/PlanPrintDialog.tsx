@@ -15,6 +15,9 @@ import {
   tripTypeLabel,
   type TripPlanFormPresetId,
   type TripPlanView,
+  formatDayMonthYear,
+  localDay,
+  t,
 } from "@logjam/shared";
 import { Button, Checkbox, Dialog } from "../../ui";
 import { planSummary, summaryForms, type SummaryParts } from "./plansModel";
@@ -64,7 +67,7 @@ export default function PlanPrintDialog({
         onClose={onClose}
         footer={
           <>
-            <Button onClick={onClose}>Cancel</Button>
+            <Button onClick={onClose}>{t`Cancel`}</Button>
             <Button type="submit" form={formId} variant="filled" icon="print">
               {copy.printSubmit}
             </Button>
@@ -151,11 +154,7 @@ function PlanSummary({
   parts: SummaryParts;
 }) {
   const summary = planSummary(plan, parts);
-  const printed = new Date().toLocaleDateString(undefined, {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
+  const printed = formatDayMonthYear(localDay(new Date()));
   return createPortal(
     <div id="plan-print" className={classes.summary}>
       <h1>{summary.name}</h1>
@@ -173,7 +172,7 @@ function PlanSummary({
       ))}
       <SummaryTable
         caption={copy.printGoing}
-        head={["Name", "Role"]}
+        head={[t`Name`, t`Role`]}
         rows={summary.going}
       />
       {summary.tables.map(({ preset, ...table }) => (

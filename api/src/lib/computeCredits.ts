@@ -5,6 +5,7 @@ import {
   nextMonthReset,
   estimateCredits,
   type WorkerKind,
+  type UserSentence,
 } from "@logjam/shared";
 import { AppError } from "../middleware/errorHandler";
 import { getEnv } from "./env";
@@ -122,7 +123,9 @@ export function getSiteCreditUsage(db: DbClient = prisma): Promise<number> {
 }
 
 /** What a refusal for the site-wide pool says. */
-const POOL_SPENT_SENTENCE = say`The processing credits everyone on Logjam shares are used up for this month. Try again next month.`;
+function poolSpentSentence(): UserSentence {
+  return say`The processing credits everyone on Logjam shares are used up for this month. Try again next month.`;
+}
 
 /**
  * Whether the site-wide pool is spent, or cannot hold a job of `projected`
@@ -200,6 +203,6 @@ export async function assertHasCredits(
   // about US$8.60. Reserve each job's credits at its reaper deadline when that
   // matters.
   if (await poolHasNoRoomFor(projected, db)) {
-    throw new AppError(429, POOL_SPENT_SENTENCE, { resetAt: usage.resetAt });
+    throw new AppError(429, poolSpentSentence(), { resetAt: usage.resetAt });
   }
 }

@@ -11,7 +11,7 @@ import Constants from "expo-constants";
 import { NavigationBar } from "@zoontek/react-native-navigation-bar";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 
-import { ACCOUNT, SIGN_OUT_EVERYWHERE_FAILED } from "@logjam/shared";
+import { ACCOUNT, SIGN_OUT_EVERYWHERE_FAILED, t } from "@logjam/shared";
 
 import { CLIENT_VERSION } from "./src/config";
 import { useMinVersionGate } from "./src/useMinVersionGate";
@@ -60,15 +60,15 @@ function askSignOut(confirm: SignOutConfirm): Promise<SignOutChoice> {
       signOutConfirmBody(confirm),
       [
         {
-          text: "Cancel",
+          text: t`Cancel`,
           style: "cancel",
           onPress: () => resolve("cancel"),
         },
         ...(confirm.canSyncFirst
-          ? [{ text: "Sync first", onPress: () => resolve("syncFirst") }]
+          ? [{ text: t`Sync first`, onPress: () => resolve("syncFirst") }]
           : []),
         {
-          text: "Sign out",
+          text: t`Sign out`,
           style: "destructive" as const,
           onPress: () => resolve("signOut"),
         },
@@ -172,26 +172,26 @@ export default function App() {
       <SafeAreaProvider>
         <SafeAreaView style={styles.blockingContainer}>
           <SystemBars barStyle={systemBarStyle} />
-          <Text style={styles.blockingTitle}>Update required</Text>
+          <Text style={styles.blockingTitle}>{t`Update required`}</Text>
           {/* The warn copy says "over mobile data, or on Wi-Fi later" and NOT
               "connect to Wi-Fi to install it", because the update is perfectly
               installable over mobile data — the metered check governs whether
               we may take the app away, not whether they can act. */}
           <Text style={styles.blockingLine}>
             {warning
-              ? `This version (${CLIENT_VERSION}) is no longer supported. You can update now over mobile data, or on Wi-Fi later.`
-              : `This version (${CLIENT_VERSION}) is no longer supported. Update Logjam GPS to version ${minVersionGate.minVersion} or later to continue.`}
+              ? t`This version (${CLIENT_VERSION}) is no longer supported. You can update now over mobile data, or on Wi-Fi later.`
+              : t`This version (${CLIENT_VERSION}) is no longer supported. Update Logjam GPS to version ${minVersionGate.minVersion} or later to continue.`}
           </Text>
           {openStore ? (
             <Button
-              label="Open the Play Store"
+              label={t`Open the Play Store`}
               icon="openExternal"
               onPress={openStore}
             />
           ) : null}
           {warning ? (
             <Button
-              label="Continue for now"
+              label={t`Continue for now`}
               variant="ghost"
               onPress={() => setWarnDismissed(true)}
             />
@@ -248,8 +248,8 @@ export default function App() {
                   // silently.
                   reportWipeIncomplete: (failed) =>
                     Alert.alert(
-                      "Some data couldn't be removed",
-                      `This phone kept your ${failed.join(" and ")}. Signing out anyway; clear Logjam GPS's storage in Android settings to be sure.`,
+                      t`Some data couldn't be removed`,
+                      t`This phone kept your ${failed.join(" and ")}. Signing out anyway; clear Logjam GPS's storage in Android settings to be sure.`,
                     ),
                   finish: () => auth.signOut(),
                 })
