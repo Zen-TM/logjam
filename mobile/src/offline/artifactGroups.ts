@@ -196,20 +196,23 @@ export function groupArtifacts(
   return [...groups.values()];
 }
 
+/** The saved areas as Saved lists them: one card per area, holding its maps and clips. */
+export function savedAreaGroups(
+  artifacts: readonly MapArtifact[],
+): ArtifactGroup[] {
+  return groupArtifacts(artifacts.filter(isRegionArtifact), regionGroupKey);
+}
+
 /**
- * The saved areas as Saved shows them: one card per area, its bytes the sum of
- * every file the card holds (maps and clips). The Offline tab and sign-out
- * read this, so no screen counts a different set of files than Saved lists.
- * Guard: `artifactGroups.test.ts` ("savedAreaTotals").
+ * How many saved areas there are and what they hold, read from the same cards
+ * Saved draws (`savedAreaGroups`), so the Offline tab and sign-out cannot count
+ * a different set of files than Saved lists.
  */
 export function savedAreaTotals(artifacts: readonly MapArtifact[]): {
   areas: number;
   bytes: number;
 } {
-  const groups = groupArtifacts(
-    artifacts.filter(isRegionArtifact),
-    regionGroupKey,
-  );
+  const groups = savedAreaGroups(artifacts);
   return {
     areas: groups.length,
     bytes: groups.reduce((sum, group) => sum + group.sizeBytes, 0),
