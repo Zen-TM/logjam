@@ -2323,13 +2323,15 @@ export function MapScreen({
 
   /**
    * Opens the point sheet at `tapped` and asks the overlays what is drawn under
-   * `screenPoint`. One path for a tap on the map and a press on your own
-   * arrow, so the sheet has the same rows for both.
+   * `screenPoint` (a promise where the point must first be found: a fix is
+   * projected, since a press near the arrow is not on it). One path for a tap
+   * on the map and a press on your own arrow, so the sheet has the same rows
+   * for both. An answer for a point the sheet has since left is dropped.
    */
   const askAbout = useCallback(
     (
       tapped: MapPoint,
-      screenPoint: PressEvent["point"],
+      screenPoint: PressEvent["point"] | Promise<PressEvent["point"]>,
       lngLat: [number, number],
     ) => {
       setTappedPoint(tapped);
@@ -2337,37 +2339,40 @@ export function MapScreen({
       setTappedFire(null);
       setTappedCoverage(null);
       landAskedFor.current = tapped;
-      // From the tiles on the phone, so this works offline and asks no one.
-      if (landLayerIds.length > 0) {
-        mapRef.current
-          ?.queryRenderedFeatures(screenPoint, { layers: landLayerIds })
-          .then((features) => {
-            if (landAskedFor.current === tapped)
-              setTappedLand(landNameOf(features));
+      void Promise.resolve(screenPoint).then((point) => {
+        if (landAskedFor.current !== tapped) return;
+        // From the tiles on the phone, so this works offline and asks no one.
+        if (landLayerIds.length > 0) {
+          mapRef.current
+            ?.queryRenderedFeatures(point, { layers: landLayerIds })
+            .then((features) => {
+              if (landAskedFor.current === tapped)
+                setTappedLand(landNameOf(features));
+            })
+            // Never a failure to show: the sheet just has no land figure.
+            .catch(() => undefined);
+        }
+        if (fireLayerIdList.length > 0) {
+          mapRef.current
+            ?.queryRenderedFeatures(point, { layers: fireLayerIdList })
+            .then((features) => {
+              if (landAskedFor.current === tapped)
+                setTappedFire(fireNameOf(features));
+            })
+            .catch(() => undefined);
+        }
+        coverageAtTap(
+          mapRef.current,
+          point,
+          lngLat,
+          coverageLayerIdList,
+          coverageCarrier,
+        )
+          .then((name) => {
+            if (landAskedFor.current === tapped) setTappedCoverage(name);
           })
-          // Never a failure to show: the sheet just has no land figure.
           .catch(() => undefined);
-      }
-      if (fireLayerIdList.length > 0) {
-        mapRef.current
-          ?.queryRenderedFeatures(screenPoint, { layers: fireLayerIdList })
-          .then((features) => {
-            if (landAskedFor.current === tapped)
-              setTappedFire(fireNameOf(features));
-          })
-          .catch(() => undefined);
-      }
-      coverageAtTap(
-        mapRef.current,
-        screenPoint,
-        lngLat,
-        coverageLayerIdList,
-        coverageCarrier,
-      )
-        .then((name) => {
-          if (landAskedFor.current === tapped) setTappedCoverage(name);
-        })
-        .catch(() => undefined);
+      });
     },
     [coverageCarrier, coverageLayerIdList, fireLayerIdList, landLayerIds],
   );
@@ -3525,10 +3530,20 @@ export function MapScreen({
           accuracyM: here.coords.accuracy,
           altitudeM: here.coords.altitude,
         });
+        const fixLngLat: [number, number] = [
+          here.coords.longitude,
+          here.coords.latitude,
+        ];
+        // The overlays are asked about the fix itself, not the finger: a press
+        // up to 22 dp from the arrow is hundreds of metres away at low zoom.
+        // The press point is the fallback when the map cannot project it.
+        const fixPoint = (
+          mapRef.current?.project(fixLngLat) ?? Promise.reject(new Error())
+        ).catch(() => event.nativeEvent.point);
         askAbout(
           { latitude: here.coords.latitude, longitude: here.coords.longitude },
-          event.nativeEvent.point,
-          [here.coords.longitude, here.coords.latitude],
+          fixPoint,
+          fixLngLat,
         );
         return;
       }

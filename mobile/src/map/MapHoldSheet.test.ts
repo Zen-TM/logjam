@@ -55,9 +55,13 @@ describe("the tap sheet", () => {
     expect(screen.match(/fireNameOf\(/g)).toHaveLength(1);
     expect(screen.match(/coverageAtTap\(/g)).toHaveLength(1);
     const arrow = screen.slice(screen.indexOf("const handleMapOrArrowPress"));
-    expect(arrow.slice(0, arrow.indexOf("handleMapPress(event)"))).toContain(
-      "askAbout(",
-    );
+    const fixBranch = arrow.slice(0, arrow.indexOf("handleMapPress(event)"));
+    expect(fixBranch).toContain("askAbout(");
+    // Mutation: hand `askAbout` the finger's `event.nativeEvent.point` there
+    // again, and Land and Fire are named for a spot up to a kilometre from
+    // the position the sheet is titled for.
+    expect(fixBranch).toContain("mapRef.current?.project(fixLngLat)");
+    expect(fixBranch).not.toMatch(/askAbout\([^)]*event\.nativeEvent\.point/);
   });
 
   // Mutation: give the sheet a plain `onClose={onClose}` again, and the back

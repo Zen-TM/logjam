@@ -834,7 +834,7 @@ export function PlaceEditSheet({
         {sources.map((source, index) => (
           // Rows have no identity of their own, and are only ever added at the
           // end or removed, so the index is a stable key within an edit.
-          <View key={index} style={styles.source}>
+          <FormStack key={index}>
             <TextField
               label={PLACE_FORM.copy.sourceLabel}
               value={source.label}
@@ -873,7 +873,7 @@ export function PlaceEditSheet({
                 );
               }}
             />
-          </View>
+          </FormStack>
         ))}
         <Button
           compact
@@ -1043,7 +1043,6 @@ function sameList(a: string[], b: string[]): boolean {
 const useStyles = makeStyles((theme, textRole) => ({
   hint: { ...muted(theme, textRole.detail), flex: 1 },
   coordsHint: muted(theme, textRole.detail),
-  source: { gap: spacing(1) },
   coordRow: { flexDirection: "row", gap: spacing(1) },
   coordField: { flex: 1 },
   fixNote: { flexDirection: "row", alignItems: "center", gap: spacing(0.5) },
