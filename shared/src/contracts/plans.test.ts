@@ -423,19 +423,18 @@ describe("a plan's verbs", () => {
 
   it("prints on Logjam Web only; both clients build forms", () => {
     const live = { archived: false };
-    expect(ids(planVerbsFor(PLAN_ADD_VERBS, "gps", "leader", live))).toEqual([
-      "section",
-      "copy",
-      "route",
-      "form",
-      "invite",
-    ]);
-    expect(ids(planVerbsFor(PLAN_ADD_VERBS, "web", "leader", live))).toEqual([
-      "section",
-      "copy",
-      "form",
-      "invite",
-    ]);
+    for (const platform of ["gps", "web"] as const)
+      expect(
+        ids(planVerbsFor(PLAN_ADD_VERBS, platform, "leader", live)),
+      ).toEqual([
+        "section",
+        "copy",
+        "newPlace",
+        "route",
+        "import",
+        "form",
+        "invite",
+      ]);
     expect(ids(planVerbsFor(PLAN_FORM_VERBS, "gps", "leader", live))).toEqual([
       "edit",
       "delete",

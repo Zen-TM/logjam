@@ -48,6 +48,7 @@ import {
   type PlaceMediaCopyResult,
 } from "./copyPlaceMedia";
 import { toMediaItem } from "./mediaPresign";
+import { mediaKeys } from "./mediaKeys";
 import {
   applyStorageChanges,
   assertHasStorageQuota,
@@ -269,6 +270,60 @@ export async function copyStandaloneFile(
           origin: source.origin,
           displayName: source.displayName,
           metadata: source.metadata as Prisma.InputJsonValue,
+        },
+      }),
+  );
+}
+
+/**
+ * A track file (an import) uploaded straight into the plan: the adder is
+ * charged the size S3 reports, in the transaction that writes the row, and
+ * the object is removed again if that fails (chargeAndWrite).
+ */
+export async function createPlanFile(
+  user: { id: string },
+  planId: string,
+  file: {
+    mediaId: string;
+    bytes: bigint;
+    mediaType: string;
+    filename: string;
+    displayName: string | null;
+    metadata: Prisma.InputJsonValue;
+    color: string | null;
+  },
+): Promise<Media> {
+  const { displayKey } = mediaKeys(user.id, file.mediaId, file.mediaType);
+  return chargeAndWrite(
+    { planId },
+    user.id,
+    file.bytes,
+    { bucket: MEDIA_BUCKET, keys: [displayKey] },
+    async (tx) =>
+      tx.media.create({
+        data: {
+          id: file.mediaId,
+          ...ownerColumns({ planId }, user.id),
+          linkedType: "none",
+          linkedId: null,
+          origin: "import",
+          s3KeyDisplay: displayKey,
+          s3KeyThumbnail: null,
+          mediaType: file.mediaType,
+          filename: file.filename,
+          fileSizeBytes: file.bytes,
+          displayName: file.displayName,
+          metadata: file.metadata,
+          color:
+            file.color ??
+            pickNextTrackColor(
+              (
+                await tx.media.findMany({
+                  where: { planId, color: { not: null } },
+                  select: { color: true },
+                })
+              ).map((other) => other.color),
+            ),
         },
       }),
   );

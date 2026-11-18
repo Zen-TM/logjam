@@ -412,3 +412,121 @@ describe("POST /plans/:id/items (a new place or way, made in the plan)", () => {
     expect(await planRows()).toEqual({ places: 0, routes: 0 });
   });
 });
+
+describe("a way imported straight into the plan", () => {
+  const GPX = Buffer.from(
+    `<?xml version="1.0"?><gpx version="1.1" creator="test"><trk><trkseg>
+  <trkpt lat="-33.5" lon="150.4"/><trkpt lat="-33.51" lon="150.41"/>
+</trkseg></trk></gpx>`,
+    "utf8",
+  );
+  const meta = {
+    filename: `plan-test-${Date.now()}.gpx`,
+    mediaType: "application/gpx+xml",
+    displayName: "Test walk-out",
+    metadata: {
+      bbox: [150.4, -33.51, 150.41, -33.5],
+      featureCount: 1,
+      positionCount: 2,
+    },
+  };
+  const presign = (sub: string, body: object = {}) =>
+    request(API_URL)
+      .post(`/plans/${planId}/items/media/presign`)
+      .set(as(sub))
+      .send({ ...meta, sizeBytes: GPX.length, ...body });
+  const confirm = (sub: string, mediaId: string, body: object = {}) =>
+    request(API_URL)
+      .post(`/plans/${planId}/items/media/${mediaId}/confirm`)
+      .set(as(sub))
+      .send({ ...meta, ...body });
+  async function upload(sub: string) {
+    const signed = await presign(sub);
+    expect(signed.status, JSON.stringify(signed.body)).toBe(201);
+    const put = await fetch(signed.body.displayUploadUrl, {
+      method: "PUT",
+      headers: { "Content-Type": meta.mediaType },
+      body: GPX,
+    });
+    expect(put.ok).toBe(true);
+    return signed.body.mediaId as string;
+  }
+
+  // Mutation: charge the plan's creator, or no one, instead of the adder.
+  it("keeps the file in the plan, charged to the one who imported it", async () => {
+    const before = await used(BOB_ID);
+    const mediaId = await upload(BOB_SUB);
+    const res = await confirm(BOB_SUB, mediaId);
+    expect(res.status, JSON.stringify(res.body)).toBe(201);
+    expect(res.body.item).toMatchObject({
+      kind: "media",
+      id: mediaId,
+      sizeBytes: String(GPX.length),
+      addedBy: { id: BOB_ID },
+      chargedTo: { id: BOB_ID },
+    });
+    const row = await prisma.media.findUniqueOrThrow({
+      where: { id: mediaId },
+    });
+    expect(row).toMatchObject({
+      ownerId: null,
+      planId,
+      linkedType: "none",
+      origin: "import",
+    });
+    expect(await used(BOB_ID)).toBe(before + BigInt(GPX.length));
+
+    // A retried confirm answers with the row and charges nothing more.
+    const again = await confirm(BOB_SUB, mediaId);
+    expect(again.status).toBe(200);
+    expect(await used(BOB_ID)).toBe(before + BigInt(GPX.length));
+    expect((await confirm(ALICE_SUB, mediaId)).status).toBe(404);
+
+    // Any member saves a copy; its maker's delete refunds them.
+    const saved = await request(API_URL)
+      .post(`/plans/${planId}/items/media/${mediaId}/save`)
+      .set(as(ALICE_SUB))
+      .send({});
+    expect(saved.status, JSON.stringify(saved.body)).toBe(201);
+    await request(API_URL).delete(`/media/${saved.body.id}`).set(as(ALICE_SUB));
+    const del = await request(API_URL)
+      .delete(`/plans/${planId}/items/media/${mediaId}`)
+      .set(as(BOB_SUB));
+    expect(del.status).toBe(204);
+    expect(await used(BOB_ID)).toBe(before);
+  });
+
+  // The boundary again, for a file: who may write into a plan.
+  // Mutation: requirePlanWrite → requirePlanMember in the presign route (the
+  // confirm's archived check is touchPlanAsMember's, in createPlanFile).
+  it("takes nothing from someone not in the plan, or into an archived one", async () => {
+    expect((await presign(CAROL_SUB)).status).toBe(404);
+    const mediaId = await upload(BOB_SUB);
+    expect((await confirm(CAROL_SUB, mediaId)).status).toBe(404);
+    await prisma.tripPlan.update({
+      where: { id: planId },
+      data: { archivedAt: new Date() },
+    });
+    expect((await presign(BOB_SUB)).status).toBe(409);
+    expect((await confirm(BOB_SUB, mediaId)).status).toBe(409);
+    expect(await prisma.media.count({ where: { planId } })).toBe(0);
+  });
+
+  it("refuses what the import never sends, and an upload that never landed", async () => {
+    const cases: object[] = [
+      { mediaType: "image/png", filename: "a.png" },
+      { filename: "a.kml" },
+      { metadata: { bbox: "x" } },
+      { sizeBytes: 0 },
+      { sizeBytes: 500 * 1024 * 1024 },
+    ];
+    for (const body of cases)
+      expect(
+        (await presign(BOB_SUB, body)).status,
+        JSON.stringify(body),
+      ).toBeGreaterThanOrEqual(400);
+    const never = await confirm(BOB_SUB, randomUUID());
+    expect(never.status).toBe(400);
+    expect(await prisma.media.count({ where: { planId } })).toBe(0);
+  });
+});

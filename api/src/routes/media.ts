@@ -328,7 +328,10 @@ function parseTrackClimbOr400(body: Record<string, unknown>) {
 
 /** parseMediaMetadata, with its shape complaint turned into a 400. The message
  * names the offending FIELD and never its value — metadata holds coordinates. */
-function parseMediaMetadataOr400(origin: MediaOrigin | null, value: unknown) {
+export function parseMediaMetadataOr400(
+  origin: MediaOrigin | null,
+  value: unknown,
+) {
   try {
     return parseMediaMetadata(origin, value);
   } catch (err) {
@@ -340,7 +343,7 @@ function parseMediaMetadataOr400(origin: MediaOrigin | null, value: unknown) {
 /** Validates the file's type and name together and hands both back narrowed —
  * callers need the strings, and re-asserting them at each use is how one site
  * ends up trusting an unvalidated one. */
-function validateMediaType(
+export function validateMediaType(
   rawMediaType: unknown,
   rawFilename: unknown,
 ): { category: MediaCategory; mediaType: string; filename: string } {

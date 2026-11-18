@@ -3,13 +3,17 @@
 // delete. Copy and storage rules are lib/planItems.ts's; access is
 // lib/planAccess.ts's.
 import { Router, Response } from "express";
+import { randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { Prisma } from "@prisma/client";
+import { HeadObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import {
   asFieldValues,
   isSystemPlaceTypeId,
   isTripPlanItemKind,
   isTripPlanItemNew,
+  MEDIA_SIZE_CAPS,
   parseRouteColor,
   parseTripPlanFilePatch,
   parseTripPlanItemAdd,
@@ -24,6 +28,8 @@ import {
 import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 import prisma from "../services/prisma";
 import { accepted, AppError, malformed } from "../middleware/errorHandler";
+import { s3 } from "../services/awsClients";
+import { getEnv } from "../lib/env";
 import { getParam } from "../lib/getParam";
 import { resolveUser } from "../lib/resolveUser";
 import {
@@ -32,9 +38,14 @@ import {
   requirePlanWrite,
   touchPlan,
 } from "../lib/planAccess";
+import { mediaKeys } from "../lib/mediaKeys";
+import { validateUploadSizes } from "../lib/mediaUploadValidation";
+import { assertHasStorageQuota } from "../lib/storageQuota";
+import { deleteS3KeysBestEffort } from "../lib/s3Cleanup";
 import {
   addPlanItem,
   copyStandaloneFile,
+  createPlanFile,
   deletePlanItem,
   itemNotFound,
   loadPlanItems,
@@ -46,10 +57,17 @@ import {
   placePayloadRefusal,
   validatePlaceTextFields,
 } from "./places";
-import { parseMediaDisplayName } from "./media";
+import {
+  parseMediaDisplayName,
+  parseMediaMetadataOr400,
+  validateMediaType,
+} from "./media";
 import { copyRouteFor } from "./routes";
 
 const router = Router({ mergeParams: true });
+
+const MEDIA_BUCKET = getEnv().S3_BUCKET_MEDIA ?? "";
+const UPLOAD_URL_TTL_SECONDS = 900;
 
 const NOT_YOURS = say`You can change what you added. A leader or an editor can change anything.`;
 
@@ -126,6 +144,109 @@ router.post(
         ...(added.media.outOfSpace && { mediaOutOfSpace: true }),
       }),
     });
+  },
+);
+
+// ── POST /plans/:planId/items/media/presign and …/:mediaId/confirm ──
+// A way imported straight into the plan: the account's own import flow
+// (POST /media/presign, /media/:id/confirm), for a track file only and with the
+// plan as its owner. The adder is charged what S3 holds, as for a copy.
+// Guard: __tests__/planItemsNew.test.ts.
+router.post(
+  "/media/presign",
+  requireAuth,
+  async (req: AuthenticatedRequest, res: Response) => {
+    const user = await resolveUser(req.user!.sub);
+    await requirePlanWrite(user.id, getParam(req.params.planId));
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const { category, mediaType } = validateMediaType(
+      body.mediaType,
+      body.filename,
+    );
+    if (category !== "track") throw malformed("a plan takes a track file here");
+    parseMediaMetadataOr400("import", body.metadata);
+    const { sizeBytes } = validateUploadSizes(
+      category,
+      body.sizeBytes,
+      undefined,
+    );
+    await assertHasStorageQuota(user.id, BigInt(sizeBytes));
+    const mediaId = randomUUID();
+    const { displayKey } = mediaKeys(user.id, mediaId, mediaType);
+    const displayUploadUrl = await getSignedUrl(
+      s3,
+      new PutObjectCommand({
+        Bucket: MEDIA_BUCKET,
+        Key: displayKey,
+        ContentType: mediaType,
+        ContentLength: sizeBytes,
+      }),
+      { expiresIn: UPLOAD_URL_TTL_SECONDS },
+    );
+    res.status(201).json({ mediaId, displayUploadUrl });
+  },
+);
+
+router.post(
+  "/media/:mediaId/confirm",
+  requireAuth,
+  async (req: AuthenticatedRequest, res: Response) => {
+    const user = await resolveUser(req.user!.sub);
+    const access = await requirePlanWrite(user.id, getParam(req.params.planId));
+    const mediaId = getParam(req.params.mediaId);
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const { category, mediaType, filename } = validateMediaType(
+      body.mediaType,
+      body.filename,
+    );
+    if (category !== "track") throw malformed("a plan takes a track file here");
+    const metadata = parseMediaMetadataOr400("import", body.metadata);
+    const displayName = parseMediaDisplayName(body.displayName);
+
+    // A confirm that already landed: its row, charged once. Another's id is 404.
+    const existing = await prisma.media.findUnique({ where: { id: mediaId } });
+    if (existing) {
+      if (existing.planId !== access.plan.id || existing.addedById !== user.id)
+        throw itemNotFound();
+    } else {
+      const { displayKey } = mediaKeys(user.id, mediaId, mediaType);
+      let bytes: number;
+      try {
+        const head = await s3.send(
+          new HeadObjectCommand({ Bucket: MEDIA_BUCKET, Key: displayKey }),
+        );
+        bytes = head.ContentLength ?? 0;
+      } catch {
+        throw new AppError(
+          400,
+          say`That file didn't finish uploading. Try again.`,
+        );
+      }
+      if (bytes > MEDIA_SIZE_CAPS.track) {
+        await deleteS3KeysBestEffort(MEDIA_BUCKET, [displayKey]);
+        const limitMb = Math.round(MEDIA_SIZE_CAPS.track / 1024 / 1024);
+        throw new AppError(
+          413,
+          say`That file is too big. The limit is ${limitMb} MB.`,
+        );
+      }
+      await createPlanFile(user, access.plan.id, {
+        mediaId,
+        bytes: BigInt(bytes),
+        mediaType,
+        filename,
+        displayName,
+        metadata: metadata as Prisma.InputJsonValue,
+        color: parseRouteColor(body.color),
+      });
+    }
+    const items = await loadPlanItems(access.plan.id, {
+      kind: "media",
+      id: mediaId,
+    });
+    const item = items.files[0];
+    if (!item) throw itemNotFound();
+    res.status(existing ? 200 : 201).json({ item });
   },
 );
 
