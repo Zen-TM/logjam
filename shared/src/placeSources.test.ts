@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { PLACE_FORM } from "./contracts/placeForm.js";
+import { placeSources } from "./contracts/placePage.js";
 import { setFieldValues } from "./fieldValues.js";
 import {
   cleanSources,
@@ -32,6 +33,22 @@ describe("isHttpUrl", () => {
     expect(isHttpUrl("")).toBe(false);
     expect(isHttpUrl("not a url")).toBe(false);
     expect(isHttpUrl("example.com")).toBe(false);
+  });
+});
+
+describe("a place page's source links", () => {
+  // Mutation: set `linkable: true` in `placeSources`, or drop its `isHttpUrl`
+  // call, and a stored `javascript:` source becomes a link both clients open.
+  it("makes only http(s) sources linkable", () => {
+    const rows = placeSources({
+      [SOURCES_FIELD_KEY]: [
+        ["x", "javascript:alert(1)"],
+        ["d", "data:text/html,hi"],
+        ["y", "https://a.example"],
+      ],
+    });
+    expect(rows.map((row) => row.linkable)).toEqual([false, false, true]);
+    expect(rows[2].host).toBe("a.example");
   });
 });
 
