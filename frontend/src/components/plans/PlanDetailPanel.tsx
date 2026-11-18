@@ -181,7 +181,11 @@ export default function PlanDetailPanel({
     latitude: number;
     longitude: number;
   } | null>(null);
-  const wayImport = useWayImport(() => refetch(), view?.id);
+  // An import into the plan is charged to the importer, so their meter moves.
+  const wayImport = useWayImport(() => {
+    refetch();
+    onOwnChanged();
+  }, view?.id);
   const [tab, setTab] = useState<TripPlanPageView>(initialView);
   const [editing, setEditing] = useState(false);
   const [sectionOpen, setSectionOpen] = useState<{ id: string | null } | null>(

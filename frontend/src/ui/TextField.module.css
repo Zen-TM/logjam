@@ -42,6 +42,11 @@
   border: 0;
 }
 
+/* A legend is not a flex item, so the gap never reaches it. */
+.group > legend {
+  margin-bottom: var(--form-label);
+}
+
 .labelRow {
   display: flex;
   justify-content: space-between;

@@ -6,7 +6,7 @@ import { Router, Response } from "express";
 import { randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { Prisma } from "@prisma/client";
-import { HeadObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
+import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import {
   asFieldValues,
@@ -29,7 +29,6 @@ import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 import prisma from "../services/prisma";
 import { accepted, AppError, malformed } from "../middleware/errorHandler";
 import { s3 } from "../services/awsClients";
-import { getEnv } from "../lib/env";
 import { getParam } from "../lib/getParam";
 import { resolveUser } from "../lib/resolveUser";
 import {
@@ -39,9 +38,13 @@ import {
   touchPlan,
 } from "../lib/planAccess";
 import { mediaKeys } from "../lib/mediaKeys";
+import {
+  MEDIA_BUCKET,
+  UPLOAD_URL_TTL_SECONDS,
+  uploadedSize,
+} from "../lib/uploadedFile";
 import { validateUploadSizes } from "../lib/mediaUploadValidation";
 import { assertHasStorageQuota } from "../lib/storageQuota";
-import { deleteS3KeysBestEffort } from "../lib/s3Cleanup";
 import {
   addPlanItem,
   copyStandaloneFile,
@@ -65,9 +68,6 @@ import {
 import { copyRouteFor } from "./routes";
 
 const router = Router({ mergeParams: true });
-
-const MEDIA_BUCKET = getEnv().S3_BUCKET_MEDIA ?? "";
-const UPLOAD_URL_TTL_SECONDS = 900;
 
 const NOT_YOURS = say`You can change what you added. A leader or an editor can change anything.`;
 
@@ -97,7 +97,8 @@ async function planRow(planId: string, kind: TripPlanItemKind, id: string) {
  * A new item is held to the rules an owner's own place or way, or a plan
  * item's edit, is: a place's values against its type's attributes, a way's
  * points as the way tools make them (parsed in shared). A plan holds system
- * types only, as a copy lands.
+ * types only, as a copy lands. Guard: __tests__/planItemsNew.test.ts
+ * ("refuses what the place and way forms refuse, writing nothing").
  */
 async function refuseNewItem(input: TripPlanItemAdd): Promise<void> {
   if (!isTripPlanItemNew(input) || input.kind !== "place") return;
@@ -214,26 +215,9 @@ router.post(
     let existing = await landed();
     if (!existing) {
       const { displayKey } = mediaKeys(user.id, mediaId, mediaType);
-      let bytes: number;
-      try {
-        const head = await s3.send(
-          new HeadObjectCommand({ Bucket: MEDIA_BUCKET, Key: displayKey }),
-        );
-        bytes = head.ContentLength ?? 0;
-      } catch {
-        throw new AppError(
-          400,
-          say`That file didn't finish uploading. Try again.`,
-        );
-      }
-      if (bytes > MEDIA_SIZE_CAPS.track) {
-        await deleteS3KeysBestEffort(MEDIA_BUCKET, [displayKey]);
-        const limitMb = Math.round(MEDIA_SIZE_CAPS.track / 1024 / 1024);
-        throw new AppError(
-          413,
-          say`That file is too big. The limit is ${limitMb} MB.`,
-        );
-      }
+      const bytes = await uploadedSize(displayKey, MEDIA_SIZE_CAPS.track, [
+        displayKey,
+      ]);
       try {
         await createPlanFile(user, access.plan.id, {
           mediaId,

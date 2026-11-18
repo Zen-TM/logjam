@@ -37,7 +37,6 @@ import {
 } from "@logjam/shared";
 import prisma from "../services/prisma";
 import { AppError, fault } from "../middleware/errorHandler";
-import { getEnv } from "./env";
 import { touchPlan, touchPlanAsMember } from "./planAccess";
 import { dropMembership, endPlanForOthers } from "./planMembership";
 import { reconcileCopiedPlace } from "./placeCopy";
@@ -49,6 +48,7 @@ import {
 } from "./copyPlaceMedia";
 import { toMediaItem } from "./mediaPresign";
 import { mediaKeys } from "./mediaKeys";
+import { MEDIA_BUCKET } from "./uploadedFile";
 import {
   applyStorageChanges,
   assertHasStorageQuota,
@@ -57,8 +57,6 @@ import {
   storageFull,
 } from "./storageQuota";
 import { deleteS3Keys, deleteS3KeysBestEffort } from "./s3Cleanup";
-
-const MEDIA_BUCKET = getEnv().S3_BUCKET_MEDIA ?? "";
 
 export const userRef = { select: { id: true, username: true } } as const;
 
@@ -237,7 +235,7 @@ async function chargeAndWrite<T>(
   } catch (err) {
     // A row with this id already exists: a concurrent confirm of the same
     // upload won, and its row points at these very keys. Guard:
-    // __tests__/planItemsNew.test.ts ("two confirms at once").
+    // __tests__/planItemsNew.test.ts ("keeps the file when two confirms of one upload race").
     if (
       !(
         err instanceof Prisma.PrismaClientKnownRequestError &&

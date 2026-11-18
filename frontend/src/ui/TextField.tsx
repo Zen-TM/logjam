@@ -91,25 +91,37 @@ function Field({
 }
 
 /** A question answered by several controls (chips, tick boxes): its prompt,
- *  the hint, the controls, then the error, drawn as a text field's are. */
+ *  the hint, the controls, then the error, drawn as a text field's are. The
+ *  legend names the group. `named` is for controls that name themselves (a
+ *  radio group): the prompt is then drawn for the eye only, so a screen reader
+ *  does not hear the question twice. */
 export function FieldGroup({
   label,
   hint,
   error,
+  named = false,
   children,
 }: {
   label: string;
   hint?: string;
   error?: string | null;
+  named?: boolean;
   children: ReactNode;
 }) {
+  const Root = named ? "div" : "fieldset";
+  const Prompt = named ? "span" : "legend";
   return (
-    <fieldset className={classes.group}>
-      <legend className={classes.labelProminent}>{label}</legend>
+    <Root className={classes.group}>
+      <Prompt
+        className={classes.labelProminent}
+        aria-hidden={named || undefined}
+      >
+        {label}
+      </Prompt>
       {hint && <p className={classes.hint}>{hint}</p>}
       {children}
       <FieldError message={error ?? null} />
-    </fieldset>
+    </Root>
   );
 }
 

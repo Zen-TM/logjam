@@ -478,6 +478,23 @@ test.describe("desktop", () => {
     await expectNoViolations(page, "dialog");
     await page.keyboard.press("Escape");
     await expect(dialog).toHaveCount(0);
+
+    // New place: a point picked on the map, then the form. Closed unsaved:
+    // nothing is written.
+    await aside.getByRole("button", { name: "Add", exact: true }).click();
+    await page.getByRole("menuitem", { name: "New place" }).click();
+    await expect(
+      page.getByText("Click the map to select a location"),
+    ).toBeVisible();
+    const canvas = page.locator("canvas.maplibregl-canvas");
+    const box = (await canvas.boundingBox())!;
+    await page.mouse.click(box.x + box.width * 0.7, box.y + box.height * 0.5);
+    await expect(
+      dialog.getByRole("textbox", { name: "Name", exact: true }),
+    ).toBeFocused();
+    await expectNoViolations(page, "dialog");
+    await page.keyboard.press("Escape");
+    await expect(dialog).toHaveCount(0);
   });
 
   test("Plans on the map: the plan bar, and Start a trip log's places", async ({
@@ -1969,8 +1986,28 @@ test.describe("narrow web", () => {
     ).toBeFocused();
     await expectNoViolations(page);
 
-    // A plan carol invited alice to: its preview, with Join and Decline.
+    // New place at phone width: the sheet steps aside for the pick, then the
+    // form fills the screen. Closed unsaved.
     await page.getByRole("button", { name: "Back to people" }).click();
+    await page.getByRole("radio", { name: /^Map/ }).click();
+    await page.getByRole("button", { name: "Add", exact: true }).click();
+    await page.getByRole("menuitem", { name: "New place" }).click();
+    const canvas = page.locator("canvas.maplibregl-canvas");
+    await expect(
+      page.getByText("Click the map to select a location"),
+    ).toBeVisible();
+    const box = (await canvas.boundingBox())!;
+    await page.mouse.click(box.x + box.width * 0.5, box.y + box.height * 0.3);
+    const newPlace = page.locator("dialog[open]");
+    await expect(
+      newPlace.getByRole("textbox", { name: "Name", exact: true }),
+    ).toBeFocused();
+    await expectNoViolations(page, "dialog");
+    expect((await newPlace.boundingBox())!.width).toBe(390);
+    await page.keyboard.press("Escape");
+    await expect(newPlace).toHaveCount(0);
+
+    // A plan carol invited alice to: its preview, with Join and Decline.
     await page.getByRole("button", { name: "Back to plans" }).click();
     await page
       .getByRole("button", { name: SEED_NAMES.planKanangra, exact: true })
