@@ -3,8 +3,13 @@
 //
 // A worker has its own global scope, so the simulated-regions switch the page
 // set is not here: this import sets it again, before `@logjam/shared` loads,
-// for the region a sheet's terrain is read from. Guard: workerSimRegions.test.ts.
+// for the region a sheet's terrain is read from. Guards: workerSimRegions.test.ts,
+// workerGrid.test.ts.
+// The display units are in the same case: each request carries the page's, and
+// the scale bar is written in them. Guard: worker.test.ts ("the render worker's
+// display units").
 import "../simRegions";
+import { setDisplayUnits } from "@logjam/shared";
 import { tileCache } from "./cache";
 import { renderGeoPdf, TooLarge } from "./render";
 import type { WorkerMessage, WorkerRequest } from "./types";
@@ -16,7 +21,8 @@ const scope = self as unknown as {
 
 scope.onmessage = async (e) => {
   if (e.data.type !== "render") return;
-  const { input, limits, debug } = e.data;
+  const { input, limits, units, debug } = e.data;
+  setDisplayUnits(units);
   try {
     const out = await renderGeoPdf(input, {
       signal: new AbortController().signal,

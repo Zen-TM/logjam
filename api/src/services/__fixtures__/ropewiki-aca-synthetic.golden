@@ -1,0 +1,405 @@
+{
+  "places": [
+    {
+      "ropeWikiId": 910001,
+      "name": "Synthetic Plain ACA",
+      "latitude": 38.3,
+      "longitude": -110.8,
+      "numAbseils": 3,
+      "longestAbseil": 18.3,
+      "vGrade": null,
+      "aGrade": null,
+      "commitment": null,
+      "acaTechnical": 3,
+      "acaWater": 2,
+      "acaTime": 3,
+      "acaRisk": null,
+      "quality": 4,
+      "hours": null,
+      "attributes": {
+        "sources": [
+          [
+            "RopeWiki",
+            "http://ropewiki.com/index.php?curid=910001"
+          ]
+        ]
+      }
+    },
+    {
+      "ropeWikiId": 910002,
+      "name": "Synthetic Both Systems",
+      "latitude": 38.31,
+      "longitude": -110.81,
+      "numAbseils": 4,
+      "longestAbseil": 12.2,
+      "vGrade": null,
+      "aGrade": null,
+      "commitment": null,
+      "acaTechnical": 3,
+      "acaWater": 2,
+      "acaTime": 3,
+      "acaRisk": null,
+      "quality": 4,
+      "hours": null,
+      "attributes": {
+        "sources": [
+          [
+            "RopeWiki",
+            "http://ropewiki.com/index.php?curid=910002"
+          ]
+        ]
+      }
+    },
+    {
+      "ropeWikiId": 910003,
+      "name": "Synthetic Risk R",
+      "latitude": 38.32,
+      "longitude": -110.82,
+      "numAbseils": 6,
+      "longestAbseil": 27.4,
+      "vGrade": null,
+      "aGrade": null,
+      "commitment": null,
+      "acaTechnical": 4,
+      "acaWater": 4,
+      "acaTime": 4,
+      "acaRisk": 3,
+      "quality": 3,
+      "hours": null,
+      "attributes": {
+        "sources": [
+          [
+            "RopeWiki",
+            "http://ropewiki.com/index.php?curid=910003"
+          ]
+        ]
+      }
+    },
+    {
+      "ropeWikiId": 910004,
+      "name": "Synthetic Risk PG13",
+      "latitude": 38.33,
+      "longitude": -110.83,
+      "numAbseils": 2,
+      "longestAbseil": 6.1,
+      "vGrade": null,
+      "aGrade": null,
+      "commitment": null,
+      "acaTechnical": 3,
+      "acaWater": 1,
+      "acaTime": 2,
+      "acaRisk": 2,
+      "quality": 3,
+      "hours": null,
+      "attributes": {
+        "sources": [
+          [
+            "RopeWiki",
+            "http://ropewiki.com/index.php?curid=910004"
+          ]
+        ]
+      }
+    },
+    {
+      "ropeWikiId": 910005,
+      "name": "Synthetic Risk G",
+      "latitude": 38.34,
+      "longitude": -110.84,
+      "numAbseils": 2,
+      "longestAbseil": 7.6,
+      "vGrade": null,
+      "aGrade": null,
+      "commitment": null,
+      "acaTechnical": 2,
+      "acaWater": 2,
+      "acaTime": 4,
+      "acaRisk": null,
+      "quality": 3,
+      "hours": null,
+      "attributes": {
+        "sources": [
+          [
+            "RopeWiki",
+            "http://ropewiki.com/index.php?curid=910005"
+          ]
+        ]
+      }
+    },
+    {
+      "ropeWikiId": 910006,
+      "name": "Synthetic Risk PG",
+      "latitude": 38.35,
+      "longitude": -110.85,
+      "numAbseils": 2,
+      "longestAbseil": 7.6,
+      "vGrade": null,
+      "aGrade": null,
+      "commitment": null,
+      "acaTechnical": 2,
+      "acaWater": 2,
+      "acaTime": 4,
+      "acaRisk": 1,
+      "quality": 3,
+      "hours": null,
+      "attributes": {
+        "sources": [
+          [
+            "RopeWiki",
+            "http://ropewiki.com/index.php?curid=910006"
+          ]
+        ]
+      }
+    },
+    {
+      "ropeWikiId": 910007,
+      "name": "Synthetic Top Ranks",
+      "latitude": 38.36,
+      "longitude": -110.86,
+      "numAbseils": 9,
+      "longestAbseil": 61,
+      "vGrade": null,
+      "aGrade": null,
+      "commitment": null,
+      "acaTechnical": 4,
+      "acaWater": 7,
+      "acaTime": 6,
+      "acaRisk": 5,
+      "quality": 5,
+      "hours": null,
+      "attributes": {
+        "sources": [
+          [
+            "RopeWiki",
+            "http://ropewiki.com/index.php?curid=910007"
+          ]
+        ]
+      }
+    },
+    {
+      "ropeWikiId": 910008,
+      "name": "Synthetic No Time",
+      "latitude": 38.37,
+      "longitude": -110.87,
+      "numAbseils": 1,
+      "longestAbseil": 4.6,
+      "vGrade": null,
+      "aGrade": null,
+      "commitment": null,
+      "acaTechnical": 2,
+      "acaWater": 1,
+      "acaTime": null,
+      "acaRisk": null,
+      "quality": 2,
+      "hours": null,
+      "attributes": {
+        "sources": [
+          [
+            "RopeWiki",
+            "http://ropewiki.com/index.php?curid=910008"
+          ]
+        ]
+      }
+    },
+    {
+      "ropeWikiId": 910009,
+      "name": "Synthetic Split Tags",
+      "latitude": 38.38,
+      "longitude": -110.88,
+      "numAbseils": 2,
+      "longestAbseil": 9.1,
+      "vGrade": null,
+      "aGrade": null,
+      "commitment": null,
+      "acaTechnical": 3,
+      "acaWater": 2,
+      "acaTime": null,
+      "acaRisk": null,
+      "quality": 2,
+      "hours": null,
+      "attributes": {
+        "sources": [
+          [
+            "RopeWiki",
+            "http://ropewiki.com/index.php?curid=910009"
+          ]
+        ]
+      }
+    },
+    {
+      "ropeWikiId": 910010,
+      "name": "Synthetic Technical Only",
+      "latitude": 38.39,
+      "longitude": -110.89,
+      "numAbseils": 2,
+      "longestAbseil": 9.1,
+      "vGrade": null,
+      "aGrade": null,
+      "commitment": null,
+      "acaTechnical": 4,
+      "acaWater": null,
+      "acaTime": null,
+      "acaRisk": null,
+      "quality": 2,
+      "hours": null,
+      "attributes": {
+        "sources": [
+          [
+            "RopeWiki",
+            "http://ropewiki.com/index.php?curid=910010"
+          ]
+        ]
+      }
+    },
+    {
+      "ropeWikiId": 910011,
+      "name": "Synthetic French Only",
+      "latitude": 38.4,
+      "longitude": -110.9,
+      "numAbseils": 2,
+      "longestAbseil": 9.1,
+      "vGrade": null,
+      "aGrade": null,
+      "commitment": null,
+      "acaTechnical": null,
+      "acaWater": null,
+      "acaTime": null,
+      "acaRisk": null,
+      "quality": 2,
+      "hours": null,
+      "attributes": {
+        "sources": [
+          [
+            "RopeWiki",
+            "http://ropewiki.com/index.php?curid=910011"
+          ]
+        ]
+      }
+    },
+    {
+      "ropeWikiId": 910012,
+      "name": "Synthetic French In Brackets",
+      "latitude": 38.41,
+      "longitude": -110.91,
+      "numAbseils": 2,
+      "longestAbseil": 9.1,
+      "vGrade": null,
+      "aGrade": null,
+      "commitment": null,
+      "acaTechnical": null,
+      "acaWater": null,
+      "acaTime": null,
+      "acaRisk": null,
+      "quality": 2,
+      "hours": null,
+      "attributes": {
+        "sources": [
+          [
+            "RopeWiki",
+            "http://ropewiki.com/index.php?curid=910012"
+          ]
+        ]
+      }
+    },
+    {
+      "ropeWikiId": 910013,
+      "name": "Synthetic No Rating",
+      "latitude": 38.42,
+      "longitude": -110.92,
+      "numAbseils": 2,
+      "longestAbseil": 9.1,
+      "vGrade": null,
+      "aGrade": null,
+      "commitment": null,
+      "acaTechnical": null,
+      "acaWater": null,
+      "acaTime": null,
+      "acaRisk": null,
+      "quality": 2,
+      "hours": null,
+      "attributes": {
+        "sources": [
+          [
+            "RopeWiki",
+            "http://ropewiki.com/index.php?curid=910013"
+          ]
+        ]
+      }
+    },
+    {
+      "ropeWikiId": 910014,
+      "name": "Synthetic Technical Out Of Range",
+      "latitude": 38.43,
+      "longitude": -110.93,
+      "numAbseils": 2,
+      "longestAbseil": 9.1,
+      "vGrade": null,
+      "aGrade": null,
+      "commitment": null,
+      "acaTechnical": null,
+      "acaWater": null,
+      "acaTime": null,
+      "acaRisk": null,
+      "quality": 2,
+      "hours": null,
+      "attributes": {
+        "sources": [
+          [
+            "RopeWiki",
+            "http://ropewiki.com/index.php?curid=910014"
+          ]
+        ]
+      }
+    },
+    {
+      "ropeWikiId": 910015,
+      "name": "Synthetic Water Out Of Range",
+      "latitude": 38.44,
+      "longitude": -110.94,
+      "numAbseils": 2,
+      "longestAbseil": 9.1,
+      "vGrade": null,
+      "aGrade": null,
+      "commitment": null,
+      "acaTechnical": null,
+      "acaWater": null,
+      "acaTime": null,
+      "acaRisk": null,
+      "quality": 2,
+      "hours": null,
+      "attributes": {
+        "sources": [
+          [
+            "RopeWiki",
+            "http://ropewiki.com/index.php?curid=910015"
+          ]
+        ]
+      }
+    },
+    {
+      "ropeWikiId": 910016,
+      "name": "Synthetic Trailing Junk",
+      "latitude": 38.45,
+      "longitude": -110.95,
+      "numAbseils": 2,
+      "longestAbseil": 9.1,
+      "vGrade": null,
+      "aGrade": null,
+      "commitment": null,
+      "acaTechnical": null,
+      "acaWater": null,
+      "acaTime": null,
+      "acaRisk": null,
+      "quality": 2,
+      "hours": null,
+      "attributes": {
+        "sources": [
+          [
+            "RopeWiki",
+            "http://ropewiki.com/index.php?curid=910016"
+          ]
+        ]
+      }
+    }
+  ],
+  "errors": []
+}

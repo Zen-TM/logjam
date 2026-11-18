@@ -11,6 +11,7 @@ import {
   gaugeWeekCharts,
   latestGaugeReading,
   type Gauge,
+  type GaugeUnits,
 } from "@logjam/shared";
 import { IconButton, ProfileChart, StatGrid } from "../../ui";
 import classes from "./GaugeView.module.css";
@@ -30,12 +31,14 @@ export function GaugeView({
   gauge,
   attribution,
   generatedAt,
+  units,
   now,
   onClose,
 }: {
   gauge: Gauge;
   attribution: string;
   generatedAt: string;
+  units: GaugeUnits;
   now: number;
   /** Given where the view is a surface of its own: the × beside the name. */
   onClose?: () => void;
@@ -49,7 +52,7 @@ export function GaugeView({
     () => ReactNode
   > = {
     reading: () =>
-      latest && <StatGrid stats={gaugeStats(gauge, latest, now)} />,
+      latest && <StatGrid stats={gaugeStats(gauge, latest, now, units)} />,
     age: () =>
       ages ? (
         (ages.line || fileNote) && (
@@ -74,8 +77,10 @@ export function GaugeView({
               <p className={classes.muted}>{GAUGES.copy[charted]}</p>
               <ProfileChart
                 series={series}
-                formatValue={
-                  charted === "level" ? formatGaugeLevel : formatGaugeFlow
+                formatValue={(v) =>
+                  charted === "level"
+                    ? formatGaugeLevel(v, units)
+                    : formatGaugeFlow(v, units)
                 }
                 formatX={(x) => DAY_FORMAT.format(x)}
                 label={`${GAUGES.copy[charted]}, ${GAUGES.copy.graph.toLowerCase()}`}

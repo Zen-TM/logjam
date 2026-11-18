@@ -36,6 +36,7 @@ import { patchPlanItem } from "../../plansApi";
 import { wayNameError } from "../sidebar/panels/waysModel";
 import {
   ITEM_ATTR,
+  itemElevationLabel,
   itemFieldDefs,
   itemPatch,
   itemWords,
@@ -124,7 +125,7 @@ export default function PlanItemEditDialog({
     setAsked(true);
     if (openedItem.kind === "route" && wayNameError(values.name, true)) return;
     if (place && detailsInvalid) return;
-    const patch = itemPatch(seen, values);
+    const patch = itemPatch(seen, values, defs);
     if (!patch) return onClose();
     setBusy(true);
     try {
@@ -213,7 +214,7 @@ export default function PlanItemEditDialog({
                 />
               </div>
               <NumberField
-                label={copy.itemElevation}
+                label={itemElevationLabel()}
                 value={values.elevation}
                 onChange={(elevation) => set({ elevation })}
                 constraints={{}}

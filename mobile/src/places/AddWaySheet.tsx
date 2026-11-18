@@ -38,6 +38,7 @@ import {
   addWayNoTracks,
   attachableRoutes,
   formatDistanceM,
+  formatDurationMs,
   routeLengthM,
   routesMatching,
   TRIP_FORM,
@@ -593,15 +594,7 @@ export function AddWaySheet({
 }
 
 function trackSummary(track: Track): string {
-  const km = track.distanceM / 1000;
-  const distance =
-    km >= 1 ? `${km.toFixed(1)} km` : `${Math.round(track.distanceM)} m`;
-  const minutes = Math.round(track.durationMs / 60000);
-  const duration =
-    minutes >= 60
-      ? `${Math.floor(minutes / 60)}h ${minutes % 60}m`
-      : `${minutes}m`;
-  return `${distance} · ${duration}`;
+  return `${formatDistanceM(track.distanceM)} · ${formatDurationMs(track.durationMs)}`;
 }
 
 const useStyles = makeStyles((theme, textRole) => ({

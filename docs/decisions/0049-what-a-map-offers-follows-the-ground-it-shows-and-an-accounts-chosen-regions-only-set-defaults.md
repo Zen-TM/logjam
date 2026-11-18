@@ -30,6 +30,8 @@ The maintainer chose the map on 2026-11-14.
 shows. The regions an account chose only set defaults: where a map first
 opens, the first-run basemap and the canyon-list offers. They never decide
 what is offered at a location.**
+(updated 2026-11-15: the Updates below add the other places the home region is
+read, none of them a location.)
 
 - **The map asks one question.** `regionInView(view)` in
   `shared/src/regions.ts` returns the region holding the view's centre, else
@@ -50,7 +52,7 @@ what is offered at a location.**
   at a time.
 - **Update 2026-11-15: a printed sheet's Terrain comes from one region.** A
   GeoPDF takes its hillshade, slope, contours and Land from the one region
-  `regionInWrappedView` picks for the sheet's box (`sheetTerrain` in
+  `regionInView` picks for the sheet's box (`sheetTerrain` in
   `frontend/src/geoPdf/sheetTerrain.ts`), the way a map does, not from every
   region in `regionsTouching(box)`. A sheet straddling two regions prints the
   far side from the wrong archives, or none. It is held to one region
@@ -81,7 +83,7 @@ what is offered at a location.**
 - **Update 2026-11-16: the vector map is offered where the region in view
   declares one.** The vector basemap is each region's own extract
   (`Region.vector`), so `offeredBasemaps` lists it when
-  `vectorIn(regionInWrappedView(view))` is not null, not when a region
+  `vectorIn(regionInView(view))` is not null, not when a region
   touching the view lists it (no region lists it in `basemaps`), and falls to
   the world's archive only where no region is in view. The map, a route's
   snapping and a printed sheet read that one region's archive; a saved box
@@ -97,6 +99,26 @@ what is offered at a location.**
   `offeredBasemaps` and `basemapHere` take a box, so a call that passes the
   chosen region ids does not compile (the typecheck covers the tests), and
   `regions.test.ts` ("offeredBasemaps") holds what each view lists.
+- **Update 2026-11-14: the chosen regions also set the first-run units.** An
+  account that never chose its units reads those of its home region, the first
+  of its chosen regions in `REGIONS` order (`unitsOf`,
+  `shared/src/units.ts`); its own choice in Settings, offered only once a
+  region uses feet (`offersUnitsChoice`), replaces them while that choice is
+  offered. What a map offers at
+  a place still never reads the choice. Guard: `shared/src/units.test.ts`
+  ("unitsOf", "offersUnitsChoice"). Everything else above stands.
+- **Update 2026-11-15: the account's home region also decides which grade
+  attributes the lists with no map position name.** Settings, Place attributes;
+  the Canyon type's built-in rows; Logjam GPS's attributes step and editor; and the
+  import dialog's column targets list the grade fields of the system of the home
+  region's `canyonGrades` (`listedAttributeDefs`, `shared/src/canyonGrade.ts`), plus,
+  in the import dialog only, any grade field a place of the user holds a value on.
+  The ACA four are not listed over NSW. This does not break "never decide what is
+  offered at a location": these lists have no location, they are not drawn over a
+  place, and a place's own form and the filter sheet still follow the ground
+  ([0051](0051-a-lettered-grade-is-stored-as-its-rank.md) holds the rule). Guard:
+  `shared/src/canyonGrade.test.ts` ("the definitions an attribute list shows").
+  Everything else above stands.
 
 ## Consequences
 
@@ -112,7 +134,8 @@ what is offered at a location.**
 - **Negative:** with one region in prod, a layer switch outside NSW reads "Not
   available here" where it used to turn on and draw nothing.
 - **Neutral:** the region step and Settings section stay, and what they set
-  is a default. Home with several chosen regions is the first in `REGIONS`
+  is a default (updated 2026-11-15: and the grade attributes the lists with no map
+  position name, the last Update). Home with several chosen regions is the first in `REGIONS`
   order, as `defaultBasemapFor` already does.
 
 ## Alternatives considered

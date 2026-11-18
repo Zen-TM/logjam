@@ -2,8 +2,15 @@
 // GIS (GeoTIFF, GeoPackage) or a styled map for an offline app (MBTiles), made
 // by the export worker (topo/area_export.py, which mirrors these declarations:
 // topo/tests/test_area_export.py).
+import { boxCentre, gridZoneOf } from "./grids.js";
 import { nswContourStyle } from "./contourRules.js";
-import { layerIn, REGIONS, regionTouchesBox, type Region } from "./regions.js";
+import {
+  layerIn,
+  regionInView,
+  REGIONS,
+  regionTouchesBox,
+  type Region,
+} from "./regions.js";
 import { normalizeUserUiPreferences } from "./themeSchemes.js";
 import { say } from "./userSentence.js";
 
@@ -39,6 +46,26 @@ export type AreaBbox = {
 };
 
 /**
+ * The EPSG code of the grid the worker warps an export of this box to: the
+ * grid of a region with heights, in the zone at the box's centre. That is the
+ * region with heights holding the centre, else the first region with heights
+ * touching the box (the regions `areaInTerrainRegion` admits a box by, and
+ * the ones the data comes from), so a box over the edge of NSW stays in MGA
+ * however its centre falls. UTM when no region with heights touches the box.
+ * The API stores the code on the job beside the box, so the worker needs no
+ * regions of its own. Guard: `areaExport.test.ts`.
+ */
+export function areaExportEpsg(
+  bbox: AreaBbox,
+  regions: readonly Region[] = REGIONS,
+): number {
+  const { lon, lat } = boxCentre(bbox);
+  const withHeights = regions.filter((each) => layerIn(each, "heights"));
+  const region = regionInView(bbox, withHeights);
+  return gridZoneOf(region?.grid ?? "utm", lon, lat).epsg;
+}
+
+/**
  * The longest side a box may have. On the export task's size (4 vCPU, 8 GiB,
  * 20 GiB disk), a 100 km GeoPackage of all four layers took 10 min and made a
  * 2.8 GB file, with 4.3 GB of disk and 1.6 GB of memory at peak. 150 km fits
@@ -47,7 +74,10 @@ export type AreaBbox = {
  */
 export const AREA_EXPORT_MAX_SIDE_KM = 100;
 
-export const AREA_EXPORT_TOO_LARGE = say`A map can be up to ${AREA_EXPORT_MAX_SIDE_KM} km on a side. Choose a smaller area, or split it into smaller maps.`;
+// The limit is written out: a `say` hole takes a number, not a formatted
+// string, and the API sends this sentence as it is, in km. The test "says the
+// limit it enforces" (`areaExport.test.ts`) holds the 100 to the constant.
+export const AREA_EXPORT_TOO_LARGE = say`A map can be up to 100 km on a side. Choose a smaller area, or split it into smaller maps.`;
 
 /**
  * Names every region with terrain, which `say` cannot take as a hole: a

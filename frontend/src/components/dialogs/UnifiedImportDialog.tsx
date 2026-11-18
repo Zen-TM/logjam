@@ -30,6 +30,7 @@ import {
   defaultPlaceMergePolicy,
   mergeableFieldsForDefs,
   defsForType,
+  listedAttributeDefs,
   SYSTEM_PLACE_TYPE_IDS,
   type MatchCandidate,
   type PlaceMergePolicy,
@@ -279,12 +280,24 @@ function UnifiedImportDialog({
   const [importPlaceTypeId, setImportPlaceTypeId] = useState<string>(
     SYSTEM_PLACE_TYPE_IDS.canyon,
   );
+  /** A type's definitions as the import offers them: the grade fields of the
+   *  account's home region's system, and any a place of the user's holds a
+   *  value on (`listedAttributeDefs`). */
+  const importDefsFor = useCallback(
+    (placeTypeId: string) =>
+      listedAttributeDefs(
+        defsForType(placeCustomFieldDefs, placeTypeId),
+        currentUser?.uiPreferences,
+        places,
+      ),
+    [placeCustomFieldDefs, currentUser?.uiPreferences, places],
+  );
   /** The PLACE definitions in force for the chosen type — what the columns map
    *  onto. `defsForType` is the shared rule, so a header matches the same field
    *  here as it would in the place form. */
   const placeDefsForImportType = useMemo(
-    () => defsForType(placeCustomFieldDefs, importPlaceTypeId),
-    [placeCustomFieldDefs, importPlaceTypeId],
+    () => importDefsFor(importPlaceTypeId),
+    [importDefsFor, importPlaceTypeId],
   );
   // Changing the type re-detects the columns, because the mapping is against
   // THAT type's fields — leaving the old assignments would keep a canyon's
@@ -294,10 +307,7 @@ function UnifiedImportDialog({
     setImportPlaceTypeId(placeTypeId);
     if (!placeFile) return;
     setPlaceAssignments(
-      detectPlaceColumns(
-        placeFile.headers,
-        defsForType(placeCustomFieldDefs, placeTypeId),
-      ),
+      detectPlaceColumns(placeFile.headers, importDefsFor(placeTypeId)),
     );
   }
 
@@ -590,10 +600,7 @@ function UnifiedImportDialog({
       setImportPlaceTypeId(landsIn);
       setPlaceFile(loaded);
       setPlaceAssignments(
-        detectPlaceColumns(
-          parsed.headers,
-          defsForType(placeCustomFieldDefs, landsIn),
-        ),
+        detectPlaceColumns(parsed.headers, importDefsFor(landsIn)),
       );
     } else {
       setTripFile(loaded);

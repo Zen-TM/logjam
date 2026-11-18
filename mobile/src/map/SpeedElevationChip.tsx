@@ -24,7 +24,7 @@
 // logged.
 import { memo, useEffect, useState } from "react";
 import { StyleSheet, Text, View, useWindowDimensions } from "react-native";
-import { formatSpeedMps } from "@logjam/shared";
+import { formatHeight, formatSpeedMps } from "@logjam/shared";
 
 import {
   fontSize,
@@ -108,7 +108,7 @@ export const SpeedElevationChip = memo(function SpeedElevationChip({
   const elevation =
     figures.elevationM == null
       ? UNKNOWN
-      : keepWithValue(`${Math.round(figures.elevationM)} m`);
+      : keepWithValue(formatHeight(figures.elevationM));
   // Every figure from the position says how far to trust it: its age once the
   // fix is stale, "about" when it is a tower's guess (gpsSignal.ts). It takes
   // the label's place (over the figure, so "about" reads into it) because the

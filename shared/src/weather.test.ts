@@ -330,8 +330,8 @@ describe("weatherRows", () => {
 
   it("names the past row for its source and totals it", () => {
     expect(byKey.past.title).toBe("Modelled rain, past 7 days");
-    // Mutation: a plain space in formatRainMm lets a narrow card or a large
-    // font strand the unit on its own line.
+    // Mutation: `NBSP` in units.ts becomes a plain space, which lets a narrow
+    // card or a large font strand the unit on its own line.
     expect(byKey.past.summary).toBe("25\u00a0mm");
     expect(byKey.past.cards).toHaveLength(7);
     expect(byKey.past.cards[0]).toMatchObject({

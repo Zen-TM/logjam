@@ -114,7 +114,7 @@ export const ICONS = {
   region: { web: "globe", gps: "globe" }, // where someone canyons (regions.ts)
   place: { web: "map-pin", gps: "map-pin" },
   gauge: { web: "droplets", gps: "mci:water-outline" }, // a river gauge
-  mgaGrid: { web: "grid-3x3", gps: "grid" }, // the MGA grid overlay
+  mgaGrid: { web: "grid-3x3", gps: "grid" }, // the map grid overlay
   trip: { web: "book-open", gps: "book-open" },
   plan: { web: "clipboard-list", gps: "clipboard" }, // a trip plan, the Plans page
   form: { web: "text-cursor-input", gps: "mci:form-textbox" }, // a plan's form: a field to fill, not plan's clipboard or multiSelect's list

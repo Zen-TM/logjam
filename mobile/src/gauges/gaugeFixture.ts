@@ -6,6 +6,8 @@ export const gaugeFixture: GaugeLatestFile = {
   generatedAt: "2026-10-31T00:00:00.000Z",
   coldSweptAt: "2026-10-31T00:00:00.000Z",
   attribution: "© WaterNSW",
+  units: { level: "m", flow: "ML/d" },
+  dayOffsetMinutes: 600,
   gauges: [
     {
       id: "212290",

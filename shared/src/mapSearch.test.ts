@@ -10,7 +10,7 @@ import {
   SEARCH_STATUS,
   searchPinAfter,
 } from "./mapSearch";
-import { toEastingNorthing } from "./geoPdfExtent";
+import { toGridAt } from "./grids";
 import type { LonLatBox } from "./regions";
 
 const viewAround = (lat: number, lon: number): LonLatBox => ({
@@ -114,8 +114,8 @@ describe("parseCoordinates", () => {
   });
 
   // MapLibre's bounds run past ±180 after a pan around the world: the copy of
-  // the world a view sits in must not decide east or west. Mutation: drop the
-  // `wrapView` call in `parseLatLon`.
+  // the world a view sits in must not decide east or west. Mutation: pass
+  // `view` in place of `wrapBox(view)` in `mapCentre`.
   it.each([
     [
       "Sydney, 360 west",
@@ -154,18 +154,172 @@ describe("parseCoordinates", () => {
   ])("reads MGA %s", (text) => {
     const p = parseCoordinates(text)!;
     expect(p.label).toBe("MGA 56 245000 6264000");
-    const back = toEastingNorthing(p.lat, p.lon);
-    expect(back.zone).toBe(56);
+    const back = toGridAt(p.lat, p.lon);
+    expect(back.zone.name).toBe("MGA 56");
     expect(back.easting).toBeCloseTo(245000, 0);
+    expect(back.northing).toBeCloseTo(6264000, 0);
+  });
+
+  // Every input above is zone 56. Mutation: read every reference in zone 56.
+  it("reads a zone 55 reference in zone 55", () => {
+    const p = parseCoordinates("55 700000 6264000")!;
+    expect(p.label).toBe("MGA 55 700000 6264000");
+    const back = toGridAt(p.lat, p.lon);
+    expect(back.zone.name).toBe("MGA 55");
+    expect(back.easting).toBeCloseTo(700000, 0);
     expect(back.northing).toBeCloseTo(6264000, 0);
   });
 
   // Mutation: decimals back outside the capture groups (metres truncated).
   it("keeps the metres' decimals", () => {
     const p = parseCoordinates("56 245000.6 6264000.4")!;
-    const back = toEastingNorthing(p.lat, p.lon);
+    const back = toGridAt(p.lat, p.lon);
     expect(back.easting).toBeCloseTo(245000.6, 1);
     expect(back.northing).toBeCloseTo(6264000.4, 1);
+  });
+
+  // 40.7 N, 111.9 W is 12 423966 4505845 (a made-up point near Salt Lake City).
+  // A band letter is a latitude band: "12S" is north of the equator, and "N" is
+  // the first band north of it. Mutation: read any band letter as "south", or
+  // "N" as south (the `south` line of `parseGridReference`).
+  it.each([
+    ["12S 423966 4505845", OVER_UTAH],
+    ["12S 423966E 4505845N", OVER_NZ],
+    ["UTM 12T 423966 4505845", OVER_SYDNEY],
+    ["12N 423966 4505845", OVER_UTAH],
+    ["utm zone 12 423966 4505845", OVER_UTAH],
+  ])("reads the UTM reference %j", (text, view) => {
+    const p = parseCoordinates(text, view)!;
+    expect(p.label).toBe(`UTM 12 423966 4505845`);
+    expect(p.lat).toBeCloseTo(40.7, 3);
+    expect(p.lon).toBeCloseTo(-111.9, 3);
+  });
+
+  // With no letter the hemisphere is the map's. Mutation: always north, or
+  // always south, for a reference with no letter.
+  it.each([
+    ["12 423966 4505845", OVER_UTAH, 40.7, -111.9],
+    ["19 351205 6303224", viewAround(-33.4, -70.6), -33.4, -70.6],
+    ["19M 351205 6303224", OVER_UTAH, -33.4, -70.6],
+  ])(
+    "takes the hemisphere of the UTM reference %j from the map",
+    (text, view, lat, lon) => {
+      const p = parseCoordinates(text, view)!;
+      expect(p.lat).toBeCloseTo(lat, 3);
+      expect(p.lon).toBeCloseTo(lon, 3);
+    },
+  );
+
+  // Over no region an unprefixed zone 56 reads as MGA too, so this holds the
+  // prefix through the map's hemisphere. Mutation: make the MGA branch of
+  // `parseGridReference` need a southern map (`prefix === "MGA" && south`),
+  // and zone 56 over Utah reads as UTM north.
+  it("reads MGA over a map that is not over Australia when the text says MGA", () => {
+    const p = parseCoordinates("MGA 56 245000 6264000", OVER_UTAH)!;
+    expect(p.label).toBe("MGA 56 245000 6264000");
+    expect(p.lat).toBeCloseTo(-33.7, 0);
+  });
+
+  // The map decides what an unprefixed zone means: over Australia's grid only
+  // zones 54 to 56 are zones. Mutation: read a zone outside 54-56 as UTM even
+  // when the map is over MGA's region.
+  it("reads a zone number in the grid of the map: no UTM zone 12 over NSW without the name", () => {
+    expect(parseCoordinates("12 423966 4505845", OVER_SYDNEY)).toBeNull();
+    expect(parseCoordinates("12S 423966 4505845", OVER_SYDNEY)).toBeNull();
+    expect(
+      parseCoordinates("UTM 12S 423966 4505845", OVER_SYDNEY),
+    ).not.toBeNull();
+  });
+
+  // Mutation: gate the NZTM branch on the map alone, ignoring the "NZTM"
+  // prefix (`nz[1]` in `parseGridReference`): the Utah and Sydney rows go red.
+  it.each([
+    ["NZTM 1749046 5427521", OVER_UTAH],
+    ["nztm2000 1749046E 5427521N", OVER_SYDNEY],
+  ])("reads the NZTM reference %j wherever the map is", (text, view) => {
+    const p = parseCoordinates(text, view)!;
+    expect(p.label).toBe("NZTM 1749046 5427521");
+    expect(p.lat).toBeCloseTo(-41.29, 3);
+    expect(p.lon).toBeCloseTo(174.78, 3);
+  });
+
+  // A bare pair of seven-digit numbers is a reference only over an NZTM region
+  // (grids.test.ts, "reads a bare NZTM pair over an NZTM region"). Mutation:
+  // delete the lookahead after the zone in `REFERENCE`, which reads
+  // "1749046 5427521" as zone 1.
+  it.each([
+    ["1749046 5427521", OVER_UTAH],
+    ["1749046 5427521", OVER_SYDNEY],
+    ["1749046 5427521", null],
+  ])("does not read a bare pair %j far from NZ", (text, view) => {
+    expect(parseCoordinates(text, view)).toBeNull();
+  });
+
+  // What read before reads the same where the map is over no region, whichever
+  // hemisphere it looks at: zones 54 to 56 are MGA, with the MGA label.
+  // Mutation: read an unprefixed zone as UTM whenever the map is over no
+  // region (drop the `!nearGrid` branch of `parseGridReference`).
+  it.each([
+    ["56 245000 6264000", viewAround(40, -100), "MGA 56 245000 6264000"],
+    ["56H 245000 6264000", viewAround(40, -100), "MGA 56 245000 6264000"],
+    ["55 320000 5812000", viewAround(-37.8, 145), "MGA 55 320000 5812000"],
+  ])("reads %j over no region as MGA", (text, view, label) => {
+    const p = parseCoordinates(text, view)!;
+    expect(p.label).toBe(label);
+    expect(p.lat).toBeLessThan(-30);
+  });
+
+  // A band letter keeps its meaning outside an MGA region. Mutation: let the
+  // MGA branch ignore a northern band letter.
+  it("reads 55N over no region as UTM north", () => {
+    const p = parseCoordinates("55N 245000 6264000", OVER_UTAH)!;
+    expect(p.label).toBe("UTM 55 245000 6264000");
+    expect(p.lat).toBeGreaterThan(50);
+  });
+
+  // MGA's own zones need no gap before the easting; nothing else does.
+  // Mutation: delete the `(?<=5[456])` alternative from `REFERENCE`.
+  it.each(["56245000 6264000", "MGA 56245000 6264000", "mga56245000, 6264000"])(
+    "reads %j with no gap after the zone",
+    (text) => {
+      const p = parseCoordinates(text)!;
+      expect(p.label).toBe("MGA 56 245000 6264000");
+      expect(p.lat).toBeCloseTo(-33.7, 0);
+    },
+  );
+
+  // A six-digit northing is a northern UTM reference only. 1 N, 111 W is
+  // 12 400000 110574 (made up). Mutation: require a seven-digit northing
+  // again (`\d{6,7}` to `\d{7}` in `REFERENCE`); or drop the latitude check
+  // on an MGA point (the NSW row) or on a UTM one (the 19M row), which are what
+  // refuse a six-digit northing in the south.
+  it("reads a six-digit northing in the northern hemisphere only", () => {
+    const p = parseCoordinates("12N 400000 110574", OVER_UTAH)!;
+    expect(p.label).toBe("UTM 12 400000 110574");
+    expect(p.lat).toBeCloseTo(1, 1);
+    expect(parseCoordinates("12 400000 110574", OVER_UTAH)).not.toBeNull();
+    expect(parseCoordinates("56 245000 626400")).toBeNull(); // over NSW
+    expect(parseCoordinates("19M 351205 630322", OVER_UTAH)).toBeNull();
+    expect(parseCoordinates("MGA 56 245000 626400", OVER_UTAH)).toBeNull();
+  });
+
+  // Mutation: drop the zone range check, which reads zone 61 as zone 1, or
+  // drop the latitude check on a UTM point, or the latitude or the longitude
+  // check on an NZTM one.
+  it.each([
+    ["61 423966 4505845", OVER_UTAH],
+    ["0 423966 4505845", OVER_UTAH],
+    ["12S 423966 9500000", OVER_UTAH], // past 84 N
+    ["NZTM 1749046 1000000", OVER_UTAH], // nowhere near NZ
+    ["NZTM 1749046 9000000", OVER_UTAH],
+    ["NZTM 2900000 5427521", OVER_UTAH], // the right latitude, 1,300 km east of the zone
+    // Mutation: drop the easting range check, which projects these into a
+    // neighbouring zone under this zone's label.
+    ["UTM 12 999999 4000000", OVER_UTAH],
+    ["UTM 12 050000 4000000", OVER_UTAH],
+    ["MGA 55 950000 6264000", OVER_SYDNEY],
+  ])("does not read the grid reference %j", (text, view) => {
+    expect(parseCoordinates(text, view)).toBeNull();
   });
 
   it.each([

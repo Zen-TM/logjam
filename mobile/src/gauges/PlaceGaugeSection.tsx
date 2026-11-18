@@ -24,6 +24,7 @@ import { useGauges } from "./useGauges";
 const NEARBY = 8;
 
 export function PlaceGaugeSection({
+  feed,
   latitude,
   longitude,
   gaugeId,
@@ -31,6 +32,8 @@ export function PlaceGaugeSection({
   tripDates,
   onChange,
 }: {
+  /** The feed of the region the place is in (`gaugeFeedAt`): its gauges are read from there. */
+  feed: string;
   latitude: number;
   longitude: number;
   gaugeId: string | null | undefined;
@@ -43,7 +46,7 @@ export function PlaceGaugeSection({
   const copy = PLACE_PAGE.copy;
   const styles = useStyles();
   const [picking, setPicking] = useState(false);
-  const { file, settled, now } = useGauges(owned || !!gaugeId);
+  const { file, settled, now } = useGauges(owned || !!gaugeId ? feed : null);
   const chosen = gaugeId ? file?.gauges.find((g) => g.id === gaugeId) : null;
   return (
     <>
@@ -52,6 +55,7 @@ export function PlaceGaugeSection({
           <>
             <Text style={styles.note}>{gaugeDisplayName(chosen.name)}</Text>
             <TripGaugeReading
+              feed={feed}
               gaugeIds={[gaugeId]}
               dates={tripDatesFor(owned, tripDates)}
               when="lastTrip"
@@ -61,6 +65,7 @@ export function PlaceGaugeSection({
               gauge={chosen}
               attribution={file.attribution}
               generatedAt={file.generatedAt}
+              units={file.units}
               now={now}
             />
           </>
@@ -111,7 +116,7 @@ export function PlaceGaugeSection({
                     subtitle={[
                       formatDistanceM(distanceM),
                       level?.level != null && level.levelAt != null
-                        ? `${formatGaugeLevel(level.level)}, ${gaugeAgo(level.levelAt, now)}`
+                        ? `${formatGaugeLevel(level.level, file.units)}, ${gaugeAgo(level.levelAt, now)}`
                         : GAUGES.copy.noLevel,
                     ].join(" · ")}
                     onPress={() => {

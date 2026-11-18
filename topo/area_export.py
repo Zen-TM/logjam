@@ -15,10 +15,12 @@ file holds the numbers the map, the slope readout and Logjam GPS read:
   every 10 m) run over the exported heights, so the lines match the map's and
   come out whole instead of cut at every tile edge.
 
-Rasters are warped once into GDA2020 / MGA, the zone of the box's centre, at
-5 m: in web mercator a GIS computing slope from the heights would be off by
-1/cos(latitude). The z15 tiles are first written into one tiled GeoTIFF on
-disk, so memory stays flat however large the box: GDAL warps it in chunks.
+Rasters are warped once into the grid of the region the box is exported from
+(the API names its EPSG on the job: MGA in NSW, NZTM in New Zealand, a UTM
+zone where no region is), at 5 m: in web mercator a GIS computing slope from
+the heights would be off by 1/cos(latitude). The z15 tiles are first written
+into one tiled GeoTIFF on disk, so memory stays flat however large the box:
+GDAL warps it in chunks.
 
 Inside a sharpened area the user may read (ADR 0040), the API names the area
 and its place in the router's order (`sourceJobIds`, decided at submit). A
@@ -147,7 +149,8 @@ GetBytes = Callable[[int, int], bytes]
 
 
 def mga_epsg(lon: float) -> int:
-    """GDA2020 / MGA for the zone a longitude falls in (zone 55 is EPSG:7855)."""
+    """GDA2020 / MGA for the zone a longitude falls in (zone 55 is EPSG:7855).
+    A job an older API queued names no grid and falls back to this."""
     return 7800 + int((lon + 180) // 6) + 1
 
 
@@ -278,17 +281,17 @@ def tile_range(bbox: Bbox, zoom: int) -> Tuple[int, int, int, int]:
     return x0, y0, x1, y1
 
 
-def mga_extent(bbox: Bbox, epsg: int, cell: int = CELL_M) -> Tuple[Bbox, Bbox]:
-    """The MGA rectangle a box is warped to, on the cell's grid, and that
-    rectangle's own lon/lat bounds. The box is rotated in MGA, so the rectangle
-    reaches past it at the corners: the mosaic covers the lon/lat bounds, or
-    those corners come out no-data."""
-    wgs84, mga = osr.SpatialReference(), osr.SpatialReference()
+def grid_extent(bbox: Bbox, epsg: int, cell: int = CELL_M) -> Tuple[Bbox, Bbox]:
+    """The rectangle in the grid `epsg` that a box is warped to, on the cell's
+    grid, and that rectangle's own lon/lat bounds. The box is rotated in the
+    grid, so the rectangle reaches past it at the corners: the mosaic covers
+    the lon/lat bounds, or those corners come out no-data."""
+    wgs84, grid = osr.SpatialReference(), osr.SpatialReference()
     wgs84.ImportFromEPSG(4326)
-    mga.ImportFromEPSG(epsg)
-    for srs in (wgs84, mga):
+    grid.ImportFromEPSG(epsg)
+    for srs in (wgs84, grid):
         srs.SetAxisMappingStrategy(osr.OAMS_TRADITIONAL_GIS_ORDER)
-    xmin, ymin, xmax, ymax = osr.CoordinateTransformation(wgs84, mga).TransformBounds(
+    xmin, ymin, xmax, ymax = osr.CoordinateTransformation(wgs84, grid).TransformBounds(
         *bbox, 21
     )
     rect = (
@@ -297,7 +300,7 @@ def mga_extent(bbox: Bbox, epsg: int, cell: int = CELL_M) -> Tuple[Bbox, Bbox]:
         math.ceil(xmax / cell) * cell,
         math.ceil(ymax / cell) * cell,
     )
-    around = osr.CoordinateTransformation(mga, wgs84).TransformBounds(*rect, 21)
+    around = osr.CoordinateTransformation(grid, wgs84).TransformBounds(*rect, 21)
     return rect, tuple(around)
 
 
@@ -416,7 +419,7 @@ def write_mosaic(
 
 def run(*command: str, stderr_in_error: bool = True) -> None:
     """Raises with GDAL's stderr for the log. A warp with a cutline drops it
-    (`warp_to_mga` passes `stderr_in_error=False`): GDAL quotes a bad
+    (`warp_to_grid` passes `stderr_in_error=False`): GDAL quotes a bad
     geometry's coordinates there, and the log never carries a place
     (tests/test_area_export.py `CutlineErrors`)."""
     result = subprocess.run(command, capture_output=True, text=True)
@@ -425,7 +428,7 @@ def run(*command: str, stderr_in_error: bool = True) -> None:
         raise AreaExportError(f"{command[0]} failed{detail}")
 
 
-def warp_to_mga(
+def warp_to_grid(
     source: Path,
     out: Path,
     rect: Bbox,
@@ -478,8 +481,9 @@ def make_layers(
     cutline: Optional[Path] = None,
     credit: Optional[str] = None,
 ) -> Made:
-    """Every requested layer as a file in MGA, in `work`: the statewide 5 m
-    ones by default, or an area's at its zoom and cell, cut to its survey."""
+    """Every requested layer as a file in the grid `epsg`, in `work`: the
+    statewide 5 m ones by default, or an area's at its zoom and cell, cut to
+    its survey."""
     steps = plan(layers)
     if epsg is None:
         epsg = mga_epsg((bbox[0] + bbox[2]) / 2)
@@ -489,20 +493,20 @@ def make_layers(
         if not attribution:
             raise AreaExportError("the heights archive carries no attribution")
         credit = credit_line(layers, attribution)
-    rect, around = mga_extent(bbox, epsg, cell)
+    rect, around = grid_extent(bbox, epsg, cell)
     rasters: Dict[str, Path] = {}
 
     if steps["heights"]:
         mosaic = work / "heights-3857.tif"
         write_mosaic(heights_reader, around, mosaic, "heights", credit, zoom)
         rasters["heights"] = work / "heights.tif"
-        warp_to_mga(mosaic, rasters["heights"], rect, epsg, "bilinear", cell, cutline)
+        warp_to_grid(mosaic, rasters["heights"], rect, epsg, "bilinear", cell, cutline)
         mosaic.unlink()
     if steps["slope"]:
         mosaic = work / "slope-3857.tif"
         write_mosaic(Archive(archives["slope"]), around, mosaic, "slope", credit, zoom)
         rasters["slope"] = work / "slope.tif"
-        warp_to_mga(mosaic, rasters["slope"], rect, epsg, "near", cell, cutline)
+        warp_to_grid(mosaic, rasters["slope"], rect, epsg, "near", cell, cutline)
         mosaic.unlink()
     if steps["hillshade"]:
         shade = work / "hillshade-raw.tif"
@@ -1064,17 +1068,19 @@ def render_area(
     work: Path,
     style: Optional[dict] = None,
     areas: Sequence[AreaSource] = (),
+    epsg: Optional[int] = None,
 ) -> Path:
     """`style` is the export's style snapshot, which only an MBTiles draws.
     `areas` are the sharpened areas the API chose, in the router's order,
-    each with its archives."""
+    each with its archives. `epsg` is the grid the API chose for the box
+    (the MGA zone of its centre when a job has none: `mga_epsg`)."""
     allowed = LAYERS_BY_FORMAT.get(fmt)
     if allowed is None or not layers or any(l not in allowed for l in layers):
         raise AreaExportError(f"bad request: {fmt} {layers}")
     if fmt == "mbtiles":
         return render_mbtiles(archives, bbox, layers, style or {}, work, areas)
-    statewide = make_layers(archives, bbox, layers, work)
-    epsg = mga_epsg((bbox[0] + bbox[2]) / 2)
+    epsg = epsg or mga_epsg((bbox[0] + bbox[2]) / 2)
+    statewide = make_layers(archives, bbox, layers, work, epsg=epsg)
     mades = [statewide]
     for area, arch in areas:
         made = area_made(

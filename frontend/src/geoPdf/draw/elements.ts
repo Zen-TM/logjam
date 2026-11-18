@@ -4,16 +4,18 @@
 // same constants, so a browser GeoPDF looks like a server one.
 import { model as magneticModel } from "geomagnetism";
 import {
-  detectMgaZone,
   extractionCreditLine,
-  fromEastingNorthing,
   BASEMAP_CATALOG,
+  formatScaleStep,
   gridConvergence,
   overlayAttributionLines,
-  toEastingNorthing,
+  REGIONS,
+  scaleBarSteps,
   type GeoPdfConfig,
+  type Region,
   type TopoLayerName,
 } from "@logjam/shared";
+import { sheetGrid } from "../sheetGrid";
 import {
   ACCENT,
   DEG_TO_RAD,
@@ -29,14 +31,6 @@ import {
   TN_COLOR,
   type Ctx,
 } from "./common";
-
-const SCALE_BAR_DISTANCES = [100, 250, 500, 1000, 2000, 5000, 10000];
-
-/** Format distance label for scale bar */
-function formatDistance(m: number): string {
-  if (m >= 1000) return `${m / 1000} km`;
-  return `${m} m`;
-}
 
 export function drawRoundedRect(
   ctx: Ctx,
@@ -133,8 +127,9 @@ export function drawScaleBar(
     111320 *
     Math.cos(midLat * DEG_TO_RAD);
   const maxBarM = mapWidthM * 0.25;
-  let barDistM = SCALE_BAR_DISTANCES[0];
-  for (const d of SCALE_BAR_DISTANCES) {
+  const steps = scaleBarSteps("print");
+  let barDistM = steps[0];
+  for (const d of steps) {
     if (d <= maxBarM) barDistM = d;
     else break;
   }
@@ -145,7 +140,7 @@ export function drawScaleBar(
   const segments = 4;
   const segWidth = barWidthPx / segments;
 
-  const labelText = formatDistance(barDistM);
+  const labelText = formatScaleStep(barDistM);
   ctx.font = `${fontPx}px ${MAP_FONT}`;
   const labelW = ctx.measureText(labelText).width;
 
@@ -211,6 +206,7 @@ export function drawCompass(
   stackY: number,
   margin: number,
   dpi: number,
+  regions: readonly Region[] = REGIONS,
 ): number {
   const midLat = (config.extent.north + config.extent.south) / 2;
   const midLon = (config.extent.east + config.extent.west) / 2;
@@ -221,7 +217,11 @@ export function drawCompass(
   const magDecl = magInfo.decl as number; // degrees, positive = east
 
   // Grid convergence
-  const gridConv = gridConvergence(midLat, midLon);
+  const gridConv = gridConvergence(
+    midLat,
+    midLon,
+    sheetGrid(config.extent, regions).zone,
+  );
 
   // ── Layout ───────────────────────────────────────────────────────────────
   // Standard declination diagram: three arms from one origin at their TRUE
@@ -524,7 +524,7 @@ function drawHaloed(
 }
 
 /**
- * Draw an MGA grid label with the principal 2-digit grid reference in a
+ * Draw a grid label with the principal 2-digit grid reference in a
  * larger bold font, following standard topographic map conventions.
  */
 export function drawGridLabel(
@@ -541,9 +541,11 @@ export function drawGridLabel(
   drawHaloed(
     ctx,
     [
-      [String(Math.floor(km / 100)), small],
+      // A margin prints no sign: -10 km reads "99" then "90", as the same
+      // line does in the southern zone with its 10,000 km false northing.
+      [String(((Math.floor(km / 100) % 100) + 100) % 100), small],
       [
-        String(km % 100).padStart(2, "0"),
+        String(((km % 100) + 100) % 100).padStart(2, "0"),
         `bold ${largeFontSize}px ${MAP_FONT}`,
       ],
       ...(interval < 10000 ? [["000", small] as const] : []),
@@ -560,6 +562,7 @@ export function drawGridLines(
   widthPx: number,
   heightPx: number,
   dpi: number,
+  regions: readonly Region[] = REGIONS,
 ) {
   const { north, south, east, west } = config.extent;
   const fontPx = mmToPx(2, dpi);
@@ -570,15 +573,14 @@ export function drawGridLines(
   ctx.lineWidth = 2.5;
 
   if (config.elements.gridLines === "enNorthing") {
-    // MGA easting/northing grid
+    // Easting/northing grid
     const interval = config.scale <= 25000 ? 1000 : 10000;
 
-    // Use a single MGA zone based on the map centre to avoid cross-zone issues
-    const midLon = (east + west) / 2;
-    const zone = detectMgaZone(midLon);
-
-    const swEN = toEastingNorthing(south, west);
-    const neEN = toEastingNorthing(north, east);
+    // One grid zone, the one at the sheet's centre, read at both corners so a
+    // sheet across a zone edge or the equator gets one set of numbers
+    const grid = sheetGrid(config.extent, regions);
+    const swEN = grid.toGrid(south, west);
+    const neEN = grid.toGrid(north, east);
 
     const toPixel = (lat: number, lon: number) =>
       latLonToCanvasPx(lat, lon, config.extent, widthPx, heightPx);
@@ -587,8 +589,8 @@ export function drawGridLines(
     const startE = Math.ceil(swEN.easting / interval) * interval;
     const endE = Math.floor(neEN.easting / interval) * interval;
     for (let e = startE; e <= endE; e += interval) {
-      const topLL = fromEastingNorthing(e, neEN.northing, zone);
-      const botLL = fromEastingNorthing(e, swEN.northing, zone);
+      const topLL = grid.fromGrid(e, neEN.northing);
+      const botLL = grid.fromGrid(e, swEN.northing);
       const topPx = toPixel(topLL.lat, topLL.lon);
       const botPx = toPixel(botLL.lat, botLL.lon);
       ctx.beginPath();
@@ -610,8 +612,8 @@ export function drawGridLines(
     const startN = Math.ceil(swEN.northing / interval) * interval;
     const endN = Math.floor(neEN.northing / interval) * interval;
     for (let n = startN; n <= endN; n += interval) {
-      const leftLL = fromEastingNorthing(swEN.easting, n, zone);
-      const rightLL = fromEastingNorthing(neEN.easting, n, zone);
+      const leftLL = grid.fromGrid(swEN.easting, n);
+      const rightLL = grid.fromGrid(neEN.easting, n);
       const leftPx = toPixel(leftLL.lat, leftLL.lon);
       const rightPx = toPixel(rightLL.lat, rightLL.lon);
       ctx.beginPath();

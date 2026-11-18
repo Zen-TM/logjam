@@ -27,6 +27,7 @@ import {
   ATTRIBUTE_NOUN,
   contractSectionKeys,
   isSystemFieldDef,
+  listedAttributeDefs,
   ownAttributeCountLabel,
   ownTypeCountLabel,
   SETTINGS,
@@ -320,7 +321,9 @@ export function SettingsScreen({
         {sheet.kind === "fields" ? (
           <CustomFieldList
             entity={sheet.entity}
-            defs={defsFor(sheet.entity)}
+            defs={listedAttributeDefs(defsFor(sheet.entity), {
+              regions: regionIds,
+            })}
             onEdit={(def) =>
               setSheet({
                 kind: "fieldForm",

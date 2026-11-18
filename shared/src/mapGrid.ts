@@ -1,13 +1,13 @@
-// The MGA grid on the live map: GDA2020 / MGA lines, as GeoJSON in lon/lat.
-// A view across a zone edge gets both zones' grids, each cut at the edge
-// meridian, since the two grids sit at different angles there. Both clients
-// draw it from this one function (ADR 0020); the printed grid in the GeoPDF
-// follows the same two-digit label convention. Guard: mgaGrid.test.ts.
-import {
-  fromEastingNorthing,
-  MGA_ZONES,
-  toZoneEastingNorthing,
-} from "./geoPdfExtent.js";
+// The map grid on the live map, as GeoJSON in lon/lat: the grid of the ground
+// at the view's centre (MGA in NSW, NZTM in an NZTM region, UTM elsewhere;
+// grids.ts). A view across a zone edge gets both zones' grids, each cut at the
+// edge meridian, since the two grids sit at different angles there. Both
+// clients draw it from this one function (ADR 0020); the printed grid in the
+// GeoPDF follows the same two-digit label convention. Guards: mapGrid.test.ts,
+// and layerOrder.test.ts ("grid layers": each client calls `mapGrid`).
+import { fromGrid, gridZonesFor, toGrid, type GridZone } from "./grids.js";
+import { lonNear } from "./placeGeo.js";
+import { REGIONS, type Region } from "./regions.js";
 
 export interface GridBbox {
   west: number;
@@ -17,12 +17,12 @@ export interface GridBbox {
 }
 
 /** Below this zoom a grid is noise, and the lines are not built. */
-export const MGA_GRID_MIN_ZOOM = 9;
+export const GRID_MIN_ZOOM = 9;
 
 /** Metres between lines at `zoom`, or null when the grid is hidden. Each step
  *  keeps lines roughly 50 to 300 px apart. */
-export function mgaGridStep(zoom: number): 10000 | 1000 | 100 | null {
-  if (zoom < MGA_GRID_MIN_ZOOM) return null;
+export function gridStep(zoom: number): 10000 | 1000 | 100 | null {
+  if (zoom < GRID_MIN_ZOOM) return null;
   if (zoom < 13) return 10000;
   return zoom < 16 ? 1000 : 100;
 }
@@ -33,7 +33,7 @@ export function mgaGridStep(zoom: number): 10000 | 1000 | 100 | null {
  * GPS turns the map, and a turned view's extent reaches past the screen, so an
  * edge label lands off it.
  */
-export const MGA_GRID_STYLE = {
+export const GRID_STYLE = {
   lineWidth: 1,
   lineOpacity: 0.9,
   labelSpacing: 300,
@@ -45,16 +45,21 @@ type Line = {
   properties: { text: string };
   geometry: { type: "LineString"; coordinates: [number, number][] };
 };
-export type MgaGrid = { type: "FeatureCollection"; features: Line[] };
+export type MapGrid = { type: "FeatureCollection"; features: Line[] };
 
 const SEGMENTS = 8;
 
 /** The digits a map margin prints: km modulo 100, or hundreds of metres modulo
- *  1000 at the 100 m step ("84" for 6 284 000, "843" for 6 284 300). */
-export function mgaGridLabel(metres: number, step: number): string {
+ *  1000 at the 100 m step ("84" for 6 284 000, "843" for 6 284 300). A margin
+ *  prints no sign, so a northing south of the equator in a northern zone
+ *  ("-30" km) reads "70". */
+export function gridLabel(metres: number, step: number): string {
   return step >= 1000
-    ? String(Math.round(metres / 1000) % 100).padStart(2, "0")
-    : String(Math.round(metres / 100) % 1000).padStart(3, "0");
+    ? String(((Math.round(metres / 1000) % 100) + 100) % 100).padStart(2, "0")
+    : String(((Math.round(metres / 100) % 1000) + 1000) % 1000).padStart(
+        3,
+        "0",
+      );
 }
 
 type Pt = [number, number];
@@ -86,11 +91,15 @@ export function clipToLongitudes(
   return pieces.filter((c) => c.length > 1);
 }
 
-export function mgaGrid(bbox: GridBbox, zoom: number): MgaGrid {
-  const out: MgaGrid = { type: "FeatureCollection", features: [] };
-  const step = mgaGridStep(zoom);
+export function mapGrid(
+  bbox: GridBbox,
+  zoom: number,
+  regions: readonly Region[] = REGIONS,
+): MapGrid {
+  const out: MapGrid = { type: "FeatureCollection", features: [] };
+  const step = gridStep(zoom);
   if (step === null) return out;
-  for (const z of MGA_ZONES) {
+  for (const z of gridZonesFor(bbox, regions)) {
     const west = Math.max(bbox.west, z.west);
     const east = Math.min(bbox.east, z.east);
     if (west < east) zoneGrid(out, { ...bbox, west, east }, z, step);
@@ -100,18 +109,14 @@ export function mgaGrid(bbox: GridBbox, zoom: number): MgaGrid {
 
 /** One zone's lines over `bbox`, cut at the zone's edges but not at the
  *  view's, so lines still reach past a turned or panning view. */
-function zoneGrid(
-  out: MgaGrid,
-  bbox: GridBbox,
-  { zone, west, east }: (typeof MGA_ZONES)[number],
-  step: number,
-) {
+function zoneGrid(out: MapGrid, bbox: GridBbox, zone: GridZone, step: number) {
+  const { west, east } = zone;
   const corners = [
     [bbox.south, bbox.west],
     [bbox.south, bbox.east],
     [bbox.north, bbox.west],
     [bbox.north, bbox.east],
-  ].map(([lat, lon]) => toZoneEastingNorthing(lat, lon, zone));
+  ].map(([lat, lon]) => toGrid(lat, lon, zone));
   const eMin = Math.min(...corners.map((c) => c.easting));
   const eMax = Math.max(...corners.map((c) => c.easting));
   const nMin = Math.min(...corners.map((c) => c.northing));
@@ -119,8 +124,10 @@ function zoneGrid(
   if (![eMin, eMax, nMin, nMax].every(Number.isFinite)) return;
 
   const at = (e: number, n: number): Pt => {
-    const { lat, lon } = fromEastingNorthing(e, n, zone);
-    return [lon, lat];
+    const { lat, lon } = fromGrid(e, n, zone);
+    // fromGrid answers in [-180, 180]; a view in another world copy (MapLibre
+    // past the date line) wants the copy it is in, or the clip drops the line.
+    return [lonNear(lon, (bbox.west + bbox.east) / 2), lat];
   };
   const run = (from: number, to: number) =>
     Array.from(
@@ -131,7 +138,7 @@ function zoneGrid(
     for (const piece of clipToLongitudes(coordinates, west, east))
       out.features.push({
         type: "Feature",
-        properties: { text: mgaGridLabel(metres, step) },
+        properties: { text: gridLabel(metres, step) },
         geometry: { type: "LineString", coordinates: piece },
       });
   };

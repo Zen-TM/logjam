@@ -6,11 +6,12 @@ import { refreshGaugeHistories } from "./gaugeFeed";
 import { readCachedGaugeHistory } from "./gaugeStorage";
 
 /**
- * The kept daily history of some gauges at once, refreshed when the screen
+ * The kept daily history of some gauges of the feed at `feed` at once, refreshed when the screen
  * mounts and when the app returns to the front; offline, the kept files stand.
  * Null until the first read has finished.
  */
 export function useGaugeHistories(
+  feed: string,
   ids: string[],
 ): Record<string, GaugeHistoryFile> | null {
   const key = ids.join(",");
@@ -22,7 +23,9 @@ export function useGaugeHistories(
     const list = key.split(",");
     let live = true;
     const read = async () => {
-      const files = await Promise.all(list.map(readCachedGaugeHistory));
+      const files = await Promise.all(
+        list.map((id) => readCachedGaugeHistory(feed, id)),
+      );
       if (live)
         setFound(
           Object.fromEntries(
@@ -30,7 +33,7 @@ export function useGaugeHistories(
           ),
         );
     };
-    const refresh = () => refreshGaugeHistories(list).then(read);
+    const refresh = () => refreshGaugeHistories(feed, list).then(read);
     void read().then(refresh);
     const app = AppState.addEventListener("change", (s) => {
       if (s === "active") void refresh();
@@ -39,6 +42,6 @@ export function useGaugeHistories(
       live = false;
       app.remove();
     };
-  }, [key]);
+  }, [feed, key]);
   return found;
 }

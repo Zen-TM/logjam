@@ -26,7 +26,7 @@ import { VectorTile } from "@mapbox/vector-tile";
 import { PbfReader } from "pbf";
 
 import {
-  regionInWrappedView,
+  regionInView,
   REGIONS,
   vectorIn,
   WORLD,
@@ -46,7 +46,7 @@ export const SNAP_TILE_ZOOM = 15;
 
 /**
  * The archive a segment snaps to: the vector archive of the region in view over
- * the segment (`regionInWrappedView` on its box), or null where that region has
+ * the segment (`regionInView` on its box), or null where that region has
  * none or its archive stops short of `SNAP_TILE_ZOOM`, which reads as no ways
  * rather than as "not downloaded". Both clients ask this, so a segment snaps to
  * the same archive on either. Guard: `snapTiles.test.ts` ("snapArchiveFor").
@@ -58,7 +58,7 @@ export function snapArchiveFor(
   world: Region = WORLD,
 ): VectorArchive | null {
   const archive = vectorIn(
-    regionInWrappedView(
+    regionInView(
       {
         west: Math.min(from[0], to[0]),
         south: Math.min(from[1], to[1]),
