@@ -62,6 +62,7 @@ function QuestionField({
         <TextField
           label={label}
           hint={help}
+          prominentLabel
           required={question.required}
           type={question.kind === "phone" ? "tel" : "text"}
           autoComplete={question.kind === "phone" ? "tel" : "off"}
@@ -76,6 +77,7 @@ function QuestionField({
         <TextArea
           label={label}
           hint={help}
+          prominentLabel
           required={question.required}
           maxLength={TRIP_PLAN_LONG_TEXT_ANSWER_MAX_LENGTH}
           error={error}
@@ -89,6 +91,7 @@ function QuestionField({
           <NumberField
             label={label}
             hint={help}
+            prominentLabel
             required={question.required}
             constraints={{ integer: true, min: 0 }}
             value={typeof value === "string" ? value : ""}
@@ -102,7 +105,7 @@ function QuestionField({
       const options = tripPlanQuestionChoices(question);
       return (
         <div className={classes.question}>
-          <span className={classes.questionLabel} aria-hidden>
+          <span className={classes.questionPrompt} aria-hidden>
             {label}
           </span>
           {help && <p className={classes.note}>{help}</p>}
@@ -120,7 +123,7 @@ function QuestionField({
       const ticked = Array.isArray(value) ? value : [];
       return (
         <fieldset className={classes.question}>
-          <legend className={classes.questionLabel}>{label}</legend>
+          <legend className={classes.questionPrompt}>{label}</legend>
           {help && <p className={classes.note}>{help}</p>}
           {(question.options ?? []).map((option) => (
             <Checkbox

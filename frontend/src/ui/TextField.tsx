@@ -26,6 +26,9 @@ type FieldLabelling = {
   /** A line under the control saying what it means or what it takes. Visible,
    *  and read with the control, where a tooltip would be neither. */
   hint?: string;
+  /** A question someone answers: the label is set above its hint, in the text
+   *  colour, instead of looking like it. */
+  prominentLabel?: boolean;
   error?: string | null;
   /** Draws "Required" beside the label. The input's own `required` is what
    *  assistive technology reads; the mark is for the eye, and a form where
@@ -41,6 +44,7 @@ function Field({
   label,
   hideLabel = false,
   hint,
+  prominentLabel,
   error,
   requiredMark,
   reserveError,
@@ -51,11 +55,12 @@ function Field({
   className?: string;
   children: ReactNode;
 }) {
+  const labelClass = prominentLabel ? classes.labelProminent : classes.label;
   return (
     <div className={[classes.field, className].filter(Boolean).join(" ")}>
       {requiredMark && !hideLabel ? (
         <div className={classes.labelRow}>
-          <label htmlFor={inputId} className={classes.label}>
+          <label htmlFor={inputId} className={labelClass}>
             {label}
           </label>
           <span className={classes.required} aria-hidden>
@@ -65,7 +70,7 @@ function Field({
       ) : (
         <label
           htmlFor={inputId}
-          className={hideLabel ? "visually-hidden" : classes.label}
+          className={hideLabel ? "visually-hidden" : labelClass}
         >
           {label}
         </label>
@@ -125,6 +130,7 @@ export function TextField({
   label,
   hideLabel,
   hint,
+  prominentLabel,
   error,
   requiredMark,
   reserveError,
@@ -142,6 +148,7 @@ export function TextField({
       label={label}
       hideLabel={hideLabel}
       hint={hint}
+      prominentLabel={prominentLabel}
       error={error}
       requiredMark={requiredMark}
       reserveError={reserveError}
@@ -328,6 +335,7 @@ export function TextArea({
   label,
   hideLabel,
   hint,
+  prominentLabel,
   error,
   requiredMark,
   reserveError,
@@ -352,6 +360,7 @@ export function TextArea({
       label={label}
       hideLabel={hideLabel}
       hint={hint}
+      prominentLabel={prominentLabel}
       error={error}
       requiredMark={requiredMark}
       reserveError={reserveError}
@@ -384,6 +393,7 @@ export function Select({
   label,
   hideLabel,
   hint,
+  prominentLabel,
   error,
   requiredMark,
   reserveError,
@@ -402,6 +412,7 @@ export function Select({
       label={label}
       hideLabel={hideLabel}
       hint={hint}
+      prominentLabel={prominentLabel}
       error={error}
       requiredMark={requiredMark}
       reserveError={reserveError}

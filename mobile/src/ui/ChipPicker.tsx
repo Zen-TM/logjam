@@ -38,6 +38,7 @@ export function ChipPicker({
   hint,
   error,
   field = false,
+  prominentLabel,
 }: {
   label: string;
   options: ChipOption[];
@@ -60,6 +61,8 @@ export function ChipPicker({
   /** One question among a form's fields: labelled as a `Field` is, not
    *  headed as a vocabulary of its own (a trip's types). */
   field?: boolean;
+  /** With `field`: the label of a question someone answers (`Field`'s `prominentLabel`). */
+  prominentLabel?: boolean;
 }) {
   const theme = useTheme();
   const styles = useStyles();
@@ -123,7 +126,12 @@ export function ChipPicker({
   );
   if (field)
     return (
-      <Field label={label} hint={hint} error={error}>
+      <Field
+        label={label}
+        hint={hint}
+        prominentLabel={prominentLabel}
+        error={error}
+      >
         {chips}
       </Field>
     );
