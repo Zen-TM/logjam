@@ -155,7 +155,7 @@ export function useCopyPanel({
       : copyConfirm({
           count: targets.length,
           friendName,
-          ...(one ? { itemName, kindLabel } : {}),
+          ...(one ? { itemName, entityType: targets[0].entityType } : {}),
         });
 
   return {

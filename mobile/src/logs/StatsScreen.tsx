@@ -52,6 +52,7 @@ import {
   UNTAGGED_ACTIVITY,
   type FieldStat,
   type LogbookRange,
+  logbookRangeById,
   type LogbookStats,
   type SectionKeysOn,
   t,
@@ -120,15 +121,13 @@ export function StatsScreen({
   // Remembered per install rather than per screen: a drill-down is a pushed
   // screen with its own state, and having it silently reset the window the
   // numbers are read in would make the two screens disagree on screen.
-  const [rangeLabel, setRangeLabelState] = useState(
-    () => readPref(RANGE_PREF_KEY) ?? ranges[0].label,
-  );
-  const setRangeLabel = useCallback((label: string) => {
-    setRangeLabelState(label);
-    writePref(RANGE_PREF_KEY, label);
+  // The id, not the label: the label is in the language of the day.
+  const [rangeId, setRangeIdState] = useState(() => readPref(RANGE_PREF_KEY));
+  const setRangeId = useCallback((id: string) => {
+    setRangeIdState(id);
+    writePref(RANGE_PREF_KEY, id);
   }, []);
-  const range: LogbookRange =
-    ranges.find((entry) => entry.label === rangeLabel) ?? ranges[0];
+  const range: LogbookRange = logbookRangeById(ranges, rangeId);
 
   const stats = useMemo(
     () =>
@@ -195,10 +194,10 @@ export function StatsScreen({
         >
           {ranges.map((entry) => (
             <Chip
-              key={entry.label}
+              key={entry.id}
               label={entry.label}
-              active={entry.label === range.label}
-              onPress={() => setRangeLabel(entry.label)}
+              active={entry.id === range.id}
+              onPress={() => setRangeId(entry.id)}
             />
           ))}
         </ScrollView>

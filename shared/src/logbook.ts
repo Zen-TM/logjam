@@ -191,6 +191,8 @@ export function countTripsInLastMonths(
 // ── Ranges and spark buckets for the stats screen ──────────────────────
 
 export type LogbookRange = {
+  /** What a client keeps to remember the choice: the same in every language, unlike `label`. */
+  id: string;
   label: string;
   from: string | null;
   to: string | null;
@@ -214,9 +216,10 @@ export function datePresets(today: string = todayDateKey()): LogbookRange[] {
     .toISOString()
     .slice(0, 10);
   return [
-    { label: t`This year`, from: `${year}-01-01`, to: today },
-    { label: t`Last 12 months`, from: twelveMonths, to: today },
+    { id: "year", label: t`This year`, from: `${year}-01-01`, to: today },
+    { id: "12m", label: t`Last 12 months`, from: twelveMonths, to: today },
     {
+      id: `${year - 1}`,
       label: `${year - 1}`,
       from: `${year - 1}-01-01`,
       to: `${year - 1}-12-31`,
@@ -240,17 +243,30 @@ export function logbookRanges(
   const thisYear = Number(today.slice(0, 4));
   const covered = new Set([thisYear, thisYear - 1]);
   return [
-    { label: t`All time`, from: null, to: null },
+    { id: "all", label: t`All time`, from: null, to: null },
     ...datePresets(today),
     ...[...new Set(years)]
       .filter((year) => !covered.has(year))
       .sort((a, b) => b - a)
       .map((year) => ({
+        id: `${year}`,
         label: `${year}`,
         from: `${year}-01-01`,
         to: `${year}-12-31`,
       })),
   ];
+}
+
+/**
+ * The range a stored id names, else the first (all time). An id from before
+ * ids were stored (a translated label) or for a year with no trips any more
+ * reads as the default.
+ */
+export function logbookRangeById(
+  ranges: LogbookRange[],
+  id: string | null | undefined,
+): LogbookRange {
+  return ranges.find((range) => range.id === id) ?? ranges[0];
 }
 
 /** Twelve calendar-month buckets for ONE year — the spark for a year pill,

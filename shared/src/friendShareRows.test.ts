@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { afterEach, describe, it, expect } from "vitest";
 import type { FriendShareRow } from "./sharing.js";
 import { inTimeZone } from "./timeZone.testHelper.js";
 
@@ -294,7 +294,7 @@ describe("copyConfirm", () => {
       count: 1,
       friendName: FRIEND,
       itemName: "Claustral",
-      kindLabel: "place",
+      entityType: "place",
     });
     expect(confirm.title).toBe("Save a copy?");
     expect(confirm.body).toContain("“Claustral”");
@@ -313,7 +313,7 @@ describe("copyConfirm", () => {
         count: 1,
         friendName: FRIEND,
         itemName: "X",
-        kindLabel: "place",
+        entityType: "place",
       }).body,
     ).toContain("with its route");
     expect(
@@ -321,9 +321,26 @@ describe("copyConfirm", () => {
         count: 1,
         friendName: FRIEND,
         itemName: "X",
-        kindLabel: "route",
+        entityType: "route",
       }).body,
     ).not.toContain("with its route");
+  });
+
+  // Mutation: compare the entity type with a translated word
+  // (`args.entityType === t\`place\``), or fall back to `kindLabel`: the
+  // pseudo-language's route sentence stops differing between a place and a route.
+  describe("in a language other than English", () => {
+    afterEach(() => {
+      delete (globalThis as { LOGJAM_LANGUAGE?: string }).LOGJAM_LANGUAGE;
+    });
+
+    it("still promises the route only on a place", () => {
+      (globalThis as { LOGJAM_LANGUAGE?: string }).LOGJAM_LANGUAGE = "en-XA";
+      const body = (entityType: string) =>
+        copyConfirm({ count: 1, itemName: "X", entityType }).body;
+      expect(body("place")).not.toBe(body("route"));
+      expect(body("place")).toContain("⟦");
+    });
   });
 
   it("counts in the plural without naming rows or kinds", () => {
@@ -340,7 +357,7 @@ describe("copyConfirm", () => {
     const body = copyConfirm({
       count: 1,
       itemName: "Claustral",
-      kindLabel: "place",
+      entityType: "place",
     }).body;
     expect(body).toContain("stays if the owner stops sharing");
     expect(body).toContain("The owner's original is untouched");
