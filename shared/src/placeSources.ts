@@ -58,8 +58,8 @@ export function cleanSources(
 }
 
 /**
- * What a save does about `_sources`: nothing unless the user changed the rows.
- * Stored sources can hold what the form would refuse or drop (a CSV import
+ * What a save does about `_sources`: nothing unless the rows differ from the
+ * place as it is now. Stored sources can hold what the form would refuse or drop (a CSV import
  * keeps a scheme-less link and an unlabelled entry as they came), and an edit
  * to the name must not be refused for them or rewrite them.
  */
