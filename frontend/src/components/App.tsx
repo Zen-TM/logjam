@@ -777,7 +777,10 @@ function App() {
       (activePanel === "ways" || activePanel === "plan-detail" || showWays),
   );
   const { openPicker: openWayImportPicker, input: wayImportInput } =
-    useWayImport(refetchStandaloneFiles);
+    useWayImport(() => {
+      refetchStandaloneFiles();
+      refetchCurrentUser();
+    });
   const shownStandaloneIds = useMemo(
     () => (showWays ? standaloneFiles.map((file) => file.id) : []),
     [showWays, standaloneFiles],

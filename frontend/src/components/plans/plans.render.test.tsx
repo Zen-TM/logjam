@@ -58,6 +58,7 @@ import PlanAnswerDialog from "./PlanAnswerDialog";
 import PlanFormBuilderDialog from "./PlanFormBuilderDialog";
 import PlanItemEditDialog from "./PlanItemEditDialog";
 import PlanAddCopyDialog from "./PlanAddCopyDialog";
+import PlanNewPlaceDialog from "./PlanNewPlaceDialog";
 import PlanTripLogPlacesDialog from "./PlanTripLogPlacesDialog";
 import type { TPlace } from "../../placeUtils";
 
@@ -446,6 +447,28 @@ describe("a plan's page ends its views with their add buttons", () => {
         }),
       }),
     );
+  });
+
+  // Mutation: drop the placeDetailsInvalid guard from submit, and a position
+  // off the globe is sent for the API to refuse.
+  it("sends nothing while the place's details are invalid", () => {
+    vi.mocked(addPlanItem).mockClear();
+    render(
+      <PlanNewPlaceDialog
+        planId="p1"
+        at={{ latitude: -33.5, longitude: 150.25 }}
+        onSaved={() => {}}
+        onClose={() => {}}
+      />,
+    );
+    fireEvent.change(screen.getByLabelText(/^Name/), {
+      target: { value: "Water drop" },
+    });
+    fireEvent.change(screen.getByLabelText(/^Longitude/), {
+      target: { value: "999" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(addPlanItem).not.toHaveBeenCalled();
   });
 
   // Mutation: draw on the account (no onDrawRoute call), and the route is
