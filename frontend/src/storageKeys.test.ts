@@ -50,7 +50,7 @@ const KEPT: Record<string, string> = {
     "sort order reorders and never hides: a device preference",
   "logjam.tripSort": "sort order reorders and never hides: a device preference",
   "logjam.logbookStatsRange":
-    "a range label such as 'All time': a device preference",
+    "a range id such as 'all' or '2024': a device preference",
   "logjam.weatherModel": "the forecast model picked: a device preference",
   "logjam.leaderboard.podiumDismissed":
     "per device by design, holds a season and no user",

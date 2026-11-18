@@ -278,7 +278,8 @@ export function copyConfirm(args: {
    * The row's entity code (`"place"`, `"route"`), when only one row is being
    * copied — a place brings its route with it and a route does not, and the
    * sentence has to be right about which. A code, never a display word, because
-   * it is compared. Omit for a mixed or multi-row copy, which says neither.
+   * it is compared (guard: "still promises the route only on a place" in
+   * `friendShareRows.test.ts`). Omit for a mixed or multi-row copy, which says neither.
    */
   entityType?: string;
 }): { title: string; body: string } {
