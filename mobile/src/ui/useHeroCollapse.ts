@@ -5,7 +5,6 @@ import {
   useRef,
   useSyncExternalStore,
 } from "react";
-import { useIsFocused } from "@react-navigation/native";
 import {
   Animated,
   type LayoutChangeEvent,
@@ -77,8 +76,7 @@ type Scrollable = {
  * room.
  *
  * A page that is shown again (a tab, or a screen the user came back to) keeps
- * its scroll offset and its header follows it: the offset is only read while
- * the page is in view, and put back, with the header's value, when it returns.
+ * its scroll offset, and the header keeps following it (`setList`).
  *
  * On the screen: `CollapsingHeader` around the hero (`CollapsingHero`) and
  * the rows pinned under it; the list is a `HeroFlatList` / `HeroSectionList` /
@@ -142,9 +140,6 @@ export function useHeroCollapse() {
     paddedExtra: 0,
   });
   const settleRef = useRef<() => void>(() => undefined);
-  /** The page is out of view: a hidden list lays out at nothing and reports an
-   *  offset that is not the user's. */
-  const away = useRef(false);
 
   const scrollTo = useCallback(
     (y: number) => {
@@ -220,7 +215,6 @@ export function useHeroCollapse() {
       Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], {
         useNativeDriver: true,
         listener: (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-          if (away.current) return;
           const { contentOffset, contentSize, layoutMeasurement } =
             e.nativeEvent;
           const s = scroll.current;
@@ -286,11 +280,16 @@ export function useHeroCollapse() {
   );
 
   // A list that mounts again (Plans swaps its list for a loading state and
-  // back) starts at the top, whatever the old one had reached.
+  // back) starts at the top, whatever the old one had reached. The same list
+  // is handed its ref again whenever a page is shown again (`useMergeRefs`
+  // re-runs it when a prop's identity changes): that one has kept its offset,
+  // and so does the header.
+  const mounted = useRef<ListHandle | null>(null);
   const setList = useCallback(
     (instance: ListHandle | null) => {
       list.current = instance;
-      if (!instance) return;
+      if (!instance || instance === mounted.current) return;
+      mounted.current = instance;
       scrollY.setValue(0);
       Object.assign(scroll.current, {
         y: 0,
@@ -303,33 +302,6 @@ export function useHeroCollapse() {
     [patch, scrollY],
   );
   useEffect(() => () => clearTimeout(scroll.current.arrival), []);
-
-  const focused = useIsFocused();
-  useEffect(() => {
-    if (!focused) {
-      away.current = true;
-      return;
-    }
-    if (!away.current) return;
-    away.current = false;
-    const { y } = scroll.current;
-    scrollY.setValue(y);
-    patch({
-      collapsed:
-        distanceOf(metrics.current) > 0 && y >= distanceOf(metrics.current),
-      moving: false,
-    });
-    // After the page has laid out again, which a hidden one has not.
-    const frame = requestAnimationFrame(() => {
-      const handle = list.current;
-      const target = (handle?.getScrollResponder?.() ?? handle) as
-        | Scrollable
-        | null
-        | undefined;
-      target?.scrollTo?.({ y, animated: false });
-    });
-    return () => cancelAnimationFrame(frame);
-  }, [focused, patch, scrollY]);
 
   // What a screen reads, so it re-renders when the header's height or the end
   // room changes (a selection bar, a note, a search) and never for the collapse.

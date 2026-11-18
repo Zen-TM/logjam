@@ -259,12 +259,13 @@ describe("the hook", () => {
     expect(hook).toMatch(/Animated\.event\([\s\S]*useNativeDriver: true/);
     expect(hook).not.toContain("useNativeDriver: false");
   });
-  // Mutation: read the scroll offset while the page is hidden, or drop the
-  // restore on return: a page left scrolled comes back with the header full.
-  it("puts the header back to the list's offset when the page returns", () => {
-    expect(hook).toContain("if (away.current) return;");
-    expect(hook).toMatch(/scrollY\.setValue\(y\);/);
-    expect(hook).toMatch(/animated: false/);
+  // Mutation: drop the `instance === mounted.current` check from `setList`,
+  // and the list handed its ref again when a page is shown again is reset to
+  // the top: the header comes back expanded over a list that kept its offset.
+  it("resets only for a list it has not seen, not for the same one's ref again", () => {
+    expect(hook).toMatch(
+      /if \(!instance \|\| instance === mounted\.current\) return;\s*mounted\.current = instance;\s*scrollY\.setValue\(0\);/,
+    );
   });
   // Mutation: bring `LayoutAnimation` back, and the swap lays the list out again.
   it("never animates layout", () => {
