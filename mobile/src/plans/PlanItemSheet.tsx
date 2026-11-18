@@ -24,27 +24,19 @@ import {
   tripPlanSetAsideRows,
   tripPlanSame,
   tripPlanTheirsChanged,
-  SYSTEM_FIELD_DEFS,
   TRIP_PLAN_PAGE,
-  validatePlacePayload,
   type ItemWords,
   type PlanItemVerbId,
   type TripPlanItem,
   type TripPlanRole,
-  coordinateEntry,
 } from "@logjam/shared";
 
 import { unavailableReasonText } from "../auth/capabilities";
-import {
-  AttributeTable,
-  CustomFieldValueInputs,
-} from "../customFields/CustomFieldValues";
-import { coerceCustomFields } from "../customFields/fieldValueCoercion";
+import { AttributeTable } from "../customFields/CustomFieldValues";
 import { makeStyles, muted, spacing, useTheme } from "../theme";
 import {
   BottomSheet,
   Button,
-  DatePicker,
   ErrorBanner,
   FormStack,
   Row,
@@ -54,6 +46,8 @@ import {
 } from "../ui";
 import { deletePlanItem, patchPlanItem } from "./plansApi";
 import { afterPlanWrite } from "./plansCache";
+import { PlanDateEditor, PlanPlaceFields } from "./PlanPlaceFields";
+import { placeFormProblem } from "./planPlaceForm";
 
 const copy = TRIP_PLAN_PAGE.copy;
 const OFFLINE = unavailableReasonText("needs-connection");
@@ -170,28 +164,7 @@ export function PlanItemSheet({
 
   async function submit(target: TripPlanItem) {
     if (target.kind === "place") {
-      const defs = itemFieldDefs(target);
-      const attrs = Object.fromEntries(
-        defs.map((def) => [def.key, values[ITEM_ATTR + def.key] ?? ""]),
-      );
-      const blank = (text: string) => text.trim() === "";
-      const problem = validatePlacePayload(
-        {
-          latitude: blank(values.latitude)
-            ? undefined
-            : Number(values.latitude),
-          longitude: blank(values.longitude)
-            ? undefined
-            : Number(values.longitude),
-          elevation: blank(values.elevation) ? null : Number(values.elevation),
-          fieldValues: Object.fromEntries(
-            Object.entries(coerceCustomFields(attrs, defs)).filter(
-              ([, value]) => value != null,
-            ),
-          ),
-        },
-        { requireCoords: true, defs: [...SYSTEM_FIELD_DEFS, ...defs] },
-      );
+      const problem = placeFormProblem(values, itemFieldDefs(target));
       if (problem) return setError(problem);
     }
     const base = seen ?? target;
@@ -303,25 +276,14 @@ export function PlanItemSheet({
         </View>
       ) : null}
       {item && editing && dateKey ? (
-        <FormStack>
-          <DatePicker
-            value={dateValue || null}
-            onChange={(day) => set({ [ITEM_ATTR + dateKey]: day })}
-          />
-          {/* An attribute date may be unknown: a picker with no way back to
-              blank turns that into a wrong answer. */}
-          {dateValue ? (
-            <Button
-              label="Clear date"
-              icon="close"
-              variant="ghost"
-              onPress={() => {
-                set({ [ITEM_ATTR + dateKey]: "" });
-                setDateKey(null);
-              }}
-            />
-          ) : null}
-        </FormStack>
+        <PlanDateEditor
+          value={dateValue}
+          onChange={(day) => set({ [ITEM_ATTR + dateKey]: day })}
+          onClear={() => {
+            set({ [ITEM_ATTR + dateKey]: "" });
+            setDateKey(null);
+          }}
+        />
       ) : null}
       {item && editing && !dateKey ? (
         <FormStack>
@@ -334,68 +296,13 @@ export function PlanItemSheet({
           />
           {item.kind === "place" ? (
             <>
-              <TextField
-                label={copy.itemAlsoKnownAs}
-                value={values.altNames}
-                hint={theirs("altNames") ?? copy.itemAlsoKnownAsHint}
-                autoCapitalize="words"
-                onChangeText={(altNames) => set({ altNames })}
+              <PlanPlaceFields
+                values={values}
+                defs={attrDefs}
+                set={set}
+                onPickDate={setDateKey}
+                theirs={theirs}
               />
-              <View style={styles.coordRow}>
-                <View style={styles.coordField}>
-                  <TextField
-                    label={copy.itemLatitude}
-                    value={values.latitude}
-                    hint={theirs("latitude")}
-                    keyboardType="numbers-and-punctuation"
-                    onChangeText={(next) =>
-                      set(coordinateEntry(next, "latitude", values.latitude))
-                    }
-                  />
-                </View>
-                <View style={styles.coordField}>
-                  <TextField
-                    label={copy.itemLongitude}
-                    value={values.longitude}
-                    hint={theirs("longitude")}
-                    keyboardType="numbers-and-punctuation"
-                    onChangeText={(next) =>
-                      set(coordinateEntry(next, "longitude", values.longitude))
-                    }
-                  />
-                </View>
-              </View>
-              <TextField
-                label={copy.itemElevation}
-                value={values.elevation}
-                hint={theirs("elevation")}
-                keyboardType="numbers-and-punctuation"
-                onChangeText={(elevation) => set({ elevation })}
-              />
-              <TextField
-                label={copy.itemNotes}
-                value={values.notes}
-                hint={theirs("notes")}
-                multiline
-                autoCapitalize="sentences"
-                onChangeText={(notes) => set({ notes })}
-              />
-              {attrDefs.length > 0 ? (
-                <>
-                  <SectionHeader title={copy.itemAttributes} />
-                  <CustomFieldValueInputs
-                    defs={attrDefs}
-                    values={Object.fromEntries(
-                      attrDefs.map((def) => [
-                        def.key,
-                        values[ITEM_ATTR + def.key] ?? "",
-                      ]),
-                    )}
-                    onChange={(key, next) => set({ [ITEM_ATTR + key]: next })}
-                    onPickDate={setDateKey}
-                  />
-                </>
-              ) : null}
               {item?.kind === "place" &&
               tripPlanSetAsideRows(item).length > 0 ? (
                 <>
@@ -414,8 +321,6 @@ export function PlanItemSheet({
 
 const useStyles = makeStyles((theme, textRole) => ({
   verbs: { gap: spacing(1) },
-  coordRow: { flexDirection: "row", gap: spacing(1) },
-  coordField: { flex: 1 },
   rule: { height: StyleSheet.hairlineWidth, backgroundColor: theme.line },
   note: { ...muted(theme, textRole.detail) },
 }));

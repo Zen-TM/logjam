@@ -107,7 +107,6 @@ import {
   nswContourStyle,
   MAP_INK,
   TRIP_PLAN_PAGE,
-  planRouteNotAdded,
   type SharpenedArea,
   type SearchPin,
   searchPinAfter,
@@ -119,7 +118,7 @@ import {
   planModeReducer,
   planModeStart,
 } from "../plans/planMap";
-import { addDrawnRouteToPlan } from "../plans/addDrawnRoute";
+import { addDrawnRouteToPlan, drawnRouteTarget } from "../plans/addDrawnRoute";
 import { readCachedPlan } from "../plans/plansCache";
 import { PlanPlaceSheet } from "../plans/PlanPlaceSheet";
 
@@ -918,13 +917,15 @@ export function MapScreen({
   // it.
   drawRouteFor?: {
     placeId: string | null;
-    /** Drawn from this plan's page: the finished route goes into it. */
+    /** Drawn from this plan's page: the finished route is made in it, in a
+     *  colour from `planRouteColors` that the plan's ways lack. */
     planId?: string;
+    planRouteColors?: string[];
     nonce: number;
   } | null;
   /** Back to a plan's page: its banner was tapped, or a route drawn for it
    *  was saved. */
-  onOpenPlan?: (planId: string) => void;
+  onOpenPlan?: (planId: string, notice?: string) => void;
   // "Continue recording" from the Saved tab: pick a finished track back up. An
   // id only; the row comes from this screen's own list. It lands here rather
   // than being done on Saved because arming the recorder needs the location
@@ -2112,9 +2113,39 @@ export function MapScreen({
       // Anchors ride along so a snapped route reopens with the user's own
       // handful of vertices rather than every snapped one.
       const anchors = routeDraft.anchorIndices();
-      let planForRoute: { planId: string; routeId: string } | null = null;
+      const target = drawnRouteTarget({
+        editingRouteId,
+        placeId: draftPlaceId,
+        planId: draftPlanId,
+      });
       setSavingRoute(true);
       try {
+        if (target === "plan" && draftPlanId) {
+          // Made in the plan alone: nothing is saved on this phone. A refusal
+          // (offline, a plan that is archived now) leaves the draft armed.
+          try {
+            await addDrawnRouteToPlan(draftPlanId, {
+              name,
+              points,
+              anchors,
+              ...(draftColor ? { color: draftColor } : {}),
+            });
+          } catch (err) {
+            console.error(err);
+            notify(
+              messageFromError(err, TRIP_PLAN_PAGE.copy.addCopyFailed),
+              "error",
+            );
+            return;
+          }
+          const planId = draftPlanId;
+          setNamingRoute(false);
+          routeDraft.close();
+          setDraftPlanId(null);
+          setDraftColor(null);
+          onOpenPlan?.(planId, TRIP_PLAN_PAGE.copy.routeAdded);
+          return;
+        }
         if (editingRouteId) {
           await updateRouteLocal(editingRouteId, {
             name,
@@ -2151,13 +2182,12 @@ export function MapScreen({
           // was, so the user can pick a different name or back out themselves.
           if (!filled) return;
         } else {
-          const routeId = await createRouteLocal({
+          await createRouteLocal({
             name,
             points,
             anchors,
             ...(draftColor ? { color: draftColor } : {}),
           });
-          planForRoute = draftPlanId ? { planId: draftPlanId, routeId } : null;
         }
         setNamingRoute(false);
         routeDraft.close();
@@ -2165,14 +2195,6 @@ export function MapScreen({
         setDraftPlaceId(null);
         setDraftPlanId(null);
         setDraftColor(null);
-        if (planForRoute) {
-          const { planId, routeId } = planForRoute;
-          if (await addDrawnRouteToPlan(planId, routeId)) onOpenPlan?.(planId);
-          else {
-            const notAdded = planRouteNotAdded();
-            notify(`${notAdded.title}. ${notAdded.body}`, "error");
-          }
-        }
       } catch (err) {
         console.error(err);
         notify("Couldn't save that route.", "error");
@@ -3183,7 +3205,13 @@ export function MapScreen({
       setEditingRouteId(null);
       setDraftPlaceId(drawRouteFor.placeId);
       setDraftPlanId(drawRouteFor.planId ?? null);
-      setDraftColor(pickNextTrackColor(routes.data?.map((r) => r.color) ?? []));
+      setDraftColor(
+        pickNextTrackColor(
+          drawRouteFor.planId
+            ? (drawRouteFor.planRouteColors ?? [])
+            : (routes.data?.map((r) => r.color) ?? []),
+        ),
+      );
     };
     if (routeDraft.active && routeDraft.points.length > 0) {
       handleCancelRouteDraw(arm);

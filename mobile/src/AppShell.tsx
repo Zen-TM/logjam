@@ -167,8 +167,10 @@ type MapStackParams = {
         // from Saved's add sheet the id is null and the route stands alone.
         drawRouteFor?: {
           placeId: string | null;
-          /** From a plan's page: the finished route is added to it. */
+          /** From a plan's page: the finished route is made in it, in a colour
+           *  its other ways lack. */
           planId?: string;
+          planRouteColors?: string[];
           nonce: number;
         };
         // `continueTrack` = "Continue recording" from Saved: pick a finished
@@ -293,10 +295,15 @@ type MoreStackParams = {
   Plan: {
     planId: string;
     name: string;
-    view?: "people";
+    view?: "people" | "items";
     invited?: boolean;
     joined?: boolean;
+    /** Said once as a toast on arrival: a route drawn for the plan was added. */
+    notice?: string;
   };
+  // A new place's point, picked on a map. The answer comes back in memory
+  // through `map/pickedPoint.ts`; nothing travels here.
+  PlanPickPoint: undefined;
   Account: undefined;
   Friends: undefined;
   // The per-friend sharing audit, pushed from a friend's overflow sheet. Params
@@ -467,7 +474,7 @@ function MapStackNav() {
             planMode={route.params?.planMode ?? null}
             // The whole More stack is named, so Back from the plan lands on
             // Plans, whatever More held when the user left for the map.
-            onOpenPlan={(planId) =>
+            onOpenPlan={(planId, notice) =>
               navigation.getParent()?.navigate("More", {
                 state: {
                   routes: [
@@ -479,6 +486,7 @@ function MapStackNav() {
                         planId,
                         name: TRIP_PLANS_LIST.title,
                         view: "items",
+                        notice,
                       },
                     },
                   ],
@@ -1550,6 +1558,7 @@ export function AppShell({
                           name={route.params.name}
                           initialView={route.params.view}
                           joined={route.params.joined}
+                          arrival={route.params.notice}
                           onBack={() => navigation.goBack()}
                           backLabel={backLabelOf(
                             navigation.getState(),
@@ -1566,17 +1575,21 @@ export function AppShell({
                               },
                             })
                           }
-                          onDrawRoute={(planId) =>
+                          onDrawRoute={(planId, planRouteColors) =>
                             navigation.getParent()?.navigate("Map", {
                               screen: "MapView",
                               params: {
                                 drawRouteFor: {
                                   placeId: null,
                                   planId,
+                                  planRouteColors,
                                   nonce: Date.now(),
                                 },
                               },
                             })
+                          }
+                          onPickPoint={() =>
+                            navigation.navigate("PlanPickPoint")
                           }
                           onDownloadMap={(bounds) =>
                             navigation.navigate("MoreRegionDownload", {
@@ -1591,6 +1604,22 @@ export function AppShell({
                         />
                       )
                     }
+                  </MoreStack.Screen>
+                  <MoreStack.Screen
+                    name="PlanPickPoint"
+                    options={{ headerShown: false }}
+                  >
+                    {({ navigation }) => (
+                      <PickPointScreen
+                        initialPoint={null}
+                        subject="place"
+                        onCancel={() => navigation.goBack()}
+                        onConfirm={(point) => {
+                          setPickedPoint(point);
+                          navigation.goBack();
+                        }}
+                      />
+                    )}
                   </MoreStack.Screen>
                   <MoreStack.Screen
                     name="Account"
