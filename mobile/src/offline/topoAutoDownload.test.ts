@@ -99,6 +99,8 @@ describe("a regained signal", () => {
     expect(apiFetch).not.toHaveBeenCalled();
   });
 
+  // Mutation: invert the guard in `requestRun` to `!== "background"`, and
+  // nothing runs in front.
   it("checks when the app is in front", async () => {
     await reconnect();
     expect(apiFetch).toHaveBeenCalledOnce();
@@ -106,6 +108,7 @@ describe("a regained signal", () => {
 
   // Android reports "unknown" until the first AppState event, and the check at
   // launch runs inside that window.
+  // Mutation: `!== "active"` in `requestRun`.
   it("checks while AppState is still unknown", async () => {
     appState.currentState = "unknown";
     await reconnect();

@@ -3,7 +3,8 @@
 // WHEN IT CHECKS: on app start, on return to the foreground, and when a
 // connection is regained, each only in the foreground: the three moments the
 // sync engine uses, and never a background timer, because battery is a field
-// resource (ADR 0013).
+// resource (ADR 0013). Guard: src/batteryRules.test.ts (the reconnect
+// callbacks).
 //
 // WHAT IT TAKES: every layer of every completed job the account has, once each.
 // That is deliberately simple rather than
@@ -155,6 +156,7 @@ function requestRun(): void {
   // foreground runs again. `=== "background"`, not `!== "active"`, as
   // `sync/syncEngine.ts` has it: Android reports "unknown" until the first
   // AppState event, and the run at launch sits inside that window.
+  // Guard: src/batteryRules.test.ts (the reconnect callbacks).
   if (AppState.currentState === "background") return;
   if (Date.now() - lastRunAt < MIN_INTERVAL_MS) return;
   lastRunAt = Date.now();

@@ -428,6 +428,7 @@ function requestCheck(): void {
   // foreground checks again. `=== "background"`, not `!== "active"`, as
   // `sync/syncEngine.ts` has it: Android reports "unknown" until the first
   // AppState event, and the check at launch runs inside that window.
+  // Guard: src/batteryRules.test.ts (the reconnect callbacks).
   if (AppState.currentState === "background") return;
   if (Date.now() - lastCheckAt < MIN_INTERVAL_MS) return;
   lastCheckAt = Date.now();
