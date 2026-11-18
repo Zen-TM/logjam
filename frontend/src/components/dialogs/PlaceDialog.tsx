@@ -180,8 +180,9 @@ function PlaceDialog({
   const [media, setMedia] = useState<MediaItem[]>([]);
   const [mediaLoading, setMediaLoading] = useState(false);
   const [draftPlaceId, setDraftPlaceId] = useState<string | null>(null);
-  // Files this open of the dialog has uploaded. They are saved the moment they
-  // land, so they count as an unsaved change and Discard takes them back out.
+  // Photos and videos this open of the dialog has uploaded (and, on a new place,
+  // its route file). They are saved the moment they land, so they count as an unsaved change and Discard takes
+  // them back out.
   const [uploadedIds, setUploadedIds] = useState<string[]>([]);
   // Uploads in flight, across the dialog's drop zones.
   const [uploading, setUploading] = useState(0);
@@ -318,7 +319,8 @@ function PlaceDialog({
   // Real dirty-check: current form fields vs. the snapshot taken when the
   // dialog was (re)populated — not just "the dialog is open".
   // Custom-field-def edits are excluded: they persist through their own
-  // endpoint. Uploads persist too, but only Discard can undo them.
+  // endpoint. Photo and video uploads persist too, but only Discard can undo
+  // them; a way added from the Route section is saved at once, as on the page.
   const isDirty =
     open &&
     initialFormSnapshot !== null &&

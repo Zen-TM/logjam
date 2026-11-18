@@ -558,10 +558,12 @@ describe("adding a route from the edit dialog", () => {
     );
   });
 
-  // Mutation: pass the draw hand-off whatever `clean` says: unsaved edits go
-  // when the dialog closes.
-  it("offers no pen once the form holds edits", async () => {
-    renderPanel({ verbRequest: { id: "edit" } });
+  // Mutation: drop `drawBlockedReason` for a dirty form (the row is then
+  // pressable and closes the dialog on unsaved edits), or drop the row there
+  // (DESIGN.md §5: disabled with a reason, not absent).
+  it("keeps the pen's row, disabled with a reason, once the form holds edits", async () => {
+    const onDrawRoute = vi.fn();
+    renderPanel({ verbRequest: { id: "edit" }, onDrawRoute });
     const dialog = await editDialog();
     fireEvent.change(within(dialog).getByRole("textbox", { name: /^Name/ }), {
       target: { value: "Claustral Canyon" },
@@ -572,11 +574,18 @@ describe("adding a route from the edit dialog", () => {
     const addWay = await screen.findByRole("dialog", {
       name: ADD_WAY.copy.title,
     });
-    expect(
-      within(addWay).queryByRole("button", {
-        name: new RegExp(ADD_WAY.copy.drawTitle),
-      }),
-    ).toBeNull();
+    const draw = within(addWay).getByRole("button", {
+      name: new RegExp(ADD_WAY.copy.drawTitle),
+    });
+    expect(draw.getAttribute("aria-disabled")).toBe("true");
+    // jsdom has no Popover API: the tooltip needs these to open.
+    HTMLElement.prototype.showPopover = () => {};
+    HTMLElement.prototype.hidePopover = () => {};
+    fireEvent.focus(draw);
+    expect(await screen.findByText("Save your changes first.")).toBeTruthy();
+    fireEvent.click(draw);
+    expect(onDrawRoute).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog", { name: "Edit place" })).toBeTruthy();
     expect(
       within(addWay).getByRole("button", {
         name: new RegExp(ADD_WAY.copy.routeTitle),

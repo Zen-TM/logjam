@@ -2333,6 +2333,8 @@ function Map({
       // the user was trying to delete.
       if (Date.now() - handlePressedAt.current < HANDLE_CLICK_SUPPRESS_MS)
         return;
+      // A pick armed over the draft owns the click, as it does for Enter.
+      if (pickModeRef.current) return;
       placeDrawPointRef.current(e.lngLat);
     };
     map.on("click", handleClick);

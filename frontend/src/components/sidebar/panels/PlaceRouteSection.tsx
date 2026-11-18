@@ -41,6 +41,7 @@ export default function PlaceRouteSection({
   onFilled,
   onDeleteFile,
   onDrawRoute,
+  drawBlockedReason,
 }: {
   place: Pick<TPlace, "id" | "name">;
   owned: boolean;
@@ -57,8 +58,9 @@ export default function PlaceRouteSection({
   /** The slot was filled: refetch the routes, the media and the quota. */
   onFilled: () => void;
   onDeleteFile: (file: MediaItem) => void;
-  /** Absent when the map's pen cannot be taken up from where this is shown. */
-  onDrawRoute?: () => void;
+  onDrawRoute: () => void;
+  /** Why the map's pen cannot be taken up from where this is shown, just now. */
+  drawBlockedReason?: string;
 }) {
   const toast = useToast();
   const [addingWay, setAddingWay] = useState(false);
@@ -177,6 +179,7 @@ export default function PlaceRouteSection({
             media={media}
             onClose={() => setAddingWay(false)}
             onDrawRoute={onDrawRoute}
+            drawBlockedReason={drawBlockedReason}
             onFilled={onFilled}
           />
         </>

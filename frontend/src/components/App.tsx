@@ -1685,12 +1685,16 @@ function App() {
     measure: { onSelect: () => startMeasuring() },
     route: { onSelect: () => startDrawingRoute() },
     // Where first: the form opens on the spot picked, and a cancel opens nothing.
+    // Over a pick already armed (a form's Select on map) it does nothing: a
+    // second callback would replace the form's and lose its pick.
     place: {
-      onSelect: () =>
+      onSelect: () => {
+        if (pickingCoords) return;
         startPickingCoords((latitude, longitude) => {
           setAddPlaceAt({ latitude, longitude });
           setShowAdd(true);
-        }),
+        });
+      },
     },
     makeMap: {
       onSelect: () => {

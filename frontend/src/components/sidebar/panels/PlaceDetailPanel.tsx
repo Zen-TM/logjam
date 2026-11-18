@@ -689,7 +689,7 @@ function PlaceDetailPanel({
     (m) => mediaCategory(m.mediaType) !== "track",
   );
 
-  const routeSection = (draw?: () => void) => (
+  const routeSection = (draw: () => void, drawBlockedReason?: string) => (
     <PlaceRouteSection
       place={current}
       owned={isOwnedPlace}
@@ -708,6 +708,7 @@ function PlaceDetailPanel({
       }}
       onDeleteFile={setFileToDelete}
       onDrawRoute={draw}
+      drawBlockedReason={drawBlockedReason}
     />
   );
 
@@ -1149,15 +1150,14 @@ function PlaceDetailPanel({
         placeTypes={placeTypes}
         onMediaChanged={reloadPlaceMedia}
         // The pen takes the map over from under the dialog, so unsaved edits
-        // would go: the dialog offers it only while it holds none.
+        // would go: the row waits until the form holds none.
         routeSection={(clean) =>
           routeSection(
-            clean
-              ? () => {
-                  setShowEdit(false);
-                  onDrawRoute(current.id);
-                }
-              : undefined,
+            () => {
+              setShowEdit(false);
+              onDrawRoute(current.id);
+            },
+            clean ? undefined : "Save your changes first.",
           )
         }
       />
