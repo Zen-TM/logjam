@@ -22,6 +22,7 @@ import {
   mediaDisplayName,
   messageFromError,
   planAddVerbLabel,
+  planItemAddVerbs,
   tripPlanAddedMessage,
   planItemVerbs,
   TRIP_PLAN_MAX_FORMS,
@@ -111,7 +112,6 @@ import {
 import { openablePlanMedia, planFiles } from "./planFiles";
 import { PlanNewPlaceSheet } from "./PlanNewPlaceSheet";
 import { PlanPlaceSheet } from "./PlanPlaceSheet";
-import { itemAddVerbs } from "./planAdds";
 import { planBbox } from "./planMap";
 import { itemTitle, PlanItemSheet } from "./PlanItemSheet";
 import { PlanOptionsSheet } from "./PlanOptionsSheet";
@@ -566,7 +566,7 @@ function PlanPage({
         <Items
           plan={plan}
           online={online}
-          verbs={itemAddVerbs(plan.myRole, archived)}
+          verbs={planItemAddVerbs("gps", plan.myRole, archived)}
           me={myId}
           onInfo={notify}
           onError={(text) => notify(text, "error")}

@@ -3,7 +3,6 @@
 import {
   ITEM_ATTR,
   newPlaceFromWords,
-  newPlaceWords,
   SYSTEM_FIELD_DEFS,
   validatePlacePayload,
   type ItemWords,
@@ -38,20 +37,6 @@ export function placeFormProblem(
     },
     { requireCoords: true, defs: [...SYSTEM_FIELD_DEFS, ...defs] },
   );
-}
-
-/** A new place's words after its type changed: a type has its own attributes,
- *  so the ones typed under the last one go and everything else stays. */
-export function retypePlaceWords(was: ItemWords, typeId: string): ItemWords {
-  return {
-    ...newPlaceWords(typeId),
-    name: was.name,
-    notes: was.notes,
-    altNames: was.altNames,
-    latitude: was.latitude,
-    longitude: was.longitude,
-    elevation: was.elevation,
-  };
 }
 
 /** Makes the form's place in the plan, in no account. Throws on a refusal or

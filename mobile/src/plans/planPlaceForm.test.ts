@@ -1,15 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import {
-  ITEM_ATTR,
   itemFieldDefs,
   newPlaceWords,
   SYSTEM_PLACE_TYPE_IDS,
 } from "@logjam/shared";
-import {
-  addNewPlaceToPlan,
-  placeFormProblem,
-  retypePlaceWords,
-} from "./planPlaceForm";
+import { addNewPlaceToPlan, placeFormProblem } from "./planPlaceForm";
 
 const api = vi.hoisted(() => ({
   addPlanItem: vi.fn(),
@@ -19,7 +14,6 @@ vi.mock("./plansApi", () => ({ addPlanItem: api.addPlanItem }));
 vi.mock("./plansCache", () => ({ afterPlanWrite: api.afterPlanWrite }));
 
 const marker = SYSTEM_PLACE_TYPE_IDS.marker;
-const canyon = SYSTEM_PLACE_TYPE_IDS.canyon;
 const at = { latitude: -33.5, longitude: 150.4 };
 
 describe("placeFormProblem", () => {
@@ -35,30 +29,6 @@ describe("placeFormProblem", () => {
     const defs = itemFieldDefs({ placeTypeId: marker });
     const words = { ...newPlaceWords(marker, at), elevation: "abc" };
     expect(placeFormProblem(words, defs)).not.toBeNull();
-  });
-});
-
-describe("retypePlaceWords", () => {
-  // Mutation: keep every typed value across a type change, and a Canyon's
-  // attribute is sent for a Marker, which the API refuses.
-  it("keeps the typed place details and drops the old type's attributes", () => {
-    const defs = itemFieldDefs({ placeTypeId: canyon });
-    expect(defs.length).toBeGreaterThan(0);
-    const attr = ITEM_ATTR + defs[0].key;
-    const was = {
-      ...newPlaceWords(canyon, at),
-      name: "Water drop",
-      notes: "Fills in March",
-      [attr]: "3",
-    };
-    const next = retypePlaceWords(was, marker);
-    expect(next).toMatchObject({
-      name: "Water drop",
-      notes: "Fills in March",
-      latitude: String(at.latitude),
-      longitude: String(at.longitude),
-    });
-    expect(next[attr]).toBeUndefined();
   });
 });
 

@@ -21,6 +21,7 @@ import {
   planVerbsFor,
   PLAN_ADD_VERBS,
   PLAN_ITEM_ADD_VERBS,
+  planItemAddVerbs,
   PLAN_FORM_VERBS,
   PLAN_SECTION_VERBS,
   PLAN_VERB_LISTS,
@@ -83,7 +84,6 @@ import {
   tripPlanFormTally,
   tripPlanFormTallyLines,
   tripPlanFormsUrgent,
-  planRouteNotAdded,
 } from "./index.js";
 
 const TODAY = "2026-10-19";
@@ -440,6 +440,20 @@ describe("a plan's verbs", () => {
       ),
     ).toEqual([...PLAN_ITEM_ADD_VERBS]);
   });
+
+  // Mutation: skip the `PLAN_ITEM_ADD_VERBS` filter, or ignore `archived`, and a
+  // client's Map view offers the write-up, form or invite verbs, or adds on an
+  // archived plan.
+  it.each(["web", "gps"] as const)(
+    "gives %s's Map view the item add verbs a role may run",
+    (platform) => {
+      const ids = (role: "leader" | "editor" | "member", archived = false) =>
+        planItemAddVerbs(platform, role, archived).map((verb) => verb.id);
+      for (const role of ["leader", "editor", "member"] as const)
+        expect(ids(role)).toEqual([...PLAN_ITEM_ADD_VERBS]);
+      expect(ids("leader", true)).toEqual([]);
+    },
+  );
 
   it("prints on Logjam Web only; both clients build forms", () => {
     const live = { archived: false };
@@ -1107,9 +1121,6 @@ describe("tripPlanFormsUrgent", () => {
     expect(tripPlanFormsUrgent(1, trip, "2026-10-01")).toBe(true);
     expect(tripPlanFormsUrgent(1, trip, "2026-09-30")).toBe(false);
     expect(tripPlanFormsUrgent(0, trip, "2026-10-01")).toBe(false);
-  });
-  it("names the Add a place or way button in the route notice", () => {
-    expect(planRouteNotAdded().body).toContain("Add a place or way");
   });
 });
 

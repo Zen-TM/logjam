@@ -193,16 +193,22 @@ export function planAddVerbLabel(
   return PLAN_ADD_VERBS.find((verb) => verb.id === id)!.label;
 }
 
-/** What a route drawn from a plan says when it is saved but not in the plan. */
-export const planRouteNotAdded = () => ({
-  title: "Route saved",
-  body: `It's in Saved, but couldn't be added to the plan. Add it from the plan's ${planAddVerbLabel("copy")}.`,
-});
-
 /** A plan verb's words, where one stands outside its ⋯ (the over notice's
  *  Start a trip log). */
 export function planVerbLabel(id: PlanVerbId): string {
   return PLAN_VERBS.find((verb) => verb.id === id)!.label;
+}
+
+/** The Map view's buttons: the add verbs that put an item in the plan that a
+ *  role may run on one client, in menu order. */
+export function planItemAddVerbs(
+  platform: ContractPlatform,
+  role: TripPlanRole,
+  archived: boolean,
+): PlanVerb<PlanAddVerbId>[] {
+  return planVerbsFor(PLAN_ADD_VERBS, platform, role, { archived }).filter(
+    (verb) => (PLAN_ITEM_ADD_VERBS as readonly string[]).includes(verb.id),
+  );
 }
 
 /** One list's verbs a role may run on one client, on a plan in this state. */

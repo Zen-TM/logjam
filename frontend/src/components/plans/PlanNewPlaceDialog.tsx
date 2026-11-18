@@ -7,6 +7,7 @@ import {
   itemFieldDefs,
   newPlaceFromWords,
   newPlaceWords,
+  retypePlaceWords,
   SYSTEM_PLACE_TYPE_IDS,
   SYSTEM_PLACE_TYPES,
   sameValue,
@@ -54,15 +55,7 @@ export default function PlanNewPlaceDialog({
   // A type has its own attributes: the ones typed under the last one go.
   const retype = (next: string) => {
     setTypeId(next);
-    setValues((was) => ({
-      ...newPlaceWords(next),
-      name: was.name,
-      notes: was.notes,
-      altNames: was.altNames,
-      latitude: was.latitude,
-      longitude: was.longitude,
-      elevation: was.elevation,
-    }));
+    setValues((was) => retypePlaceWords(was, next));
   };
 
   async function submit() {

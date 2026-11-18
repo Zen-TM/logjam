@@ -18,7 +18,7 @@ import {
   planVerbs,
   planVerbsFor,
   PLAN_ADD_VERBS,
-  PLAN_ITEM_ADD_VERBS,
+  planItemAddVerbs,
   PLAN_VERBS,
   planSectionsMoved,
   planSectionVerbs,
@@ -634,11 +634,10 @@ export default function PlanDetailPanel({
         myUserId={myUserId}
         onChanged={refetch}
         onSaved={onOwnChanged}
-        adds={addVerbs
-          .filter((verb) =>
-            (PLAN_ITEM_ADD_VERBS as readonly string[]).includes(verb.id),
-          )
-          .map((verb) => ({ ...verb, run: addRunners[verb.id] }))}
+        adds={planItemAddVerbs("web", role, archived).map((verb) => ({
+          ...verb,
+          run: addRunners[verb.id],
+        }))}
         onOpen={onOpenItem}
         onView={(place) => openPlacePage(place.id)}
       />

@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  ITEM_ATTR,
+  itemFieldDefs,
   itemPatch,
   itemWords,
   newPlaceFromWords,
   newPlaceWords,
+  retypePlaceWords,
 } from "./planItemEdit.js";
 import { SYSTEM_PLACE_TYPE_IDS } from "./placeTypes.js";
 import type { TripPlanItem } from "./tripPlans.js";
@@ -125,5 +128,36 @@ describe("a place made in a plan", () => {
     expect(
       Object.keys(newPlaceWords(SYSTEM_PLACE_TYPE_IDS.marker)).sort(),
     ).toEqual(Object.keys(itemWords(place)).sort());
+  });
+});
+
+describe("retypePlaceWords", () => {
+  const canyon = SYSTEM_PLACE_TYPE_IDS.canyon;
+  const at = { latitude: -33.5, longitude: 150.4 };
+
+  // Mutation: drop `elevation` from the kept fields, or keep every key, and a
+  // retype loses a typed elevation or sends a Canyon's attribute for a Marker.
+  it("keeps the typed place details and drops the old type's attributes", () => {
+    const defs = itemFieldDefs({ placeTypeId: canyon });
+    expect(defs.length).toBeGreaterThan(0);
+    const attr = ITEM_ATTR + defs[0].key;
+    const was = {
+      ...newPlaceWords(canyon, at),
+      name: "Water drop",
+      notes: "Fills in March",
+      altNames: "The drop",
+      elevation: "412",
+      [attr]: "3",
+    };
+    const next = retypePlaceWords(was, SYSTEM_PLACE_TYPE_IDS.marker);
+    expect(next).toEqual({
+      name: "Water drop",
+      notes: "Fills in March",
+      altNames: "The drop",
+      elevation: "412",
+      latitude: String(at.latitude),
+      longitude: String(at.longitude),
+    });
+    expect(next[attr]).toBeUndefined();
   });
 });

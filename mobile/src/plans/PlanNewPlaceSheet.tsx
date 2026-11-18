@@ -11,6 +11,7 @@ import {
   messageFromError,
   newPlaceWords,
   PLACE_FORM,
+  retypePlaceWords,
   sameValue,
   SYSTEM_PLACE_TYPE_IDS,
   SYSTEM_PLACE_TYPES,
@@ -31,11 +32,7 @@ import {
   TextField,
 } from "../ui";
 import { PlanDateEditor, PlanPlaceFields } from "./PlanPlaceFields";
-import {
-  addNewPlaceToPlan,
-  placeFormProblem,
-  retypePlaceWords,
-} from "./planPlaceForm";
+import { addNewPlaceToPlan, placeFormProblem } from "./planPlaceForm";
 
 const copy = TRIP_PLAN_PAGE.copy;
 const OFFLINE = unavailableReasonText("needs-connection");
