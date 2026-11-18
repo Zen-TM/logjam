@@ -1189,7 +1189,7 @@ function UnifiedImportDialog({
             errors.push(
               label
                 ? t`Couldn't create place "${label}": ${e.message}`
-                : t`Couldn't create row ${e.rowIndex + 1}: ${e.message}`,
+                : t`Couldn't create place "row ${e.rowIndex + 1}": ${e.message}`,
             );
           }
           // Resolve ids from the freshly-fetched place list.

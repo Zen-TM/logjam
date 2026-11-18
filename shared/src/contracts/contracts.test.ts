@@ -1857,8 +1857,8 @@ describe("sentences written whole for each count or case", () => {
 });
 
 describe("sharedWayNote", () => {
-  // Mutation: make the unnamed case call `sharedWayNote({ place: "a place" })`
-  // through a hole again, or drop its message, and the sentences below differ.
+  // Mutation: delete the `via.place === null` branch in share.ts and the unnamed
+  // case reads "as part of null".
   it("is one whole sentence for a way shared alone, with a named place, and with an unnamed one", () => {
     const tail =
       "you can see it, but not change it. Removing that place is what stops it showing here.";
