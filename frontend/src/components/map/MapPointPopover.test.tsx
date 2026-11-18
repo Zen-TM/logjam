@@ -8,13 +8,13 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   MAP_POINT,
-  NSW_FIRE,
+  NSW_REGION,
   WEATHER,
   type ElevationPoint,
 } from "@logjam/shared";
 import { takeDismissingPress } from "../../ui";
 import forecastJson from "../../../../shared/src/__fixtures__/openMeteoForecast.json";
-import { COVERAGE_FILL_LAYER, FIRE_FILL_LAYER } from "./layerOrder";
+import { coverageFillLayer, fireFillLayer } from "./layerOrder";
 import MapPointPopover from "./MapPointPopover";
 
 const placed = vi.hoisted(() => ({ order: [] as string[] }));
@@ -75,6 +75,7 @@ function mount(
       point={point}
       from={null}
       coverageCarrier="optus"
+      region={NSW_REGION}
       {...(handlers.startAt ? { startAt: handlers.startAt } : {})}
       onClose={handlers.onClose ?? vi.fn()}
       onAddPlace={handlers.onAddPlace ?? vi.fn()}
@@ -427,9 +428,9 @@ describe("the point popover's slope", () => {
 describe("MapPointPopover fire history", () => {
   const fireFeature = {
     properties: {
-      [NSW_FIRE.yearProperty]: 2019,
-      [NSW_FIRE.monthProperty]: 12,
-      [NSW_FIRE.typeProperty]: 1,
+      [NSW_REGION.terrain.fire.yearProperty]: 2019,
+      [NSW_REGION.terrain.fire.monthProperty]: 12,
+      [NSW_REGION.terrain.fire.typeProperty]: 1,
     },
   };
 
@@ -438,7 +439,7 @@ describe("MapPointPopover fire history", () => {
   it("shows the last burnt figure while the layer is on, and none when off", () => {
     const layered = map as unknown as Record<string, unknown>;
     layered.getLayer = (id: string) =>
-      id === FIRE_FILL_LAYER ? {} : undefined;
+      id === fireFillLayer(NSW_REGION) ? {} : undefined;
     layered.queryRenderedFeatures = () => [fireFeature];
     mount();
     expect(screen.getByText(MAP_POINT.copy.fire)).toBeTruthy();
@@ -459,7 +460,7 @@ describe("MapPointPopover coverage", () => {
   it("names the drawn carrier's reception while the layer is on, and nothing when off", () => {
     const layered = map as unknown as Record<string, unknown>;
     layered.getLayer = (id: string) =>
-      id === COVERAGE_FILL_LAYER ? {} : undefined;
+      id === coverageFillLayer(NSW_REGION) ? {} : undefined;
     layered.queryRenderedFeatures = () => [
       { properties: { carrier: "optus", level: "none" } },
     ];

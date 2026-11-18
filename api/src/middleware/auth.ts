@@ -4,34 +4,20 @@ import jwt from "jsonwebtoken";
 import { say } from "@logjam/shared";
 import { AppError } from "../lib/appError";
 import { getEnv } from "../lib/env";
+import { nonDevRuntime } from "../lib/runtime";
 
 // Fail fast at module load if AUTH_MODE=fake would bypass real auth in a non-dev runtime.
 // These two guards read process.env, not getEnv(), on purpose: they are a
 // second lock beside validateEnv's own fake-in-production check, independent
-// of it, so a bug in either still fails closed.
-// Four independent signals — any one is sufficient to refuse:
-//   1. NODE_ENV is not "development" or "test"
-//   2. AWS runtime env vars present (ECS and Lambda inject these)
-//   3. DB_HOST points to a non-local host
-//   4. LOGJAM_RUNTIME=prod, which a host with no AWS-injected variables (a
-//      plain Docker Compose host) sets itself
+// of it, so a bug in either still fails closed. What counts as a non-dev
+// runtime is lib/runtime.ts.
 const isProdRuntime = process.env.LOGJAM_RUNTIME === "prod";
 if (process.env.AUTH_MODE === "fake") {
-  const env = process.env.NODE_ENV;
-  const looksProd = env !== "development" && env !== "test";
-  const hasAwsRuntime =
-    isProdRuntime ||
-    Boolean(process.env.AWS_EXECUTION_ENV) ||
-    Boolean(process.env.ECS_CONTAINER_METADATA_URI_V4) ||
-    Boolean(process.env.AWS_LAMBDA_FUNCTION_NAME);
-  const dbHost = process.env.DB_HOST ?? "";
-  const dbHostNonLocal =
-    dbHost !== "" &&
-    !/^(localhost|127\.0\.0\.1|host\.docker\.internal|postgres)$/.test(dbHost);
-  if (looksProd || hasAwsRuntime || dbHostNonLocal) {
+  const runtime = nonDevRuntime(process.env);
+  if (runtime.nonDev) {
     throw new Error(
       `AUTH_MODE=fake refused: detected non-dev runtime ` +
-        `(NODE_ENV=${env}, awsRuntime=${hasAwsRuntime}, dbHostNonLocal=${dbHostNonLocal})`,
+        `(NODE_ENV=${process.env.NODE_ENV}, awsRuntime=${runtime.hasAwsRuntime}, dbHostNonLocal=${runtime.dbHostNonLocal})`,
     );
   }
 }

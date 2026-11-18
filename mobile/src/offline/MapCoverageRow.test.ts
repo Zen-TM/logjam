@@ -40,3 +40,20 @@ describe("MapCoverageRow", () => {
     expect(source).toMatch(/disabled=\{!online\}/);
   });
 });
+
+// Mutation: read `readBasemapPreference()` in the row (or leave `bbox` out of
+// the view), and a place outside NSW names, and is checked against the saves of,
+// a SIX sheet that covers none of that ground.
+describe("MapCoverageRow's basemap", () => {
+  it("is the stored pick as drawn over the row's own ground", () => {
+    const source = readFileSync(
+      new URL("./MapCoverageRow.tsx", import.meta.url),
+      "utf8",
+    );
+    expect(source).toContain("readEffectiveBasemap(boundsView(bbox))");
+    // Mutation: filter `artifacts` by `logicalKey` in the row, and a vector
+    // clip of another archive reads the place as covered.
+    expect(source).toContain("heldBasemapIn(artifacts, basemapId, bbox)");
+    expect(source).not.toContain("readBasemapPreference");
+  });
+});

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { NSW_COVERAGE, NSW_FIRE, NSW_REGION } from "@logjam/shared";
+import { NSW_REGION, SIM_REGIONS } from "@logjam/shared";
 
 import {
   offlineCoverageMask,
@@ -125,13 +125,32 @@ describe("offlineMaskBoxes", () => {
     ["contours", clip("contours-region", NSW_REGION.terrain.contours.id)],
     ["slope", clip("slope-region", NSW_REGION.terrain.slope.id)],
     ["land", clip("land-region", NSW_REGION.terrain.land.id)],
-    ["fire", clip("fire-region", NSW_FIRE.id)],
-    ["coverage", clip("coverage-region", NSW_COVERAGE.id)],
+    ["fire", clip("fire-region", NSW_REGION.terrain.fire.id)],
+    ["coverage", clip("coverage-region", NSW_REGION.terrain.coverage.id)],
     ["hillshade", clip("dem-region", NSW_REGION.terrain.heights.id)],
   ])("leaves a save's %s clear when its basemap clip failed", (_, terrain) => {
     const boxes = offlineMaskBoxes([savedBasemap], [terrain])!;
     expect(boxes).toEqual([AREA_A, AREA_B]);
     expect(masked(offlineCoverageMask(boxes)!, 148.5, -29.5)).toBe(false);
+  });
+
+  // Mutation: leave `regions` off the `drawsTerrain` call, and a clip saved
+  // in a simulated region is masked over, the Terrain group with it.
+  it("leaves clear a clip saved in any listed region", () => {
+    const [nz] = SIM_REGIONS;
+    const terrain = [
+      clip("contours-region", nz!.terrain.contours!.id),
+      clip("slope-region", nz!.terrain.slope!.id),
+      clip("dem-region", nz!.terrain.heights!.id),
+    ];
+    expect(offlineMaskBoxes([savedBasemap], terrain, SIM_REGIONS)).toEqual([
+      AREA_A,
+      AREA_B,
+      AREA_B,
+      AREA_B,
+    ]);
+    // With only NSW listed, they are no Terrain clips.
+    expect(offlineMaskBoxes([savedBasemap], terrain)).toEqual([AREA_A]);
   });
 
   it("does not clear a clip that draws nothing", () => {

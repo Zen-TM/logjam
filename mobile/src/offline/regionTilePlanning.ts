@@ -6,11 +6,14 @@
 // The response classifier is the one worth reading twice — it is what stops a
 // 200 carrying an error page being written into the archive as a tile.
 import {
-  NSW_REGION,
-  NSW_COVERAGE,
-  NSW_FIRE,
+  MAP_TERRAIN,
+  saveClipArchive,
+  t,
   type RegionBbox,
   type RegionTilePlan,
+  type SaveClip,
+  type SaveClipKind,
+  type VectorArchive,
 } from "@logjam/shared";
 
 import {
@@ -71,9 +74,27 @@ export function tileUrlFrom(
 }
 
 /**
- * The clips every saved area carries, whoever saves it: one of each DEM
- * archive the area touches, the statewide contours, slope, land, fire history and coverage, and the
- * vector map. They cost a few to a few tens of megabytes, and without them the Vector map is blank out
+ * The place of each kind in a save's queue. `clipArchivesOf` lists slope before
+ * contours, but a save over NSW has always queued contours first, so the queue
+ * keeps that order. Guard: `regionTilePlanning.test.ts` ("gives an area over
+ * NSW the DEM archive, the contours, the slope, land, fire, coverage and the
+ * vector map"). A kind added to `SaveClipKind` fails the typecheck here.
+ */
+const CLIP_ORDER: Record<SaveClipKind, number> = {
+  heights: 0,
+  contours: 1,
+  slope: 2,
+  land: 3,
+  fire: 4,
+  coverage: 5,
+};
+
+/**
+ * The clips every saved area carries, whoever saves it: one of each archive of
+ * the Terrain group of every region the area touches (`clips`, which
+ * `planRegionForBasemaps` prices), and of each vector archive the area needs
+ * (`vectors`: that of each region it touches, else the world's). They cost a few to a
+ * few tens of megabytes, and without them the Vector map is blank out
  * there, the route and measure tools stop snapping to tracks and a height
  * comes from the coarse worldwide tiles. A guest has them too: each is cut on
  * the phone from a public archive, with no call to Logjam's API
@@ -85,7 +106,8 @@ export function regionClipSpecs(
     RegionClipSpec,
     "bbox" | "groupId" | "groupLabel" | "allowCellular"
   >,
-  demSourceIds: readonly string[],
+  clips: readonly Pick<SaveClip, "kind" | "archive">[],
+  vectors: readonly VectorArchive[],
   job: (basemapId: string) => { id: string; label: string },
 ): ({ taskKind: "clip" } & RegionClipSpec)[] {
   const clip = (basemapId: string, extra: Partial<RegionClipSpec> = {}) => ({
@@ -96,33 +118,71 @@ export function regionClipSpecs(
     ...extra,
   });
   return [
-    ...demSourceIds.map((id) => clip(id, { demSourceId: id })),
-    clip(NSW_REGION.terrain.contours.id, { contours: true }),
-    clip(NSW_REGION.terrain.slope.id, { slope: true }),
-    clip(NSW_REGION.terrain.land.id, { land: true }),
-    clip(NSW_FIRE.id, { fire: true }),
-    clip(NSW_COVERAGE.id, { coverage: true }),
-    clip("protomaps"),
+    ...[...clips]
+      .sort((a, b) => CLIP_ORDER[a.kind] - CLIP_ORDER[b.kind])
+      .map(({ archive }) => clip(archive.id, { archiveId: archive.id })),
+    ...vectors.map(({ archivePath }) =>
+      clip("protomaps", { vectorPath: archivePath }),
+    ),
   ];
 }
 
 /** What a saved clip is filed as in the registry. */
 export function regionClipKind(
-  spec: Pick<
-    RegionClipSpec,
-    "demSourceId" | "contours" | "slope" | "land" | "fire" | "coverage" | "area"
-  >,
+  spec: Pick<RegionClipSpec, "archiveId" | "area">,
 ): MapArtifact["kind"] {
+  if (spec.area) return AREA_CLIP_KIND[spec.area.layer];
   // `dem-region` is the kind the sampler filters saved files on
   // (offline/demLookup.ts).
-  if (spec.area) return AREA_CLIP_KIND[spec.area.layer];
-  if (spec.demSourceId) return "dem-region";
-  if (spec.contours) return "contours-region";
-  if (spec.slope) return "slope-region";
-  if (spec.land) return "land-region";
-  if (spec.fire) return "fire-region";
-  if (spec.coverage) return "coverage-region";
-  return "basemap-region";
+  const kind = spec.archiveId && saveClipArchive(spec.archiveId)?.kind;
+  return kind ? CLIP_KIND[kind] : "basemap-region";
+}
+
+const CLIP_KIND: Record<SaveClipKind, MapArtifact["kind"]> = {
+  heights: "dem-region",
+  slope: "slope-region",
+  contours: "contours-region",
+  land: "land-region",
+  fire: "fire-region",
+  coverage: "coverage-region",
+};
+
+/** How a saved clip's tiles are drawn: heights as a raster, slope as the DEM the map colours, the rest as vectors. */
+export function clipSourceType(
+  spec: Pick<RegionClipSpec, "archiveId" | "area">,
+): MapArtifact["sourceType"] {
+  const layer =
+    spec.area?.layer ??
+    (spec.archiveId ? saveClipArchive(spec.archiveId)?.kind : undefined);
+  return layer === "heights"
+    ? "raster"
+    : layer === "slope"
+      ? "raster-dem"
+      : "vector";
+}
+
+/**
+ * What a region archive's clip is called in a job's row and on a saved card:
+ * the layer, and for heights the source ("Elevation data, NSW 5 m"). Null for
+ * an id no region declares.
+ */
+export function archiveLabel(archiveId: string): string | null {
+  const clip = saveClipArchive(archiveId);
+  if (!clip) return null;
+  switch (clip.kind) {
+    case "heights":
+      return t`Elevation data, ${clip.archive.name}`;
+    case "contours":
+      return "Contours";
+    case "slope":
+      return "Slope";
+    case "land":
+      return MAP_TERRAIN.copy.land;
+    case "fire":
+      return MAP_TERRAIN.copy.fire;
+    case "coverage":
+      return MAP_TERRAIN.copy.coverage;
+  }
 }
 
 /**

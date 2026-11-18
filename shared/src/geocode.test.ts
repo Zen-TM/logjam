@@ -1,5 +1,21 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { geocode } from "./geocode";
+import { geocode, geocodeBias } from "./geocode";
+import { regionBounds, type LonLatBox, NSW_REGION } from "./regions";
+import { SIM_NZ, SIM_REGIONS, SIM_WORLD } from "./simRegions";
+
+const around = ([lon, lat]: readonly [number, number], r = 0.1): LonLatBox => ({
+  west: lon - r,
+  south: lat - r,
+  east: lon + r,
+  north: lat + r,
+});
+/** A view in the Pacific, outside every region, simulated or not. */
+const OPEN_OCEAN = around([-140, 0]);
+const sentParams = (fetchMock: ReturnType<typeof vi.fn>) =>
+  Object.fromEntries(
+    new URL((fetchMock.mock.calls.at(-1) as unknown as [string])[0])
+      .searchParams,
+  );
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -13,7 +29,11 @@ describe("geocode", () => {
     const fetchMock = vi.fn(async () => new Response("[]"));
     vi.stubGlobal("fetch", fetchMock);
 
-    await geocode("  Newnes Plateau ");
+    await geocode(
+      "  Newnes Plateau ",
+      undefined,
+      around(NSW_REGION.view.center),
+    );
 
     const [url, init] = fetchMock.mock.calls[0] as unknown as [
       string,
@@ -33,6 +53,43 @@ describe("geocode", () => {
       "Accept",
       "User-Agent",
     ]);
+  });
+
+  // The request a search over NSW sent before regions existed, as a string so
+  // the parameter order is pinned too. Mutation: drop `countrycodes` from NSW's
+  // declaration, or send it after `bounded`.
+  it("sends a search over NSW exactly as it was sent before regions existed", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(Date.now() + 30_000);
+    const fetchMock = vi.fn(async () => new Response("[]"));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await geocode("Wollemi Creek", undefined, around(NSW_REGION.view.center));
+
+    const [url] = fetchMock.mock.calls[0] as unknown as [string];
+    expect(url).toBe(
+      "https://nominatim.openstreetmap.org/search?format=jsonv2&q=Wollemi+Creek&countrycodes=au&limit=5&viewbox=140.9%2C-28.04%2C154.29%2C-37.73&bounded=0",
+    );
+  });
+
+  // Mutation: send `countrycodes` whatever the region declares (for instance
+  // a hard-coded "au"), or never send it.
+  it("sends the region's country code, and none where the region declares none", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(Date.now() + 45_000);
+    const fetchMock = vi.fn(async () => new Response("[]"));
+    vi.stubGlobal("fetch", fetchMock);
+    const view = around(SIM_NZ.view.center);
+    const { geocoderCountry: _dropped, ...noCountry } = SIM_NZ;
+
+    await geocode("Franz Josef", undefined, view, SIM_REGIONS, SIM_WORLD);
+    expect(sentParams(fetchMock)).toMatchObject({ countrycodes: "nz" });
+
+    await vi.advanceTimersByTimeAsync(1000);
+    await geocode("Fox Glacier", undefined, view, [noCountry], SIM_WORLD);
+    const params = sentParams(fetchMock);
+    expect(params).toHaveProperty("viewbox");
+    expect(params).not.toHaveProperty("countrycodes");
   });
 
   it("sends nothing for a query too short to be useful", async () => {
@@ -69,5 +126,94 @@ describe("geocode", () => {
     await geocode("Mount Wilson");
     await geocode("mount wilson ");
     expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  // Mutation: send a box, centre or zoom whenever the view is outside every
+  // region (for instance the view's own bounds, or the old NSW box).
+  it("sends no view bias when the map shows no region, so the view stays on the device", async () => {
+    vi.useFakeTimers();
+    // Past every earlier test's request slot (the spacing is module state).
+    vi.setSystemTime(Date.now() + 300_000);
+    const fetchMock = vi.fn(async () => new Response("[]"));
+    vi.stubGlobal("fetch", fetchMock);
+
+    for (const [name, view] of [
+      ["Mount Cook", OPEN_OCEAN],
+      ["Mount Kosciuszko", null],
+      ["Zion Narrows", undefined],
+    ] as const) {
+      const done = geocode(name, undefined, view);
+      await vi.advanceTimersByTimeAsync(1000);
+      await done;
+    }
+
+    for (const call of fetchMock.mock.calls) {
+      const params = Object.fromEntries(
+        new URL((call as unknown as [string])[0]).searchParams,
+      );
+      expect(Object.keys(params).sort()).toEqual(["format", "limit", "q"]);
+    }
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  // Mutation: key the cache on the query alone: a name asked from Utah
+  // answers from NSW's biased result.
+  it("asks again when the same query is asked from a different region", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(Date.now() + 600_000);
+    const fetchMock = vi.fn(async () => new Response("[]"));
+    vi.stubGlobal("fetch", fetchMock);
+    const nsw = around(NSW_REGION.view.center);
+    await geocode("Springfield", undefined, nsw);
+    await geocode("springfield", undefined, nsw);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1000);
+    await geocode("Springfield", undefined, OPEN_OCEAN);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(sentParams(fetchMock)).not.toHaveProperty("viewbox");
+  });
+});
+
+describe("geocodeBias", () => {
+  // MapLibre's bounds run past ±180 after a pan around the world. Mutation:
+  // drop the `wrapView` call in `geocodeBias`.
+  it.each([-360, 360, 720])(
+    "finds the region, or none, in the copy of the world %i degrees over",
+    (turn) => {
+      const over = (view: LonLatBox) => ({
+        ...view,
+        west: view.west + turn,
+        east: view.east + turn,
+      });
+      expect(geocodeBias(over(around(NSW_REGION.view.center)))).toEqual(
+        regionBounds(NSW_REGION),
+      );
+      expect(geocodeBias(over(OPEN_OCEAN))).toBeNull();
+    },
+  );
+
+  // Mutation: return the view itself, or any box when no region holds it.
+  it("is the bounds of the region in view and nothing outside every region", () => {
+    expect(geocodeBias(around(NSW_REGION.view.center))).toEqual(
+      regionBounds(NSW_REGION),
+    );
+    expect(geocodeBias(OPEN_OCEAN)).toBeNull();
+    expect(geocodeBias(null)).toBeNull();
+    expect(geocodeBias(undefined)).toBeNull();
+  });
+
+  // Mutation: pick the region by a corner of the view (`regionAt(view.west,
+  // view.south, regions)`) instead of by `regionInView`'s centre.
+  it("follows the region under the view's centre, not the view's size", () => {
+    const [lon, lat] = SIM_NZ.view.center;
+    expect(geocodeBias(around([lon, lat], 5), SIM_REGIONS)).toEqual(
+      regionBounds(SIM_NZ),
+    );
+  });
+
+  // Mutation: let the world entry through to regionBounds, which throws on a
+  // region with no border.
+  it("gives no box for the worldwide entry, which has no border", () => {
+    expect(geocodeBias(OPEN_OCEAN, SIM_REGIONS, SIM_WORLD)).toBeNull();
   });
 });

@@ -29,7 +29,7 @@ import {
 import {
   asFieldValues,
   fieldValue,
-  NSW_REGION,
+  DEFAULT_REGION_IDS,
   REGIONS,
   SOURCES_FIELD_KEY,
   SYSTEM_PLACE_TYPE_IDS,
@@ -41,11 +41,11 @@ const router = Router();
 const UPDATE_CHUNK_SIZE = 200;
 
 /**
- * The canyon source of the region a request names in `?region=`, or NSW's
- * when it names none: every build before regions sends none.
+ * The canyon source of the region a request names in `?region=`, or the
+ * default region's when it names none: every build before regions sends none.
  */
 function canyonSource(req: AuthenticatedRequest): RopeWikiSource {
-  const id = req.query.region ?? NSW_REGION.id;
+  const id = req.query.region ?? DEFAULT_REGION_IDS[0];
   const source = REGIONS.find((region) => region.id === id)?.canyons;
   if (!source) throw malformed("region has no canyon source");
   return source;

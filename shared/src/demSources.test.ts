@@ -23,6 +23,7 @@ import { DEM_TILE_SIZE } from "./demTiles.js";
 import { buildElevationProfile, densifyLineSegments } from "./elevation.js";
 import { sharpenedDemSource } from "./sharpen.js";
 import { NSW_REGION } from "./regions.js";
+import { SIM_REGIONS, SIM_WORLD } from "./simRegions.js";
 
 describe("demTileUrl", () => {
   // The decode fixture is a REAL terrarium tile named for its address: z13,
@@ -72,12 +73,49 @@ describe("the declaration", () => {
     expect(demCredits([])).toEqual([]);
   });
 
+  // Mutation: pair every area with `regions[0]` in demCredits in place of the
+  // region `areasInRegion` finds, and an area outside every region is credited
+  // to the first one; drop the `coverage` test and an area with none throws.
+  it("credits an area with the heights of the region it lies in", () => {
+    const area = (coverage: DemSource["coverage"]) => ({
+      ...sharpenedDemSource({
+        id: "a1",
+        zmax: 16,
+        tiles15: [0, 0, 1, 1],
+        coverage: [0, 0, 0, 0],
+        contours: true,
+        credit: "Elevation: a survey.",
+        createdAt: "2026-10-24T00:00:00.000Z",
+      }),
+      coverage,
+    });
+    const nz = SIM_REGIONS.find((r) => r.id === "simnz")!;
+    const inNz = area([169.22, -44.08, 169.28, -44.03]);
+    expect(demCredits([inNz.id], [inNz], SIM_REGIONS)).toEqual([
+      "Elevation: a survey.",
+      nz.terrain.heights!.credit,
+    ]);
+    const nowhere = area([0, 0, 0.01, 0.01]);
+    expect(demCredits([nowhere.id], [nowhere], SIM_REGIONS)).toEqual([
+      "Elevation: a survey.",
+    ]);
+    const unplaced = area(null);
+    expect(demCredits([unplaced.id], [unplaced], SIM_REGIONS)).toEqual([
+      "Elevation: a survey.",
+    ]);
+  });
+
   // Mutation: paste a source's host into a reader instead of importing the
-  // declaration, and this names the file. A region declares its own sources.
+  // declaration, and this names the file. A region declares its own sources,
+  // and so do the simulated regions, whose sources join `DEM_SOURCES` when
+  // `simRegionsOn()`: they are checked here with the flag off and on.
+  // Mutation: paste `master/dem/simnz-heights.pmtiles` into a client source.
   it("is the only place a DEM host is written", () => {
-    const prefixes = DEM_SOURCES.map(
-      (s) => s.archivePath ?? s.urlTemplate!.split("{")[0]!,
-    );
+    const prefixes = [
+      ...DEM_SOURCES,
+      ...[...SIM_REGIONS, SIM_WORLD].flatMap((region) => region.dem),
+    ].map((s) => s.archivePath ?? s.urlTemplate!.split("{")[0]!);
+    expect(prefixes).toContain("master/dem/simnz-heights.pmtiles");
     const offenders: string[] = [];
     for (const pkg of ["api", "frontend", "mobile", "shared"]) {
       const root = join(import.meta.dirname, "../..", pkg, "src");
@@ -85,7 +123,7 @@ describe("the declaration", () => {
         if (!/\.tsx?$/.test(file) || /\.test\.tsx?$/.test(file)) continue;
         if (
           pkg === "shared" &&
-          (file === "demSources.ts" || file === "regions.ts")
+          ["demSources.ts", "regions.ts", "simRegions.ts"].includes(file)
         )
           continue;
         const text = readFileSync(join(root, file), "utf8");

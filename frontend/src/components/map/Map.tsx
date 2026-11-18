@@ -49,7 +49,8 @@ import {
   landColor,
   landEdgeOpacity,
   nswContourStyle,
-  NSW_REGION,
+  layerIn,
+  type Region,
   COVERAGE_HATCH_PIXEL_RATIO,
   COVERAGE_HATCH_URIS,
   coverageFilter,
@@ -58,7 +59,11 @@ import {
   type SharpenedOverlay,
   type TerrainLayerKey,
 } from "@logjam/shared";
-import { WORLDWIDE_TERRAIN_SOURCE, applyTerrain } from "./terrainSource";
+import {
+  WORLDWIDE_TERRAIN_SOURCE,
+  applyTerrain,
+  terrainReapplyKey,
+} from "./terrainSource";
 import { useTerrainReapply } from "./useTerrainReapply";
 import { useBoxDraw } from "./useBoxDraw";
 import MapPointPopover from "./MapPointPopover";
@@ -72,16 +77,22 @@ import {
   GAUGE_LAYER,
   GRID_LABELS,
   GRID_LINES,
-  LAND_EDGE_LAYER,
-  COVERAGE_FILL_LAYER,
-  LAND_FILL_LAYER,
+  coverageFillLayer,
+  landEdgeLayer,
+  landFillLayer,
   PRESSABLE_LAYERS,
   pressClosedGauge,
   pressedGaugeId,
+  terrainKeyOf,
 } from "./layerOrder";
 import type { PlaceHighlight } from "./placeHighlight";
 import type { RouteHoverChannel } from "./routeHover";
-import { layers as protomapsLayers, namedFlavor } from "@protomaps/basemaps";
+import {
+  initialVectorArchive,
+  snapUrlFor,
+  vectorStyleLayers,
+  vectorSourceUrl,
+} from "./vectorBasemap";
 import {
   arrowSegmentFeatures,
   DRAFT_LINE,
@@ -101,9 +112,12 @@ import {
   ROUTE_ARROW_MIN_ZOOM,
   ROUTE_ARROW_SDF_URI,
   SAVED_ROUTE_MIN_ZOOM,
+  type LonLatBox,
   type RouteDraft,
   type RoutePoint,
   type SnapMode,
+  type VectorArchive,
+  vectorIn,
 } from "@logjam/shared";
 
 export type { SnapMode };
@@ -113,6 +127,16 @@ const pmtilesProtocol = new Protocol();
 maplibregl.addProtocol("pmtiles", pmtilesProtocol.tile.bind(pmtilesProtocol));
 // The Terrain group's tiles once the user can see a sharpened area.
 maplibregl.addProtocol(TERRAIN_PROTOCOL, terrainTile);
+
+/** MapLibre's bounds as the shared box. Longitudes are raw: past ±180 after a pan round the world. */
+function boxOf(bounds: maplibregl.LngLatBounds): LonLatBox {
+  return {
+    west: bounds.getWest(),
+    south: bounds.getSouth(),
+    east: bounds.getEast(),
+    north: bounds.getNorth(),
+  };
+}
 
 // Decide whether a MapLibre source error means the PMTiles archive is
 // DEFINITIVELY gone (tear the overlay down + blacklist it) versus a transient
@@ -178,10 +202,9 @@ import { useToast } from "../feedback/ToastProvider";
 import { moveTerrainIntoBasemap, stackTopoLayers } from "./layerOrder";
 import { coverageLayerSpec } from "./coverageLayers";
 import { fireLayerSpecs } from "./fireLayers";
-import { TERRAIN_ENTRIES, type RoutedTiles } from "./terrainEntries";
+import type { RoutedTiles } from "./terrainEntries";
 import {
   TERRAIN_PROTOCOL,
-  areasKey,
   isAbsentTerrainTile,
   terrainTile,
 } from "./terrainRouter";
@@ -218,8 +241,6 @@ const DRAG_INSERT_MIN_PIXELS = 6;
 // same floor, and why that zoom (and why the route being drawn is exempt) is
 // documented there.
 
-const INITIAL_CENTER: [number, number] = [151.2093, -33.8688];
-const INITIAL_ZOOM = 7;
 const NOTHING_MUTED: ReadonlySet<string> = new Set();
 
 /** Below this the pin's dot is under 13px across, no bigger than its badge. */
@@ -321,50 +342,30 @@ const PROTOMAPS_SOURCE_ID = "protomaps";
  * mobile/src/map/basemap/ are reshaped for maplibre-react-native (paint+layout
  * merged into one camelCase object). Same package, same pinned version — see
  * scripts/basemap/package.json; bump both together or neither.
- *
- * Light flavor only: Logjam Web has no dark theme (index.css carries a single
- * prefers-color-scheme rule that inverts icons, nothing more).
  */
 function addProtomapsBasemap(
   map: maplibregl.Map,
   visibility: "visible" | "none",
+  archive: VectorArchive,
 ) {
   const entry = BASEMAP_CATALOG.find((e) => e.id === "protomaps");
   // Fail loudly — a missing catalog entry is a programming error, and silently
   // skipping it would leave the picker offering a basemap that draws nothing.
   if (!entry) throw new Error("protomaps missing from BASEMAP_CATALOG");
 
-  // Always same-origin: prod serves /master/* from the web distribution, and
-  // the dev server proxies the same prefix (see vite.config.ts). That keeps
-  // the archive under CSP 'self' and out of the CORS problem entirely.
   map.addSource(PROTOMAPS_SOURCE_ID, {
     type: "vector",
-    url: `pmtiles://${window.location.origin}/${entry.urlTemplate}`,
+    url: vectorSourceUrl(archive, window.location.origin),
     attribution: entry.attributionHtml,
   });
 
-  for (const layer of protomapsLayers(
-    PROTOMAPS_SOURCE_ID,
-    namedFlavor("light"),
-    { lang: "en" },
-  )) {
+  for (const layer of vectorStyleLayers(PROTOMAPS_SOURCE_ID)) {
     map.addLayer({
       ...layer,
       id: `${PROTOMAPS_LAYER_PREFIX}${layer.id}`,
       layout: { ...layer.layout, visibility },
     } as maplibregl.LayerSpecification);
   }
-}
-
-/**
- * The Protomaps archive, read directly for snapping. Same origin in prod and
- * proxied in dev (vite.config.ts), so this never leaves our own host — and it
- * is independent of which basemap is showing or how far the map is zoomed.
- */
-function snapArchiveUrl(): string {
-  const entry = BASEMAP_CATALOG.find((e) => e.id === "protomaps");
-  if (!entry) throw new Error("protomaps missing from BASEMAP_CATALOG");
-  return `${window.location.origin}/${entry.urlTemplate}`;
 }
 
 /** Every layer id belonging to the Protomaps band, in style order. */
@@ -598,6 +599,7 @@ function Map({
   selectingFilterArea,
   onFilterAreaSelected,
   topoLayers,
+  region,
   sharpenedAreas,
   onBasemapHealth,
   slopeBands,
@@ -613,6 +615,7 @@ function Map({
   onMapBoundsChange,
   onMapViewChange,
   initialView,
+  homeView,
   topoFlyTarget,
   onTopoFlyConsumed,
   flyToPlace,
@@ -721,6 +724,8 @@ function Map({
     /** Read through the terrain router instead of `pmtilesUrl`'s archive. */
     tiles?: RoutedTiles;
   }[];
+  /** The region whose Terrain group `topoLayers` holds: its overlays are styled and answer a tap from its archives. */
+  region: Region | null;
   /** The sharpened areas the user can see: 3D terrain reads them too. */
   sharpenedAreas?: readonly SharpenedOverlay[];
   /** A basemap's tiles keep failing on a server fault (`down`), or load again. */
@@ -759,6 +764,8 @@ function Map({
     bearing: number;
     pitch: number;
   } | null;
+  /** Where the map first opens, with no stored view: the account region's (`accountRegion`). */
+  homeView: { center: readonly [number, number]; zoom: number };
   // A footprint may be a Polygon OR a MultiPolygon (disconnected capture);
   // collectLngLatPairs walks either to its [lng,lat] leaf positions.
   topoFlyTarget?: GeoJsonPolygonal | null;
@@ -897,6 +904,9 @@ function Map({
   // without refs it would close over the first render's points and snap every
   // segment from the same stale vertex.
   // Read inside the map's one-shot load handler, which cannot see later props.
+  // The URL the vector source reads now, so a region change that names the same
+  // archive reloads nothing.
+  const vectorUrlRef = useRef<string | null>(null);
   const activeLayerIdRef = useRef(activeLayerId);
   useEffect(() => {
     activeLayerIdRef.current = activeLayerId;
@@ -951,7 +961,11 @@ function Map({
    */
   const snapBetweenRef = useRef((from: RoutePoint, to: RoutePoint) => {
     if (snapModeRef.current === "off") return;
-    void fetchSnapLines(snapArchiveUrl(), snapModeRef.current, from, to)
+    // The archive is read directly, independent of which basemap is showing or
+    // how far the map is zoomed.
+    const archiveUrl = snapUrlFor(from, to, window.location.origin);
+    if (!archiveUrl) return;
+    void fetchSnapLines(archiveUrl, snapModeRef.current, from, to)
       .then((lines) => {
         const between = snapSegment(lines, from, to);
         // `between` includes the graph nodes nearest both ends; drop them, or
@@ -1036,8 +1050,10 @@ function Map({
         sources: {},
         layers: [],
       },
-      center: initialView ? [initialView.lng, initialView.lat] : INITIAL_CENTER,
-      zoom: initialView?.zoom ?? INITIAL_ZOOM,
+      center: initialView
+        ? [initialView.lng, initialView.lat]
+        : [...homeView.center],
+      zoom: initialView?.zoom ?? homeView.zoom,
       bearing: initialView?.bearing ?? 0,
       pitch: initialView?.pitch ?? 0,
       touchPitch: false, // pinch-rotate is enough for 3D; touch-pitch is a nuisance
@@ -1181,7 +1197,12 @@ function Map({
         const visibility =
           layer.id === activeLayerIdRef.current ? "visible" : "none";
         if (layer.kind === "vector") {
-          addProtomapsBasemap(map, visibility);
+          const archive = initialVectorArchive(boxOf(map.getBounds()));
+          vectorUrlRef.current = vectorSourceUrl(
+            archive,
+            window.location.origin,
+          );
+          addProtomapsBasemap(map, visibility, archive);
           return;
         }
         map.addSource(layer.id, {
@@ -1201,8 +1222,8 @@ function Map({
 
       map.addSource(WORLDWIDE_TERRAIN_SOURCE, {
         type: "raster-dem",
-        // The worldwide source in shared/src/demSources.ts. The NSW one is
-        // added when 3D is switched on over NSW: see terrainSource.ts.
+        // The worldwide source in shared/src/demSources.ts. A region's own is
+        // added when 3D is switched on over it: see terrainSource.ts.
         tiles: [TERRARIUM.urlTemplate],
         encoding: "terrarium",
         attribution: TERRARIUM.creditHtml,
@@ -1834,13 +1855,7 @@ function Map({
       // or pitched map reports MORE ground than is on screen. "Filter to the
       // current view" is a coarse convenience, and reporting slightly more than
       // is visible errs towards keeping places rather than hiding them.
-      const bounds = map.getBounds();
-      onMapBoundsChangeRef.current?.({
-        west: bounds.getWest(),
-        south: bounds.getSouth(),
-        east: bounds.getEast(),
-        north: bounds.getNorth(),
-      });
+      onMapBoundsChangeRef.current?.(boxOf(map.getBounds()));
     };
 
     fireViewChange(); // report initial centre immediately on load
@@ -2261,16 +2276,7 @@ function Map({
       map.setLayoutProperty(id, "visibility", vis);
     if (!showMgaGrid) return;
     const draw = () => {
-      const b = map.getBounds();
-      const grid = mgaGrid(
-        {
-          west: b.getWest(),
-          south: b.getSouth(),
-          east: b.getEast(),
-          north: b.getNorth(),
-        },
-        map.getZoom(),
-      );
+      const grid = mgaGrid(boxOf(map.getBounds()), map.getZoom());
       (map.getSource("mga-grid") as maplibregl.GeoJSONSource).setData(grid);
     };
     draw();
@@ -2742,6 +2748,23 @@ function Map({
     };
   }, [searchPin, mapLoaded]);
 
+  // The vector source reads the archive of the region the map shows. A region
+  // with none leaves it as it was: the vector map is not offered there, so its
+  // layers are hidden and nothing is read.
+  useEffect(() => {
+    const archive = vectorIn(region);
+    const map = mapRef.current;
+    if (!mapLoaded || !map || !archive) return;
+    const url = vectorSourceUrl(archive, window.location.origin);
+    if (url === vectorUrlRef.current) return;
+    vectorUrlRef.current = url;
+    (
+      map.getSource(PROTOMAPS_SOURCE_ID) as
+        | maplibregl.VectorTileSource
+        | undefined
+    )?.setUrl(url);
+  }, [region, mapLoaded]);
+
   // Toggle base layer visibility
   useEffect(() => {
     if (!mapLoaded || !mapRef.current) return;
@@ -2930,7 +2953,7 @@ function Map({
       const fmt = format ?? "raster";
       // A Terrain source made for another set of areas (or for none) has the
       // wrong zooms and holds tiles from the wrong archives: rebuild it.
-      if (TERRAIN_LAYER_KEYS.some((key) => TERRAIN_ENTRIES[key].id === id)) {
+      if (terrainKeyOf(id)) {
         const reads = tiles?.template ?? pmtilesUrl;
         const before = terrainSourceFromRef.current.get(srcId);
         if (before !== undefined && before !== reads && map.getSource(srcId)) {
@@ -3004,41 +3027,47 @@ function Map({
       if (fmt === "coverage") {
         const carrier = coverageCarrierRef.current;
         if (!carrier) return;
-        const layer = coverageLayerSpec(srcId, carrier);
-        if (!map.getLayer(layer.id)) map.addLayer(layer);
+        const layer = region && coverageLayerSpec(region, srcId, carrier);
+        if (layer && !map.getLayer(layer.id)) map.addLayer(layer);
         return;
       }
 
       if (fmt === "fire") {
         // The tint ages by the month: a map left open for weeks is at most
         // that stale.
-        for (const layer of fireLayerSpecs(srcId, new Date()))
+        for (const layer of (region &&
+          fireLayerSpecs(region, srcId, new Date())) ||
+          [])
           if (!map.getLayer(layer.id)) map.addLayer(layer);
         return;
       }
 
       if (fmt === "land") {
-        if (!map.getLayer(LAND_FILL_LAYER)) {
+        const land = layerIn(region, "land");
+        if (!region || !land) return;
+        if (!map.getLayer(landFillLayer(region))) {
           map.addLayer({
-            id: LAND_FILL_LAYER,
+            id: landFillLayer(region),
             type: "fill",
             source: srcId,
-            "source-layer": NSW_REGION.terrain.land.sourceLayer,
+            "source-layer": land.sourceLayer,
             minzoom: LAND_EDGE_MINZOOM,
             // Unseen: it is what a tap reads, since a line has no inside.
             paint: { "fill-opacity": 0 },
           });
         }
         LAND_EDGE_LINES.forEach(({ width, offset, blur, opacity }, i) => {
-          if (map.getLayer(`${LAND_EDGE_LAYER}-${i}`)) return;
+          if (map.getLayer(`${landEdgeLayer(region)}-${i}`)) return;
           map.addLayer({
-            id: `${LAND_EDGE_LAYER}-${i}`,
+            id: `${landEdgeLayer(region)}-${i}`,
             type: "line",
             source: srcId,
-            "source-layer": NSW_REGION.terrain.land.sourceLayer,
+            "source-layer": land.sourceLayer,
             minzoom: LAND_EDGE_MINZOOM,
             paint: {
-              "line-color": landColor() as maplibregl.ExpressionSpecification,
+              "line-color": landColor(
+                land,
+              ) as maplibregl.ExpressionSpecification,
               "line-width": width,
               "line-offset": offset,
               "line-blur": blur,
@@ -3134,8 +3163,8 @@ function Map({
 
     // Paint freshly created (or rebuilt) layers with the current style so they
     // never flash a default colour before the paint effect runs.
-    if (layers.some(({ id }) => id === TERRAIN_ENTRIES.contours.id))
-      applyContourPaint(map, TERRAIN_ENTRIES.contours.id, vs);
+    for (const { id } of layers)
+      if (terrainKeyOf(id) === "contours") applyContourPaint(map, id, vs);
 
     // In the topoLayers order, each entry's layers as a group.
     stackTopoLayers(
@@ -3148,22 +3177,21 @@ function Map({
         Object.fromEntries(
           TERRAIN_LAYER_KEYS.map((key) => [
             key,
-            ownedLayerIds(TERRAIN_ENTRIES[key].id),
+            layers
+              .filter(({ id }) => terrainKeyOf(id) === key)
+              .flatMap(({ id }) => ownedLayerIds(id)),
           ]),
         ) as Record<TerrainLayerKey, string[]>,
         PROTOMAPS_LAYER_PREFIX,
       );
-  }, [topoLayers, mapLoaded, activeLayerId]);
+  }, [topoLayers, region, mapLoaded, activeLayerId]);
 
   // The contours' look follows the basemap: a paint change, never a new layer.
   useEffect(() => {
     if (!mapLoaded || !mapRef.current) return;
-    if ((topoLayers ?? []).some(({ id }) => id === TERRAIN_ENTRIES.contours.id))
-      applyContourPaint(
-        mapRef.current,
-        TERRAIN_ENTRIES.contours.id,
-        nswContourStyle(activeLayerId),
-      );
+    for (const { id } of topoLayers ?? [])
+      if (terrainKeyOf(id) === "contours")
+        applyContourPaint(mapRef.current, id, nswContourStyle(activeLayerId));
   }, [topoLayers, mapLoaded, activeLayerId]);
 
   // The slope bands, live, the same way: a paint change, never a new layer.
@@ -3186,12 +3214,21 @@ function Map({
   // The carrier, live, the same way: a filter change, never a new layer.
   useEffect(() => {
     if (!mapLoaded || !mapRef.current) return;
-    if (coverageCarrier && mapRef.current.getLayer(COVERAGE_FILL_LAYER))
+    const coverage = layerIn(region, "coverage");
+    if (
+      region &&
+      coverage &&
+      coverageCarrier &&
+      mapRef.current.getLayer(coverageFillLayer(region))
+    )
       mapRef.current.setFilter(
-        COVERAGE_FILL_LAYER,
-        coverageFilter(coverageCarrier) as maplibregl.FilterSpecification,
+        coverageFillLayer(region),
+        coverageFilter(
+          coverage,
+          coverageCarrier,
+        ) as maplibregl.FilterSpecification,
       );
-  }, [topoLayers, coverageCarrier, mapLoaded]);
+  }, [topoLayers, region, coverageCarrier, mapLoaded]);
 
   // Fly to a topo job's bbox when requested from App.tsx
   const onTopoFlyConsumedRef = useRef(onTopoFlyConsumed);
@@ -3616,13 +3653,18 @@ function Map({
       tilt,
     );
   };
-  // A change of areas while 3D is on draws terrain again from the new set:
-  // `useTerrainReapply.test.ts` (the trigger) and `terrainSource.test.ts`
-  // ("applyTerrain": the new source, the old one removed).
-  useTerrainReapply(areasKey(sharpenedAreas ?? []), is3D, () => {
-    const map = mapRef.current;
-    if (map) applyTerrainNow(map, ++terrainToggleRef.current);
-  });
+  // A change of areas, or of the region the map shows, while 3D is on draws
+  // terrain again from the new set: `useTerrainReapply.test.ts` (the trigger)
+  // and `terrainSource.test.ts` ("applyTerrain": the new source, the old one
+  // removed).
+  useTerrainReapply(
+    terrainReapplyKey(region, sharpenedAreas ?? []),
+    is3D,
+    () => {
+      const map = mapRef.current;
+      if (map) applyTerrainNow(map, ++terrainToggleRef.current);
+    },
+  );
   const toggleTerrain = () => setTerrainOn(!is3D);
   const setTerrainOn = (on: boolean, quiet = false) => {
     const map = mapRef.current;
@@ -3705,6 +3747,10 @@ function Map({
           // while an area is selected: the frame holds the view the user set.
           <MapSearchBox
             disabled={selectingArea}
+            getView={() => {
+              const bounds = mapRef.current?.getBounds();
+              return bounds ? boxOf(bounds) : null;
+            }}
             places={places}
             sharedPlaces={sharedPlaces}
             onSelectPlace={(place) => {
@@ -3744,6 +3790,7 @@ function Map({
           point={asked.point}
           from={asked.from}
           coverageCarrier={coverageCarrier}
+          region={region}
           {...(asked.startAt ? { startAt: asked.startAt } : {})}
           onClose={closeAsked}
           onAddPlace={onAddPlaceAt}

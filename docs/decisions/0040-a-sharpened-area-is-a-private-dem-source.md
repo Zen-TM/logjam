@@ -54,8 +54,10 @@ found three problems:
   - A stranger gets the statewide answer, worded as anywhere else.
 - **Each map tile comes from exactly one archive.** `terrainTileArchive`
   routes heights and slope from z15 to the first area whose z15 range holds
-  the tile, down to that area's zmax. Past it, or past z15 outside every
-  area, the tile is absent and the renderer draws its parent. Contours route
+  the tile, down to that area's zmax. Past it, or past the region's own
+  archive's deepest zoom (z15 for New South Wales's) outside every area, the
+  tile is absent and the renderer draws its parent (updated 2026-11-15).
+  Contours route
   at z14, the statewide archive's deepest zoom, and are never absent. To make
   that hold, an area's archives hold every tile of the range: the footprint's
   bbox in z15 tiles, widened to whole z14 tiles, and every descendant. Where
@@ -66,8 +68,10 @@ found three problems:
   names no job.
 - **The credit is declared once, by the worker.** `credit` in
   `topo/sharpen.py` writes it into the job's result, and the API passes it
-  on. Every result read from an area also carries the NSW 5 m credit
-  (`demCredits`), because the area's edge tiles hold 5 m heights.
+  on. Every result read from an area also carries the heights credit of
+  the region the area lies in (`demCredits`; the NSW 5 m credit in NSW),
+  because the area's edge tiles hold that region's heights (updated
+  2026-11-14).
 - **Update 2026-10-24: a file made from an area can leave that circle.** An
   export of an area (GeoTIFF, GeoPackage, MBTiles) or a GeoPDF made by
   someone who may read a sharpened area carries the area's terrain. Which
@@ -92,6 +96,30 @@ found three problems:
   maker's alone and reaches anyone else only if the maker hands it on. The
   server render's guard went with it; `sharpenedAreas.test.ts` holds the
   route. Everything else above stands.
+- **Update 2026-11-14: a map routes an area only inside the region that holds
+  it.** Both clients draw the region the map shows
+  ([0049](0049-what-a-map-offers-follows-the-ground-it-shows-and-an-accounts-chosen-regions-only-set-defaults.md)),
+  so each client routes only the areas whose survey box shares ground with
+  that region's border (`areasInRegion`, the test the area-export check
+  uses): Logjam Web's `terrainTile` hands them to `terrainTileArchive`, and
+  Logjam GPS's `resolveTerrain` cuts its rectangles from them. An area
+  centred just outside the border is still routed inside it. A region with none reads its own archives directly. The height
+  sampler (`demSourcesFor`, the API) still reads every area, so the router and
+  the sampler differ on which areas count, by design. Guards:
+  `shared/src/regions.test.ts` ("areasInRegion") and
+  `frontend/src/components/map/terrainRouter.test.ts` ("routes an area only
+  inside the region that holds it"). Everything else above stands.
+- **Update 2026-11-15: outside every area, a region's own archive answers to
+  its own deepest zoom.** Routing starts at z15 whatever the region, but
+  where no area holds a tile the region's archive answers it down to the
+  `maxzoom` of its entry (`terrainTileArchive`'s `statewideMax`), and the
+  tile is absent only past that. New South Wales's archives stop at z15, so
+  nothing changes there; a region whose archives hold z17 is read at z17 by
+  the map, by 3D terrain and by a GeoPDF. An area's own zmax still ends its
+  tiles. Guards: `shared/src/sharpen.test.ts` ("reads statewide to the
+  region's own deepest zoom outside an area") and
+  `frontend/src/components/map/terrainRouter.test.ts` ("reads the region's
+  archive to its own top zoom beside an area"). Everything else above stands.
 
 Guards:
 - `shared/src/sharpen.test.ts`: the precedence, the routing at each edge of

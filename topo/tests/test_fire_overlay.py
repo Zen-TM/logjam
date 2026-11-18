@@ -1,5 +1,5 @@
 """The Fire history overlay's archive: one fire per area, and its agreement
-with the clients (`NSW_FIRE` in shared/src/nswFire.ts)."""
+with the clients (`NSW_REGION.terrain.fire` in shared/src/regions.ts)."""
 
 import os
 import re
@@ -15,7 +15,10 @@ import _native_stub  # noqa: F401,E402  (stubs osgeo when absent on the host)
 
 import build_fire_history as fh  # noqa: E402
 
-SHARED = (Path(__file__).resolve().parents[2] / "shared/src/nswFire.ts").read_text()
+# The archive is declared in the region: only its `fire: {` entry, so another
+# layer's zooms can't stand in for its own.
+REGIONS = (Path(__file__).resolve().parents[2] / "shared/src/regions.ts").read_text()
+SHARED = REGIONS[REGIONS.index("    fire: {") :].split("\n    },", 1)[0]
 REAL_SHAPELY = not _native_stub.is_stubbed("shapely")
 if REAL_SHAPELY:
     from shapely.geometry import LineString, box
@@ -109,7 +112,7 @@ class TestFlatten(unittest.TestCase):
 
 
 class TestArchive(unittest.TestCase):
-    # Mutation: change a value here or in NSW_FIRE alone, and the clients ask
+    # Mutation: change a value here or in the region's fire entry alone, and the clients ask
     # for a file, a layer or zooms the archive doesn't have.
     def test_the_clients_read_what_the_build_writes(self):
         self.assertIn(f'archivePath: "{fh.ARCHIVE_KEY}"', SHARED)

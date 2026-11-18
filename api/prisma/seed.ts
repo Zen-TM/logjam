@@ -39,6 +39,7 @@ import {
   PLACE_REGISTRY_PREFIX,
   DEFAULT_MONTHLY_EGRESS_BYTES,
   SYSTEM_PLACE_TYPE_IDS,
+  accountRegion,
   currentSeason,
   SYSTEM_PLACE_TYPES,
   TRACK_COLORS,
@@ -1318,7 +1319,7 @@ function buildTrips(): SeedTrip[] {
   // so every trip above keeps its id and date. A week apart from the season's
   // start and never after today, so a re-seed in any month lands them in the
   // season it is.
-  const season = currentSeason();
+  const season = currentSeason(new Date(), accountRegion(null));
   const daysIn = Math.floor((Date.now() - season.start.getTime()) / 86_400_000);
   const isCanyon = (place: SeedPlace) =>
     seedPlaceTypeId(place.id) === SYSTEM_PLACE_TYPE_IDS.canyon;

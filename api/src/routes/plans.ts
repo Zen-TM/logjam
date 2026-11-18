@@ -3,6 +3,7 @@
 // under /plans/:planId. Access is lib/planAccess.ts's alone.
 import { Router, Response } from "express";
 import {
+  accountRegion,
   isTripPlanFormPresetId,
   isTripPlanFormVisibility,
   parseTripPlanCreate,
@@ -74,6 +75,7 @@ router.get(
                 )
               : null,
             unanswered(plan.forms),
+            accountRegion(user.uiPreferences).timeZone,
           );
         }),
       ),
@@ -256,7 +258,15 @@ router.post(
       },
     });
     if (!plan) throw planNotFound();
-    res.json(planSummary(plan, plan.members[0], null, unanswered(plan.forms)));
+    res.json(
+      planSummary(
+        plan,
+        plan.members[0],
+        null,
+        unanswered(plan.forms),
+        accountRegion(user.uiPreferences).timeZone,
+      ),
+    );
   },
 );
 

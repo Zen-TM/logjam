@@ -1,5 +1,6 @@
 // The Coverage overlay: where the user's carrier predicts a phone won't work,
-// statewide, from the ACCC Mobile Infrastructure Report data. One archive,
+// from a region's coverage archive (`RegionTerrain.coverage`, regions.ts); NSW's
+// is the ACCC Mobile Infrastructure Report data. One archive,
 // rebuilt by `topo/build_coverage.py` when the ACCC publishes a new year,
 // holds every carrier: each area is a carrier's `level` there, and the map
 // draws only the user's carrier.
@@ -9,49 +10,47 @@
 // and Land.
 import { COVERAGE_HATCH_URI } from "./coverageHatchImages.js";
 import { MAP_TERRAIN } from "./contracts/mapTerrain.js";
-import { NSW_REGION } from "./regions.js";
+import {
+  layerIn,
+  REGIONS,
+  type CoverageArchive,
+  type Region,
+} from "./regions.js";
 
-export const NSW_COVERAGE = {
-  /** A saved clip is filed under this, beside the area it was saved with. */
-  id: "nsw-coverage",
-  /** A PMTiles archive under the CDN's `/master`, beside Land. */
-  archivePath: "master/coverage/nsw-coverage.pmtiles",
-  /** The build script's `SOURCE_LAYER` (test_coverage.py). */
-  sourceLayer: "coverage",
-  /** A `CARRIERS` id. */
-  carrierProperty: "carrier",
-  /** A `COVERAGE_LEVELS` level. */
-  levelProperty: "level",
-  /** The build script's zooms: z12 alone, where the overlay is drawn from
-   *  (`COVERAGE_MIN_ZOOM`); its grid is about 50 m, finer than the hatch's
-   *  spacing (about 190 m at z12). Deeper zooms overzoom. */
-  minzoom: 12,
-  maxzoom: 12,
-  coverage: NSW_REGION.terrain.heights.coverage,
-  credit:
-    "Mobile coverage: ACCC Mobile Infrastructure Report data release © Commonwealth of Australia (ACCC), CC BY 2.5 AU; coastline © ABS, CC BY 4.0",
-  creditHtml:
-    'Mobile coverage: <a href="https://data.gov.au/data/dataset/accc-mobile-infrastructure-report-data-release">ACCC Mobile Infrastructure Report data release</a> &copy; Commonwealth of Australia (ACCC), <a href="https://creativecommons.org/licenses/by/2.5/au/">CC BY 2.5 AU</a>; coastline &copy; <a href="https://www.abs.gov.au/statistics/standards/australian-statistical-geography-standard-asgs-edition-3">ABS</a>, <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>',
-} as const;
+/** A network's id, as a coverage archive's `carriers` and a stored choice hold it. */
+export type CarrierId = string;
 
 /**
- * The networks a user picks from: the three that own one. `NETWORKS` in the
- * build script has the same ids (test_coverage.py). A reseller uses one of
- * these; Telstra's resellers get less than Telstra's own map, which the legend
- * says.
+ * A stored carrier, or null for anything that isn't one of `carriers`: until
+ * the user picks, the overlay has no carrier and draws nothing.
  */
-export const CARRIERS = [
-  { id: "telstra", name: "Telstra" },
-  { id: "optus", name: "Optus" },
-  { id: "tpg", name: "TPG" },
-] as const;
+export function normalizeCarrier(
+  value: unknown,
+  carriers: readonly { id: string }[],
+): CarrierId | null {
+  return carriers.find((c) => c.id === value)?.id ?? null;
+}
 
-export type CarrierId = (typeof CARRIERS)[number]["id"];
+// ponytail: one stored carrier for every region, checked against every
+// region's list, so a pick the region in view doesn't list draws nothing there
+// and the traveller picks again on return. Upgrade: a pick per region.
+/** Every network any of `regions` lists: what a stored pick is checked against. */
+export function carriersOf(
+  regions: readonly Region[] = REGIONS,
+): { id: string; name: string }[] {
+  return regions.flatMap((r) => r.terrain.coverage?.carriers ?? []);
+}
 
-/** A stored carrier, or null for anything that isn't one: until the user
- *  picks, the overlay has no carrier and draws nothing. */
-export function normalizeCarrier(value: unknown): CarrierId | null {
-  return CARRIERS.find((c) => c.id === value)?.id ?? null;
+/**
+ * The carrier the Coverage row names for the region in view: the stored pick
+ * where that region lists it, else none, so the row asks again. Guard:
+ * `coverage.test.ts` ("keeps a stored carrier only where the region lists it").
+ */
+export function coverageCarrierHere(
+  region: Region | null,
+  stored: CarrierId | null,
+): CarrierId | null {
+  return normalizeCarrier(stored, layerIn(region, "coverage")?.carriers ?? []);
 }
 
 /** The style image's name, registered on each map with `COVERAGE_HATCH_URIS`. */
@@ -83,16 +82,19 @@ export function drawsCoverage(on: boolean, carrier: CarrierId | null): boolean {
 }
 
 /** The layer's `filter`: the user's carrier alone. */
-export function coverageFilter(carrier: CarrierId): unknown[] {
-  return ["==", ["get", NSW_COVERAGE.carrierProperty], carrier];
+export function coverageFilter(
+  coverage: CoverageArchive,
+  carrier: CarrierId,
+): unknown[] {
+  return ["==", ["get", coverage.carrierProperty], carrier];
 }
 
 /**
  * The `fill-opacity` expression: clear where there is reception, so the area
  * is still there for a tap to read, and hatched everywhere else.
  */
-export function coverageOpacity(): unknown[] {
-  return ["match", ["get", NSW_COVERAGE.levelProperty], RECEPTION_LEVEL, 0, 1];
+export function coverageOpacity(coverage: CoverageArchive): unknown[] {
+  return ["match", ["get", coverage.levelProperty], RECEPTION_LEVEL, 0, 1];
 }
 
 type Ring = readonly (readonly number[])[];
@@ -146,18 +148,19 @@ export function polygonHolds(
  * should their levels differ, any without reception wins.
  */
 export function coverageNameOf(
+  coverage: CoverageArchive,
   features: readonly QueriedFeature[],
   carrier: CarrierId,
   at: readonly [number, number],
 ): string | null {
   const levels = features
     .filter((f) => polygonHolds(f.geometry, at))
-    .map((f) => f.properties?.[NSW_COVERAGE.levelProperty]);
+    .map((f) => f.properties?.[coverage.levelProperty]);
   const known = levels.filter((l) =>
     (COVERAGE_LEVELS as readonly unknown[]).includes(l),
   );
   if (known.length === 0) return null;
-  const name = CARRIERS.find((c) => c.id === carrier)?.name ?? carrier;
+  const name = coverage.carriers.find((c) => c.id === carrier)?.name ?? carrier;
   const copy = MAP_TERRAIN.copy;
   return `${name}: ${
     known.every((l) => l === RECEPTION_LEVEL)

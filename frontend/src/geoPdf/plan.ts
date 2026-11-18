@@ -1,31 +1,34 @@
-// What a GeoPDF reads from the statewide archives, worked out from its
-// config alone. The renderer plans its strips from the same functions, and the
-// dialog's background prefetch (prefetch.ts) asks the same question before any
-// render, so both name the same tiles. Pure; nothing here touches the network.
+// What a GeoPDF reads from the archives of the region its sheet is in, worked
+// out from its config alone. The renderer plans its strips from the same
+// functions, and the dialog's background prefetch (prefetch.ts) asks the same
+// question before any render, so both name the same tiles. Pure; nothing here
+// touches the network.
 import {
   BASEMAP_CATALOG,
   computeTileToMapTransform,
   computeZoom,
   geoPdfBaseTileZoom,
   geoPdfMaxNativeZoom,
-  NSW_REGION,
   TARGET_DPI,
   type SharpenedOverlay,
+  type TerrainArchive,
   type TileCoord,
   type TileToMapTransform,
+  type VectorArchive,
 } from "@logjam/shared";
 import {
   areasOnPage,
   contourTilesBySource,
   demBlockRows,
-  nswVectorZoom,
   overlaysDrawn,
   STATEWIDE,
   terrainReadZoom,
   terrainTileReader,
   terrainTileReads,
+  vectorReadZoom,
   type TerrainTileRead,
 } from "./terrain";
+import { sheetTerrain, type SheetTerrain } from "./sheetTerrain";
 import { displayZoomForScale } from "./draw/common";
 import type { GeoPdfRenderInput } from "./types";
 
@@ -68,24 +71,27 @@ export function rasterBaseTiles(
   );
 }
 
+/** Whether the sheet's base layer is a vector catalogue entry, read from an archive. */
+export const isVectorBase = (config: GeoPdfRenderInput["config"]): boolean =>
+  BASEMAP_CATALOG.some((e) => e.id === config.baseLayer && e.kind === "vector");
+
 /**
- * The archive and tiles a vector base is read from, or null for a raster base.
+ * The archive and tiles a vector base is read from, or null for a raster base
+ * or where `archive` is null (the sheet's region has none).
  * The tile zoom follows the style zoom it is drawn at, not the print's: more
  * pixels on the page do not put more features in a tile.
  */
 export function vectorBasemap(
   config: GeoPdfRenderInput["config"],
   g: PrintGeometry,
+  archive: VectorArchive | null,
 ) {
-  const entry = BASEMAP_CATALOG.find(
-    (e) => e.id === config.baseLayer && e.kind === "vector",
-  );
-  if (!entry) return null;
+  if (!isVectorBase(config) || !archive) return null;
   const { north, south, east, west } = config.extent;
   const styleZoom = displayZoomForScale(config.scale, g.centreLat);
-  const zoom = Math.floor(Math.min(styleZoom, entry.maxNativeZoom));
+  const zoom = Math.floor(Math.min(styleZoom, archive.maxzoom));
   return {
-    path: entry.urlTemplate,
+    path: archive.archivePath,
     styleZoom,
     transform: computeTileToMapTransform(
       Math.max(zoom, 0),
@@ -112,23 +118,21 @@ export type TerrainBlocks = {
 
 /**
  * The tiles a heights or slope layer reads for each span of map rows (a
- * strip's drawn rows), in the DEM block `demBlockRows` gives it.
+ * strip's drawn rows), in the DEM block `demBlockRows` gives it. `archive` is
+ * the sheet's region's, which sets the deepest zoom it holds.
  */
 export function planTerrainBlocks(
   config: GeoPdfRenderInput["config"],
   g: PrintGeometry,
   areas: readonly SharpenedOverlay[],
   archiveLayer: "heights" | "slope",
+  archive: Pick<TerrainArchive, "maxzoom">,
   spans: readonly { from: number; to: number }[],
 ): TerrainBlocks {
   const { north, south, east, west } = config.extent;
-  const maxzoom =
-    archiveLayer === "heights"
-      ? NSW_REGION.terrain.hillshade.maxzoom
-      : NSW_REGION.terrain.slope.maxzoom;
   const demZoom = terrainReadZoom(
     Math.min(g.zoom, g.overlayZoom),
-    maxzoom,
+    archive.maxzoom,
     areas,
   );
   const t = computeTileToMapTransform(
@@ -143,7 +147,7 @@ export function planTerrainBlocks(
   const last = t.tiles[t.tiles.length - 1]!;
   const cols = last.x - t.minTileX + 1;
   const rows = last.y - t.minTileY + 1;
-  const read = terrainTileReader(areas, archiveLayer);
+  const read = terrainTileReader(areas, archiveLayer, archive.maxzoom);
   const blocks = spans.map((span) => {
     const { r0, r1 } = demBlockRows(span.from, span.to, t, rows);
     const tiles: TileCoord[] = [];
@@ -174,40 +178,45 @@ export type StatewideRead = {
  * out (they are presigned, never prefetched). The whole map is one span: the
  * strips' blocks overlap by their halo and together cover exactly that.
  */
-export function statewideReads(input: GeoPdfRenderInput): StatewideRead[] {
+export function statewideReads(
+  input: GeoPdfRenderInput,
+  terrain: SheetTerrain = sheetTerrain(input.config.extent),
+): StatewideRead[] {
   const { config } = input;
   const g = printGeometry(config);
   if (!(g.nativeW > 0 && g.nativeH > 0)) return [];
   const areas = areasOnPage(input.areas, config.extent);
-  const drawn = overlaysDrawn(config);
+  const drawn = overlaysDrawn(config, terrain);
   const out = new Map<string, StatewideRead>();
   const add = (path: string, r: TileCoord) =>
     out.set(`${path} ${r.z}/${r.x}/${r.y}`, { path, ...r });
-  const basemap = vectorBasemap(config, g);
+  const basemap = vectorBasemap(config, g, terrain.vector);
   if (basemap)
     for (const tile of basemap.transform.tiles) add(basemap.path, tile);
   const whole = [{ from: 0, to: g.nativeH }];
-  const layers: [boolean, "heights" | "slope"][] = [
-    [drawn.hillshade, "heights"],
-    [config.overlays.includes("slope"), "slope"],
+  const layers: [TerrainArchive | null, "heights" | "slope"][] = [
+    [drawn.hillshade ? terrain.heights : null, "heights"],
+    [config.overlays.includes("slope") ? terrain.slope : null, "slope"],
   ];
-  for (const [wanted, archiveLayer] of layers) {
-    if (!wanted) continue;
-    const path =
-      archiveLayer === "heights"
-        ? NSW_REGION.terrain.hillshade.archivePath
-        : NSW_REGION.terrain.slope.archivePath;
-    for (const r of planTerrainBlocks(config, g, areas, archiveLayer, whole)
-      .blocks[0]!.reads)
-      if (r.source === STATEWIDE) add(path, r);
+  for (const [archive, archiveLayer] of layers) {
+    if (!archive) continue;
+    for (const r of planTerrainBlocks(
+      config,
+      g,
+      areas,
+      archiveLayer,
+      archive,
+      whole,
+    ).blocks[0]!.reads)
+      if (r.source === STATEWIDE) add(archive.archivePath, r);
   }
-  const contourZoom = nswVectorZoom(
-    NSW_REGION.terrain.contours,
+  const contourZoom = vectorReadZoom(
+    terrain.contours,
     config.scale,
     g.centreLat,
     g.overlayZoom,
   );
-  if (contourZoom !== null && drawn.contours) {
+  if (terrain.contours && contourZoom !== null && drawn.contours) {
     const { north, south, east, west } = config.extent;
     const t = computeTileToMapTransform(
       contourZoom,
@@ -219,16 +228,15 @@ export function statewideReads(input: GeoPdfRenderInput): StatewideRead[] {
       g.nativeH,
     );
     const tiles = contourTilesBySource(areas, t.tiles).get(STATEWIDE) ?? [];
-    for (const tile of tiles)
-      add(NSW_REGION.terrain.contours.archivePath, tile);
+    for (const tile of tiles) add(terrain.contours.archivePath, tile);
   }
-  const landZoom = nswVectorZoom(
-    NSW_REGION.terrain.land,
+  const landZoom = vectorReadZoom(
+    terrain.land,
     config.scale,
     g.centreLat,
     g.overlayZoom,
   );
-  if (landZoom !== null && config.overlays.includes("land")) {
+  if (terrain.land && landZoom !== null && config.overlays.includes("land")) {
     const { north, south, east, west } = config.extent;
     const t = computeTileToMapTransform(
       landZoom,
@@ -239,7 +247,7 @@ export function statewideReads(input: GeoPdfRenderInput): StatewideRead[] {
       g.nativeW,
       g.nativeH,
     );
-    for (const tile of t.tiles) add(NSW_REGION.terrain.land.archivePath, tile);
+    for (const tile of t.tiles) add(terrain.land.archivePath, tile);
   }
   return [...out.values()];
 }

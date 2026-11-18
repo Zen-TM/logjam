@@ -28,6 +28,7 @@ import {
   parseRgbaHex,
   slopeBandAt,
   terrainCredit,
+  TERRAIN_ROUTED_FROM,
   terrainTileArchive,
   TILE_SIZE,
   tileY2lat,
@@ -36,6 +37,7 @@ import {
   type TerrainLayerKey,
   type TileCoord,
 } from "@logjam/shared";
+import type { SheetTerrain } from "./sheetTerrain";
 
 /** A terrarium tile set decoded into one row-major grid: metres, or degrees. */
 export type DemGrid = { values: Float32Array; width: number; height: number };
@@ -232,18 +234,20 @@ export function hillshadePixels(
 
 /**
  * The zoom a print at 1:`scale` reads a statewide vector `archive` at (the
- * contours, or Land), or null when Logjam Web would show none at that scale: it
- * loads the archive as a vector source, which asks for nothing below the
- * minzoom in the archive's header.
+ * contours, or Land), or null when the sheet's region has none (`archive` is
+ * null) or Logjam Web would show none at that scale: it loads the archive as a
+ * vector source, which asks for nothing below the minzoom in the archive's
+ * header.
  * The map's camera zoom is 512-based (mapZoom.ts), so it is read through
  * `metersPerPixel`, at one CSS pixel (1/96 in) of screen per `scale` of ground.
  */
-export function nswVectorZoom(
-  archive: { minzoom: number; maxzoom: number },
+export function vectorReadZoom(
+  archive: { minzoom: number; maxzoom: number } | null,
   scale: number,
   latDeg: number,
   overlayZoom: number,
 ): number | null {
+  if (!archive) return null;
   const cameraZoom = Math.log2(
     metersPerPixel(latDeg, 0) / ((scale * 0.0254) / 96),
   );
@@ -282,7 +286,7 @@ export function areasOnPage<A extends SharpenedArea>(
 
 /**
  * The zoom a print reads heights or slope at: its own, but no deeper than
- * the statewide archive's `statewideMax` (z15) unless an area on the page
+ * the region's archive's `statewideMax` (z15 for NSW's) unless an area on the page
  * holds more, then that area's zmax. At 300 dpi and NSW's latitude a print
  * at 1:50 000 wants z15, 1:25 000 z16, 1:15 000 z17, 1:10 000 z18; the base
  * layer's own cap comes first (`computeZoom`).
@@ -302,12 +306,14 @@ export function terrainReadZoom(
  * Which tile a print reads for the heights or slope tile `z/x/y`: the one
  * archive `terrainTileArchive` routes it to or, where that says absent, the
  * nearest ancestor it routes, which a map would draw in its place. Below z15
- * every tile is statewide, so the walk up ends. Memoised: a grid asks for each
- * tile many times.
+ * every tile is statewide, so the walk up ends. `statewideMax` is the deepest
+ * zoom of the sheet's region's archive. Memoised: a grid asks for each tile
+ * many times.
  */
 export function terrainTileReader(
   areas: readonly SharpenedArea[],
   layer: "heights" | "slope",
+  statewideMax: number,
 ): (z: number, x: number, y: number) => TerrainTileRead {
   const known = new Map<string, TerrainTileRead>();
   return (z, x, y) => {
@@ -321,6 +327,7 @@ export function terrainTileReader(
           z - up,
           x >> up,
           y >> up,
+          statewideMax,
         );
         if (answer !== "absent") {
           const source = answer === "statewide" ? STATEWIDE : answer.id;
@@ -467,6 +474,10 @@ export function contourTilesBySource(
       tile.z,
       tile.x,
       tile.y,
+      // Contours are never absent, so the zoom does not matter. Guard:
+      // `sharpen.test.ts` ("answers at the routed zoom, and for contours,
+      // whatever the archive's deepest zoom").
+      TERRAIN_ROUTED_FROM.contours,
     );
     if (answer === "absent") continue;
     const source = answer === "statewide" ? STATEWIDE : answer.id;
@@ -480,19 +491,23 @@ export function contourTilesBySource(
 /**
  * The credit lines for the terrain a print drew: the statewide line for every
  * layer drawn, then each area's survey for the layers that area supplied,
- * worded the same way. The statewide line is the NSW 5 m credit an area's
- * always carries too (`demCredits`), because its edge tiles hold 5 m heights,
- * so it names every layer an area supplied as well as `drawn`. Guard: the
- * "beside the NSW 5 m data" test in terrain.test.ts.
+ * worded the same way. The statewide line is the sheet's region's heights
+ * credit (`SheetTerrain.credit`), which an area's always carries too
+ * (`demCredits`), because its edge tiles hold the region's heights, so it names
+ * every layer an area supplied as well as `drawn`. Guard: the "beside the
+ * region's own heights" test in terrain.test.ts.
  */
 export function terrainCreditLines(
   drawn: ReadonlySet<TerrainLayerKey>,
   areas: ReadonlyMap<SharpenedArea, ReadonlySet<TerrainLayerKey>>,
+  credit: string | null,
 ): string[] {
   const lines = [
-    terrainCredit(
-      new Set([...drawn, ...[...areas.values()].flatMap((l) => [...l])]),
-    ),
+    credit &&
+      terrainCredit(
+        new Set([...drawn, ...[...areas.values()].flatMap((l) => [...l])]),
+        credit,
+      ),
     ...[...areas].map(([area, layers]) => terrainCredit(layers, area.credit)),
   ].filter((line): line is string => line !== null);
   return [...new Set(lines)];
@@ -501,23 +516,25 @@ export function terrainCreditLines(
 /**
  * Which of the statewide shade and contours a print draws: the ones in its
  * overlays, minus those its base sheet already carries (imagery its own
- * shadows, a topographic sheet its own contours). A saved request, an older
- * client or a direct call can ask for either over any sheet, so the renderer
- * decides, not the dialog. Guard: `terrain.test.ts` ("overlaysDrawn").
+ * shadows, a topographic sheet its own contours) and those the sheet's region
+ * has no archive for. A saved request, an older client or a direct call can ask
+ * for either over any sheet, so the renderer decides, not the dialog. Guard:
+ * `terrain.test.ts` ("overlaysDrawn").
  */
-export function overlaysDrawn(config: {
-  baseLayer: string;
-  overlays: readonly string[];
-}): { hillshade: boolean; contours: boolean } {
+export function overlaysDrawn(
+  config: { baseLayer: string; overlays: readonly string[] },
+  terrain: Pick<SheetTerrain, "heights" | "contours">,
+): { hillshade: boolean; contours: boolean } {
   return {
-    hillshade: drawsNswHillshade(
-      config.baseLayer,
-      config.overlays.includes("hillshade"),
-    ),
-    contours: drawsNswContours(
-      config.baseLayer,
-      config.overlays.includes("contours"),
-    ),
+    hillshade:
+      terrain.heights !== null &&
+      drawsNswHillshade(
+        config.baseLayer,
+        config.overlays.includes("hillshade"),
+      ),
+    contours:
+      terrain.contours !== null &&
+      drawsNswContours(config.baseLayer, config.overlays.includes("contours")),
   };
 }
 

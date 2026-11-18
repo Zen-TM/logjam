@@ -44,7 +44,6 @@ import * as FileSystem from "expo-file-system/legacy";
 
 import {
   BASEMAP_CATALOG,
-  NSW_REGION,
   SHARPENED_SOURCE_PREFIX,
   TOPO_LAYERS,
   formatDistanceM,
@@ -153,6 +152,7 @@ import { downloadTopoOverlay } from "../offline/overlayDownloads";
 import { deleteDownloadedArtifact } from "../offline/regionDownloads";
 import { renameArtifact } from "../offline/registryDb";
 import { canUpdateRegion, startRegionUpdate } from "../offline/regionUpdate";
+import { archiveLabel } from "../offline/regionTilePlanning";
 import { useMapArtifacts } from "../offline/useMapArtifacts";
 import {
   cardDates,
@@ -238,9 +238,7 @@ function regionMemberName(artifact: MapArtifact): string {
   if (artifact.kind === "fire-region") return MAP_TERRAIN.copy.fire;
   if (artifact.kind === "coverage-region") return MAP_TERRAIN.copy.coverage;
   if (artifact.kind !== "dem-region") return basemapName(artifact.logicalKey);
-  return artifact.logicalKey === NSW_REGION.terrain.heights.id
-    ? "Elevation data, NSW 5 m"
-    : "Elevation data";
+  return archiveLabel(artifact.logicalKey) ?? "Elevation data";
 }
 
 /** A topo-overlay artifact's logicalKey is `<jobId>/<layer>`. */

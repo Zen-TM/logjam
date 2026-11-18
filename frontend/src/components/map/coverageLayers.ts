@@ -4,7 +4,8 @@ import {
   COVERAGE_MIN_ZOOM,
   coverageFilter,
   coverageOpacity,
-  NSW_COVERAGE,
+  layerIn,
+  type Region,
   zoomFadeIn,
 } from "@logjam/shared";
 import type {
@@ -13,25 +14,34 @@ import type {
   LayerSpecification,
 } from "maplibre-gl";
 
-import { COVERAGE_FILL_LAYER } from "./layerOrder";
+import { coverageFillLayer } from "./layerOrder";
 
 type Expr = ExpressionSpecification;
 
-/** The Coverage hatch over the source `source`, for `carrier` alone. */
+/**
+ * The Coverage hatch of `region` over the source `source`, for `carrier`
+ * alone, or null where the region has no coverage archive.
+ */
 export function coverageLayerSpec(
+  region: Region,
   source: string,
   carrier: CarrierId,
-): Extract<LayerSpecification, { type: "fill" }> {
+): Extract<LayerSpecification, { type: "fill" }> | null {
+  const coverage = layerIn(region, "coverage");
+  if (!coverage) return null;
   return {
-    id: COVERAGE_FILL_LAYER,
+    id: coverageFillLayer(region),
     type: "fill",
     source,
-    "source-layer": NSW_COVERAGE.sourceLayer,
+    "source-layer": coverage.sourceLayer,
     minzoom: COVERAGE_MIN_ZOOM,
-    filter: coverageFilter(carrier) as FilterSpecification,
+    filter: coverageFilter(coverage, carrier) as FilterSpecification,
     paint: {
       "fill-pattern": COVERAGE_HATCH_IMAGE,
-      "fill-opacity": zoomFadeIn(COVERAGE_MIN_ZOOM, coverageOpacity()) as Expr,
+      "fill-opacity": zoomFadeIn(
+        COVERAGE_MIN_ZOOM,
+        coverageOpacity(coverage),
+      ) as Expr,
     },
   };
 }

@@ -89,8 +89,9 @@ the API path never could.
   from the public archives with no call to the API ([0036](0036-the-phone-cuts-its-own-offline-clips.md)). The worldwide
   tiles are still saved with every area. Everything else above stands.
 
-**Size estimates are measured, not guessed.** `shared/src/mapRegionEstimate.ts`
-holds per-source, per-zoom tile sizes calibrated by
+**Size estimates are measured, not guessed.** Each downloadable raster's entry in
+`shared/src/geoPdfBaseLayers.ts` holds its per-zoom tile sizes (`tileBytes`), and
+`shared/src/mapRegionEstimate.ts` prices a save from them, calibrated by
 `shared/scripts/calibrate-basemap-tile-sizes.mjs` (bush AND town samples — a
 bush-only calibration read 40 % under for a Katoomba download) plus a measured
 7.1 % MBTiles container overhead. Re-run the script and update both together; a

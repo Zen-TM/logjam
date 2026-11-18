@@ -63,6 +63,7 @@ import {
   type DeviceMotionMeasurement,
 } from "expo-sensors";
 import {
+  coverageCarrierHere,
   abandonConfirm,
   SYSTEM_PLACE_TYPE_IDS,
   demCredits,
@@ -76,6 +77,7 @@ import {
   MAP_OVERLAY_REFINEMENTS,
   GAUGES,
   MAP_OVERLAYS,
+  MAP_TERRAIN,
   MAP_OVERLAY_DEFAULTS,
   messageFromError,
   pickNextTrackColor,
@@ -92,11 +94,9 @@ import {
   landColor,
   landEdgeOpacity,
   landNameOf,
-  NSW_REGION,
   drawsCoverage,
   fireNameOf,
-  NSW_COVERAGE,
-  NSW_FIRE,
+  layerIn,
   slopeReliefColor,
   SLOPE_MIN_ZOOM,
   zoomFadeIn,
@@ -183,8 +183,7 @@ import { ScaleBar, SCALE_BAR_HEIGHT, type ScaleBarHandle } from "./ScaleBar";
 import {
   CHROME_BOTTOM,
   CHROME_GAP,
-  DEFAULT_CENTER,
-  DEFAULT_ZOOM,
+  homeView,
   FAB_ICON,
   FAB_SIZE,
   MINI_FAB_ICON,
@@ -270,6 +269,8 @@ import { useSlopeBands } from "./slopeBandsPreference";
 import { useRegions } from "../regionsPreference";
 import { effectiveBasemap, mobileBasemaps } from "./basemapMeta";
 import { offlineCoverageMask, offlineMaskBoxes } from "./offlineMask";
+import { regionShown } from "./terrainRegion";
+import { hasGauges } from "./terrainSwitches";
 import { DraftToolPanel } from "./DraftToolPanel";
 import { FocusPulse } from "./FocusPulse";
 import { MapToolGroup, MapToolTray, type MapTool } from "./MapToolGroup";
@@ -279,6 +280,7 @@ import {
   BASEMAP_CATALOG,
   basemapFallbackNotice,
   basemapToShow,
+  pointBox,
   ROUTE_ARROW_SDF_URI,
   placeStatus,
 } from "@logjam/shared";
@@ -482,11 +484,6 @@ const SINGLE_POINT_ZOOM = 14;
  * moving it — a rounding error next to the screen being lit at all.
  */
 const MAP_MAX_FPS = 60;
-
-const CAMERA_DEFAULTS = {
-  center: DEFAULT_CENTER,
-  zoom: DEFAULT_ZOOM,
-};
 
 /**
  * The scale "where am I" always lands on: opening Logjam GPS, and entering either
@@ -1029,20 +1026,44 @@ export function MapScreen({
     },
     [],
   );
+  /**
+   * The ground actually on screen, read back from the map when a move settles.
+   *
+   * Asked of MapLibre rather than derived from centre + zoom + window size,
+   * because the map ROTATES: a course-up view's axis-aligned extent is up to
+   * √2 wider than the same camera facing north, and the offline notice would be
+   * wrong at exactly the moment (walking, map turning) it matters. Null until
+   * the first settle. Coordinates stay in component state — never logged.
+   */
+  const [viewportBbox, setViewportBbox] = useState<{
+    west: number;
+    south: number;
+    east: number;
+    north: number;
+  } | null>(null);
   // A basemap whose tile server is down is not drawn; the fallback is, and the
   // pick stays, so the map returns to it when the server answers again.
   const regionIds = useRegions();
-  // The pick can outlive its region (unchosen while the map is open).
-  const basemapId = effectiveBasemap(pickedBasemapId, regionIds);
+  // Read once: the camera's `initialViewState` is only honoured on the first render.
+  const [home] = useState(() => homeView(regionIds));
+  // The ground the map shows decides the basemaps on offer, not the account's
+  // regions (ADR 0049): the settled view, or the opening point before the first.
+  const basemapView = useMemo(
+    () => viewportBbox ?? pointBox(...home.center),
+    [viewportBbox, home],
+  );
+  // The pick can outlive its ground: the map panned somewhere that does not
+  // offer it.
+  const basemapId = effectiveBasemap(pickedBasemapId, basemapView);
   const { down: downBasemaps, probe: probeBasemaps } = useDownBasemaps(
     connectivity === "online",
-    regionIds,
+    basemapView,
   );
   const shownBasemapId = basemapToShow(
     basemapId,
     downBasemaps,
-    basemapFallbackFor(basemapId, downBasemaps, regionIds),
-  ) as BasemapId;
+    basemapFallbackFor(basemapId, downBasemaps, basemapView),
+  );
   // Both point tools run the SAME draft model — same anchors, same drag,
   // delete and snapping. What differs is the exit (measure discards silently,
   // route draw confirms and saves) and the ink (shared/DESIGN.md §11).
@@ -1219,11 +1240,6 @@ export function MapScreen({
     setShowMgaGridState(on);
     setMgaGridLayer(on);
   }, []);
-  const {
-    file: gaugeFile,
-    settled: gaugesSettled,
-    now: gaugesNow,
-  } = useGauges(showGauges);
   const [gaugeId, setGaugeId] = useState<string | null>(null);
   const [gaugeNow, setGaugeNow] = useState(0);
   const [showVectorImports, setShowVectorImports] = useState(true);
@@ -1235,9 +1251,9 @@ export function MapScreen({
   // the camera continuously through its own ref (see scaleBarRef), because
   // re-rendering this screen at gesture rate would re-reconcile every layer.
   const [camera, setCamera] = useState({
-    zoom: DEFAULT_ZOOM,
-    latitude: DEFAULT_CENTER[1],
-    longitude: DEFAULT_CENTER[0],
+    zoom: home.zoom,
+    latitude: home.center[1],
+    longitude: home.center[0],
   });
   // Hand the settled camera to the module store the offline-download screen
   // reads, so it opens on this ground whether it was reached from here or from
@@ -1250,21 +1266,6 @@ export function MapScreen({
       basemapId,
     });
   }, [camera, basemapId]);
-  /**
-   * The ground actually on screen, read back from the map when a move settles.
-   *
-   * Asked of MapLibre rather than derived from centre + zoom + window size,
-   * because the map ROTATES: a course-up view's axis-aligned extent is up to
-   * √2 wider than the same camera facing north, and the offline notice would be
-   * wrong at exactly the moment (walking, map turning) it matters. Null until
-   * the first settle. Coordinates stay in component state — never logged.
-   */
-  const [viewportBbox, setViewportBbox] = useState<{
-    west: number;
-    south: number;
-    east: number;
-    north: number;
-  } | null>(null);
   const scaleBarRef = useRef<ScaleBarHandle>(null);
   /** Set once the user has panned/zoomed themselves — see the open-on-location effect. */
   const userMovedCamera = useRef(false);
@@ -1349,7 +1350,7 @@ export function MapScreen({
     followModeRef.current = followMode;
   });
   /** Live zoom and heading, so a pinch starts from what is actually on screen. */
-  const zoomRef = useRef(DEFAULT_ZOOM);
+  const zoomRef = useRef(home.zoom);
   const headingRef = useRef(0);
   const cameraRef = useRef<React.ComponentRef<typeof Camera>>(null);
   // MLRN's native camera KEEPS the last stop handed to it imperatively, and
@@ -1588,40 +1589,74 @@ export function MapScreen({
    */
   const renderedBasemapId = useDeferredValue(shownBasemapId);
 
+  // The one region the map draws from (terrainRegion.ts): the vector basemap
+  // and the Terrain group (shared terrain.ts) read its archives, and a layer
+  // that region lacks draws nothing. The contours only where this basemap takes
+  // them; offline, each is whatever clips were saved of it.
+  const terrainRegion = useMemo(
+    () => regionShown(viewportBbox, camera),
+    [viewportBbox, camera],
+  );
   const basemapResolved = useMemo(
     () =>
-      resolveMapSource({ kind: "basemap", basemapId: renderedBasemapId }, ctx),
-    [renderedBasemapId, ctx],
+      resolveMapSource(
+        {
+          kind: "basemap",
+          basemapId: renderedBasemapId,
+          region: terrainRegion,
+        },
+        ctx,
+      ),
+    [renderedBasemapId, terrainRegion, ctx],
   );
-  // The Terrain group (shared terrain.ts). The contours only where this
-  // basemap takes them; offline, each is whatever clips were saved of it.
+  // The Gauges row reads OFF where the region has no feed, and the map's gauge
+  // layer draws nothing there (search and the place page still read gauges). A
+  // gauge picked in search still loads the file its sheet reads, and opens at
+  // the pick whatever the region.
+  const gaugesHere = hasGauges(terrainRegion);
+  const gaugesShown = showGauges && gaugesHere;
+  const gaugeWanted = showGauges && gaugeId !== null;
+  const {
+    file: gaugeFile,
+    settled: gaugesSettled,
+    now: gaugesNow,
+  } = useGauges(gaugesShown || gaugeWanted);
+  const landArchive = layerIn(terrainRegion, "land");
+  const fireArchive = layerIn(terrainRegion, "fire");
+  const coverageArchive = layerIn(terrainRegion, "coverage");
   const contoursResolved = useMemo(
     () =>
       drawsNswContours(renderedBasemapId, terrainLayers.contours)
         ? writeTileJsons(
-            resolveMapSource({ kind: "nsw-contours" }, ctx).filter(
-              (r) => r.status === "ok",
-            ),
+            resolveMapSource(
+              { kind: "terrain", layer: "contours", region: terrainRegion },
+              ctx,
+            ).filter((r) => r.status === "ok"),
             areasEpoch,
           )
         : [],
-    [renderedBasemapId, terrainLayers.contours, ctx, areasEpoch],
+    [renderedBasemapId, terrainLayers.contours, terrainRegion, ctx, areasEpoch],
   );
   const landResolved = useMemo(
     () =>
       terrainLayers.land
         ? writeTileJsons(
             resolveMapSource(
-              { kind: "nsw-land", viewport: viewportBbox },
+              {
+                kind: "terrain",
+                layer: "land",
+                region: terrainRegion,
+                viewport: viewportBbox,
+              },
               ctx,
             ).filter((r) => r.status === "ok"),
             areasEpoch,
           )
         : [],
-    [terrainLayers.land, viewportBbox, ctx, areasEpoch],
+    [terrainLayers.land, terrainRegion, viewportBbox, ctx, areasEpoch],
   );
   const landLayerIds = useMemo(
-    () => landResolved.map((r) => `nsw-land-${r.key}`),
+    () => landResolved.map((r) => `terrain-land-${r.key}`),
     [landResolved],
   );
   const fireResolved = useMemo(
@@ -1629,13 +1664,18 @@ export function MapScreen({
       terrainLayers.fire
         ? writeTileJsons(
             resolveMapSource(
-              { kind: "nsw-fire", viewport: viewportBbox },
+              {
+                kind: "terrain",
+                layer: "fire",
+                region: terrainRegion,
+                viewport: viewportBbox,
+              },
               ctx,
             ).filter((r) => r.status === "ok"),
             areasEpoch,
           )
         : [],
-    [terrainLayers.fire, viewportBbox, ctx, areasEpoch],
+    [terrainLayers.fire, terrainRegion, viewportBbox, ctx, areasEpoch],
   );
   const fireLayerIdList = useMemo(
     () => fireResolved.flatMap((r) => fireLayerIds(r.key)),
@@ -1643,55 +1683,90 @@ export function MapScreen({
   );
   // Once per mount, so the tint ages with the map's own session, no timer.
   const [fireNow] = useState(() => new Date());
-  const firePaints = useMemo(() => fireLayerPaints(fireNow), [fireNow]);
-  const coverageOn = drawsCoverage(terrainLayers.coverage, coverageCarrier);
+  const firePaints = useMemo(
+    () => (fireArchive ? fireLayerPaints(fireArchive, fireNow) : null),
+    [fireArchive, fireNow],
+  );
+  // The carrier that counts here: the stored pick only where the region lists
+  // it, as the layers sheet reads it, so nothing is fetched or tapped for one
+  // the row says is not chosen.
+  const carrierHere = coverageCarrierHere(terrainRegion, coverageCarrier);
+  const coverageOn = drawsCoverage(terrainLayers.coverage, carrierHere);
   const coverageResolved = useMemo(
     () =>
       coverageOn
         ? writeTileJsons(
             resolveMapSource(
-              { kind: "nsw-coverage", viewport: viewportBbox },
+              {
+                kind: "terrain",
+                layer: "coverage",
+                region: terrainRegion,
+                viewport: viewportBbox,
+              },
               ctx,
             ).filter((r) => r.status === "ok"),
             areasEpoch,
           )
         : [],
-    [coverageOn, viewportBbox, ctx, areasEpoch],
+    [coverageOn, terrainRegion, viewportBbox, ctx, areasEpoch],
   );
   const coverageLayerIdList = useMemo(
     () => coverageResolved.map((r) => coverageLayerId(r.key)),
     [coverageResolved],
   );
-  const coveragePaint = useMemo(() => coverageLayerPaint(), []);
+  const coveragePaint = useMemo(
+    () => (coverageArchive ? coverageLayerPaint(coverageArchive) : null),
+    [coverageArchive],
+  );
   const coverageFilterExpr = useMemo(
-    () => (coverageCarrier ? coverageLayerFilter(coverageCarrier) : undefined),
-    [coverageCarrier],
+    () =>
+      coverageArchive && carrierHere
+        ? coverageLayerFilter(coverageArchive, carrierHere)
+        : undefined,
+    [coverageArchive, carrierHere],
   );
   const slopeResolved = useMemo(
     () =>
       terrainLayers.slope
         ? writeTileJsons(
             resolveMapSource(
-              { kind: "nsw-slope", viewport: viewportBbox },
+              {
+                kind: "terrain",
+                layer: "slope",
+                region: terrainRegion,
+                viewport: viewportBbox,
+              },
               ctx,
             ).filter((r) => r.status === "ok"),
             areasEpoch,
           )
         : [],
-    [terrainLayers.slope, viewportBbox, ctx, areasEpoch],
+    [terrainLayers.slope, terrainRegion, viewportBbox, ctx, areasEpoch],
   );
   const hillshadeResolved = useMemo(
     () =>
       drawsNswHillshade(renderedBasemapId, terrainLayers.hillshade)
         ? writeTileJsons(
             resolveMapSource(
-              { kind: "nsw-hillshade", viewport: viewportBbox },
+              {
+                kind: "terrain",
+                layer: "hillshade",
+                region: terrainRegion,
+                viewport: viewportBbox,
+              },
               ctx,
             ).filter((r) => r.status === "ok"),
             areasEpoch,
           )
         : [],
-    [renderedBasemapId, terrainLayers.hillshade, viewportBbox, ctx, areasEpoch],
+    [
+      renderedBasemapId,
+      terrainLayers.hillshade,
+      terrainRegion,
+      viewportBbox,
+      ctx,
+      areasEpoch,
+    ],
   );
 
   /**
@@ -1721,13 +1796,14 @@ export function MapScreen({
     const covering = basemapsCoveringViewport(
       artifacts,
       viewportBbox,
-      mobileBasemaps(regionIds),
+      mobileBasemaps(viewportBbox),
+      terrainRegion,
     );
     return {
       current: covering.includes(renderedBasemapId),
       others: covering.filter((id) => id !== renderedBasemapId),
     };
-  }, [artifacts, renderedBasemapId, viewportBbox, connectivity, regionIds]);
+  }, [artifacts, renderedBasemapId, viewportBbox, connectivity, terrainRegion]);
 
   // Everywhere the phone has no saved tiles, blanked out — but only when the
   // basemap is actually being drawn FROM those saved tiles. Online there is
@@ -2363,48 +2439,53 @@ export function MapScreen({
       setTappedCoverage(null);
       landAskedFor.current = tapped;
       // From the tiles on the phone, so this works offline and asks no one.
-      if (landLayerIds.length > 0) {
+      if (landArchive && landLayerIds.length > 0) {
         mapRef.current
           ?.queryRenderedFeatures(event.nativeEvent.point, {
             layers: landLayerIds,
           })
           .then((features) => {
             if (landAskedFor.current === tapped)
-              setTappedLand(landNameOf(features));
+              setTappedLand(landNameOf(landArchive, features));
           })
           // Never a failure to show: the sheet just has no land figure.
           .catch(() => undefined);
       }
-      if (fireLayerIdList.length > 0) {
+      if (fireArchive && fireLayerIdList.length > 0) {
         mapRef.current
           ?.queryRenderedFeatures(event.nativeEvent.point, {
             layers: fireLayerIdList,
           })
           .then((features) => {
             if (landAskedFor.current === tapped)
-              setTappedFire(fireNameOf(features));
+              setTappedFire(fireNameOf(fireArchive, features));
           })
           .catch(() => undefined);
       }
-      coverageAtTap(
-        mapRef.current,
-        event.nativeEvent.point,
-        [lon, lat],
-        coverageLayerIdList,
-        coverageCarrier,
-      )
-        .then((name) => {
-          if (landAskedFor.current === tapped) setTappedCoverage(name);
-        })
-        .catch(() => undefined);
+      if (coverageArchive)
+        coverageAtTap(
+          mapRef.current,
+          event.nativeEvent.point,
+          [lon, lat],
+          coverageLayerIdList,
+          carrierHere,
+          coverageArchive,
+        )
+          .then((name) => {
+            if (landAskedFor.current === tapped) setTappedCoverage(name);
+          })
+          .catch(() => undefined);
     },
     [
       addToolPoint,
       anchorDeleteSideFor,
+      carrierHere,
       collectingPoints,
-      coverageCarrier,
+      coverageArchive,
       coverageLayerIdList,
+      fireArchive,
       fireLayerIdList,
+      landArchive,
       landLayerIds,
       pressedAnchorIndex,
     ],
@@ -4622,7 +4703,7 @@ export function MapScreen({
    * definition of "where is this thing", not a second one for search.
    *
    * PRIVACY: names and coordinates stay in this array. Nothing here is sent
-   * anywhere; the geocoder only ever sees the typed string.
+   * anywhere. What the geocoder is sent is in MapSearchBar.tsx's PRIVACY note.
    */
   const savedSearchItems: SavedSearchItem[] = useMemo(
     () => [
@@ -4808,11 +4889,13 @@ export function MapScreen({
       hue: MAP_INK.gauge,
       title: MAP_OVERLAYS.copy.gauges,
       // Live state only: a layer on with nothing to draw says so.
-      note:
-        showGauges && gaugesSettled && !gaugeFile
+      note: !gaugesHere
+        ? MAP_TERRAIN.copy.notHere
+        : gaugesShown && gaugesSettled && !gaugeFile
           ? GAUGES.copy.failed
           : undefined,
-      value: showGauges,
+      value: gaugesShown,
+      disabled: !gaugesHere,
       onChange: setShowGauges,
     },
     {
@@ -5044,16 +5127,16 @@ export function MapScreen({
   }));
   const terrainLayerIds: Record<TerrainLayerKey, string[]> = {
     contours: contoursResolved.flatMap((r) =>
-      topoVectorLayerIds(`nsw-contours-${r.key}`, nswContoursStyle),
+      topoVectorLayerIds(`terrain-contours-${r.key}`, nswContoursStyle),
     ),
-    slope: slopeResolved.map((r) => `nsw-slope-${r.key}`),
+    slope: slopeResolved.map((r) => `terrain-slope-${r.key}`),
     land: landResolved.flatMap((r) => [
-      `nsw-land-${r.key}`,
-      ...LAND_EDGE_LINES.map((_, i) => `nsw-land-edge-${i}-${r.key}`),
+      `terrain-land-${r.key}`,
+      ...LAND_EDGE_LINES.map((_, i) => `terrain-land-edge-${i}-${r.key}`),
     ]),
     fire: fireResolved.flatMap((r) => fireLayerIds(r.key)),
     coverage: coverageLayerIdList,
-    hillshade: hillshadeResolved.map((r) => `nsw-hillshade-${r.key}`),
+    hillshade: hillshadeResolved.map((r) => `terrain-hillshade-${r.key}`),
   };
   // The Terrain group goes in the basemap's bands: under the vector map's roads
   // and labels, and over a raster, which sits below them all.
@@ -5182,7 +5265,7 @@ export function MapScreen({
         onPress={handleMapOrArrowPress}
         onLongPress={handleMapLongPress}
       >
-        <Camera ref={cameraRef} initialViewState={CAMERA_DEFAULTS} />
+        <Camera ref={cameraRef} initialViewState={home} />
         {/* Locate-me sprite: one baked PNG per Settings → Map colour choice
             (see UserMarkerImages) — picked by iconImage, not recoloured at
             runtime. */}
@@ -5234,10 +5317,10 @@ export function MapScreen({
         {hillshadeResolved.map((r) => (
           <ResolvedSource key={r.key} resolved={r}>
             <Layer
-              key={`nsw-hillshade-${r.key}`}
+              key={`terrain-hillshade-${r.key}`}
               type="hillshade"
-              id={`nsw-hillshade-${r.key}`}
-              beforeId={groundBefore[`nsw-hillshade-${r.key}`]}
+              id={`terrain-hillshade-${r.key}`}
+              beforeId={groundBefore[`terrain-hillshade-${r.key}`]}
               minzoom={r.layerMinZoom ?? 0}
               maxzoom={r.layerMaxZoom ?? MAX_LAYER_ZOOM}
               // Lit from the map, not the default viewport: MapLibre Native
@@ -5247,94 +5330,99 @@ export function MapScreen({
             />
           </ResolvedSource>
         ))}
-        {landResolved.map((r) => (
-          <ResolvedSource key={r.key} resolved={r}>
-            <Layer
-              key={`nsw-land-${r.key}`}
-              type="fill"
-              id={`nsw-land-${r.key}`}
-              source-layer={NSW_REGION.terrain.land.sourceLayer}
-              beforeId={groundBefore[`nsw-land-${r.key}`]}
-              minzoom={Math.max(r.layerMinZoom ?? 0, LAND_EDGE_MINZOOM)}
-              maxzoom={r.layerMaxZoom ?? MAX_LAYER_ZOOM}
-              // Unseen: it is what a tap reads, since a line has no inside.
-              paint={{ "fill-opacity": 0 }}
-            />
-            {LAND_EDGE_LINES.map(({ width, offset, blur, opacity }, i) => (
-              <Layer
-                key={`nsw-land-edge-${i}-${r.key}`}
-                type="line"
-                id={`nsw-land-edge-${i}-${r.key}`}
-                source-layer={NSW_REGION.terrain.land.sourceLayer}
-                beforeId={groundBefore[`nsw-land-edge-${i}-${r.key}`]}
-                minzoom={Math.max(r.layerMinZoom ?? 0, LAND_EDGE_MINZOOM)}
-                maxzoom={r.layerMaxZoom ?? MAX_LAYER_ZOOM}
-                paint={{
-                  "line-color": landColor() as LineColor,
-                  "line-width": width,
-                  "line-offset": offset,
-                  "line-blur": blur,
-                  "line-opacity": landEdgeOpacity(opacity) as LineOpacity,
-                }}
-              />
-            ))}
-          </ResolvedSource>
-        ))}
-        {fireResolved.map((r) => {
-          const [fillId, edgeId] = fireLayerIds(r.key);
-          return (
+        {landArchive &&
+          landResolved.map((r) => (
             <ResolvedSource key={r.key} resolved={r}>
               <Layer
-                key={fillId}
+                key={`terrain-land-${r.key}`}
                 type="fill"
-                id={fillId}
-                source-layer={NSW_FIRE.sourceLayer}
-                beforeId={groundBefore[fillId]}
-                minzoom={fireMinZoom(r.layerMinZoom)}
+                id={`terrain-land-${r.key}`}
+                source-layer={landArchive.sourceLayer}
+                beforeId={groundBefore[`terrain-land-${r.key}`]}
+                minzoom={Math.max(r.layerMinZoom ?? 0, LAND_EDGE_MINZOOM)}
                 maxzoom={r.layerMaxZoom ?? MAX_LAYER_ZOOM}
-                paint={firePaints.fill}
+                // Unseen: it is what a tap reads, since a line has no inside.
+                paint={{ "fill-opacity": 0 }}
               />
-              <Layer
-                key={edgeId}
-                type="line"
-                id={edgeId}
-                source-layer={NSW_FIRE.sourceLayer}
-                beforeId={groundBefore[edgeId]}
-                minzoom={fireMinZoom(r.layerMinZoom)}
-                maxzoom={r.layerMaxZoom ?? MAX_LAYER_ZOOM}
-                paint={firePaints.edge}
-              />
+              {LAND_EDGE_LINES.map(({ width, offset, blur, opacity }, i) => (
+                <Layer
+                  key={`terrain-land-edge-${i}-${r.key}`}
+                  type="line"
+                  id={`terrain-land-edge-${i}-${r.key}`}
+                  source-layer={landArchive.sourceLayer}
+                  beforeId={groundBefore[`terrain-land-edge-${i}-${r.key}`]}
+                  minzoom={Math.max(r.layerMinZoom ?? 0, LAND_EDGE_MINZOOM)}
+                  maxzoom={r.layerMaxZoom ?? MAX_LAYER_ZOOM}
+                  paint={{
+                    "line-color": landColor(landArchive) as LineColor,
+                    "line-width": width,
+                    "line-offset": offset,
+                    "line-blur": blur,
+                    "line-opacity": landEdgeOpacity(opacity) as LineOpacity,
+                  }}
+                />
+              ))}
             </ResolvedSource>
-          );
-        })}
+          ))}
+        {fireArchive &&
+          firePaints &&
+          fireResolved.map((r) => {
+            const [fillId, edgeId] = fireLayerIds(r.key);
+            return (
+              <ResolvedSource key={r.key} resolved={r}>
+                <Layer
+                  key={fillId}
+                  type="fill"
+                  id={fillId}
+                  source-layer={fireArchive.sourceLayer}
+                  beforeId={groundBefore[fillId]}
+                  minzoom={fireMinZoom(r.layerMinZoom)}
+                  maxzoom={r.layerMaxZoom ?? MAX_LAYER_ZOOM}
+                  paint={firePaints.fill}
+                />
+                <Layer
+                  key={edgeId}
+                  type="line"
+                  id={edgeId}
+                  source-layer={fireArchive.sourceLayer}
+                  beforeId={groundBefore[edgeId]}
+                  minzoom={fireMinZoom(r.layerMinZoom)}
+                  maxzoom={r.layerMaxZoom ?? MAX_LAYER_ZOOM}
+                  paint={firePaints.edge}
+                />
+              </ResolvedSource>
+            );
+          })}
         {coverageResolved.length > 0 ? (
           <Images images={COVERAGE_IMAGES} />
         ) : null}
-        {coverageResolved.map((r) => {
-          const id = coverageLayerId(r.key);
-          return (
-            <ResolvedSource key={r.key} resolved={r}>
-              <Layer
-                key={id}
-                type="fill"
-                id={id}
-                source-layer={NSW_COVERAGE.sourceLayer}
-                filter={coverageFilterExpr}
-                beforeId={groundBefore[id]}
-                minzoom={coverageMinZoom(r.layerMinZoom)}
-                maxzoom={r.layerMaxZoom ?? MAX_LAYER_ZOOM}
-                paint={coveragePaint}
-              />
-            </ResolvedSource>
-          );
-        })}
+        {coverageArchive &&
+          coveragePaint &&
+          coverageResolved.map((r) => {
+            const id = coverageLayerId(r.key);
+            return (
+              <ResolvedSource key={r.key} resolved={r}>
+                <Layer
+                  key={id}
+                  type="fill"
+                  id={id}
+                  source-layer={coverageArchive.sourceLayer}
+                  filter={coverageFilterExpr}
+                  beforeId={groundBefore[id]}
+                  minzoom={coverageMinZoom(r.layerMinZoom)}
+                  maxzoom={r.layerMaxZoom ?? MAX_LAYER_ZOOM}
+                  paint={coveragePaint}
+                />
+              </ResolvedSource>
+            );
+          })}
         {slopeResolved.map((r) => (
           <ResolvedSource key={r.key} resolved={r}>
             <Layer
-              key={`nsw-slope-${r.key}`}
+              key={`terrain-slope-${r.key}`}
               type="color-relief"
-              id={`nsw-slope-${r.key}`}
-              beforeId={groundBefore[`nsw-slope-${r.key}`]}
+              id={`terrain-slope-${r.key}`}
+              beforeId={groundBefore[`terrain-slope-${r.key}`]}
               minzoom={Math.max(r.layerMinZoom ?? 0, SLOPE_MIN_ZOOM)}
               maxzoom={r.layerMaxZoom ?? MAX_LAYER_ZOOM}
               paint={{
@@ -5354,7 +5442,7 @@ export function MapScreen({
         {contoursResolved.map((r) => (
           <ResolvedSource key={r.key} resolved={r}>
             <TopoVectorOverlay
-              idPrefix={`nsw-contours-${r.key}`}
+              idPrefix={`terrain-contours-${r.key}`}
               sourceID={sourceIdFor(r.key)}
               beforeIds={groundBefore}
               vectorStyle={nswContoursStyle}
@@ -5520,7 +5608,7 @@ export function MapScreen({
           <MgaGridLayer bbox={viewportBbox} zoom={camera.zoom} />
         ) : null}
 
-        {showGauges && gaugeFile ? (
+        {gaugesShown && gaugeFile ? (
           <GaugesLayer
             file={gaugeFile}
             now={gaugesNow}
@@ -5712,6 +5800,7 @@ export function MapScreen({
           savedItems={savedSearchItems}
           onSelectPlace={handleSelectPlace}
           onSearchPin={setSearchPin}
+          view={viewportBbox}
           onSelectSaved={(item) => {
             if (item.gaugeId) {
               setShowGauges(true);
@@ -6226,8 +6315,10 @@ export function MapScreen({
         open={layersOpen}
         onOpened={probeBasemaps}
         connectivity={connectivity}
+        region={terrainRegion}
         basemapId={basemapId}
         onBasemapChange={chooseBasemap}
+        view={basemapView}
         downBasemaps={downBasemaps}
         terrainLayers={terrainLayers}
         onTerrainLayerChange={chooseTerrainLayer}

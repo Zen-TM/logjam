@@ -44,13 +44,10 @@ import {
   BASEMAP_CATALOG,
   checkRegionCaps,
   DEM_SOURCE_ID,
-  NSW_REGION,
-  NSW_COVERAGE,
-  NSW_FIRE,
+  downloadableBasemaps,
   planRegionForBasemaps,
-  type OfflineBasemapId,
+  regionInWrappedView,
   type RegionBbox,
-  MAP_TERRAIN,
 } from "@logjam/shared";
 
 import { config } from "../config";
@@ -76,7 +73,7 @@ import {
 import { placeRegistryWithRegion } from "../offline/placeRegistry";
 import { askAllowCellular } from "../offline/askMobileData";
 import { NotEnoughSpaceError, assertSpaceFor } from "../offline/freeSpace";
-import { regionClipSpecs } from "../offline/regionTilePlanning";
+import { archiveLabel, regionClipSpecs } from "../offline/regionTilePlanning";
 import {
   areaClipBytes,
   areaClipSpecs,
@@ -97,13 +94,17 @@ import { BAND_MARKERS } from "./layerOrder";
 import { PROTOMAPS_FLAVOR } from "./basemap/protomapsLayers";
 import { useShellStyle } from "./basemap/shellStyle";
 import { readLastMapCamera } from "./lastCamera";
-import { DEFAULT_CENTER, DEFAULT_ZOOM } from "./mapChrome";
+import { readRegions } from "../regionsPreference";
+import { homeView } from "./mapChrome";
 import { nextRegionName } from "./regionName";
 import { ResolvedSource, sourceIdFor } from "./ResolvedSource";
 import {
   bboxToFrame,
   defaultFrameInsets,
+  defaultPreviewFor,
   startingArea,
+  startBox,
+  startPicks,
   frameToBbox,
   detailLabel,
   metresPerPixel,
@@ -112,33 +113,6 @@ import {
 } from "./regionFrame";
 import { SelectionFrame } from "./SelectionFrame";
 import { resolveMapSource, type BasemapId } from "./sourceResolver";
-
-/**
- * What may be kept on the device.
- *
- * The three NSW SIX rasters are here because their CC licence permits
- * redistribution (operator-verified); the OSM-family sources are NOT, and are
- * absent rather than disabled — an affordance that exists only to refuse is
- * worse than no affordance.
- *
- * `protomaps`, our own vector basemap, is not a choice here: it comes with
- * every area anyone saves (`regionClipSpecs`). It is a few megabytes
- * against tens for one raster, and the route and measure tools snap to it, so
- * leaving it optional would mean a tool that quietly stops working in the field.
- */
-type SelectableId = OfflineBasemapId;
-const DOWNLOADABLE: SelectableId[] = ["six-topo", "six-base", "six-imagery"];
-
-/**
- * Chip labels, not the catalog's picker names: "SIX Maps Base Map" on a chip
- * pushed the row onto a third line, and the "SIX Maps" prefix is noise when
- * every chip here carries it.
- */
-const DOWNLOAD_CHIP_LABEL: Record<SelectableId, string> = {
-  "six-topo": "Topo",
-  "six-base": "Base Map",
-  "six-imagery": "Imagery",
-};
 
 /**
  * Detail levels offered. The ceiling is per-source (topo stops at z16), so the
@@ -169,15 +143,8 @@ function regionLabelFor(basemapId: string): string {
   // The DEM is not a map in the catalog and is not one to the user either —
   // it is what keeps elevation profiles and point heights working out there.
   if (basemapId === DEM_SOURCE_ID) return "Elevation data";
-  if (basemapId === NSW_REGION.terrain.heights.id)
-    return "Elevation data, NSW 5 m";
-  if (basemapId === NSW_REGION.terrain.contours.id) return "Contours";
-  if (basemapId === NSW_REGION.terrain.slope.id) return "Slope";
-  if (basemapId === NSW_REGION.terrain.land.id) return MAP_TERRAIN.copy.land;
-  if (basemapId === NSW_FIRE.id) return MAP_TERRAIN.copy.fire;
-  if (basemapId === NSW_COVERAGE.id) return MAP_TERRAIN.copy.coverage;
   const name = BASEMAP_CATALOG.find((entry) => entry.id === basemapId)?.name;
-  return name ?? "Map";
+  return archiveLabel(basemapId) ?? name ?? "Map";
 }
 
 /**
@@ -228,8 +195,9 @@ export function RegionDownloadScreen({
   const [lastCamera] = useState(() => readLastMapCamera());
   const startBasemapId: BasemapId =
     initialBasemapId ?? lastCamera?.basemapId ?? "six-topo";
-  const startCenter = initialCenter ?? lastCamera?.center ?? DEFAULT_CENTER;
-  const startZoom = initialZoom ?? lastCamera?.zoom ?? DEFAULT_ZOOM;
+  const [home] = useState(() => homeView(readRegions()));
+  const startCenter = initialCenter ?? lastCamera?.center ?? home.center;
+  const startZoom = initialZoom ?? lastCamera?.zoom ?? home.zoom;
   const basemapAssets = useBasemapAssets();
   const shellStyle = useShellStyle(
     basemapAssets.localBaseUrl,
@@ -242,16 +210,8 @@ export function RegionDownloadScreen({
     [initialBounds],
   );
 
-  const downloadable = DOWNLOADABLE;
-
-  const [selected, setSelected] = useState<SelectableId[]>(() =>
-    downloadable.includes(startBasemapId as SelectableId)
-      ? [startBasemapId as SelectableId]
-      : // Arriving from the Vector map: that map is coming anyway, so nothing
-        // else is picked for them.
-        startBasemapId === "protomaps"
-        ? []
-        : ["six-topo"],
+  const [selected, setSelected] = useState<string[]>(() =>
+    startPicks(startBox(startArea, startCenter), startBasemapId),
   );
   const [detailZoom, setDetailZoom] = useState(DEFAULT_DETAIL_ZOOM);
   const [size, setSize] = useState({ width: 0, height: 0 });
@@ -292,25 +252,62 @@ export function RegionDownloadScreen({
     [artifacts, runningJobs],
   );
 
+  const bbox: RegionBbox | null =
+    viewport && frame ? frameToBbox(viewport, frame) : null;
+
+  // What may be kept on the device, of the ground the frame holds: the
+  // `offlineCapable` raster basemaps offered there. Over NSW those are the
+  // three SIX rasters, whose CC licence permits redistribution
+  // (operator-verified); the OSM-family sources are NOT, and are absent rather
+  // than disabled. Over ground with none, the row is not shown. `protomaps`,
+  // our own vector basemap, is not a choice: an area in a region that has a
+  // vector archive saves it (`regionClipSpecs`), and the route and measure
+  // tools snap to it. A pick the
+  // frame has moved off stays picked, and comes back when the frame returns,
+  // but is not saved from here.
+  const framed = bbox ?? startBox(startArea, startCenter);
+  const downloadable = useMemo(
+    () =>
+      downloadableBasemaps({
+        west: framed.west,
+        south: framed.south,
+        east: framed.east,
+        north: framed.north,
+      }),
+    [framed.west, framed.south, framed.east, framed.north],
+  );
+  const pyramidIds = selected.filter((id) =>
+    downloadable.some((entry) => entry.id === id),
+  );
+
   // Preview the map they are about to save — the LAST one they picked, which
   // is the one the tap was about. Deselecting the previewed map falls back to
   // the default rather than to whatever happens to be left in the list.
   //
-  // The default is the vector basemap: it is the detailed one, it is what the
-  // map screen draws, and every area saves it.
-  const defaultPreview: BasemapId = "protomaps";
-  const [preview, setPreview] = useState<BasemapId>(() =>
-    downloadable.includes(startBasemapId as SelectableId)
-      ? startBasemapId
-      : defaultPreview,
+  // The vector basemap is read from the archive of the region the map shows.
+  const previewRegion = useMemo(
+    () => regionInWrappedView(viewport ?? framed),
+    [viewport, framed],
   );
-  const previewBasemap: BasemapId = (selected as BasemapId[]).includes(preview)
+  // The default is the vector basemap where the region shown has an archive of
+  // it: it is the detailed one, it is what the map screen draws, and an area
+  // there saves it. Elsewhere it would preview nothing, so it is the first map
+  // the ground offers to save; with none of those either, a blank preview is
+  // all there is to show.
+  const defaultPreview: BasemapId = defaultPreviewFor(
+    previewRegion,
+    downloadable,
+  );
+  const [preview, setPreview] = useState<BasemapId>(() =>
+    selected.includes(startBasemapId) ? startBasemapId : defaultPreview,
+  );
+  const previewBasemap: BasemapId = pyramidIds.includes(preview)
     ? preview
     : defaultPreview;
   const previewResolved = useMemo(
     () =>
       resolveMapSource(
-        { kind: "basemap", basemapId: previewBasemap },
+        { kind: "basemap", basemapId: previewBasemap, region: previewRegion },
         // `artifacts: []` on purpose: the preview is the ONLINE map, not
         // whatever this phone already holds. `cdnBaseUrl` builds the vector
         // source's pmtiles:// URL — without it, it would resolve to an
@@ -321,7 +318,7 @@ export function RegionDownloadScreen({
           cdnBaseUrl: config.topoCdnBaseUrl,
         },
       ),
-    [previewBasemap],
+    [previewBasemap, previewRegion],
   );
 
   // Stable identity: the frame's gesture handlers are rebuilt whenever this
@@ -399,9 +396,6 @@ export function RegionDownloadScreen({
     void refreshViewport();
   }, [mapReady, size.width, refreshViewport]);
 
-  const bbox: RegionBbox | null =
-    viewport && frame ? frameToBbox(viewport, frame) : null;
-
   // The account's sharpened areas the box reaches go into the save, cut
   // through the list's presigned URLs (offline/sharpenedClips.ts); a guest
   // has none. What Save does while the list loads or fails is `saveGate`'s.
@@ -437,7 +431,6 @@ export function RegionDownloadScreen({
   }, [overlays.data, loadsAreas, sharpenedAreas, areasEpoch]);
   const areaBytes = bbox ? areaClipBytes(sharpenedAreas, bbox) : 0;
 
-  const pyramidIds = selected;
   // Not memoised: `bbox` is a fresh object every render, so no key could hold.
   const job = bbox
     ? planRegionForBasemaps(bbox, pyramidIds, detailZoom, catalogMaxZoom)
@@ -507,12 +500,13 @@ export function RegionDownloadScreen({
         })),
         ...regionClipSpecs(
           { bbox, groupId, groupLabel, allowCellular },
-          job.demArchives.map(({ sourceId }) => sourceId),
+          job.clips,
+          job.vectors,
           (basemapId) => ({ id: uuid(), label: regionLabelFor(basemapId) }),
         ),
       ]);
       // The first region brings the place names for search (ADR 0034).
-      placeRegistryWithRegion(allowCellular);
+      placeRegistryWithRegion(allowCellular, bbox);
     },
     [bbox, job, sharpenedAreas],
   );
@@ -728,35 +722,37 @@ export function RegionDownloadScreen({
       </View>
 
       <View style={styles.panel}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.chipScroll}
-          contentContainerStyle={styles.chipRow}
-        >
-          {downloadable.map((id) => {
-            const active = selected.includes(id);
-            return (
-              <Chip
-                key={id}
-                label={DOWNLOAD_CHIP_LABEL[id]}
-                icon="map"
-                active={active}
-                onPress={() => {
-                  setSelected((current) =>
-                    active
-                      ? current.filter((value) => value !== id)
-                      : [...current, id],
-                  );
-                  // Selecting a map previews it; deselecting leaves `preview`
-                  // pointing at something no longer in `selected`, which is
-                  // read as "back to the default".
-                  if (!active) setPreview(id);
-                }}
-              />
-            );
-          })}
-        </ScrollView>
+        {downloadable.length > 0 && (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.chipScroll}
+            contentContainerStyle={styles.chipRow}
+          >
+            {downloadable.map(({ id, name, chipName }) => {
+              const active = selected.includes(id);
+              return (
+                <Chip
+                  key={id}
+                  label={chipName ?? name}
+                  icon="map"
+                  active={active}
+                  onPress={() => {
+                    setSelected((current) =>
+                      active
+                        ? current.filter((value) => value !== id)
+                        : [...current, id],
+                    );
+                    // Selecting a map previews it; deselecting leaves `preview`
+                    // pointing at something no longer in `selected`, which is
+                    // read as "back to the default".
+                    if (!active) setPreview(id);
+                  }}
+                />
+              );
+            })}
+          </ScrollView>
+        )}
 
         <View style={styles.panelBody}>
           <Field

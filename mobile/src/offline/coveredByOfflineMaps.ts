@@ -1,6 +1,9 @@
 // Whether saved map regions already hold a place's or a way's ground, for the
 // coverage line on their pages and the plan's "Map downloaded" pill.
-import type { MapArtifact } from "../map/sourceResolver";
+import { regionInWrappedView } from "@logjam/shared";
+
+import { boundsView } from "../map/basemapMeta";
+import { holdsBasemap, type MapArtifact } from "../map/sourceResolver";
 
 type Bbox = [number, number, number, number];
 type Region = Pick<MapArtifact, "kind" | "bbox">;
@@ -16,6 +19,21 @@ function savedBoxes(regions: readonly Region[]): Bbox[] {
   return regions.flatMap(({ kind, bbox }) =>
     kind === "basemap-region" && bbox ? [bbox] : [],
   );
+}
+
+/**
+ * The saved files that hold `basemapId`'s map over `bbox`: for the vector map
+ * only the clips cut from the archive of the region the box is in, which is
+ * what the map draws there (`holdsBasemap`). Guard:
+ * `coveredByOfflineMaps.test.ts` ("heldBasemapIn").
+ */
+export function heldBasemapIn(
+  artifacts: readonly MapArtifact[],
+  basemapId: string,
+  bbox: Bbox,
+): MapArtifact[] {
+  const region = regionInWrappedView(boundsView(bbox));
+  return artifacts.filter((a) => holdsBasemap(a, basemapId, region));
 }
 
 /** Whether `bbox` (west, south, east, north, edges included) is held by one

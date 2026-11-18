@@ -70,12 +70,22 @@ export const CACHE_ROOT = FileSystem.cacheDirectory;
 export const BASEMAP_ASSETS_DIR = `${FileSystem.documentDirectory}basemap-assets/`;
 
 /**
- * The place registry for location search (`offline/placeRegistry.ts`, ADR
- * 0034): the OpenStreetMap file, saved as plain JSON, and the CDN pointer it
- * came with. DELIBERATELY NOT WIPED, for BASEMAP_ASSETS_DIR's reasons: it is
- * the same public file on every phone, holds nothing about the user, and a
- * wipe would only cost the next user the download
- * (PLACE_REGISTRY_DOWNLOAD_ESTIMATE in placeRegistry.ts).
+ * The place registries for location search (`offline/placeRegistry.ts`, ADR
+ * 0034): each region's OpenStreetMap file, saved as plain JSON, and the CDN
+ * pointer it came with. NOT WIPED BY THE DIRECTORY LIST, for
+ * BASEMAP_ASSETS_DIR's reasons: each is the same public file on every phone and
+ * holds nothing about the user. What does show a user is WHICH regions have a
+ * copy, so a copy is kept only for a region the account chose or saved a map
+ * over, and at sign-out and when a different account signs in
+ * `wipeAllLocalData` deletes the rest, and any folder named for such a region
+ * (`lapsePlaceRegistries`), once the chosen regions and saved maps are gone: the
+ * default region's copy stays, as it did when it was the only one. A copy that
+ * will not delete is reported at sign-out and stops the sign-in of a different
+ * account, as any store does. Guards: placeRegistry.test.ts ("leaves only the
+ * default region's copy after a wipe, at sign-out or when a different account
+ * signs in") and wipeLocalData.test.ts ("lets the place registries lapse after
+ * the chosen regions and saved maps are gone"). A wipe would only cost the next
+ * user the download (PLACE_REGISTRY_DOWNLOAD_ESTIMATE in placeRegistry.ts).
  */
 export const PLACE_REGISTRY_DIR = `${FileSystem.documentDirectory}place-registry/`;
 
