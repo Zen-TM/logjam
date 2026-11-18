@@ -7,9 +7,10 @@
 // for a full-width rounded rectangle would make the icon jump left and up,
 // disconnecting the two shapes.
 //
-// Locations come as the user types from the OpenStreetMap place registry
-// (`placeSearch.ts`): the phone's own copy when it has one, or our API for a
-// signed-in phone without it. Nominatim answers only when asked: the last row
+// Locations come as the user types from the OpenStreetMap place registry of
+// the region the map shows (`placeSearch.ts`): the phone's own copy when it
+// has one, or our API for a signed-in phone without it; over ground no
+// registry covers, from neither. Nominatim answers only when asked: the last row
 // is "Search locations for …" (or the keyboard's Search key), as on Logjam
 // Web, for the street addresses the registry leaves out. Its usage policy
 // forbids search as you type, and a box that geocoded every keystroke would
@@ -23,9 +24,12 @@
 // with no debounce and no request, and are listed ABOVE the places with their
 // kind's glyph and hue so the two are never confused for each other.
 //
-// PRIVACY: only the typed string leaves Logjam GPS, to our API when the phone
-// has no registry, to Nominatim when asked (shared/src/geocode.test.ts), and
-// nowhere when it has. No saved place's name or coordinates is sent — the saved matches are the
+// PRIVACY: only the typed string leaves Logjam GPS, to our API (with the id of
+// the region the map shows) when the phone has no registry for it, and to
+// Nominatim when asked, which also gets the outline of the covered region the
+// map shows and, where it declares one, that region's country code, and
+// nothing extra when it shows none
+// (shared/src/geocode.test.ts); with a registry, nowhere. No saved place's name or coordinates is sent — the saved matches are the
 // reason they do not have to be. The only thing persisted is the short list of
 // recent picks (`recentSearches.ts`), on this phone, cleared on sign-out.
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -56,10 +60,12 @@ import {
   messageFromError,
   PLACE_REGISTRY_ATTRIBUTION,
   PLACE_SEARCH_MIN_QUERY_LENGTH,
+  placeRegistryIn,
   placeResultDetail,
   searchLocationsLabel,
   searchPlaces,
   type GeocodeResult,
+  type LonLatBox,
   MAP_SEARCH_PLACEHOLDER,
 } from "@logjam/shared";
 
@@ -131,6 +137,7 @@ export function MapSearchBar({
   onSelectPlace,
   onSelectSaved,
   onSearchPin,
+  view,
 }: {
   /** Status-bar inset — chrome must never sit under the camera cutout. */
   topInset: number;
@@ -147,6 +154,10 @@ export function MapSearchBar({
   onSelectSaved: (item: SavedSearchItem) => void;
   /** The temporary pin for the searched location, or none (searchPinAfter). */
   onSearchPin: (pin: SearchPin | null) => void;
+  /** What the map shows, null before it first settles. It picks the
+   *  geocoder's bias and reads a typed coordinate's hemispheres, and is never
+   *  sent as it is (geocodeBias). */
+  view: LonLatBox | null;
 }) {
   const theme = useTheme();
   const styles = useStyles();
@@ -156,6 +167,9 @@ export function MapSearchBar({
   // The query the user asked the geocoder about. Typing on past it leaves the
   // answer behind and offers the ask row again.
   const [asked, setAsked] = useState<string | null>(null);
+  // The view as it was when asked. The effect reads this copy, not `view`,
+  // which changes on every pan.
+  const [askedView, setAskedView] = useState<LonLatBox | null>(null);
   // Tagged with the query it answers, so a stale or still-pending answer reads
   // as "no answer" without being cleared from an effect.
   const [search, setSearch] = useState<{
@@ -165,7 +179,7 @@ export function MapSearchBar({
   } | null>(null);
   const [recents, setRecents] = useState(loadRecentSearches);
   const trimmed = query.trim();
-  const coordinate = expanded ? parseCoordinates(trimmed) : null;
+  const coordinate = expanded ? parseCoordinates(trimmed, view) : null;
   const searchable = expanded && trimmed.length >= GEOCODE_MIN_QUERY_LENGTH;
   const askedHere = searchable && asked === trimmed;
   const answer = askedHere && search?.query === trimmed ? search : null;
@@ -177,8 +191,11 @@ export function MapSearchBar({
 
   // ── The place registry, as the user types ───────────────────────────────
   const { accountState } = useAccountState();
-  const registry = usePlaceRegistryStatus();
+  // The registry of the region the map shows, as the geocoder's bias is.
+  const registryRegion = placeRegistryIn(view)?.id ?? null;
+  const registry = usePlaceRegistryStatus(registryRegion);
   const source = placeSearchSource(
+    registryRegion,
     registry.stored !== null,
     accountState,
     online,
@@ -186,7 +203,7 @@ export function MapSearchBar({
   // Read from the store on every render, never copied into state: Remove and
   // a refresh drop it there, and a copy here would keep it alive (and a
   // refreshed build beside it).
-  const index = registry.stored ? placeIndex() : null;
+  const index = registry.stored ? placeIndex(registryRegion) : null;
   // Built on the first open, not with the map: nobody who never searches
   // carries it. The build takes a few seconds, in slices; until it is ready
   // the user's own matches show and a loading row stands for the rest.
@@ -198,9 +215,9 @@ export function MapSearchBar({
       index === null &&
       !registry.loadFailed
     ) {
-      void loadPlaceIndex();
+      void loadPlaceIndex(registryRegion);
     }
-  }, [expanded, registry.stored, index, registry.loadFailed]);
+  }, [expanded, registryRegion, registry.stored, index, registry.loadFailed]);
   const placeQuery =
     expanded && trimmed.length >= PLACE_SEARCH_MIN_QUERY_LENGTH;
   const devicePlaces = useMemo(
@@ -214,9 +231,9 @@ export function MapSearchBar({
   // blink on every keystroke.
   const [placeAnswer, setPlaceAnswer] = useState<PlaceAnswer | null>(null);
   useEffect(() => {
-    if (source !== "api" || !placeQuery) return;
-    return askPlacesOnline(trimmed, setPlaceAnswer);
-  }, [source, placeQuery, trimmed]);
+    if (source !== "api" || registryRegion === null || !placeQuery) return;
+    return askPlacesOnline(trimmed, registryRegion, setPlaceAnswer);
+  }, [source, registryRegion, placeQuery, trimmed]);
   const places =
     source === "device"
       ? index || !placeQuery
@@ -224,11 +241,11 @@ export function MapSearchBar({
         : registry.loadFailed
           ? {
               error: SEARCH_STATUS.namesFailed,
-              retry: () => void loadPlaceIndex(),
+              retry: () => void loadPlaceIndex(registryRegion),
             }
           : "loading"
-      : source === "api" && placeQuery
-        ? placesFromAnswer(placeAnswer, trimmed)
+      : source === "api" && registryRegion !== null && placeQuery
+        ? placesFromAnswer(placeAnswer, trimmed, registryRegion)
         : [];
 
   // One driver for width and for the fade of everything that only exists in
@@ -248,7 +265,7 @@ export function MapSearchBar({
   useEffect(() => {
     if (asked === null) return;
     const controller = new AbortController();
-    geocode(asked, controller.signal)
+    geocode(asked, controller.signal, askedView)
       .then((found) => {
         setSearch({ query: asked, results: found, error: null });
       })
@@ -262,10 +279,12 @@ export function MapSearchBar({
         });
       });
     return () => controller.abort();
-  }, [asked]);
+  }, [asked, askedView]);
 
   const ask = () => {
-    if (searchable) setAsked(trimmed);
+    if (!searchable) return;
+    setAsked(trimmed);
+    setAskedView(view);
   };
 
   // Focus AFTER the expansion has committed, not from the tap handler: the

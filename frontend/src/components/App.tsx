@@ -11,7 +11,11 @@ import { useIsMobile } from "../useIsMobile";
 import NavRail from "./sidebar/NavRail";
 import SidebarPanel from "./sidebar/SidebarPanel";
 import Map, { type SnapMode } from "./map/Map";
-import { baseLayersFor } from "./map/baseLayers";
+import {
+  baseLayersFor,
+  basemapPicked,
+  viewForBasemaps,
+} from "./map/baseLayers";
 import { useRouteDraft } from "./routes/useRouteDraft";
 import SignIn from "./SignIn";
 import BrandMark from "./brand/BrandMark";
@@ -30,13 +34,20 @@ import OnboardingChoiceDialog from "./dialogs/OnboardingChoiceDialog";
 import SelectedPlacesDialog from "./dialogs/SelectedPlacesDialog";
 import classes from "./App.module.css";
 import type { TBbox } from "./map/Map";
-import { TERRAIN_ENTRIES, terrainEntries } from "./map/terrainEntries";
+import { terrainKeyOf } from "./map/layerOrder";
+import { terrainDrawn } from "./map/terrainDrawn";
+import { terrainEntries } from "./map/terrainEntries";
+import { nextViewRegion } from "./map/viewRegion";
 import { setRoutedAreas } from "./map/terrainRouter";
 import { useBootDefinitions } from "../useBootDefinitions";
 import { useCompletedTopoJobs } from "../useCompletedTopoJobs";
 import { createPlaceHighlight } from "./map/placeHighlight";
 import type { TFilters, TPlace, TPlaceType } from "../placeUtils";
-import type { ScopedCustomFieldDef, StandaloneFile } from "@logjam/shared";
+import type {
+  Region,
+  ScopedCustomFieldDef,
+  StandaloneFile,
+} from "@logjam/shared";
 import { PANEL_TITLES, type LogsView, type PanelId } from "./sidebar/panels";
 import {
   usePlaces,
@@ -131,12 +142,9 @@ import {
   WayRemovalError,
   TERRAIN_LAYER_DEFAULTS,
   TERRAIN_LAYER_KEYS,
-  drawsNswContours,
-  drawsNswHillshade,
   normalizeTerrainLayers,
   normalizeCarrier,
-  drawsCoverage,
-  normalizeUserUiPreferences,
+  carriersOf,
   type TerrainSwitchKey,
   MAP_OVERLAY_DEFAULTS,
   MAP_TERRAIN,
@@ -149,6 +157,9 @@ import {
   tripPlanTripLogPrefill,
   type TripPlanItemKind,
   type TripPlanPageView,
+  accountRegion,
+  pointBox,
+  type LonLatBox,
 } from "@logjam/shared";
 import type { MapPointCoord, OverlaySource } from "@logjam/shared";
 import { useAuth, signOut } from "../useAuth";
@@ -245,7 +256,7 @@ function App() {
     "logjam.coverageCarrier",
     null,
   );
-  const coverageCarrier = normalizeCarrier(storedCarrier);
+  const coverageCarrier = normalizeCarrier(storedCarrier, carriersOf());
   const setTerrainLayer = (key: TerrainSwitchKey, on: boolean) =>
     setStoredTerrainLayers((prev: unknown) => ({
       ...normalizeTerrainLayers(prev),
@@ -395,20 +406,27 @@ function App() {
     applyCurrentUser,
   } = useCurrentUser(authenticated);
   const slopeBands = useSlopeBands(currentUser, applyCurrentUser);
-  // Keyed by string: the fallback toast's effect depends on this list.
-  const regionKey = normalizeUserUiPreferences(
-    currentUser?.uiPreferences,
-  ).regions.join(",");
-  const baseLayers = useMemo(
-    () => baseLayersFor(regionKey.split(",")),
-    [regionKey],
+  // Map view state — persisted for session restore and used for GeoPDF initialisation
+  const [mapCenter, setMapCenter] = useStoredState<{
+    lat: number;
+    lng: number;
+    zoom: number;
+    bearing: number;
+    pitch: number;
+  } | null>("logjam.mapView", null);
+
+  // The ground the map shows decides the gallery, not the regions the account
+  // chose (ADR 0049). The state keeps its old value for a pan that offers the
+  // same basemaps (`viewForBasemaps`), so the list below is stable.
+  const [basemapView, setBasemapView] = useState<LonLatBox>(() =>
+    mapCenter
+      ? pointBox(mapCenter.lng, mapCenter.lat)
+      : pointBox(...accountRegion(currentUser?.uiPreferences).view.center),
   );
-  // A basemap the picker does not offer (a region unchosen, or the raster
-  // "Default") would otherwise be shown with no way to switch off it.
-  const pickedLayerId = baseLayers.some((layer) => layer.id === storedLayerId)
-    ? storedLayerId
-    : (baseLayers.find((layer) => layer.id === "protomaps") ?? baseLayers[0]!)
-        .id;
+  const baseLayers = useMemo(() => baseLayersFor(basemapView), [basemapView]);
+  // A pick the map's ground does not offer shows `basemapPicked`'s, with no way
+  // to switch off it otherwise; the pick stays and returns with the ground.
+  const pickedLayerId = basemapPicked(storedLayerId, basemapView);
   const {
     shownLayerId: activeLayerId,
     down: downBasemaps,
@@ -467,15 +485,6 @@ function App() {
   const [pendingGeoPdfScale, setPendingGeoPdfScale] = useState<number | null>(
     null,
   );
-
-  // Map view state — persisted for session restore and used for GeoPDF initialisation
-  const [mapCenter, setMapCenter] = useStoredState<{
-    lat: number;
-    lng: number;
-    zoom: number;
-    bearing: number;
-    pitch: number;
-  } | null>("logjam.mapView", null);
 
   // Place fly-to target
   const [flyToPlace, setFlyToPlace] = useState<{
@@ -547,38 +556,48 @@ function App() {
     () => completedTopoJobs.flatMap((job) => job.sharpened ?? []),
     [completedTopoJobs],
   );
+  // The one region the map draws its Terrain group from: the one in view,
+  // changed only when the map moves into another (ADR 0049; `viewRegion.test.ts`
+  // holds that a pan inside one keeps the same object). Unknown until the map
+  // reports its first view.
+  const [viewRegion, setViewRegion] = useState<Region | null>(null);
+  // Only a region with a gauge feed has river gauges to draw.
+  const gaugesHere = viewRegion?.gauges != null;
+  // The layers drawn over the region in view, and the stored carrier where
+  // that region lists it (the Layers popover asks the same).
+  const { shown, carrier: carrierHere } = useMemo(
+    () =>
+      terrainDrawn(
+        { contours, coverage, fire, slope, land, hillshade },
+        activeLayerId,
+        viewRegion,
+        coverageCarrier,
+      ),
+    [
+      contours,
+      coverage,
+      fire,
+      slope,
+      land,
+      hillshade,
+      activeLayerId,
+      viewRegion,
+      coverageCarrier,
+    ],
+  );
   const mapTopoLayers = useMemo(() => {
     // Here, not in an effect: the Map's effects run before this component's,
     // and its routed sources ask for tiles as soon as it adds them.
     setRoutedAreas(sharpenedAreas);
-    const entries = terrainEntries(sharpenedAreas);
-    const shown = {
-      contours: drawsNswContours(activeLayerId, contours),
-      coverage: drawsCoverage(coverage, coverageCarrier),
-      fire,
-      slope,
-      land,
-      hillshade: drawsNswHillshade(activeLayerId, hillshade),
-    };
+    const entries = terrainEntries(viewRegion, sharpenedAreas);
     return [
       ...[...TERRAIN_LAYER_KEYS]
         .reverse()
         .filter((key) => shown[key])
-        .map((key) => entries[key]),
+        .flatMap((key) => entries[key] ?? []),
       ...vegetationLayers,
     ];
-  }, [
-    activeLayerId,
-    contours,
-    coverage,
-    coverageCarrier,
-    fire,
-    slope,
-    land,
-    hillshade,
-    vegetationLayers,
-    sharpenedAreas,
-  ]);
+  }, [shown, vegetationLayers, sharpenedAreas, viewRegion]);
 
   // A PMTiles source failed to load (Map already tore it down to stop the
   // retry spam). Tell the user once.
@@ -587,9 +606,7 @@ function App() {
       // A Terrain layer's switch is on, so say which one draws nothing. Only
       // a reload retries it: the pmtiles protocol keeps the failed header for
       // the page's life.
-      const terrainKey = TERRAIN_LAYER_KEYS.find(
-        (key) => TERRAIN_ENTRIES[key].id === entryId,
-      );
+      const terrainKey = terrainKeyOf(entryId);
       if (terrainKey) {
         toast.error(
           `${MAP_TERRAIN.copy[terrainKey]} couldn't be loaded — its map file is missing.`,
@@ -2080,7 +2097,7 @@ function App() {
             // One overlay for every line, so nothing has to be partitioned by
             // ownership on the way to the map any more.
             showWays={showWays || !!planOnMap}
-            showGauges={showGauges}
+            showGauges={showGauges && gaugesHere}
             onShowGauges={() => setShowGauges(true)}
             showMgaGrid={showMgaGrid}
             placeTracks={!planOnMap || mineShown.ways ? placeTracks : []}
@@ -2155,6 +2172,8 @@ function App() {
             }}
             onMapBoundsChange={(bounds) => {
               mapBoundsRef.current = bounds;
+              setBasemapView((prev) => viewForBasemaps(prev, bounds));
+              setViewRegion((previous) => nextViewRegion(previous, bounds));
             }}
             selectingBbox={boxFor(boxPick) !== null}
             onBboxSelected={(bbox) => {
@@ -2178,9 +2197,10 @@ function App() {
             }
             onBasemapHealth={setBasemapHealth}
             topoLayers={mapTopoLayers}
+            region={viewRegion}
             sharpenedAreas={sharpenedAreas}
             slopeBands={slopeBands.drawn}
-            coverageCarrier={coverageCarrier}
+            coverageCarrier={carrierHere}
             activeLayerId={mapLayerId}
             selectingGeoPdfExtent={selectingGeoPdfExtent}
             geoPdfPaperAspect={geoPdfPaperAspect}
@@ -2199,6 +2219,7 @@ function App() {
             }}
             onMapViewChange={(view) => setMapCenter(view)}
             initialView={mapCenter}
+            homeView={accountRegion(currentUser?.uiPreferences).view}
             topoFlyTarget={topoFlyTarget}
             onTopoFlyConsumed={() => setTopoFlyTarget(null)}
             flyToPlace={flyToPlace}
@@ -2248,6 +2269,7 @@ function App() {
           showWays={showWays}
           setShowWays={setShowWays}
           showGauges={showGauges}
+          gaugesHere={gaugesHere}
           setShowGauges={setShowGauges}
           showMgaGrid={showMgaGrid}
           setShowMgaGrid={setShowMgaGrid}
@@ -2266,6 +2288,7 @@ function App() {
           slopeBands={slopeBands.bands}
           onSlopeBandsChange={slopeBands.setBands}
           mapView={mapCenter}
+          region={viewRegion}
         />
 
         <PlanInviteLinkDialog

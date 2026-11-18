@@ -10,6 +10,7 @@ import {
   say,
   normalizeUserUiPreferences,
   computeLeaderboard,
+  accountRegion,
   currentSeason,
   isPodiumWeek,
   medalFor,
@@ -260,12 +261,13 @@ router.get(
     );
 
     const now = new Date();
-    const season = currentSeason(now);
+    const home = accountRegion(user.uiPreferences);
+    const season = currentSeason(now, home);
     const entries = await buildLeaderboard(participants, season);
 
     let podium: Extract<LeaderboardResponse, { joined: true }>["podium"] = null;
-    if (isPodiumWeek(now)) {
-      const last = previousSeason(now);
+    if (isPodiumWeek(now, home)) {
+      const last = previousSeason(now, home);
       const mine = (await buildLeaderboard(participants, last)).find(
         (entry) => entry.userId === user.id,
       );

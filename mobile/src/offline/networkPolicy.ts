@@ -4,8 +4,8 @@
 // and the honest default differs per job:
 //
 // - TOPO overlay auto-download: same order or larger, Wi-Fi by default.
-// - PLACE NAMES refresh: one build a month, PLACE_REGISTRY_DOWNLOAD_ESTIMATE
-//   in placeRegistry.ts, Wi-Fi by default.
+// - PLACE NAMES refresh: one build a month for each region kept,
+//   PLACE_REGISTRY_DOWNLOAD_ESTIMATE in placeRegistry.ts, Wi-Fi by default.
 // - SYNC: a few kilobytes of JSON, and the river gauge feed (about 300 KB
 //   gzipped, at most every 5 minutes in the foreground), ALLOWED on mobile
 //   data by default — a queued trip log that waits for Wi-Fi is a trip log

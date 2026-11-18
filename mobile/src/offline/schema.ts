@@ -29,7 +29,8 @@ export const SCHEMA_SQL = `
           label        TEXT,
           groupId      TEXT,
           groupLabel   TEXT,
-          firstSavedAt TEXT
+          firstSavedAt TEXT,
+          archivePath  TEXT
         );
         CREATE INDEX IF NOT EXISTS idx_map_artifact_lookup
           ON map_artifact(kind, logicalKey);
@@ -187,6 +188,11 @@ export const ADDED_COLUMNS: {
   // update, so the card keeps its place in Saved and says when it was first
   // saved and when it was last updated (`cardDates`).
   { table: "map_artifact", column: "firstSavedAt", definition: "TEXT" },
+  // The CDN path of the archive a vector basemap clip was cut from (one clip
+  // per region archive a save touches): the vector map draws the clips of the
+  // region it shows. NULL on every other artifact and on a vector clip saved
+  // before this.
+  { table: "map_artifact", column: "archivePath", definition: "TEXT" },
   // Wall-clock recording time. Deriving elapsed time from the fix series alone
   // would omit time between the last accepted fix and the Finish tap. Pauses
   // are accumulated explicitly at pause/resume taps.

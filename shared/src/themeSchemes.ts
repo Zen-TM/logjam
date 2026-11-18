@@ -126,9 +126,10 @@ export type UserUiPreferences = {
    */
   slopeBands: SlopeBand[];
   /**
-   * The regions whose maps and canyon list Logjam offers this user
-   * (regions.ts): ids of known regions, NSW when never chosen. Chosen in the
-   * first-login gate and Settings once there is more than one region.
+   * The regions this user chose (regions.ts): ids of known regions, NSW when
+   * never chosen. They set defaults, never what a map offers where it is
+   * (ADR 0049). Chosen in the first-login gate and Settings once there is more
+   * than one region.
    */
   regions: string[];
 };

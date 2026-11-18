@@ -44,7 +44,7 @@ import {
   type MapRef,
 } from "@maplibre/maplibre-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import type { RegionBbox } from "@logjam/shared";
+import { pointBox, regionInWrappedView, type RegionBbox } from "@logjam/shared";
 
 import { config } from "../config";
 import { spacing, makeStyles } from "../theme";
@@ -52,7 +52,7 @@ import { Button, Notice } from "../ui";
 import { useMirrorPlaces, useMirrorPlaceTypes } from "../sync/useSyncQueries";
 import { useMapArtifacts } from "../offline/useMapArtifacts";
 import { useConnectivity } from "./connectivity";
-import { readBasemapPreference } from "./basemapPreference";
+import { readEffectiveBasemap } from "./basemapPreference";
 import { useBasemapAssets } from "./basemap/basemapAssets";
 import { ProtomapsLayers } from "./basemap/ProtomapsLayers";
 import { BAND_MARKERS } from "./layerOrder";
@@ -60,7 +60,8 @@ import { PROTOMAPS_FLAVOR } from "./basemap/protomapsLayers";
 import { useShellStyle } from "./basemap/shellStyle";
 import { PlacePinsLayer, toPlaceFeatureCollection } from "./PlacePinsLayer";
 import { readLastMapCamera } from "./lastCamera";
-import { DEFAULT_CENTER, DEFAULT_ZOOM } from "./mapChrome";
+import { readRegions } from "../regionsPreference";
+import { homeView } from "./mapChrome";
 import { ResolvedSource, sourceIdFor } from "./ResolvedSource";
 import { MAP_BACK_SPACE, MapBackButton } from "./MapBackButton";
 import { SelectionFrame } from "./SelectionFrame";
@@ -113,9 +114,13 @@ export function PickAreaScreen({
   // re-reading the module store mid-session would move a map the user is
   // already panning. Same rule as PickPointScreen and RegionDownloadScreen.
   const [lastCamera] = useState(() => readLastMapCamera());
+  const [home] = useState(() => homeView(readRegions()));
   // Fixed for the life of the screen: the basemap the user was last looking at,
   // with no way to change it here (see the header for why there is no rail).
-  const basemapId: BasemapId = lastCamera?.basemapId ?? readBasemapPreference();
+  // With no last camera the stored pick is read over home, where the screen
+  // opens, since it may be a basemap that ground does not offer.
+  const basemapId: BasemapId =
+    lastCamera?.basemapId ?? readEffectiveBasemap(pointBox(...home.center));
   const mapRef = useRef<MapRef>(null);
 
   const [size, setSize] = useState({ width: 0, height: 0 });
@@ -136,9 +141,21 @@ export function PickAreaScreen({
     () => ({ connectivity, artifacts, cdnBaseUrl: config.topoCdnBaseUrl }),
     [connectivity, artifacts],
   );
+  // The vector basemap is read from the archive of the region the map shows:
+  // what the camera opened on until the map first reports its bounds.
+  const [openLon, openLat] = initialArea
+    ? [
+        (initialArea.west + initialArea.east) / 2,
+        (initialArea.south + initialArea.north) / 2,
+      ]
+    : (lastCamera?.center ?? home.center);
+  const region = useMemo(
+    () => regionInWrappedView(viewport ?? pointBox(openLon!, openLat!)),
+    [viewport, openLon, openLat],
+  );
   const basemapResolved = useMemo(
-    () => resolveMapSource({ kind: "basemap", basemapId }, ctx),
-    [basemapId, ctx],
+    () => resolveMapSource({ kind: "basemap", basemapId, region }, ctx),
+    [basemapId, region, ctx],
   );
 
   const places = useMirrorPlaces();
@@ -237,8 +254,8 @@ export function PickAreaScreen({
         },
       }
     : {
-        center: lastCamera?.center ?? DEFAULT_CENTER,
-        zoom: lastCamera?.zoom ?? DEFAULT_ZOOM,
+        center: lastCamera?.center ?? home.center,
+        zoom: lastCamera?.zoom ?? home.zoom,
       };
 
   return (

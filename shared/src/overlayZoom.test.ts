@@ -1,7 +1,5 @@
 import { describe, expect, it } from "vitest";
 
-import { NSW_COVERAGE } from "./nswCoverage.js";
-import { NSW_FIRE } from "./nswFire.js";
 import {
   CONTOUR_LABELS_MIN_ZOOM,
   CONTOURS_MIN_ZOOM,
@@ -43,12 +41,18 @@ describe("zoom floors", () => {
       NSW_REGION.terrain.slope.maxzoom,
     );
     // Mutation: FIRE_MIN_ZOOM outside the archive's z8–z12.
-    expect(FIRE_MIN_ZOOM).toBeGreaterThanOrEqual(NSW_FIRE.minzoom);
-    expect(FIRE_MIN_ZOOM).toBeLessThan(NSW_FIRE.maxzoom);
+    expect(FIRE_MIN_ZOOM).toBeGreaterThanOrEqual(
+      NSW_REGION.terrain.fire.minzoom,
+    );
+    expect(FIRE_MIN_ZOOM).toBeLessThan(NSW_REGION.terrain.fire.maxzoom);
     // Mutation: COVERAGE_MIN_ZOOM outside the archive's zooms, or no deeper
     // than fire's.
-    expect(COVERAGE_MIN_ZOOM).toBeGreaterThanOrEqual(NSW_COVERAGE.minzoom);
-    expect(COVERAGE_MIN_ZOOM).toBeLessThanOrEqual(NSW_COVERAGE.maxzoom);
+    expect(COVERAGE_MIN_ZOOM).toBeGreaterThanOrEqual(
+      NSW_REGION.terrain.coverage.minzoom,
+    );
+    expect(COVERAGE_MIN_ZOOM).toBeLessThanOrEqual(
+      NSW_REGION.terrain.coverage.maxzoom,
+    );
     expect(COVERAGE_MIN_ZOOM).toBeGreaterThan(FIRE_MIN_ZOOM);
   });
   it("bring contour detail in coarse to fine", () => {

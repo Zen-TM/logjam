@@ -15,6 +15,7 @@ import {
   leaderboardHeroTitle,
   leaderboardNudge,
   leaderboardPodiumLine,
+  leaderboardRules,
   leaderboardSeasonLine,
   LEADERBOARD_SETTING,
   medalFor,
@@ -22,6 +23,7 @@ import {
   selfStanding,
   type LeaderboardResponse,
   type Medal,
+  type Region,
   type SectionKeysOn,
 } from "@logjam/shared";
 import classes from "./LeaderboardPage.module.css";
@@ -56,12 +58,15 @@ function LeaderboardPage({
   error,
   onRetry,
   onBack,
+  region,
 }: {
   /** `null` while the first load is out. */
   board: LeaderboardResponse | null;
   error: string | null;
   onRetry: () => void;
   onBack: () => void;
+  /** The account's home region: its seasons' dates are in the rules. */
+  region: Region;
 }) {
   const [rulesOpen, setRulesOpen] = useState(false);
   // `useStoredState` keeps every storage access in a try/catch.
@@ -181,9 +186,11 @@ function LeaderboardPage({
         footer={<Button onClick={() => setRulesOpen(false)}>Close</Button>}
       >
         <ul className={classes.rules}>
-          {copy.rules.split("\n").map((rule) => (
-            <li key={rule}>{rule}</li>
-          ))}
+          {leaderboardRules(region)
+            .split("\n")
+            .map((rule) => (
+              <li key={rule}>{rule}</li>
+            ))}
         </ul>
       </Dialog>
     </div>

@@ -1,7 +1,24 @@
 // The decisions behind the sign-in terrain, kept out of the component so they
 // can be tested: which area, where the sun is over it, and where rain runs.
+import { REGIONS, type Region } from "@logjam/shared";
 
 const RAD = Math.PI / 180;
+
+/** The height source every area's files are made from (see sign_in_terrain.py). */
+export const SIGN_IN_SOURCE = "nsw-5m";
+
+/**
+ * The licence credit of the artwork's source, wherever the user is: the
+ * artwork shows ground that source covers, not the region the map is on.
+ * Guard: `signInTerrain.test.ts` ("credits the source the areas are made from, whichever regions there are").
+ */
+export function signInCredit(regions: readonly Region[] = REGIONS): string {
+  return (
+    regions
+      .flatMap((region) => region.terrain.heights ?? [])
+      .find((heights) => heights.id === SIGN_IN_SOURCE)?.credit ?? ""
+  );
+}
 
 /**
  * The areas that have all three of their files (`<key>.json`,

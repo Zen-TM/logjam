@@ -7,8 +7,10 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  NSW_REGION,
   PLACE_REGISTRY_ATTRIBUTION,
   PLACE_SEARCH_DEBOUNCE_MS,
+  type LonLatBox,
   type PlaceResult,
 } from "@logjam/shared";
 import { ApiError } from "../../errors/ApiError";
@@ -61,11 +63,27 @@ afterEach(() => {
   searchPlaceRegistry.mockReset();
 });
 
+/** A map showing the middle of NSW, where a registry answers. */
+const OVER_NSW: LonLatBox = {
+  west: NSW_REGION.view.center[0] - 0.1,
+  south: NSW_REGION.view.center[1] - 0.1,
+  east: NSW_REGION.view.center[0] + 0.1,
+  north: NSW_REGION.view.center[1] + 0.1,
+};
+/** A map showing open sea, in no region. */
+const OVER_SEA: LonLatBox = {
+  west: 156,
+  south: -33.1,
+  east: 156.2,
+  north: -32.9,
+};
+
 function renderBox(
   props: Partial<Parameters<typeof MapSearchBox>[0]> = {},
 ): HTMLElement {
   render(
     <MapSearchBox
+      getView={() => OVER_NSW}
       places={[]}
       sharedPlaces={[]}
       onSelectPlace={() => {}}
@@ -112,7 +130,7 @@ describe("MapSearchBox", () => {
   // Mutation: start the geocode effect from the query instead of from
   // `locationQuery`, which only "Search locations for …" sets.
   it("sends a query to the public geocoder only when the user asks it to", async () => {
-    const input = renderBox();
+    const input = renderBox({ getView: () => null });
     for (const typed of ["Hi", "Hidden", "Hidden Gorge"]) type(input, typed);
     await settle();
     expect(geocode).not.toHaveBeenCalled();
@@ -121,7 +139,47 @@ describe("MapSearchBox", () => {
       screen.getByRole("option", { name: /Search locations for/ }),
     );
     expect(geocode).toHaveBeenCalledOnce();
-    expect(geocode).toHaveBeenCalledWith("Hidden Gorge", expect.anything());
+    expect(geocode).toHaveBeenCalledWith(
+      "Hidden Gorge",
+      expect.anything(),
+      null,
+    );
+  });
+
+  // Mutation: stop passing the map's view to the geocoder (the bias then
+  // always falls to "none"), or read it when the box was last rendered
+  // instead of when the user asks.
+  it("hands the geocoder the view the map has when the user asks", () => {
+    let view: LonLatBox = {
+      west: -112,
+      south: 40.5,
+      east: -111.8,
+      north: 40.9,
+    };
+    const input = renderBox({ getView: () => view });
+    type(input, "Zion Narrows");
+    view = { west: -113.1, south: 37.2, east: -112.9, north: 37.4 };
+    fireEvent.pointerDown(
+      screen.getByRole("option", { name: /Search locations for/ }),
+    );
+    expect(geocode).toHaveBeenCalledWith(
+      "Zion Narrows",
+      expect.anything(),
+      view,
+    );
+  });
+
+  // Mutation: parse a typed coordinate without the view, which reads every
+  // unsigned pair as south and east, or against the view the box had when it
+  // took focus rather than the one the map has now.
+  it("reads an unsigned coordinate in the hemispheres of the map as it is now", () => {
+    let view: LonLatBox = { west: 151, south: -34, east: 151.4, north: -33.6 };
+    const input = renderBox({ getView: () => view });
+    view = { west: -112, south: 40.5, east: -111.8, north: 40.9 };
+    type(input, "40.7 111.9");
+    expect(screen.getAllByRole("option")[0].textContent).toContain(
+      "40.70000, -111.90000",
+    );
   });
 
   // Mutation: drop the timeout (a request per keystroke), or the abort in the
@@ -139,6 +197,7 @@ describe("MapSearchBox", () => {
       "Kat",
       expect.any(Number),
       expect.any(AbortSignal),
+      NSW_REGION.id,
     );
 
     const first = searchPlaceRegistry.mock.calls[0][2] as AbortSignal;
@@ -150,7 +209,46 @@ describe("MapSearchBox", () => {
       "Kato",
       expect.any(Number),
       expect.any(AbortSignal),
+      NSW_REGION.id,
     );
+  });
+
+  // Mutation: drop the `registryRegion === null` return from the effect, and
+  // a map over the sea asks the API for a region it is not showing; drop the
+  // `registry.region === registryRegion` test from `answer`, and NSW's answer
+  // stays on screen once the map moves off it.
+  it("asks no registry over ground none covers, and shows no answer from the ground it left", async () => {
+    let view = OVER_NSW;
+    const input = renderBox({ getView: () => view });
+    type(input, "Kat");
+    await settle();
+    expect(screen.getByRole("option", { name: /Katoomba Falls/ })).toBeTruthy();
+
+    view = OVER_SEA;
+    searchPlaceRegistry.mockClear();
+    type(input, "Kato");
+    await settle();
+    expect(searchPlaceRegistry).not.toHaveBeenCalled();
+    expect(screen.queryByRole("option", { name: /Katoomba Falls/ })).toBeNull();
+    // What the user still has: the geocoder, when asked.
+    expect(
+      screen.getByRole("option", { name: /Search locations for/ }),
+    ).toBeTruthy();
+  });
+
+  // Mutation: read the view only when the box mounts, and a map that has
+  // moved onto the sea since still asks.
+  it("reads the map's view as it is when the user types", async () => {
+    let view: LonLatBox | null = null;
+    const input = renderBox({ getView: () => view });
+    type(input, "Kat");
+    await settle();
+    expect(searchPlaceRegistry).not.toHaveBeenCalled();
+
+    view = OVER_NSW;
+    type(input, "Kato");
+    await settle();
+    expect(searchPlaceRegistry).toHaveBeenCalledOnce();
   });
 
   // Mutation: list the registry before the user's places, or after the

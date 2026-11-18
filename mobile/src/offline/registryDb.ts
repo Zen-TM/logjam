@@ -81,6 +81,7 @@ type ArtifactRow = {
   groupId: string | null;
   groupLabel: string | null;
   firstSavedAt: string | null;
+  archivePath: string | null;
 };
 
 function rowToArtifact(row: ArtifactRow): MapArtifact {
@@ -106,6 +107,7 @@ function rowToArtifact(row: ArtifactRow): MapArtifact {
     groupId: row.groupId,
     groupLabel: row.groupLabel,
     firstSavedAt: row.firstSavedAt,
+    archivePath: row.archivePath,
   };
 }
 
@@ -123,8 +125,9 @@ export async function insertArtifact(artifact: MapArtifact): Promise<void> {
     `INSERT OR REPLACE INTO map_artifact
        (id, kind, logicalKey, format, sourceType, path,
         west, south, east, north, minzoom, maxzoom,
-        sizeBytes, downloadedAt, label, groupId, groupLabel, firstSavedAt)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        sizeBytes, downloadedAt, label, groupId, groupLabel, firstSavedAt,
+        archivePath)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     artifact.id,
     artifact.kind,
     artifact.logicalKey,
@@ -143,6 +146,7 @@ export async function insertArtifact(artifact: MapArtifact): Promise<void> {
     artifact.groupId ?? null,
     artifact.groupLabel ?? null,
     artifact.firstSavedAt ?? null,
+    artifact.archivePath ?? null,
   );
   notifyChanged();
 }

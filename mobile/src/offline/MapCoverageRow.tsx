@@ -6,10 +6,12 @@ import { useNavigation } from "@react-navigation/native";
 import { BASEMAP_CATALOG } from "@logjam/shared";
 
 import { useConnectivity } from "../map/connectivity";
-import { readBasemapPreference } from "../map/basemapPreference";
+import { boundsView } from "../map/basemapMeta";
+import { readEffectiveBasemap } from "../map/basemapPreference";
 import { Row } from "../ui";
 import {
   coveredByOfflineMaps,
+  heldBasemapIn,
   routeCoveredByOfflineMaps,
 } from "./coveredByOfflineMaps";
 import { coverageSubtitle } from "./coverageSubtitle";
@@ -33,11 +35,11 @@ export function MapCoverageRow({
   // Nothing until the registry is read: "no map" is not yet known to be true.
   if (!loaded) return null;
 
-  // Only what holds the basemap the map is drawn with counts: an imagery clip
+  // Only what holds the basemap the map is drawn with over this ground counts: an imagery clip
   // is no help to a map open on Topo.
-  const basemapId = readBasemapPreference();
+  const basemapId = readEffectiveBasemap(boundsView(bbox));
   const basemapName = BASEMAP_CATALOG.find((e) => e.id === basemapId)?.name;
-  const held = artifacts.filter((a) => a.logicalKey === basemapId);
+  const held = heldBasemapIn(artifacts, basemapId, bbox);
   const covered = route
     ? routeCoveredByOfflineMaps(route, held)
     : coveredByOfflineMaps(bbox, held);

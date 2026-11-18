@@ -1,13 +1,26 @@
 import { describe, expect, it } from "vitest";
-import { planRegionTiles } from "@logjam/shared";
+import {
+  MAP_TERRAIN,
+  NSW_REGION,
+  SIM_NZ,
+  SIM_REGIONS,
+  SIM_UTAH,
+  SIM_WORLD,
+  planRegionForBasemaps,
+  planRegionTiles,
+  type Region,
+} from "@logjam/shared";
 
 import {
+  archiveLabel,
   classifyTileResponse,
+  clipSourceType,
   deadTileBudget,
   exhaustedTileOutcome,
+  regionClipKind,
+  regionClipSpecs,
   regionPlanHash,
   regionTileSequence,
-  regionClipSpecs,
   settledStop,
   tileUrlFrom,
 } from "./regionTilePlanning";
@@ -109,44 +122,163 @@ describe("deadTileBudget", () => {
 });
 
 describe("regionClipSpecs", () => {
-  // Mutation: drop the contours, the slope, land, fire, coverage or the vector map from the list
-  // and this goes red: a saved area is then blank offline, with tools that
-  // draw straight lines, or has a Slope switch that draws nothing. That the screen enqueues this list for every account has no guard.
-  it("gives every area the DEM archives, the contours, the slope, land, fire, coverage and the vector map", () => {
-    const run = {
-      bbox: BBOX,
-      groupId: "g",
-      groupLabel: "Area",
-      allowCellular: false,
-    };
+  const run = {
+    bbox: BBOX,
+    groupId: "g",
+    groupLabel: "Area",
+    allowCellular: false,
+  };
+  const specsFor = (
+    box: typeof BBOX,
+    regions?: readonly Region[],
+    world?: Region,
+  ): ReturnType<typeof regionClipSpecs> => {
     let n = 0;
-    const specs = regionClipSpecs(run, ["nsw-5m"], (basemapId) => ({
-      id: `id${n++}`,
-      label: basemapId,
-    }));
-    expect(
-      specs.map((s) => [
-        s.basemapId,
-        s.demSourceId,
-        s.contours,
-        s.slope,
-        s.land,
-        s.fire,
-        s.coverage,
-      ]),
-    ).toEqual([
-      ["nsw-5m", "nsw-5m", ...Array(5).fill(undefined)],
-      ["nsw-contours", undefined, true, ...Array(4).fill(undefined)],
-      ["nsw-5m-slope", undefined, undefined, true, ...Array(3).fill(undefined)],
-      ["nsw-land", ...Array(3).fill(undefined), true, undefined, undefined],
-      ["nsw-fire", ...Array(4).fill(undefined), true, undefined],
-      ["nsw-coverage", ...Array(5).fill(undefined), true],
-      ["protomaps", ...Array(6).fill(undefined)],
+    const plan = planRegionForBasemaps(box, [], 15, () => 16, regions, world);
+    return regionClipSpecs(
+      { ...run, bbox: box },
+      plan.clips,
+      plan.vectors,
+      (basemapId) => ({ id: `id${n++}`, label: basemapId }),
+    );
+  };
+  const archives = (specs: ReturnType<typeof regionClipSpecs>) =>
+    specs.map((s) => [s.basemapId, s.archiveId]);
+  const vectorPaths = (specs: ReturnType<typeof regionClipSpecs>) =>
+    specs.flatMap((s) => (s.vectorPath ? [s.vectorPath] : []));
+
+  // A save over NSW queues one clip per archive of NSW's Terrain group, heights
+  // first, then the vector map.
+  // Mutation: drop the vector map from the list, or the sort by `CLIP_ORDER`
+  // (the slope would queue before the contours), and this goes red: a saved area is then blank offline, with tools
+  // that draw straight lines, or has a Slope switch that draws nothing. That
+  // the screen enqueues this list for every account has no guard.
+  it("gives an area over NSW the DEM archive, the contours, the slope, land, fire, coverage and the vector map", () => {
+    const specs = specsFor(BBOX);
+    expect(archives(specs)).toEqual([
+      ["nsw-5m", "nsw-5m"],
+      ["nsw-contours", "nsw-contours"],
+      ["nsw-5m-slope", "nsw-5m-slope"],
+      ["nsw-land", "nsw-land"],
+      ["nsw-fire", "nsw-fire"],
+      ["nsw-coverage", "nsw-coverage"],
+      ["protomaps", undefined],
     ]);
     for (const spec of specs) {
       expect(spec).toMatchObject({ taskKind: "clip", ...run });
     }
     expect(new Set(specs.map((s) => s.id)).size).toBe(7);
+    // The vector clip is NSW's own archive, as it always was.
+    expect(vectorPaths(specs)).toEqual([
+      "master/basemap/protomaps-nsw.pmtiles",
+    ]);
+  });
+
+  // Mutation: queue NSW's archives for every box, and a save in New Zealand
+  // cuts clips from archives that do not cover it, or one in the sea cuts any.
+  it("gives an area the archives of the region it lies in, and one in the sea none", () => {
+    const makarora = {
+      west: 169.22,
+      south: -44.08,
+      east: 169.28,
+      north: -44.03,
+    };
+    const nz = specsFor(makarora, SIM_REGIONS);
+    expect(archives(nz)).toEqual([
+      ["simnz-heights", "simnz-heights"],
+      ["simnz-contours", "simnz-contours"],
+      ["simnz-slope", "simnz-slope"],
+      ["simnz-land", "simnz-land"],
+      ["simnz-fire", "simnz-fire"],
+      ["simnz-coverage", "simnz-coverage"],
+      ["protomaps", undefined],
+    ]);
+    expect(vectorPaths(nz)).toEqual([SIM_NZ.vector!.archivePath]);
+    const sea = { west: 160, south: -30, east: 160.1, north: -29.9 };
+    expect(archives(specsFor(sea, [NSW_REGION, ...SIM_REGIONS]))).toEqual([]);
+  });
+
+  // Mutation: clip NSW's vector archive for every box, and a save in the sea
+  // cuts a clip of ground the archive does not hold; ignore the world, and a
+  // build that declares a planet vector archive never saves one.
+  it("gives an area outside every region the world's vector map, where it has one", () => {
+    const sea = { west: 160, south: -30, east: 160.1, north: -29.9 };
+    const specs = specsFor(sea, [NSW_REGION, ...SIM_REGIONS], SIM_WORLD);
+    expect(archives(specs)).toEqual([["protomaps", undefined]]);
+    expect(vectorPaths(specs)).toEqual([SIM_WORLD.vector!.archivePath]);
+  });
+
+  // Mutation: queue one vector clip for the first region a box touches, and a
+  // save over two regions has no vector map for the second.
+  it("gives an area over two regions a vector clip of each", () => {
+    const overlap: Region = { ...SIM_UTAH, borders: NSW_REGION.borders };
+    expect(vectorPaths(specsFor(BBOX, [NSW_REGION, overlap]))).toEqual([
+      NSW_REGION.vector!.archivePath,
+      SIM_UTAH.vector!.archivePath,
+    ]);
+  });
+
+  // Mutation: stop at the first region a box touches, and the second region's
+  // archives are never cut.
+  it("gives an area every region it touches its archives", () => {
+    const overlap: Region = { ...SIM_UTAH, borders: NSW_REGION.borders };
+    expect(
+      archives(specsFor(BBOX, [NSW_REGION, overlap]))
+        .map(([id]) => id)
+        .filter((id) => id!.endsWith("-slope")),
+    ).toEqual(["nsw-5m-slope", "simutah-slope"]);
+  });
+});
+
+describe("a clip's kind, source type and label", () => {
+  // Mutation: file a clip by its archive's layer wrongly (the slope as
+  // `dem-region`, say), or let an area's clip fall through to the archive
+  // lookup, and a row goes red: offline the map draws the clip as another
+  // layer, or a sharpened area's as a region's.
+  it("follows the archive a clip is cut from, and a sharpened area's own layer", () => {
+    const kindOf = (archiveId?: string, layer?: "slope" | "contours") => [
+      regionClipKind({
+        archiveId,
+        area: layer && {
+          id: "a",
+          layer,
+          url: "",
+          zmax: 16,
+          tiles: [0, 0, 1, 1],
+        },
+      }),
+      clipSourceType({
+        archiveId,
+        area: layer && {
+          id: "a",
+          layer,
+          url: "",
+          zmax: 16,
+          tiles: [0, 0, 1, 1],
+        },
+      }),
+    ];
+    expect(kindOf("nsw-5m")).toEqual(["dem-region", "raster"]);
+    expect(kindOf("nsw-5m-slope")).toEqual(["slope-region", "raster-dem"]);
+    expect(kindOf("nsw-contours")).toEqual(["contours-region", "vector"]);
+    expect(kindOf("nsw-land")).toEqual(["land-region", "vector"]);
+    expect(kindOf("nsw-fire")).toEqual(["fire-region", "vector"]);
+    expect(kindOf("nsw-coverage")).toEqual(["coverage-region", "vector"]);
+    expect(kindOf()).toEqual(["basemap-region", "vector"]);
+    // An area's own layer wins over any archive id.
+    expect(kindOf("nsw-5m", "slope")).toEqual(["slope-region", "raster-dem"]);
+  });
+
+  // Mutation: label the heights without their source's name and the first
+  // line goes red: a card lists every elevation clip alike.
+  it("names a clip by its layer, and a height clip by its source", () => {
+    expect(archiveLabel("nsw-5m")).toBe("Elevation data, NSW 5 m");
+    expect(archiveLabel("nsw-contours")).toBe("Contours");
+    expect(archiveLabel("nsw-5m-slope")).toBe("Slope");
+    expect(archiveLabel("nsw-land")).toBe(MAP_TERRAIN.copy.land);
+    expect(archiveLabel("nsw-fire")).toBe(MAP_TERRAIN.copy.fire);
+    expect(archiveLabel("nsw-coverage")).toBe(MAP_TERRAIN.copy.coverage);
+    expect(archiveLabel("protomaps")).toBeNull();
   });
 });
 

@@ -1,7 +1,9 @@
 import {
+  layerIn,
   MAP_TERRAIN,
-  takesNswContours,
-  takesNswHillshade,
+  takesContours,
+  takesHillshade,
+  type Region,
   type TerrainLayerKey,
 } from "@logjam/shared";
 import { unavailableReasonText } from "../auth/capabilities";
@@ -25,11 +27,12 @@ export type TerrainSwitchState = {
 };
 
 /**
- * One Terrain switch on the layers sheet. The basemap's reason (a sheet that
- * prints its own contours, photographs with their own shadows) outranks the
- * connection's, and only it reads OFF: a stored choice comes back on a basemap
- * that can draw it. With no connection a layer needs a saved clip of itself.
- * Guard: `terrainSwitches.test.ts`.
+ * One Terrain switch on the layers sheet. A region with no archive for the
+ * layer (`layerIn`) outranks the basemap's reason (a sheet that prints its own
+ * contours, photographs with their own shadows), which outranks the
+ * connection's. Both read OFF: a stored choice comes back on ground and a
+ * basemap that can draw it. With no connection a layer needs a saved clip of
+ * itself. Guard: `terrainSwitches.test.ts`.
  */
 export function terrainSwitch(
   key: TerrainLayerKey,
@@ -37,26 +40,30 @@ export function terrainSwitch(
   basemapId: BasemapId,
   online: boolean,
   artifacts: readonly Pick<MapArtifact, "kind" | "logicalKey" | "minzoom">[],
+  region: Region | null,
 ): TerrainSwitchState {
   const copy = MAP_TERRAIN.copy;
-  if (key === "contours" && !takesNswContours(basemapId)) {
+  if (layerIn(region, key) === null) {
+    return { checked: false, disabled: true, reason: copy.notHere };
+  }
+  if (key === "contours" && !takesContours(basemapId)) {
     return { checked: false, disabled: true, reason: copy.contoursPrinted };
   }
-  if (key === "hillshade" && !takesNswHillshade(basemapId)) {
+  if (key === "hillshade" && !takesHillshade(basemapId)) {
     return { checked: false, disabled: true, reason: copy.hillshadeImagery };
   }
-  const saved = artifacts.some(
+  const saved = artifacts.some((artifact) =>
     key === "contours"
-      ? holdsContours
+      ? holdsContours(artifact)
       : key === "slope"
-        ? holdsSlope
+        ? holdsSlope(artifact)
         : key === "land"
-          ? holdsLand
+          ? holdsLand(artifact)
           : key === "fire"
-            ? holdsFire
+            ? holdsFire(artifact)
             : key === "coverage"
-              ? holdsCoverage
-              : holdsHillshade,
+              ? holdsCoverage(artifact)
+              : holdsHillshade(artifact),
   );
   if (!online && !saved) {
     return {
@@ -66,4 +73,9 @@ export function terrainSwitch(
     };
   }
   return { checked: stored, disabled: false };
+}
+
+/** Whether the region in view has a gauge feed, which the Gauges row needs. */
+export function hasGauges(region: Region | null): boolean {
+  return region?.gauges != null;
 }

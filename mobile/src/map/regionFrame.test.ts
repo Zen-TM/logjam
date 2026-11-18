@@ -1,9 +1,13 @@
 import { describe, expect, it } from "vitest";
+import { NSW_REGION, SIM_UTAH } from "@logjam/shared";
 
 import {
+  startBox,
+  startPicks,
   MIN_FRAME_PX,
   bboxToFrame,
   defaultFrameInsets,
+  defaultPreviewFor,
   detailLabel,
   frameToBbox,
   metresPerPixel,
@@ -237,5 +241,66 @@ describe("detailLabel", () => {
     expect(detailLabel(16, -33.5)).toBe("Fine, 2 m");
     expect(detailLabel(12, -33.5)).toBe("Overview, 32 m");
     expect(detailLabel(18, -33.5)).toBe("Finest, 0.5 m");
+  });
+});
+
+describe("the ground a save starts on", () => {
+  // A plan's "Save an offline map of this area" opens the screen with only the
+  // plan's bounds, while the camera fallback can sit anywhere.
+  const PLAN_IN_NSW: [number, number, number, number] = [
+    150.2, -33.8, 150.4, -33.6,
+  ];
+  const CAMERA_IN_PERTH: [number, number] = [115.86, -31.95];
+
+  // Mutation: return the camera's point whatever the area (`startBox` reading
+  // only `center`) and the first line goes red: the plan's area is framed, but
+  // its maps are picked from where the map last was.
+  it("is the plan's area when there is one, else the point the camera opens at", () => {
+    expect(startBox(PLAN_IN_NSW, CAMERA_IN_PERTH)).toEqual({
+      west: 150.2,
+      south: -33.8,
+      east: 150.4,
+      north: -33.6,
+    });
+    expect(startBox(null, CAMERA_IN_PERTH)).toEqual({
+      west: 115.86,
+      south: -31.95,
+      east: 115.86,
+      north: -31.95,
+    });
+  });
+
+  // Mutation: drop the "protomaps" case from `startPicks` and the third line
+  // goes red; take no pick from the box (`slice(1, 1)`) and the others do.
+  it("picks the first downloadable map of that ground, and nothing from the vector map", () => {
+    const nsw = startBox(PLAN_IN_NSW, CAMERA_IN_PERTH);
+    expect(startPicks(nsw, "osm-topo")).toEqual(["six-topo"]);
+    expect(startPicks(nsw, "six-imagery")).toEqual(["six-imagery"]);
+    expect(startPicks(nsw, "protomaps")).toEqual([]);
+    expect(startPicks(startBox(null, CAMERA_IN_PERTH), "osm-topo")).toEqual([]);
+  });
+});
+
+describe("the map previewed by default", () => {
+  const offered = [{ id: "six-topo" }, { id: "six-base" }];
+  const noVector = { ...SIM_UTAH, vector: null };
+
+  // Mutation: return "protomaps" whatever the region (`vectorIn` left out), and
+  // a save over a region with no vector archive previews a map that is not
+  // available there.
+  it("is the vector map where the region shown has an archive of it", () => {
+    expect(defaultPreviewFor(NSW_REGION, offered)).toBe("protomaps");
+    expect(defaultPreviewFor(noVector, offered)).toBe("six-topo");
+    expect(defaultPreviewFor(null, offered)).toBe("six-topo");
+  });
+
+  // Mutation: leave `downloadable[0]?.id` out of `defaultPreviewFor`, and over
+  // such ground the preview is the vector map that is not available there
+  // while the ground still offers maps; return "" in place of the vector map
+  // as the last resort, and over ground that offers none the preview has no
+  // source at all.
+  it("is the first map the ground offers to save, else the vector map, where the region has no vector archive", () => {
+    expect(defaultPreviewFor(null, [{ id: "six-base" }])).toBe("six-base");
+    expect(defaultPreviewFor(null, [])).toBe("protomaps");
   });
 });

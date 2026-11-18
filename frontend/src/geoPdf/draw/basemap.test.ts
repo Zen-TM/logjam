@@ -146,7 +146,7 @@ function recorder() {
   return { ctx: ctx as unknown as Ctx, drawn };
 }
 
-const build = (tiles: BasemapTile[], zoom = 14) =>
+const build = (tiles: BasemapTile[], zoom = 14, lang?: string) =>
   buildBasemap(
     tiles,
     transform,
@@ -154,6 +154,7 @@ const build = (tiles: BasemapTile[], zoom = 14) =>
     1,
     { width: SIZE, height: SIZE },
     recorder().ctx,
+    lang,
   );
 
 const tile = (features: Feature[]): BasemapTile => ({
@@ -208,6 +209,30 @@ describe("buildBasemap's labels", () => {
     drawBasemapLabels(ctx, build([tile(features)]), 0, SIZE);
     return drawn.filter((d) => d.op === "text");
   };
+
+  // Mutation: use `STYLE` whatever `lang` in `buildBasemap`, and a sheet asked
+  // for another language prints English names; make the default another
+  // language, and a sheet that names none stops printing today's names.
+  it("prints names in the language asked for, English by default", () => {
+    const named: Feature = {
+      ...place("Plain", 1000, 1000),
+      tags: {
+        kind: "locality",
+        name: "Plain",
+        "name:en": "Alpha",
+        "name:fr": "Alfa",
+        min_zoom: "1",
+      },
+    };
+    const printed = (lang?: string) => {
+      const { ctx, drawn } = recorder();
+      drawBasemapLabels(ctx, build([tile([named])], 14, lang), 0, SIZE);
+      return drawn.filter((d) => d.op === "text").map((t) => t.text);
+    };
+    expect(printed()).toEqual(["Alpha"]);
+    expect(printed("en")).toEqual(["Alpha"]);
+    expect(printed("fr")).toEqual(["Alfa"]);
+  });
 
   // Mutation: drop the `taken` check, and names print over each other.
   it("keeps the first of two labels that collide", () => {

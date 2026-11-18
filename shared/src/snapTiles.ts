@@ -25,6 +25,14 @@ import { PMTiles, type Source } from "pmtiles";
 import { VectorTile } from "@mapbox/vector-tile";
 import { PbfReader } from "pbf";
 
+import {
+  regionInWrappedView,
+  REGIONS,
+  vectorIn,
+  WORLD,
+  type Region,
+  type VectorArchive,
+} from "./regions.js";
 import type { RoutePoint } from "./routeValidation.js";
 import type { SnapLine, SnapMode } from "./snapToPath.js";
 
@@ -35,6 +43,34 @@ import type { SnapLine, SnapMode } from "./snapToPath.js";
  * following the camera: following the camera couples detail to camera zoom.
  */
 export const SNAP_TILE_ZOOM = 15;
+
+/**
+ * The archive a segment snaps to: the vector archive of the region in view over
+ * the segment (`regionInWrappedView` on its box), or null where that region has
+ * none or its archive stops short of `SNAP_TILE_ZOOM`, which reads as no ways
+ * rather than as "not downloaded". Both clients ask this, so a segment snaps to
+ * the same archive on either. Guard: `snapTiles.test.ts` ("snapArchiveFor").
+ */
+export function snapArchiveFor(
+  from: RoutePoint,
+  to: RoutePoint,
+  regions: readonly Region[] = REGIONS,
+  world: Region = WORLD,
+): VectorArchive | null {
+  const archive = vectorIn(
+    regionInWrappedView(
+      {
+        west: Math.min(from[0], to[0]),
+        south: Math.min(from[1], to[1]),
+        east: Math.max(from[0], to[0]),
+        north: Math.max(from[1], to[1]),
+      },
+      regions,
+      world,
+    ),
+  );
+  return archive && archive.maxzoom >= SNAP_TILE_ZOOM ? archive : null;
+}
 
 /**
  * Margin around the segment's bbox, so a way that bulges outside the straight

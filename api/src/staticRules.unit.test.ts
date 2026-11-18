@@ -128,7 +128,8 @@ function allDescendants(node: ts.Node): ts.Node[] {
 
 describe("env is read through getEnv()", () => {
   const READS_PROCESS_ENV: Record<string, string> = {
-    "index.ts": "loads dotenv before anything else, from NODE_ENV",
+    "loadEnv.ts":
+      "loads dotenv from NODE_ENV and sets the simulated-regions switch before anything loads shared (loadEnv.unit.test.ts)",
     [join("lib", "env.ts")]: "getEnv() itself, and the schema's own checks",
     [join("lib", "databaseUrl.ts")]:
       "the one reader of DB_*: migrate, seed and boot-time credentials use it with no validated env yet",

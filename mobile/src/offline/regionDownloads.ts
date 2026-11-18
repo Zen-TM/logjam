@@ -19,17 +19,11 @@ import * as FileSystem from "expo-file-system/legacy";
 import { fetch as expoFetch } from "expo/fetch";
 import { AppState } from "react-native";
 import {
-  BASEMAP_CATALOG,
-  DEM_SOURCES,
-  landClip,
-  NSW_REGION,
-  NSW_COVERAGE,
-  NSW_FIRE,
   SHARPENED_SOURCE_PREFIX,
   TERRAIN_ROUTED_FROM,
-  demClipMinZoom,
   fetchExtractRequest,
   planExtract,
+  saveClipArchive,
   type ExtractPlan,
   type RegionBbox,
 } from "@logjam/shared";
@@ -47,7 +41,11 @@ import {
   listArtifacts,
   setArtifactFirstSaved,
 } from "./registryDb";
-import { exhaustedTileOutcome, regionClipKind } from "./regionTilePlanning";
+import {
+  clipSourceType,
+  exhaustedTileOutcome,
+  regionClipKind,
+} from "./regionTilePlanning";
 import type { AreaClip } from "./sharpenedClips";
 import {
   connectionAllows,
@@ -59,20 +57,19 @@ import {
 export type RegionClipSpec = {
   /** uuid: the job, the file and, once saved, the artifact. */
   id: string;
-  /** The vector basemap, or a DEM archive source's id (`demSourceId`). */
+  /** The vector basemap (`vectorPath`), a region archive's id (`archiveId`) or a sharpened area's source id. */
   basemapId: string;
-  /** Set when the clip is of a DEM archive: shared demSources.ts. */
-  demSourceId?: string;
-  /** Set when the clip is of the statewide contours: shared nswContours.ts. */
-  contours?: boolean;
-  /** Set when the clip is of the statewide slope: shared terrain.ts. */
-  slope?: boolean;
-  /** Set when the clip is of the Land overlay: shared nswLand.ts. */
-  land?: boolean;
-  /** Set when the clip is of the Fire history overlay: shared nswFire.ts. */
-  fire?: boolean;
-  /** Set when the clip is of the Coverage overlay: shared nswCoverage.ts. */
-  coverage?: boolean;
+  /**
+   * Set when the clip is of a region's vector archive: its CDN path, which the
+   * clip is cut from and filed against (`MapArtifact.archivePath`).
+   */
+  vectorPath?: string;
+  /**
+   * Set when the clip is of an archive of a region's Terrain group (heights,
+   * slope, contours, land, fire history or coverage): its `id`, which
+   * `saveClipArchive` finds and the clip is filed under.
+   */
+  archiveId?: string;
   /** Set when the clip is of a sharpened area's archive (sharpenedClips.ts). */
   area?: AreaClip;
   label: string;
@@ -88,8 +85,8 @@ export type RegionClipSpec = {
 type Source = Parameters<typeof planExtract>[0];
 
 /**
- * Where the clip comes from, and at what zooms: a DEM's, the contours' and
- * the slope's are the ones their readers use; the vector map's are all the archive has. Its
+ * Where the clip comes from, and at what zooms: a region archive's are the ones
+ * its readers use (`saveClipArchive`); the vector map's are all the archive has. Its
  * full detail, whatever the detail rail says, because the rail prices rasters
  * and a lower zoom drops the minor tracks snapping follows.
  */
@@ -121,23 +118,13 @@ function clipArchiveFor(spec: RegionClipSpec): {
       maxzoom: spec.area.layer === "contours" ? from : spec.area.zmax,
     };
   }
-  if (spec.demSourceId) {
-    const dem = DEM_SOURCES.find((source) => source.id === spec.demSourceId);
-    if (!dem?.archivePath) throw new Error("Unknown elevation source");
-    return cdn({
-      archivePath: dem.archivePath,
-      minzoom: demClipMinZoom(dem),
-      maxzoom: dem.sampleZoom,
-    });
+  if (spec.archiveId) {
+    const clip = saveClipArchive(spec.archiveId);
+    if (!clip) throw new Error("Unknown map archive");
+    return cdn({ archivePath: clip.archive.archivePath, ...clip.zooms });
   }
-  if (spec.contours) return cdn(NSW_REGION.terrain.contours);
-  if (spec.slope) return cdn(NSW_REGION.terrain.slope);
-  if (spec.land) return cdn(landClip(NSW_REGION.terrain.land));
-  if (spec.fire) return cdn(NSW_FIRE);
-  if (spec.coverage) return cdn(NSW_COVERAGE);
-  const entry = BASEMAP_CATALOG.find((e) => e.id === "protomaps");
-  if (!entry) throw new Error("protomaps missing from BASEMAP_CATALOG");
-  return cdn({ archivePath: entry.urlTemplate });
+  if (!spec.vectorPath) throw new Error("Unknown map archive");
+  return cdn({ archivePath: spec.vectorPath });
 }
 
 /** The CDN answered, and not with the bytes asked for. */
@@ -331,16 +318,10 @@ export async function runRegionClip(
   onProgress: (progress: RegionJobProgress) => void,
   token: RegionCancelToken,
 ): Promise<RegionRunOutcome> {
-  // A DEM, contour, slope, land, fire or coverage archive that is not on the CDN (not built yet) is
-  // not this run's failure: the area keeps its worldwide heights and its
-  // basemap, and the job leaves the queue as if it had never been planned.
-  const optional =
-    spec.demSourceId != null ||
-    spec.contours === true ||
-    spec.slope === true ||
-    spec.land === true ||
-    spec.fire === true ||
-    spec.coverage === true;
+  // A region archive that is not on the CDN (not built yet) is not this run's
+  // failure: the area keeps its worldwide heights and its basemap, and the job
+  // leaves the queue as if it had never been planned.
+  const optional = spec.archiveId != null;
   let handle: FileHandle | null = null;
   const settle = async (stop: {
     stop: RegionRunOutcome;
@@ -485,30 +466,16 @@ export async function runRegionClip(
     const artifact: MapArtifact = {
       id: spec.id,
       kind: regionClipKind(spec),
-      // A DEM clip is filed under its source id, which is what the sampler
-      // looks saved files up by (offline/demLookup.ts); each of an area's
-      // clips under the area's source id (`lidar-<id>`).
+      // A region archive's clip is filed under the archive's id, which is what
+      // the sampler looks a saved height file up by (offline/demLookup.ts) and
+      // what the resolver matches the shown region's archive against; each of
+      // an area's clips under the area's source id (`lidar-<id>`).
       logicalKey: spec.area
         ? `${SHARPENED_SOURCE_PREFIX}${spec.area.id}`
-        : (spec.demSourceId ??
-          (spec.contours
-            ? NSW_REGION.terrain.contours.id
-            : spec.slope
-              ? NSW_REGION.terrain.slope.id
-              : spec.land
-                ? NSW_REGION.terrain.land.id
-                : spec.fire
-                  ? NSW_FIRE.id
-                  : spec.coverage
-                    ? NSW_COVERAGE.id
-                    : "protomaps")),
+        : (spec.archiveId ?? "protomaps"),
+      archivePath: spec.vectorPath ?? null,
       format: "pmtiles",
-      sourceType:
-        spec.demSourceId || spec.area?.layer === "heights"
-          ? "raster"
-          : spec.slope || spec.area?.layer === "slope"
-            ? "raster-dem"
-            : "vector",
+      sourceType: clipSourceType(spec),
       // Registry stores the scheme-less absolute path; the resolver prefixes
       // pmtiles://file:// itself.
       path: fileUri.replace(/^file:\/\//, ""),

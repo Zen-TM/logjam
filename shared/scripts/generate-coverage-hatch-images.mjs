@@ -3,7 +3,7 @@
 // `node scripts/generate-coverage-hatch-images.mjs`. Diagonal lines, each a
 // dark core edged in light. Drawn at 2x for a sharp line on a high-density
 // screen: each client registers it at pixel ratio COVERAGE_HATCH_PIXEL_RATIO.
-// nswCoverage.test.ts fails if this drifts.
+// coverage.test.ts fails if this drifts.
 import { writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";

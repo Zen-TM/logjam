@@ -3,7 +3,7 @@
 // far the scale bar may extend, and the search bar has to clear the status bar,
 // so the geometry lives here instead of being duplicated per component.
 
-import { NSW_REGION } from "@logjam/shared";
+import { accountRegion, REGIONS, type Region } from "@logjam/shared";
 
 /**
  * The search pill's height, and therefore its collapsed diameter: the collapsed
@@ -55,9 +55,17 @@ export function mapBannerInsets(searchSide: "left" | "right") {
 export const CHROME_BOTTOM = CHROME_GAP + 32;
 
 /**
- * Opening view: the region's (`NSW_REGION.view`). Shared with the offline
- * download screen, which needs somewhere to start when it is opened from Saved
- * rather than from the map.
+ * Where a map first opens: the view of the account's home region. Shared with
+ * the offline download screen, which needs somewhere to start when it is
+ * opened from Saved rather than from the map.
  */
-export const DEFAULT_CENTER: [number, number] = [...NSW_REGION.view.center];
-export const DEFAULT_ZOOM: number = NSW_REGION.view.zoom;
+export function homeView(
+  regionIds: readonly string[],
+  regions: readonly Region[] = REGIONS,
+): {
+  center: [number, number];
+  zoom: number;
+} {
+  const { center, zoom } = accountRegion({ regions: regionIds }, regions).view;
+  return { center: [center[0], center[1]], zoom };
+}

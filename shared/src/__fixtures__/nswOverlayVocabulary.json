@@ -1,0 +1,163 @@
+{
+  "legends": {
+    "land": {
+      "title": "Land tenure",
+      "about": "About land tenure",
+      "hue": "#8e6bbf",
+      "intro": "Each colour shows who holds the land, not whether you may enter it. Crossing private land is up to its owner.",
+      "rows": [
+        {
+          "label": "Private land",
+          "colour": "#8e6bbf"
+        },
+        {
+          "label": "National park",
+          "colour": "#2f9c95"
+        },
+        {
+          "label": "State forest",
+          "colour": "#7f8f3a"
+        },
+        {
+          "label": "Crown leasehold",
+          "colour": "#d9a441"
+        },
+        {
+          "label": "Crown land",
+          "colour": "#e6d34f"
+        },
+        {
+          "label": "Aboriginal Area",
+          "colour": "#3b78c4"
+        },
+        {
+          "label": "Tenure unresolved",
+          "colour": "#8a8a8a"
+        }
+      ],
+      "caveat": "Land Council freehold can show as private land. Roads, waterways and public areas aren't properly mapped around Sydney and Wollongong.",
+      "credit": "Land: NSW Land Tenure, December 2024 v2 © State of New South Wales (Department of Primary Industries and Regional Development), CC BY 4.0"
+    },
+    "fire": {
+      "title": "Fire history",
+      "about": "About fire history",
+      "hue": "#be185d",
+      "intro": "Each area is coloured by how long since it last burnt: darkest within the year, fading out by 10 years. Older fires and ground with no recorded fire have no colour.",
+      "rows": [
+        {
+          "label": "Under a year ago",
+          "colour": "#e297b6"
+        },
+        {
+          "label": "4 years ago",
+          "colour": "#f4bed6"
+        },
+        {
+          "label": "7 years ago",
+          "colour": "#fbe1ed"
+        }
+      ],
+      "caveat": "Mapped by NSW National Parks and Wildlife Service: a fire it didn't map, often on private land, has no colour.",
+      "credit": "Fire history © State Government of NSW and NSW Department of Climate Change, Energy, the Environment and Water 2010 — NPWS Fire History - Wildfires and Prescribed Burns (CC BY 4.0)"
+    },
+    "coverage": {
+      "title": "Coverage",
+      "about": "About coverage",
+      "hue": "#4E4944",
+      "intro": "Hatching marks where your carrier's own model predicts no mobile reception for a phone in your hand outdoors.",
+      "rows": [
+        {
+          "label": "No mobile reception",
+          "colour": "#F7F3EC",
+          "pattern": "<COVERAGE_HATCH_URIS[COVERAGE_HATCH_IMAGE]>"
+        }
+      ],
+      "choice": {
+        "label": "Your carrier",
+        "choose": "Choose your carrier",
+        "options": [
+          {
+            "value": "telstra",
+            "label": "Telstra"
+          },
+          {
+            "value": "optus",
+            "label": "Optus"
+          },
+          {
+            "value": "tpg",
+            "label": "TPG"
+          }
+        ]
+      },
+      "caveat": "It's a prediction, and valley and canyon floors are where it's most often wrong. A reseller on Telstra's network may get less than Telstra's own.",
+      "credit": "Mobile coverage: ACCC Mobile Infrastructure Report data release © Commonwealth of Australia (ACCC), CC BY 2.5 AU; coastline © ABS, CC BY 4.0"
+    }
+  },
+  "land": [
+    "match",
+    ["get", "TenureClass"],
+    "Private",
+    "#8e6bbf",
+    "National Park",
+    "#2f9c95",
+    "State Forest",
+    "#7f8f3a",
+    "Crownland-Leasehold",
+    "#d9a441",
+    "Crownland-Other",
+    "#e6d34f",
+    "Indigenous Owned",
+    "#3b78c4",
+    "Unresolved Tenure",
+    "#8a8a8a",
+    "rgba(0,0,0,0)"
+  ],
+  "fireColor": [
+    "interpolate",
+    ["linear"],
+    [
+      "/",
+      ["-", 24323, ["+", ["*", 12, ["get", "year"]], ["get", "month"]]],
+      12
+    ],
+    1,
+    "#be185d",
+    4,
+    "#db2777",
+    10,
+    "#ec4899"
+  ],
+  "fill": [
+    "interpolate",
+    ["linear"],
+    [
+      "/",
+      ["-", 24323, ["+", ["*", 12, ["get", "year"]], ["get", "month"]]],
+      12
+    ],
+    1,
+    0.45,
+    4,
+    0.3,
+    10,
+    0
+  ],
+  "edge": [
+    "interpolate",
+    ["linear"],
+    [
+      "/",
+      ["-", 24323, ["+", ["*", 12, ["get", "year"]], ["get", "month"]]],
+      12
+    ],
+    1,
+    0.9,
+    4,
+    0.7,
+    10,
+    0
+  ],
+  "filter": ["==", ["get", "carrier"], "optus"],
+  "opacity": ["match", ["get", "level"], "outdoor", 0, 1]
+}

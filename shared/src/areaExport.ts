@@ -2,8 +2,8 @@
 // GIS (GeoTIFF, GeoPackage) or a styled map for an offline app (MBTiles), made
 // by the export worker (topo/area_export.py, which mirrors these declarations:
 // topo/tests/test_area_export.py).
-import { nswContourStyle } from "./nswContours.js";
-import { REGIONS, regionTouchesBox, type Region } from "./regions.js";
+import { nswContourStyle } from "./contourRules.js";
+import { layerIn, REGIONS, regionTouchesBox, type Region } from "./regions.js";
 import { normalizeUserUiPreferences } from "./themeSchemes.js";
 import { say } from "./userSentence.js";
 
@@ -92,7 +92,8 @@ export function areaInTerrainRegion(
   regions: readonly Region[] = REGIONS,
 ): boolean {
   return regions.some(
-    (region) => region.terrain !== null && regionTouchesBox(region, bbox),
+    (region) =>
+      layerIn(region, "heights") !== null && regionTouchesBox(region, bbox),
   );
 }
 

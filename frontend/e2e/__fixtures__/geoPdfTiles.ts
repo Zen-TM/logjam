@@ -3,7 +3,7 @@
 // tiles) around a generic point, built here so no network or archive is
 // needed. Nothing is a real place or a user's data.
 import { deflateSync, crc32 } from "node:zlib";
-import { LAND_CLASSES, NSW_REGION } from "@logjam/shared";
+import { NSW_REGION } from "@logjam/shared";
 import { PbfWriter } from "pbf";
 import { zxyToTileId } from "pmtiles";
 
@@ -154,7 +154,10 @@ export function landMvt(x: number, y: number): Buffer {
       layer.writeMessage(
         4,
         (_v, pbf) =>
-          pbf.writeStringField(1, LAND_CLASSES[(x + y) % 2 ? 0 : 1].source),
+          pbf.writeStringField(
+            1,
+            NSW_REGION.terrain.land.classes[(x + y) % 2 ? 0 : 1]!.source,
+          ),
         null,
       );
       layer.writeVarintField(5, 4096);
