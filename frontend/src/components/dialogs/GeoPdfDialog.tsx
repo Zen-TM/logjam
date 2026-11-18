@@ -35,6 +35,7 @@ import { useToast } from "../feedback/ToastProvider";
 import { sanitizeDecimalInput } from "../../numberInput";
 import {
   extentFieldErrors,
+  coordTooltip,
   extentFieldText,
   hasExtentFieldError,
   parseExtentField,
@@ -64,6 +65,8 @@ import {
   applyOrientationChange,
   applyCoordModeChange,
   extentFromCentreAndSize,
+  wrapBox,
+  wrapLon,
 } from "@logjam/shared";
 import {
   AREA_EXPORT_FORMATS,
@@ -177,8 +180,6 @@ const SHAPE_KEYS = TERRAIN_LAYER_KEYS.filter(
 const MY_PLACES = "my-places";
 const SHARED_PLACES = "shared-places";
 
-const COORD_TOOLTIP =
-  "Lat/Lon is what a GPS shows you. E/N is the MGA2020 grid, the one printed on NSW topo maps.";
 const SCALE_TOOLTIP = `1:${(25000).toLocaleString()} means 1 cm on the paper is 250 m on the ground.`;
 
 const DEFAULT_EXTENT_STATE: ExtentState = {
@@ -207,7 +208,13 @@ const PHASE_TEXT: Record<GeoPdfProgress["phase"], string> = {
 const PREFETCH_AFTER_MS = 1000;
 const NO_AREA = { north: 0, south: 0, east: 0, west: 0 };
 
-/** The sheet's area re-centred on a point, at its current paper and scale. */
+/**
+ * The sheet's area re-centred on a point, at its current paper and scale. A map
+ * panned round the world reports a longitude past ±180; the sheet is the ground
+ * it wraps to, which the Terrain tile reads need (`wrapLon`). Guard:
+ * GeoPdfDialog.render.test.tsx ("seeds the sheet from a map centre in another
+ * world copy as the ground it shows").
+ */
 function centredOn(
   prev: ExtentState,
   center: { lat: number; lng: number },
@@ -217,7 +224,12 @@ function centredOn(
   const heightM = prev.scale * ((paper.h - 2 * GEOPDF_PADDING_MM) / 1000);
   return {
     ...prev,
-    ...extentFromCentreAndSize(center.lat, center.lng, widthM, heightM),
+    ...extentFromCentreAndSize(
+      center.lat,
+      wrapLon(center.lng),
+      widthM,
+      heightM,
+    ),
   };
 }
 
@@ -493,12 +505,16 @@ function GeoPdfDialog({
   ) {
     setPendingAppliedFor({ pendingExtent, pendingScale });
     if (pendingExtent && pendingScale) {
+      // The same wrap for a pick made on a map panned round the world. Guard:
+      // GeoPdfDialog.render.test.tsx ("reads a sheet picked in another world
+      // copy as the ground it shows").
+      const picked = wrapBox(pendingExtent);
       setExtentState((prev: ExtentState) => ({
         ...prev,
-        north: pendingExtent.north,
-        south: pendingExtent.south,
-        east: pendingExtent.east,
-        west: pendingExtent.west,
+        north: picked.north,
+        south: picked.south,
+        east: picked.east,
+        west: picked.west,
         scale: pendingScale,
       }));
       setAreaPicked(true);
@@ -1217,7 +1233,10 @@ function GeoPdfDialog({
                 />
                 {coordsOpen && (
                   <div className={classes.group}>
-                    <SettingsRow label="Coordinates" tooltip={COORD_TOOLTIP}>
+                    <SettingsRow
+                      label="Coordinates"
+                      tooltip={coordTooltip(extentState)}
+                    >
                       <ChipRail
                         label="Coordinates"
                         className={classes.railCell}
@@ -1751,7 +1770,7 @@ function AreaExportFields({
         <FieldError message={areaError} />
         {coordsOpen && (
           <div className={classes.group}>
-            <SettingsRow label="Coordinates" tooltip={COORD_TOOLTIP}>
+            <SettingsRow label="Coordinates" tooltip={coordTooltip(edges)}>
               <ChipRail
                 label="Coordinates"
                 className={classes.railCell}

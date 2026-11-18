@@ -542,6 +542,144 @@ describe("holdsBasemap", () => {
   });
 });
 
+describe("saved regions across the date line", () => {
+  const view = (west: number, east: number): Viewport => ({
+    west,
+    south: -17.6,
+    east,
+    north: -17.4,
+  });
+  // Made-up ground: a region saved from a map panned past the line, its east
+  // edge above 180.
+  const saved = [
+    artifact({
+      id: "across",
+      kind: "basemap-region",
+      logicalKey: "six-topo",
+      bbox: [178, -19, 182, -16],
+    }),
+  ];
+
+  // Mutation: compare `west <= viewport.east && east >= viewport.west` in
+  // `bboxOnScreen` (no `lonOverlap`), and the view at -179.9 to -179.5, which is
+  // ground the region holds, reads as off it.
+  it.each([
+    ["east of the line", 179.2, 179.6, ["six-topo"]],
+    ["west of the line", -179.9, -179.5, ["six-topo"]],
+    ["panned a turn over", 539.2, 539.6, ["six-topo"]],
+    ["panned a turn under", -540.9, -540.4, ["six-topo"]],
+    ["across the line", 179.8, 180.2, ["six-topo"]],
+    ["clear of it", 175, 176, []],
+    ["clear of it, west of the line", -176, -175, []],
+  ])(
+    "names the basemaps with saved tiles on a view %s",
+    (_n, w, e, expected) => {
+      expect(
+        basemapsCoveringViewport(saved, view(w, e), ["six-topo"], null),
+      ).toEqual(expected);
+    },
+  );
+
+  // Mutation: in `lonOverlap` (placeGeo.ts) test `width > 0` in place of
+  // `width >= 0`, and a view whose edge only touches the box, east or west of
+  // the line, reads as off it.
+  it("counts a view that only touches the region's edge", () => {
+    expect(
+      basemapsCoveringViewport(saved, view(182, 183), ["six-topo"], null),
+    ).toEqual(["six-topo"]);
+    expect(
+      basemapsCoveringViewport(saved, view(-178, -177), ["six-topo"], null),
+    ).toEqual(["six-topo"]);
+  });
+
+  // Mutation: in `lonOverlap` (placeGeo.ts) measure the other range from `west`
+  // by shifts (`shift = wrapTurn(otherWest - west) - 360`, up by 360 while
+  // `shift <= span`), and a box whose edge is the view's edge to the last bit
+  // (150.3, 151.7) reads as off screen.
+  it("counts a view whose edge is a saved box's edge, for non-integer edges", () => {
+    const box = artifact({
+      id: "edge",
+      kind: "basemap-region",
+      logicalKey: "six-topo",
+      bbox: [150.3, -34, 151.7, -33],
+    });
+    const at = (west: number, east: number): Viewport => ({
+      west,
+      south: -33.6,
+      east,
+      north: -33.4,
+    });
+    for (const [west, east] of [
+      [151.7, 152.9],
+      [149.1, 150.3],
+      [0.1 + 150.2, 151.7],
+    ])
+      expect(
+        basemapsCoveringViewport([box], at(west!, east!), ["six-topo"], null),
+      ).toEqual(["six-topo"]);
+  });
+
+  const clip = (id: string, bbox: MapArtifact["bbox"]): MapArtifact =>
+    artifact({
+      id,
+      kind: "slope-region",
+      logicalKey: "nsw-5m-slope",
+      sourceType: "raster-dem",
+      path: `/maps/${id}.pmtiles`,
+      bbox,
+    });
+  const drawn = (clips: MapArtifact[], viewport: Viewport | null) =>
+    resolveMapSource(
+      { kind: "terrain", layer: "slope", region: NSW_REGION, viewport },
+      ctx({ connectivity: "offline", artifacts: clips }),
+    ).flatMap((r) => (r.status === "ok" && r.url ? [r.url] : []));
+
+  // Mutation: in `mainRegion`, take `onScreen`'s width from
+  // `Math.min(east, viewport.east) - Math.max(west, viewport.west)` (no
+  // `lonOverlap`), and a view panned a turn over draws the tall clip, which is
+  // nearer its middle but covers less of it, in place of the one covering most.
+  it("draws the clip covering most of a view over the line, in whatever world copy the view is", () => {
+    const clips = [
+      clip("tall", [-179.695, -30, -179.685, -5]),
+      clip("wide", [-179.8, -17.8, -179.7, -17.2]),
+    ];
+    for (const turn of [0, 360, -360])
+      expect(drawn(clips, view(-179.72 + turn, -179.66 + turn))).toEqual([
+        "pmtiles://file:///maps/wide.pmtiles",
+      ]);
+  });
+
+  // Mutation: in `mainRegion`'s `away`, measure the gap as `lng - east` and
+  // `west - lng` again (no `wrapLon`), and a view off both clips draws the one
+  // that is 1.9 degrees away across no line over the one 1.1 away across it.
+  it("draws the clip nearest the view across the line when none is on screen", () => {
+    const clips = [
+      clip("near", [178, -17.8, 179, -17.2]),
+      clip("far", [-178, -17.8, -177, -17.2]),
+    ];
+    expect(drawn(clips, view(-179.95, -179.85))).toEqual([
+      "pmtiles://file:///maps/near.pmtiles",
+    ]);
+    expect(drawn([...clips].reverse(), view(-179.95, -179.85))).toEqual([
+      "pmtiles://file:///maps/near.pmtiles",
+    ]);
+  });
+
+  // Mutation: in `mainRegion`, take a clip's `size` from `bbox[2] - bbox[0]`
+  // again, and a clip saved with its box wrapped (west above east) is the
+  // smallest, so the small clip wins.
+  it("draws the wider clip when nothing is on screen, a box across the line included", () => {
+    const clips = [
+      clip("small", [150, -17.8, 151, -17.2]),
+      clip("wide", [178, -17.8, -178, -17.2]),
+    ];
+    expect(drawn(clips, null)).toEqual(["pmtiles://file:///maps/wide.pmtiles"]);
+    expect(drawn([...clips].reverse(), null)).toEqual([
+      "pmtiles://file:///maps/wide.pmtiles",
+    ]);
+  });
+});
+
 describe("statewide contours", () => {
   it("online: the CDN's archive", () => {
     const [r] = resolveMapSource(

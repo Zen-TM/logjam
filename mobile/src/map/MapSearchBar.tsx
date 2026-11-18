@@ -60,6 +60,7 @@ import {
   messageFromError,
   PLACE_REGISTRY_ATTRIBUTION,
   PLACE_SEARCH_MIN_QUERY_LENGTH,
+  gaugeFeedIn,
   placeRegistryIn,
   placeResultDetail,
   searchLocationsLabel,
@@ -307,7 +308,7 @@ export function MapSearchBar({
   };
 
   // Whether or not their layer is on, and only while the bar is open.
-  const { file: gaugeFile } = useGauges(expanded);
+  const { file: gaugeFile } = useGauges(expanded ? gaugeFeedIn(view) : null);
 
   // NOT debounced and not memoised on the query: it is a substring scan over
   // one person's saved rows, and it has to answer on the keystroke — the whole

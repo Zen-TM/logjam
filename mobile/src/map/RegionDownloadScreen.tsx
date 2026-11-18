@@ -46,8 +46,9 @@ import {
   DEM_SOURCE_ID,
   downloadableBasemaps,
   planRegionForBasemaps,
-  regionInWrappedView,
+  regionInView,
   type RegionBbox,
+  formatGroundStep,
 } from "@logjam/shared";
 
 import { config } from "../config";
@@ -286,7 +287,7 @@ export function RegionDownloadScreen({
   //
   // The vector basemap is read from the archive of the region the map shows.
   const previewRegion = useMemo(
-    () => regionInWrappedView(viewport ?? framed),
+    () => regionInView(viewport ?? framed),
     [viewport, framed],
   );
   // The default is the vector basemap where the region shown has an archive of
@@ -765,7 +766,7 @@ export function RegionDownloadScreen({
                   archive comes with you. */}
                 {vectorOnly
                   ? "Detailed map only · sharp at any zoom"
-                  : `Sharp to about ${metresPerPixel(centreLat, deepestZoom).toFixed(1)} m on the ground`}
+                  : `Sharp to about ${formatGroundStep(metresPerPixel(centreLat, deepestZoom))} on the ground`}
               </Text>
             }
           >

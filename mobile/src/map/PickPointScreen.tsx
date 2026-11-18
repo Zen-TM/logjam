@@ -50,7 +50,7 @@ import {
   BASEMAP_CATALOG,
   MAP_INK,
   pointBox,
-  regionInWrappedView,
+  regionInView,
 } from "@logjam/shared";
 
 import { config } from "../config";
@@ -178,7 +178,7 @@ export function PickPointScreen({
     [connectivity, artifacts],
   );
   // The vector basemap is read from the archive of the region the map shows.
-  const region = useMemo(() => regionInWrappedView(view), [view]);
+  const region = useMemo(() => regionInView(view), [view]);
   const basemapResolved = useMemo(
     () => resolveMapSource({ kind: "basemap", basemapId, region }, ctx),
     [basemapId, region, ctx],

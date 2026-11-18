@@ -17,6 +17,8 @@ import { Text, View } from "react-native";
 import {
   elevationSeries,
   formatDistanceM,
+  formatHeight,
+  formatHeightRange,
   MAP_MEASURE,
   PAIRED_STAT_LABELS,
   pairedStatLayout,
@@ -57,19 +59,18 @@ export function RouteStatsBody({
           },
           {
             label: PAIRED_STAT_LABELS.ascent,
-            value: profile ? `↑ ${Math.round(profile.gainM)} m` : "—",
+            value: profile ? `↑ ${formatHeight(profile.gainM)}` : "—",
           },
           {
             label: PAIRED_STAT_LABELS.descent,
-            value: profile ? `↓ ${Math.round(profile.lossM)} m` : "—",
+            value: profile ? `↓ ${formatHeight(profile.lossM)}` : "—",
           },
         ])}
       />
 
       {profile?.minM != null && profile.maxM != null ? (
         <Text style={styles.band}>
-          {Math.round(profile.minM)}–{Math.round(profile.maxM)} m above sea
-          level
+          {formatHeightRange(profile.minM, profile.maxM)} above sea level
         </Text>
       ) : null}
 
@@ -81,7 +82,7 @@ export function RouteStatsBody({
           <Text style={styles.chartLabel}>Elevation vs distance</Text>
           <ProfileChart
             series={elevationSeries(profile)}
-            formatValue={(elevationM) => `${Math.round(elevationM)} m`}
+            formatValue={formatHeight}
             formatX={formatDistanceM}
             hint="Press or drag for heights."
             accessibilityLabel="Elevation profile"

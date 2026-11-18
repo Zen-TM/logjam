@@ -18,8 +18,10 @@ describe("snapArchiveFor", () => {
     );
   });
 
-  // Mutation: read `regionInView` in place of `regionInWrappedView`, and a
-  // segment drawn on a map panned a turn round the world finds no region.
+  // Mutation: read the box only as given in `regionTouchesBox` (set `first` and
+  // `last` to 0) and the centre unwrapped in `regionInView`, and a segment
+  // drawn on a map panned a turn round the world finds no region. Either
+  // change alone stays green: `regionsTouching` answers.
   it("reads a segment drawn a turn past the antimeridian where it is on the globe", () => {
     const [lon, lat] = SIM_NZ.view.center;
     expect(snapArchiveFor([lon + 360, lat], [lon + 360.01, lat], two)).toBe(
@@ -52,6 +54,7 @@ describe("snapArchiveFor", () => {
       vector: {
         archivePath: "master/basemap/shallow.pmtiles",
         maxzoom: SNAP_TILE_ZOOM - 1,
+        licence: "odbl",
       },
     };
     const [lon, lat] = shallow.view.center;

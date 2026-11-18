@@ -74,8 +74,3 @@ export function terrainSwitch(
   }
   return { checked: stored, disabled: false };
 }
-
-/** Whether the region in view has a gauge feed, which the Gauges row needs. */
-export function hasGauges(region: Region | null): boolean {
-  return region?.gauges != null;
-}

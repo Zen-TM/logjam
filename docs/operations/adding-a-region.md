@@ -78,8 +78,8 @@ constant to `REGIONS`.
   region at most (section 4). The vector basemap is never listed here: `vector`
   declares it.
 - `view`, `timeZone`, `name` and `fullName` (through `t`, as NSW's are).
-- `grid` is `"mga2020"` only. A region on another coordinate grid needs the type
-  and the map-grid code widened first.
+- `grid` is one of `GridId` (`shared/src/grids.ts`). A region on another
+  coordinate grid needs the type and the map-grid code widened first.
 
 Then run the declaration's tests:
 

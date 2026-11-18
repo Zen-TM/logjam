@@ -13,6 +13,7 @@
 import { tileMetersPerPixel } from "./scaleBar";
 import {
   downloadableBasemaps,
+  formatGroundStep,
   pointBox,
   vectorIn,
   type LonLatBox,
@@ -283,7 +284,5 @@ const DETAIL_NAMES: Record<number, string> = {
 /** A detail level named by the ground it resolves: "Fine, 2 m". */
 export function detailLabel(zoom: number, latitudeDeg: number): string {
   const metres = tileMetersPerPixel(latitudeDeg, zoom);
-  const rounded =
-    metres >= 10 ? Math.round(metres) : Math.round(metres * 10) / 10;
-  return `${DETAIL_NAMES[zoom] ?? "Detail"}, ${rounded} m`;
+  return `${DETAIL_NAMES[zoom] ?? "Detail"}, ${formatGroundStep(metres)}`;
 }

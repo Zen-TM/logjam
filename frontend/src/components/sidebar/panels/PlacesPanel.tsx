@@ -35,6 +35,7 @@ import {
   ROPEWIKI_OFFER,
   type PlaceSortKey,
   type PlaceStatus,
+  type CanyonGradeSystem,
   type Region,
   type RegionBbox,
   type ScopedCustomFieldDef,
@@ -167,6 +168,8 @@ function PlacesPanel({
   onPlaceVerb,
   onExpandSheet,
   canyonRegions,
+  gradeSystem,
+  uiPreferences,
 }: {
   places: TPlace[];
   /** False until the first fetch lands — an empty list before then is not "no
@@ -213,6 +216,10 @@ function PlacesPanel({
   onExpandSheet?: () => void;
   /** The user's regions that have a canyon list: one import entry each. */
   canyonRegions: readonly Region[];
+  /** The system the map in view grades in: "Easiest first" sorts by it. */
+  gradeSystem: CanyonGradeSystem;
+  /** The account's preferences: which grade attributes a new type's step lists. */
+  uiPreferences: unknown;
 }) {
   const toast = useToast();
   const isNarrow = useIsMobile();
@@ -288,8 +295,10 @@ function PlacesPanel({
 
   const visible = useMemo(
     () =>
-      matching(filters).sort((a, b) => comparePlaces(a.place, b.place, sort)),
-    [matching, filters, sort],
+      matching(filters).sort((a, b) =>
+        comparePlaces(a.place, b.place, sort, gradeSystem),
+      ),
+    [matching, filters, sort, gradeSystem],
   );
 
   const typeCounts = useMemo(() => {
@@ -835,6 +844,8 @@ function PlacesPanel({
       sort={sort}
       onChangeSort={setSort}
       placeCustomFieldDefs={placeCustomFieldDefs}
+      gradeSystem={gradeSystem}
+      listedPlaces={collection.map(({ place }) => place)}
       onDrawArea={onDrawFilterArea}
       onAreaToView={onFilterToMapView}
       onReset={() => onChangeFilters(clearSheetFilters(filters))}
@@ -932,6 +943,7 @@ function PlacesPanel({
           onTypesChange={onPlaceTypesChange}
           placeDefs={placeCustomFieldDefs}
           onPlaceDefsChange={onPlaceCustomFieldDefsChange}
+          uiPreferences={uiPreferences}
           onClose={() => setAddingType(false)}
         />
       )}

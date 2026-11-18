@@ -77,6 +77,7 @@ function popover(
         slopeBands={[]}
         onSlopeBandsChange={noop}
         mapView={null}
+        mapBounds={null}
         region={shown.region === undefined ? NSW_REGION : shown.region}
         onImportFile={noop}
         startView={startView}

@@ -76,6 +76,9 @@ import {
   initialBearingDegrees,
   MAP_OVERLAY_REFINEMENTS,
   GAUGES,
+  GAUGE_UNITS_DEFAULT,
+  boxCentre,
+  gridOverlayTitle,
   MAP_OVERLAYS,
   MAP_TERRAIN,
   MAP_OVERLAY_DEFAULTS,
@@ -270,7 +273,6 @@ import { useRegions } from "../regionsPreference";
 import { effectiveBasemap, mobileBasemaps } from "./basemapMeta";
 import { offlineCoverageMask, offlineMaskBoxes } from "./offlineMask";
 import { regionShown } from "./terrainRegion";
-import { hasGauges } from "./terrainSwitches";
 import { DraftToolPanel } from "./DraftToolPanel";
 import { FocusPulse } from "./FocusPulse";
 import { MapToolGroup, MapToolTray, type MapTool } from "./MapToolGroup";
@@ -283,6 +285,7 @@ import {
   pointBox,
   ROUTE_ARROW_SDF_URI,
   placeStatus,
+  gaugeFeedOf,
 } from "@logjam/shared";
 import { basemapFallbackFor, useDownBasemaps } from "./basemapReachability";
 import { ROUTE_ARROW_IMAGE } from "./routeArrowStyle";
@@ -310,7 +313,7 @@ import { MapHoldSheet, type MapHoldRun } from "./MapHoldSheet";
 import { MapPointSheet, type MapPoint, type OwnFix } from "./MapPointSheet";
 import { GaugeSheet } from "../gauges/GaugeSheet";
 import { GaugesLayer } from "../gauges/GaugesLayer";
-import { MgaGridLayer } from "./MgaGridLayer";
+import { GridLayer } from "./GridLayer";
 import { useGauges } from "../gauges/useGauges";
 import { PlaceEditSheet } from "../places/PlaceEditSheet";
 import { fillRouteSlot } from "../places/fillRouteSlot";
@@ -1610,17 +1613,15 @@ export function MapScreen({
     [renderedBasemapId, terrainRegion, ctx],
   );
   // The Gauges row reads OFF where the region has no feed, and the map's gauge
-  // layer draws nothing there (search and the place page still read gauges). A
-  // gauge picked in search still loads the file its sheet reads, and opens at
-  // the pick whatever the region.
-  const gaugesHere = hasGauges(terrainRegion);
+  // layer draws nothing there. The map reads the feed of the region it shows.
+  const gaugeFeed = gaugeFeedOf(terrainRegion);
+  const gaugesHere = gaugeFeed !== null;
   const gaugesShown = showGauges && gaugesHere;
-  const gaugeWanted = showGauges && gaugeId !== null;
   const {
     file: gaugeFile,
     settled: gaugesSettled,
     now: gaugesNow,
-  } = useGauges(gaugesShown || gaugeWanted);
+  } = useGauges(showGauges ? gaugeFeed : null);
   const landArchive = layerIn(terrainRegion, "land");
   const fireArchive = layerIn(terrainRegion, "fire");
   const coverageArchive = layerIn(terrainRegion, "coverage");
@@ -4902,7 +4903,7 @@ export function MapScreen({
       key: "mgaGrid",
       icon: "mgaGrid",
       hue: theme.neutral,
-      title: MAP_OVERLAYS.copy.mgaGrid,
+      title: gridOverlayTitle(viewportBbox && boxCentre(viewportBbox)),
       value: showMgaGrid,
       onChange: setShowMgaGrid,
     },
@@ -5605,7 +5606,7 @@ export function MapScreen({
         ) : null}
 
         {showMgaGrid && viewportBbox ? (
-          <MgaGridLayer bbox={viewportBbox} zoom={camera.zoom} />
+          <GridLayer bbox={viewportBbox} zoom={camera.zoom} />
         ) : null}
 
         {gaugesShown && gaugeFile ? (
@@ -6148,6 +6149,7 @@ export function MapScreen({
         gauge={openGauge ?? null}
         attribution={gaugeFile?.attribution ?? ""}
         generatedAt={gaugeFile?.generatedAt ?? ""}
+        units={gaugeFile?.units ?? GAUGE_UNITS_DEFAULT}
         now={gaugeNow}
         onClose={() => setGaugeId(null)}
       />

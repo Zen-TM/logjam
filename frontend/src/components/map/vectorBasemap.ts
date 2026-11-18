@@ -5,7 +5,7 @@
 import { layers, namedFlavor } from "@protomaps/basemaps";
 import {
   REGIONS,
-  regionInWrappedView,
+  regionInView,
   snapArchiveFor,
   vectorIn,
   WORLD,
@@ -33,7 +33,7 @@ export function initialVectorArchive(
   world: Region = WORLD,
 ): VectorArchive {
   return (
-    vectorIn(regionInWrappedView(view, regions, world)) ??
+    vectorIn(regionInView(view, regions, world)) ??
     regions.flatMap((region) => region.vector ?? [])[0]!
   );
 }

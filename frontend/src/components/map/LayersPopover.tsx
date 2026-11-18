@@ -3,6 +3,8 @@ import {
   contractSectionKeys,
   isOverlayTerrainKey,
   MAP_LAYERS,
+  boxCentre,
+  gridOverlayTitle,
   MAP_OVERLAYS,
   MAP_TERRAIN,
   overlayAwaitsChoice,
@@ -12,6 +14,7 @@ import {
   layerIn,
   overlayLegends,
   type CarrierId,
+  type LonLatBox,
   type Region,
   PLACE_TYPE_COLORS,
   slopeLegendRows,
@@ -59,7 +62,7 @@ const countOf = (count: number, noun: string) =>
  * question about the map. Three tabs (Map, Terrain, Overlays); a row with more
  * inside it than a switch (the slope bands) opens a sub-view in place.
  */
-/** "Show river gauges", but "Show MGA grid": an acronym keeps its capitals. */
+/** "Show river gauges", but "Show MGA grid" or "Show NZTM grid": an acronym keeps its capitals. */
 function showLabel(title: string) {
   return `Show ${/^[A-Z]{2}/.test(title) ? title : title[0].toLowerCase() + title.slice(1)}`;
 }
@@ -92,6 +95,7 @@ export default function LayersPopover({
   slopeBands,
   onSlopeBandsChange,
   mapView,
+  mapBounds,
   region,
   onImportFile,
   startView,
@@ -136,6 +140,8 @@ export default function LayersPopover({
   slopeBands: SlopeBand[];
   onSlopeBandsChange: (bands: SlopeBand[]) => void;
   mapView: { lng: number; lat: number; zoom: number } | null;
+  /** The ground the map shows, which the grid row is named for (null until the map reports it). */
+  mapBounds: LonLatBox | null;
   /** The region the map shows: a layer it has no data for reads "Not available here" and is off. */
   region: Region | null;
   /** Opens the importer (the same entry the Ways and Logs lists use). */
@@ -392,7 +398,7 @@ export default function LayersPopover({
                   <OverlayRow
                     icon="mgaGrid"
                     hue="var(--color-neutral)"
-                    title={MAP_OVERLAYS.copy.mgaGrid}
+                    title={gridOverlayTitle(mapBounds && boxCentre(mapBounds))}
                     checked={showMgaGrid}
                     onToggle={setShowMgaGrid}
                   />

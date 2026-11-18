@@ -44,7 +44,7 @@ import {
   type MapRef,
 } from "@maplibre/maplibre-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { pointBox, regionInWrappedView, type RegionBbox } from "@logjam/shared";
+import { pointBox, regionInView, type RegionBbox } from "@logjam/shared";
 
 import { config } from "../config";
 import { spacing, makeStyles } from "../theme";
@@ -150,7 +150,7 @@ export function PickAreaScreen({
       ]
     : (lastCamera?.center ?? home.center);
   const region = useMemo(
-    () => regionInWrappedView(viewport ?? pointBox(openLon!, openLat!)),
+    () => regionInView(viewport ?? pointBox(openLon!, openLat!)),
     [viewport, openLon, openLat],
   );
   const basemapResolved = useMemo(

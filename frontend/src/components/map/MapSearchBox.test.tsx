@@ -7,6 +7,7 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  GAUGE_PREFIX,
   NSW_REGION,
   PLACE_REGISTRY_ATTRIBUTION,
   PLACE_SEARCH_DEBOUNCE_MS,
@@ -31,13 +32,17 @@ vi.mock("../../placeUtils", async (importOriginal) => ({
   searchPlaceRegistry,
 }));
 
-const { gaugeFile } = vi.hoisted(() => ({
+const { gaugeFile, gaugeFeeds } = vi.hoisted(() => ({
   gaugeFile: {
     current: null as { gauges: Record<string, unknown>[] } | null,
   },
+  gaugeFeeds: [] as (string | null)[],
 }));
 vi.mock("../gauges/useGauges", () => ({
-  useGauges: () => ({ file: gaugeFile.current, failed: false, now: 0 }),
+  useGauges: (feed: string | null) => {
+    gaugeFeeds.push(feed);
+    return { file: gaugeFile.current, failed: false, now: 0 };
+  },
 }));
 
 const FALLS: PlaceResult = {
@@ -106,6 +111,30 @@ const settle = () =>
   act(() => vi.advanceTimersByTimeAsync(PLACE_SEARCH_DEBOUNCE_MS));
 
 describe("MapSearchBox", () => {
+  // Mutation: pass `GAUGE_PREFIX` whatever the view, or ask for the feed
+  // before the box is focused → red.
+  it("reads the gauge feed of the region the map shows, once the box is focused", () => {
+    gaugeFeeds.length = 0;
+    render(
+      <MapSearchBox
+        getView={() => OVER_NSW}
+        places={[]}
+        sharedPlaces={[]}
+        onSelectPlace={() => {}}
+        onSelectGauge={() => {}}
+        onSelectLocation={() => {}}
+        onSearchPin={() => {}}
+      />,
+    );
+    expect(gaugeFeeds).toEqual([null]);
+    fireEvent.focus(screen.getByRole("combobox"));
+    expect(gaugeFeeds[gaugeFeeds.length - 1]).toBe(GAUGE_PREFIX);
+    cleanup();
+    gaugeFeeds.length = 0;
+    renderBox({ getView: () => OVER_SEA });
+    expect(gaugeFeeds[gaugeFeeds.length - 1]).toBeNull();
+  });
+
   // Mutation: match the raw name, or leave `gaugeOptions` out of the list.
   it("finds a gauge by its readable name, and hands it back", async () => {
     gaugeFile.current = {

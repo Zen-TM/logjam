@@ -14,7 +14,7 @@ import { ScrollView, Text, View } from "react-native";
 import {
   attributeRows,
   contractSectionKeys,
-  distinctGaugeIds,
+  tripGaugeIdsByFeed,
   distinctTripTypes,
   formatTripDate,
   mediaCategory,
@@ -150,17 +150,24 @@ export function TripDetailScreen({
       </>
     ),
 
+    // One reading per feed the trip's gauges are in, each with its own credit.
     gauge: () => (
-      <TripGaugeReading
-        title={copy.gauge}
-        gaugeIds={distinctGaugeIds(
-          current.places.map(
-            (p) => placesQuery.data?.find((x) => x.id === p.id)?.gaugeId,
+      <>
+        {tripGaugeIdsByFeed(
+          current.places.flatMap(
+            (p) => placesQuery.data?.find((x) => x.id === p.id) ?? [],
           ),
-        )}
-        dates={[current.date]}
-        when="trip"
-      />
+        ).map(({ feed, gaugeIds }) => (
+          <TripGaugeReading
+            key={feed}
+            title={copy.gauge}
+            feed={feed}
+            gaugeIds={gaugeIds}
+            dates={[current.date]}
+            when="trip"
+          />
+        ))}
+      </>
     ),
 
     photos: () => (

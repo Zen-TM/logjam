@@ -30,7 +30,8 @@ import type { ScreenContract } from "./types.js";
 import { formatBytes } from "../format.js";
 import { friendMatches } from "../friendSearch.js";
 import { mediaSkippedSentence } from "../friendShareRows.js";
-import { todayDateKey } from "../logbook.js";
+import { todayDateKey, type AttributeRow } from "../logbook.js";
+import { withRowUnit } from "./placePage.js";
 import { PLACE_FORM } from "./placeForm.js";
 import { SHORT_MONTHS, SHORT_WEEKDAYS } from "../dateNames.js";
 
@@ -447,7 +448,6 @@ export const TRIP_PLAN_PAGE = {
     itemAlsoKnownAsHint: PLACE_FORM.copy.alsoKnownAsHint,
     itemLatitude: "Latitude",
     itemLongitude: "Longitude",
-    itemElevation: "Elevation (m)",
     itemAttributes: "Attributes",
     itemDownloadHint: "Click to download",
     placeTypeFallback: "Place",
@@ -596,16 +596,14 @@ export function tripPlanPlaceType(
 }
 
 /** The set-aside attributes of a plan place as read-only rows: key, label,
- *  value, type (the shape `attributeRows` returns). */
+ *  value, type (the shape `attributeRows` returns, a length in the display
+ *  units as there). */
 export function tripPlanSetAsideRows(
   place: Pick<TripPlanPlace, "foreignFields">,
-): [string, string, unknown, string][] {
-  return (place.foreignFields ?? []).map((item) => [
-    item.key,
-    item.label,
-    item.value,
-    item.type,
-  ]);
+): AttributeRow[] {
+  return (place.foreignFields ?? []).map((item) =>
+    withRowUnit([item.key, item.label, item.value, item.type]),
+  );
 }
 
 /** "Added by tom", or nothing once the adder's account is gone. */

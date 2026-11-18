@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { GAUGES, PLACE_PAGE } from "@logjam/shared";
+import { GAUGES, GAUGE_PREFIX, PLACE_PAGE } from "@logjam/shared";
 import latestJson from "../../../../shared/src/__fixtures__/gauges-latest.json";
 import { PlaceGauge } from "./PlaceGauge";
 
@@ -9,6 +9,7 @@ const draw = (over: Partial<Parameters<typeof PlaceGauge>[0]>) => {
   const onChange = vi.fn();
   render(
     <PlaceGauge
+      feed={GAUGE_PREFIX}
       {...place}
       gaugeId={null}
       owned

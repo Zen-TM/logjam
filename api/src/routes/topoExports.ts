@@ -20,6 +20,7 @@ import {
   AREA_EXPORT_LAYERS,
   AREA_EXPORT_OUTSIDE_TERRAIN,
   AREA_EXPORT_TOO_LARGE,
+  areaExportEpsg,
   areaExportRequestError,
   areaExportStyleSnapshot,
   areasInBox,
@@ -153,7 +154,8 @@ router.post(
       // No size signal the estimator knows yet, so no estimate.
       sourceTileCount: null,
       monthlyComputeCredits: user.monthlyComputeCredits,
-      bbox: area.data.bbox,
+      // The grid the worker warps to is decided here, where the regions are.
+      bbox: { ...area.data.bbox, epsg: areaExportEpsg(area.data.bbox) },
     });
     res.status(201).json({ id: exportJobId });
   },

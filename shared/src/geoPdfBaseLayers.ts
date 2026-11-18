@@ -1,13 +1,13 @@
+import type { LicenceId } from "./licences.js";
 import type { TopoLayerName } from "./topoSettings.js";
 import {
   layerIn,
   REGIONS,
-  regionInWrappedView,
+  regionInView,
   regionsOf,
   regionsTouching,
   vectorIn,
   WORLD,
-  wrapView,
   type LonLatBox,
   type Region,
   type TileBytes,
@@ -51,6 +51,11 @@ type BasemapCatalogBase = {
    * bush; keep that behaviour).
    */
   displayMaxZoom: number;
+  /**
+   * What the provider licenses its tiles under, or the stricter of that and
+   * its tile policy (`licences.ts`).
+   */
+  licence: LicenceId;
   /** Plain-text attribution (GeoPDF print, mobile). */
   attribution: string;
   /** HTML attribution (web AttributionControl). */
@@ -141,6 +146,8 @@ export const BASEMAP_CATALOG: BasemapCatalogEntry[] = [
     // fetched and downloadable, so the name says which rendering it is.
     name: "OSM Vector",
     kind: "vector",
+    // ODbL: the licence of the OpenStreetMap data every region's cut is drawn from.
+    licence: "odbl",
     displayMaxZoom: 15,
     attribution: "Base map © OpenStreetMap contributors (Protomaps build)",
     attributionHtml:
@@ -156,6 +163,7 @@ export const BASEMAP_CATALOG: BasemapCatalogEntry[] = [
     urlTemplate: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
     maxNativeZoom: 19,
     displayMaxZoom: 19,
+    licence: "osmf-tiles",
     attribution: "Base map © OpenStreetMap contributors",
     attributionHtml:
       '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
@@ -177,6 +185,7 @@ export const BASEMAP_CATALOG: BasemapCatalogEntry[] = [
     urlTemplate: "https://a.tile.opentopomap.org/{z}/{x}/{y}.png",
     maxNativeZoom: 17,
     displayMaxZoom: 17,
+    licence: "cc-by-sa-3",
     attribution:
       "Base map © OpenTopoMap (CC-BY-SA), © OpenStreetMap contributors, SRTM",
     attributionHtml:
@@ -197,6 +206,7 @@ export const BASEMAP_CATALOG: BasemapCatalogEntry[] = [
       "https://a.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png",
     maxNativeZoom: 20,
     displayMaxZoom: 20,
+    licence: "osmf-tiles",
     attribution: "Base map © CyclOSM, © OpenStreetMap contributors",
     attributionHtml:
       '<a href="https://github.com/cyclosm/cyclosm-cartocss-style/releases">CyclOSM</a> | &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
@@ -215,6 +225,7 @@ export const BASEMAP_CATALOG: BasemapCatalogEntry[] = [
       "https://maps.six.nsw.gov.au/arcgis/rest/services/public/NSW_Topo_Map/MapServer/tile/{z}/{y}/{x}",
     maxNativeZoom: 16,
     displayMaxZoom: 16,
+    licence: "six-web-services",
     attribution: SIX_ATTRIBUTION,
     attributionHtml: SIX_ATTRIBUTION_HTML,
     offlineCapable: true,
@@ -254,6 +265,7 @@ export const BASEMAP_CATALOG: BasemapCatalogEntry[] = [
       "https://maps.six.nsw.gov.au/arcgis/rest/services/public/NSW_Base_Map/MapServer/tile/{z}/{y}/{x}",
     maxNativeZoom: 18,
     displayMaxZoom: 18,
+    licence: "six-web-services",
     attribution: SIX_ATTRIBUTION,
     attributionHtml: SIX_ATTRIBUTION_HTML,
     offlineCapable: true,
@@ -280,6 +292,7 @@ export const BASEMAP_CATALOG: BasemapCatalogEntry[] = [
       "https://maps.six.nsw.gov.au/arcgis/rest/services/public/NSW_Imagery/MapServer/tile/{z}/{y}/{x}",
     maxNativeZoom: 20,
     displayMaxZoom: 18,
+    licence: "six-web-services",
     attribution:
       "Imagery © State of New South Wales (Spatial Services, a business unit of the Department of Customer Service NSW). For current information go to spatial.nsw.gov.au.",
     attributionHtml: SIX_ATTRIBUTION_HTML,
@@ -330,7 +343,7 @@ function listed(
  * The basemaps a picker lists for the ground a map shows, in the catalogue's
  * order: the worldwide ones and those of every region the view touches, and the
  * vector map where the region in view declares an archive of it (the one it is
- * drawn from, `regionInWrappedView`). The regions an account chose play no part
+ * drawn from, `regionInView`). The regions an account chose play no part
  * (ADR 0049). Guard: `regions.test.ts`.
  */
 export function offeredBasemaps(
@@ -340,10 +353,8 @@ export function offeredBasemaps(
 ): BasemapCatalogEntry[] {
   return listed(
     regions,
-    new Set(
-      regionsTouching(wrapView(view), regions).flatMap((r) => r.basemaps),
-    ),
-    vectorIn(regionInWrappedView(view, regions, world)) !== null,
+    new Set(regionsTouching(view, regions).flatMap((r) => r.basemaps)),
+    vectorIn(regionInView(view, regions, world)) !== null,
   );
 }
 
@@ -365,8 +376,7 @@ export function basemapHere(
   );
   return offered.includes(picked)
     ? picked
-    : (regionInWrappedView(view, regions, world)?.defaultBasemap ??
-        offered[0]!);
+    : (regionInView(view, regions, world)?.defaultBasemap ?? offered[0]!);
 }
 
 /**

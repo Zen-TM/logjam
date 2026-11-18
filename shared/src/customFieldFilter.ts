@@ -14,7 +14,9 @@
  * logs — a user-authored field label is as sensitive as a note (root AGENTS.md).
  */
 import { fieldValue } from "./fieldValues.js";
+import { isLengthField } from "./placeTypes.js";
 import type { TripLogCustomFieldDef } from "./tripLogFields.js";
+import { lengthInputText } from "./units.js";
 
 /** [start, end] inclusive ISO-date bounds (yyyy-mm-dd); either bound nullable. */
 export type FieldDateRange = [string | null, string | null];
@@ -129,7 +131,12 @@ export function passesCustomFieldFilters(
         const num = typeof value === "number" ? value : Number(value);
         if (filter.op === "Less than" && !(num < filter.value)) return false;
         if (filter.op === "More than" && !(num > filter.value)) return false;
-        if (filter.op === "Exactly" && num !== filter.value) return false;
+        // A length is "exactly" what its pages show: 15 m matches 49.2 ft.
+        const same = isLengthField(key)
+          ? Number.isFinite(num) &&
+            lengthInputText(num) === lengthInputText(filter.value)
+          : num === filter.value;
+        if (filter.op === "Exactly" && !same) return false;
         break;
       }
       case "numberRange": {

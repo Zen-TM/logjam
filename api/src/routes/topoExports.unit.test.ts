@@ -76,3 +76,18 @@ describe("POST /topo-exports and sharpened areas", () => {
     expect(launch.mock.calls[0]![0].sourceJobIds).toEqual(["fine", "coarse"]);
   });
 });
+
+describe("POST /topo-exports and the worker's grid", () => {
+  // The worker warps to the EPSG stored beside the box (the grid of the
+  // ground there: areaExport.test.ts, `areaExportEpsg`), so the row must carry
+  // it. Mutation: queue the box alone, and the worker falls back to its own
+  // zone rule.
+  it("queues the box with the EPSG of its grid", async () => {
+    visible.mockResolvedValue([]);
+    const res = await request(app)
+      .post("/topo-exports")
+      .send({ bbox: BOX, layers: ["heights"], format: "geotiff" });
+    expect(res.status).toBe(201);
+    expect(launch.mock.calls[0]![0].bbox).toEqual({ ...BOX, epsg: 7856 });
+  });
+});

@@ -35,13 +35,14 @@ import {
   placeDeleteDone,
   removeShareConfirm,
   contractSectionsFor,
-  canyonGradeRow,
+  gradeRowsOf,
   isCanyonGradeKey,
   ADD_WAY,
   PLACE_PAGE,
   PLACE_PAGE_PRIMARY_VERBS,
   WEATHER,
   formatPlacePosition,
+  gaugeFeedAt,
   placeAttributesTitle,
   placeSectionTitle,
   placeSources,
@@ -168,10 +169,16 @@ function displayValue(def: TripLogCustomFieldDef, raw: unknown): string | null {
 /** A parked value as one line. Objects are stringified rather than dropped:
  *  the point of the section is that the user can SEE what arrived before
  *  deciding what to do with it. */
-function foreignValueText(item: { value: unknown; type: string }): string {
+function foreignValueText(item: {
+  key: string;
+  value: unknown;
+  type: string;
+}): string {
   if (item.value !== null && typeof item.value === "object")
     return JSON.stringify(item.value);
-  return formatFieldValue(item.value, item.type);
+  const text = formatFieldValue(item.value, item.type);
+  // A built-in length parked here still reads in the display units.
+  return typeof item.value === "number" ? withFieldUnit(item.key, text) : text;
 }
 
 // Grammatical list: "a", "a and b", "a, b, and c".
@@ -314,7 +321,8 @@ function PlaceDetailPanel({
 
   /** What this KIND of place records, and what this one answered. Only the
    *  answered ones: a form asks every question, a page reports the answers.
-   *  The three grade inputs read as the one Grade row, first, as on the hero. */
+   *  The grade inputs read as the one Grade row, first, as on the hero, and a
+   *  canyon holding both systems has its ACA grade as a row after it. */
   const attributes = useMemo(() => {
     if (!place) return [];
     const answered = defsForType(placeCustomFieldDefs, place.placeTypeId)
@@ -328,13 +336,12 @@ function PlaceDetailPanel({
         (row): row is { key: string; label: string; text: string } =>
           row.text != null,
       );
-    const grade = canyonGradeRow(place.fieldValues);
-    return grade
-      ? [
-          { key: grade[0], label: grade[1], text: String(grade[2]) },
-          ...answered,
-        ]
-      : answered;
+    const grades = gradeRowsOf(place.fieldValues).map(([key, label, text]) => ({
+      key,
+      label,
+      text: String(text),
+    }));
+    return [...grades, ...answered];
   }, [place, placeCustomFieldDefs]);
 
   /**
@@ -712,6 +719,7 @@ function PlaceDetailPanel({
     : placeStatus({ syncRole: "shared" }, 0);
   const grade = formatCanyonGrade(current.fieldValues);
   const isShared = placeShares.length > 0;
+  const gaugeFeed = gaugeFeedAt(current.longitude, current.latitude);
   const primaryVerbs = placeVerbs("web", "page", isOwnedPlace).filter((verb) =>
     (PLACE_PAGE_PRIMARY_VERBS as readonly string[]).includes(verb.id),
   );
@@ -806,8 +814,9 @@ function PlaceDetailPanel({
     ),
 
     // A sharee sees the owner's pick, read-only, and nothing when none is set.
+    // Only where the place's region has a gauge feed.
     gauge: () =>
-      current.gaugeId || isOwnedPlace ? (
+      gaugeFeed !== null && (current.gaugeId || isOwnedPlace) ? (
         <section className={classes.section}>
           <SectionHeader
             title={placeSectionTitle("gauge", copy.gauge, {
@@ -817,6 +826,7 @@ function PlaceDetailPanel({
             })}
           />
           <PlaceGauge
+            feed={gaugeFeed}
             latitude={current.latitude}
             longitude={current.longitude}
             gaugeId={current.gaugeId}

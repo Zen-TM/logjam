@@ -8,6 +8,7 @@ import {
   type PlaceStatus,
 } from "../placeStatus.js";
 import { regionEdgesKm } from "../mapRegionEstimate.js";
+import { formatBoxSize } from "../units.js";
 import type { RegionBbox } from "../mapRegionEstimate.js";
 import type { ScreenContract } from "./types.js";
 
@@ -115,7 +116,7 @@ export function attributeFilterShape(
  */
 export function areaSizeLabel(area: RegionBbox): string {
   const [width, height] = regionEdgesKm(area);
-  return `${Math.round(width)} × ${Math.round(height)} km`;
+  return formatBoxSize(width, height);
 }
 
 /** What the map is showing, under the on-the-map switch. */

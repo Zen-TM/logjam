@@ -83,6 +83,8 @@ vi.mock("../regionsPreference", () => ({
     record("forget:regions");
   },
 }));
+const forgetUnits = vi.hoisted(() => vi.fn());
+vi.mock("../unitsPreference", () => ({ forgetUnits }));
 vi.mock("./placeRegistry", () => ({
   stopPlaceRegistryForWipe: () => {
     record("stop:placeregistry");
@@ -216,6 +218,14 @@ describe("wipeAllLocalData", () => {
     const { failed } = await wipeAllLocalData();
     expect(failed).toContain("place names");
     expect(events).toContain("delete:file:///cache/logjam-scratch/");
+  });
+
+  // Mutation: drop forgetUnits() from wipeAllLocalData, and the next account
+  // on this phone reads the previous one's units until its own arrive.
+  it("forgets the chosen units", async () => {
+    forgetUnits.mockClear();
+    await wipeAllLocalData();
+    expect(forgetUnits).toHaveBeenCalledOnce();
   });
 
   it("deletes every declared directory", async () => {
