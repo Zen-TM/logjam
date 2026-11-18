@@ -390,7 +390,7 @@ jobs:
         env:
           E2E_PREVIEW: "1"
           VITE_AUTH_MODE: fake
-        run: npx playwright test e2e/smoke.spec.ts e2e/a11y.spec.ts e2e/export-area.spec.ts e2e/geopdf-dialog.spec.ts e2e/confirms.spec.ts e2e/not-available-here.spec.ts --workers=2 --reporter=list,github,html
+        run: npx playwright test e2e/smoke.spec.ts e2e/a11y.spec.ts e2e/export-area.spec.ts e2e/geopdf-dialog.spec.ts e2e/confirms.spec.ts e2e/sim-regions-stub.spec.ts e2e/not-available-here.spec.ts e2e/sharpen-region.spec.ts --workers=2 --reporter=list,github,html
       # These write to the seeded account and take it back, which leaves sync
       # tombstones (api/src/__tests__/_seedBaseline.ts says what that costs a
       # later integration run): after the integration suite, never before it.
@@ -811,7 +811,7 @@ jobs:
             -w /app --entrypoint python3 "$IMAGE" -m unittest \
             tests/test_area_export.py tests/test_coverage.py \
             tests/test_footprint_coverage.py tests/test_reprojection.py \
-            tests/test_tile_compose.py 2>&1 | tee "$RUNNER_TEMP/gdal-tests.log"
+            tests/test_sharpen_units.py tests/test_tile_compose.py 2>&1 | tee "$RUNNER_TEMP/gdal-tests.log"
           if grep -q 'skipped=' "$RUNNER_TEMP/gdal-tests.log"; then
             echo "::error::a test that needs GDAL skipped inside the worker image: it has nothing to skip for here"
             exit 1

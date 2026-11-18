@@ -6,12 +6,16 @@ import {
   applyTerrain,
   dropStaleTerrainSources,
   terrainSourceFor,
+  worldwideTerrainSpec,
 } from "./terrainSource";
 import {
   NSW_REGION,
   SIM_NZ,
   SIM_UTAH,
   SIM_WORLD,
+  TERRARIUM,
+  WORLD,
+  layerIn,
   type Region,
   type SharpenedOverlay,
 } from "@logjam/shared";
@@ -55,6 +59,39 @@ const area: SharpenedOverlay = {
   slopeUrl: "https://bucket.test/s?sig",
   contoursUrl: null,
 };
+
+describe("worldwideTerrainSpec", () => {
+  // Mutation: take the archive branch in `worldwideTerrainSpec` whatever the
+  // world declares, and prod's worldwide 3D source asks the CDN for an archive
+  // it has not got, in place of the public tiles it always asked.
+  it("is the public Terrarium tiles while the world declares no archive", () => {
+    expect(layerIn(WORLD, "heights"), "premise: prod's world is empty").toBe(
+      null,
+    );
+    expect(worldwideTerrainSpec("https://web.test")).toEqual({
+      type: "raster-dem",
+      tiles: [
+        "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png",
+      ],
+      encoding: "terrarium",
+      attribution: TERRARIUM.creditHtml,
+    });
+  });
+
+  // Mutation: take the Terrarium branch in `worldwideTerrainSpec` whatever
+  // the world declares, and a world hillshade and its 3D terrain draw from
+  // different heights.
+  it("is the world's archive, same-origin, where the world declares one", () => {
+    const heights = layerIn(SIM_WORLD, "heights")!;
+    expect(worldwideTerrainSpec("https://web.test", SIM_WORLD)).toEqual({
+      type: "raster-dem",
+      url: `pmtiles://https://web.test/${heights.archivePath}`,
+      tileSize: 256,
+      encoding: "terrarium",
+      attribution: heights.creditHtml,
+    });
+  });
+});
 
 describe("terrainSourceFor", () => {
   it("uses the NSW archive over NSW, and adds its source once", async () => {

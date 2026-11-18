@@ -1,7 +1,7 @@
-import { NSW_REGION } from "@logjam/shared";
+import { NSW_REGION, sharpenOfferFor } from "@logjam/shared";
 import { describe, expect, it } from "vitest";
 
-import { nextViewRegion } from "./viewRegion";
+import { nextViewRegion, startingView } from "./viewRegion";
 
 const inNsw = { west: 150.2, south: -33.8, east: 150.4, north: -33.6 };
 const elsewhere = { west: 10, south: 10, east: 11, north: 11 };
@@ -28,5 +28,30 @@ describe("nextViewRegion", () => {
   it("reads a view panned round the world as where it is", () => {
     const turned = { ...inNsw, west: inNsw.west + 360, east: inNsw.east + 360 };
     expect(nextViewRegion(null, turned)).toBe(NSW_REGION);
+  });
+});
+
+describe("startingView", () => {
+  // Mutation: in viewRegion.ts change `return { box, region: nextViewRegion(null, box) };`
+  // to `return { box, region: null };`, and the first render over the default
+  // camera reads "Not available here" at a New South Wales user.
+  it("offers the New South Wales errand on the first render over the default camera", () => {
+    const { region } = startingView(null, undefined);
+    expect(region).toBe(NSW_REGION);
+    expect(sharpenOfferFor(null, region)).toMatchObject({
+      mode: "upload",
+      portal: { name: "ELVIS", steps: "elvis" },
+    });
+  });
+
+  // Mutation: in viewRegion.ts replace `camera ? pointBox(camera.lng, camera.lat)`
+  // with `false ? pointBox(camera.lng, camera.lat)`, and a stored camera over
+  // Queenstown starts as the home region.
+  it("starts where the stored camera is, and over no region there is none", () => {
+    const sydney = startingView({ lat: -33.87, lng: 151.21 }, undefined);
+    expect(sydney.region).toBe(NSW_REGION);
+    const queenstown = startingView({ lat: -45.03, lng: 168.66 }, undefined);
+    expect(queenstown.region).toBeNull();
+    expect(sharpenOfferFor(null, queenstown.region).mode).toBe("off");
   });
 });

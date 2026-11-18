@@ -24,6 +24,11 @@ const ALLOWED: { file: string; reason: string }[] = [
     reason: "Add a form at the cap of 20: a limit, not validation, and says so",
   },
   {
+    file: "components/map/SharpenedAreasView.tsx",
+    reason:
+      "Sharpen an area where the region in view has none: a capability the map lacks, and the press says why",
+  },
+  {
     file: "components/dialogs/SelectedPlacesDialog.tsx",
     reason:
       "nothing to send until a friend is ticked, and a request in flight locks it",

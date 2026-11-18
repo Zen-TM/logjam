@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 
 import { DEM_SOURCES, TERRARIUM } from "./demSources.js";
@@ -30,9 +31,11 @@ import {
   normalizeRegionIds,
   offersRegionChoice,
   REGIONS,
+  REGIONS_WITH_SIMULATED,
   regionAt,
   regionBounds,
   regionInView,
+  regionOfArea,
   regionsOf,
   regionsTouching,
   regionTouchesBox,
@@ -48,7 +51,9 @@ import { PLACE_REGISTRY_FORMAT } from "./placeRegistry.js";
 import { SIM_NZ, SIM_REGIONS, SIM_UTAH, SIM_WORLD } from "./simRegions.js";
 
 const ids = (list: readonly { id: string }[]) => list.map((item) => item.id);
-const ALL: readonly Region[] = [NSW_REGION, ...SIM_REGIONS, SIM_WORLD, WORLD];
+// Every region the declaration holds, real or simulated, and both worlds: a
+// region added to `REGIONS_WITH_SIMULATED` is in every guard that reads this.
+const ALL: readonly Region[] = [...REGIONS_WITH_SIMULATED, SIM_WORLD, WORLD];
 
 describe("the declaration", () => {
   // Mutation: write a vertex of any ring at a longitude of 190 or -190, and
@@ -164,7 +169,7 @@ describe("the declaration", () => {
 
   // Mutation: a view centre in the sea, and a new map opens on nothing.
   it("opens its map inside its own border", () => {
-    for (const region of [NSW_REGION, ...SIM_REGIONS]) {
+    for (const region of REGIONS_WITH_SIMULATED) {
       const [lon, lat] = region.view.center;
       expect(
         regionTouchesBox(region, {
@@ -907,8 +912,7 @@ describe("a region's registry prefix", () => {
   // simulated region's `placeSearch` as "master/places/simnz/v0/".
   it("carries the current registry format, for every declared and simulated region", () => {
     const declared = regionsWithRegistry([
-      NSW_REGION,
-      ...SIM_REGIONS,
+      ...REGIONS_WITH_SIMULATED,
       SIM_WORLD,
     ]);
     // A floor: a filter that stopped matching would check nothing.
@@ -963,6 +967,33 @@ describe("areasInRegion", () => {
   it("holds none of another region's, and none for no region", () => {
     expect(areasInRegion(SIM_NZ, [inside, coastal, abroad])).toEqual([abroad]);
     expect(areasInRegion(null, [inside])).toEqual([]);
+  });
+});
+
+describe("regionOfArea", () => {
+  // Mutation: test a corner of the box (`regionAt(west, south, regions)`) in
+  // place of its centre, and the clients credit an area to a region
+  // topo/regions.py `region_of_area` did not fill it from (its test reads the
+  // same cases).
+  it("is the region holding the centre of the area's box, as the worker picks it", () => {
+    const { cases } = JSON.parse(
+      readFileSync(
+        new URL("./__fixtures__/area-region.json", import.meta.url),
+        "utf8",
+      ),
+    ) as {
+      cases: {
+        why: string;
+        coverage: [number, number, number, number];
+        region: string | null;
+      }[];
+    };
+    expect(cases.length).toBeGreaterThanOrEqual(6);
+    for (const { why, coverage, region } of cases)
+      expect(
+        regionOfArea(coverage, REGIONS_WITH_SIMULATED)?.id ?? null,
+        why,
+      ).toBe(region);
   });
 });
 

@@ -1,7 +1,13 @@
 import { afterEach, describe, it, expect, vi } from "vitest";
-import { toGridAt, type ExtentState } from "@logjam/shared";
+import {
+  NSW_REGION,
+  SIM_REGIONS,
+  toGridAt,
+  type ExtentState,
+} from "@logjam/shared";
 import {
   coordTooltip,
+  exportGridLabel,
   extentFieldText,
   parseExtentField,
   extentFieldErrors,
@@ -327,3 +333,28 @@ it.each(["latlon", "enNorthing"] as const)(
     });
   },
 );
+
+describe("names the grid a GIS file is in", () => {
+  const nsw = { north: -33.6, south: -33.7, east: 150.3, west: 150.2 };
+  const declared = [NSW_REGION, ...SIM_REGIONS];
+
+  // Mutation: drop the one-region branch of `exportGridLabel` (return null
+  // whenever there is no box), and NSW's note loses "GDA2020 / MGA".
+  it("names the one declared region's grid before a box is drawn", () => {
+    expect(exportGridLabel(null, [NSW_REGION])).toBe("GDA2020 / MGA");
+  });
+
+  // Mutation: name the first region's grid whatever the count.
+  it("leaves it to the ground with two or more regions", () => {
+    expect(exportGridLabel(null, declared)).toBeNull();
+  });
+
+  // Mutation: name `gridNamedAt`'s grid for a drawn box instead of `areaExportGrid`.
+  it("names the box's own export grid once one is drawn", () => {
+    expect(exportGridLabel(nsw, [NSW_REGION])).toBe("GDA2020 / MGA");
+    expect(exportGridLabel(nsw, declared)).toBe("GDA2020 / MGA");
+    // Bendigo: no region has terrain there, so the files are UTM.
+    const bendigo = { north: -36.7, south: -36.8, east: 144.3, west: 144.2 };
+    expect(exportGridLabel(bendigo, [NSW_REGION])).toBe("WGS 84 / UTM");
+  });
+});

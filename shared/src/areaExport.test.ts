@@ -1,7 +1,10 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   AREA_EXPORT_MAX_SIDE_KM,
   areaExportEpsg,
+  areaExportGrid,
+  areaExportRegion,
   areaExportRequestError,
   areaExportStyleSnapshot,
   areaExportTooLarge,
@@ -12,7 +15,7 @@ import {
   type AreaBbox,
 } from "./areaExport.js";
 import { nswContourStyle } from "./contourRules.js";
-import { layerIn, NSW_REGION, REGIONS } from "./regions.js";
+import { NSW_REGION, REGIONS, REGIONS_WITH_SIMULATED } from "./regions.js";
 import { SIM_NZ, SIM_REGIONS, SIM_UTAH } from "./simRegions.js";
 import { RASTER_TEMPLATE_DEFAULTS } from "./topoSettings.js";
 
@@ -114,14 +117,14 @@ describe("areaExportEpsg", () => {
     };
     const UTM_33_NORTH = 32633;
 
-    // Mutation: drop the `layerIn(each, "heights")` filter, and the box takes
+    // Mutation: drop the `hasExportArchives` filter, and the box takes
     // the grid of `bare`, which the export reads no heights from.
     it("takes the grid of the first region with heights that the box touches", () => {
       const box = boxAround(14, 25, 6); // centred in none, over all three
       expect(areaExportEpsg(box, [bare, full, other])).toBe(UTM_33_NORTH);
     });
 
-    // Mutation: reverse `withHeights` before `regionInView`, and `other`
+    // Mutation: reverse `exporting` before `regionsTouching`, and `other`
     // wins.
     it("goes by list order between two regions with heights", () => {
       const box = boxAround(14, 25, 6);
@@ -129,8 +132,8 @@ describe("areaExportEpsg", () => {
       expect(areaExportEpsg(box, [bare, other, full])).toBe(2193);
     });
 
-    // Mutation: pass `regions` to `regionInView` in place of `withHeights`,
-    // and a box centred in `bare` takes its grid.
+    // Mutation: pass `regions` to `regionAt` in place of `exporting`, and a
+    // box centred in `bare` takes its grid.
     it("ignores a region with no heights even where it holds the centre", () => {
       const box = boxAround(12, 15, 4); // centred in `bare`, over `full`
       expect(areaExportEpsg(box, [bare, full, other])).toBe(UTM_33_NORTH);
@@ -159,6 +162,88 @@ describe("areaExportEpsg", () => {
       expect(areaInTerrainRegion(box), `${lon} ${lat}`).toBe(true);
       expect(areaExportEpsg(box), `${lon} ${lat}`).toBe(old(lon));
     }
+  });
+});
+
+describe("areaExportRegion", () => {
+  type Case = {
+    why: string;
+    bbox: [number, number, number, number];
+    region: string | null;
+  };
+  const fixture = JSON.parse(
+    readFileSync(
+      new URL("./__fixtures__/export-region.json", import.meta.url),
+      "utf8",
+    ),
+  ) as {
+    cases: Case[];
+    madeUp: {
+      regions: {
+        id: string;
+        box: [number, number, number, number];
+        archives: (keyof typeof SIM_UTAH.terrain)[];
+      }[];
+      cases: Case[];
+    };
+  };
+  const asBox = ([west, south, east, north]: Case["bbox"]) => ({
+    west,
+    south,
+    east,
+    north,
+  });
+
+  // Mutation: test the centre only (give `regionAt` the centre and drop the
+  // `regionsTouching` fallback), and a box over NSW's edge is read from no
+  // region, as topo/regions.py `export_region` (its test reads the same
+  // cases) reads it from NSW.
+  it("is the region the worker reads the archives from", () => {
+    expect(fixture.cases.length).toBeGreaterThanOrEqual(8);
+    for (const { why, bbox, region } of fixture.cases)
+      expect(
+        areaExportRegion(asBox(bbox), REGIONS_WITH_SIMULATED)?.id ?? null,
+        why,
+      ).toBe(region);
+  });
+
+  // Mutation: drop the `regionAt` step (take the first region touching the
+  // box), and a box centred in a later region is read from an earlier one it
+  // also touches; or keep every region that declares heights (drop the slope
+  // and contours test in `hasExportArchives`), and a box over a region with
+  // no slope is exported from it, and fails in the worker.
+  it("holds the centre first and skips a region missing an archive, as the worker does", () => {
+    const regions = fixture.madeUp.regions.map(({ id, box, archives }) => {
+      const [w, s, e, n] = box;
+      return {
+        ...SIM_UTAH,
+        id,
+        borders: [
+          [
+            [w, s],
+            [e, s],
+            [e, n],
+            [w, n],
+          ] as [number, number][],
+        ],
+        terrain: Object.fromEntries(
+          archives.map((layer) => [layer, SIM_UTAH.terrain[layer]]),
+        ),
+      };
+    });
+    expect(fixture.madeUp.cases.length).toBeGreaterThanOrEqual(4);
+    for (const { why, bbox, region } of fixture.madeUp.cases)
+      expect(areaExportRegion(asBox(bbox), regions)?.id ?? null, why).toBe(
+        region,
+      );
+  });
+
+  // Mutation: answer `regions[0]` for a box no region touches, and an export
+  // of open sea is warped to a region's grid, not UTM.
+  it("gives a box no region touches the UTM grid", () => {
+    const sea = { west: 155.5, south: -34, east: 156.5, north: -33.5 };
+    expect(areaExportRegion(sea, REGIONS_WITH_SIMULATED)).toBeNull();
+    expect(areaExportGrid(sea, REGIONS_WITH_SIMULATED)).toBe("utm");
   });
 });
 
@@ -194,10 +279,11 @@ describe("areaInTerrainRegion", () => {
     ).toBe(false);
   });
 
-  // Mutation: add terrain to a region and leave the sentence alone.
-  it("names every region with terrain in its refusal", () => {
-    for (const region of REGIONS.filter((r) => layerIn(r, "heights")))
-      expect(AREA_EXPORT_OUTSIDE_TERRAIN).toContain(region.name);
+  // Mutation: put a region's name in the sentence, and it goes stale when a
+  // region is added or this one is renamed.
+  it("names no region in its refusal", () => {
+    for (const region of REGIONS_WITH_SIMULATED)
+      expect(AREA_EXPORT_OUTSIDE_TERRAIN).not.toContain(region.name);
   });
 });
 

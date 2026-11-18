@@ -118,8 +118,8 @@ definitions are in `envs/prod/ecs.tf`:
 | Task family | Image | Runs | Launched by |
 |---|---|---|---|
 | `logjam-topo-worker` | topo worker (`topo/`) | `topo/worker.py`: LiDAR ZIP → tiles | `POST /topo-jobs/:id/start` (`JOB_ID`) |
-| `logjam-topo-export-worker` | topo worker | `topo/export_worker.py`: the statewide terrain over a box → download file | `POST /topo-exports` (`EXPORT_JOB_ID`) |
-| `logjam-place-registry` | topo worker | `topo/build_place_registry.py`: OpenStreetMap NSW extract → the public place registry under `master/places/` | an EventBridge schedule, monthly |
+| `logjam-topo-export-worker` | topo worker | `topo/export_worker.py`: the terrain of the box's region over it → download file | `POST /topo-exports` (`EXPORT_JOB_ID`) |
+| `logjam-place-registry` | topo worker | `topo/build_place_registry.py`: a region's OpenStreetMap extract (NSW's, as scheduled) → the public place registry under `master/places/` | an EventBridge schedule, monthly |
 | `logjam-gauges` | topo worker | `topo/build_gauges.py`: WaterNSW latest readings (every 2 hours) and BoM history (daily) → the public river gauge files under `master/gauges/` | an EventBridge schedule, every 2 hours |
 | `logjam-fire-history` | topo worker | `topo/build_fire_history.py`: NPWS's fire history map service → the most-recent-fire-year raster the vegetation layer reads, under `fire/`, and the public Fire history overlay archive under `master/fire/` | an EventBridge schedule, monthly |
 | `logjam-coverage` | topo worker | `topo/build_coverage.py`: the ACCC's mobile coverage maps on data.gov.au → the public Coverage overlay archive under `master/coverage/` | an EventBridge schedule, monthly |
@@ -271,7 +271,8 @@ the task ARN saved on the row.
 
 ### Topo jobs
 
-A user uploads an ELVIS LiDAR ZIP straight to S3, then starts the job
+A user uploads a LiDAR survey's ZIP (from ELVIS, in New South Wales; the
+region's `sharpen.portal` names where elsewhere) straight to S3, then starts the job
 (`api/src/routes/topoJobs.ts`, `topo/worker.py`). The ZIP goes as an S3
 multipart upload: the API signs URLs for its parts (`/parts`), Logjam Web
 sends them a few at a time, and the API joins them (`/complete`). After a

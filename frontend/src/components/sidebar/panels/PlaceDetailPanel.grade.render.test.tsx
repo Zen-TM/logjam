@@ -1,6 +1,10 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { ScopedCustomFieldDef } from "@logjam/shared";
+import {
+  NSW_REGION,
+  sharpenOffer,
+  type ScopedCustomFieldDef,
+} from "@logjam/shared";
 import type { TPlace } from "../../../placeUtils";
 import PlaceDetailPanel from "./PlaceDetailPanel";
 
@@ -83,6 +87,7 @@ function renderPlace(place: TPlace, defs: ScopedCustomFieldDef[] = []) {
       onBack={noop}
       onOpenTrip={noop}
       onMakeMap={noop}
+      sharpenFor={() => sharpenOffer(NSW_REGION)}
       onExportPlace={noop}
       onWaysChanged={noop}
       verbRequest={null}

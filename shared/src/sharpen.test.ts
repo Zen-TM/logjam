@@ -7,18 +7,25 @@ import {
   type DemTileReader,
 } from "./demSources.js";
 import { DEM_TILE_SIZE } from "./demTiles.js";
+import { MAP_TERRAIN } from "./contracts/mapTerrain.js";
 import { PLACE_VERBS } from "./contracts/placeVerbs.js";
 import { buildElevationProfile, climbFromProfile } from "./elevation.js";
 import {
   areasInBox,
   compareSharpenedAreas,
   demSourcesFor,
+  sharpenOffer,
+  sharpenOfferFor,
+  sharpenOfferForJob,
+  sharpenUnavailable,
+  SHARPEN_OFF_REASON,
   terrainTileArchive,
   type RoutedTerrain,
   type SharpenedArea,
   LIDAR_JOB_COPY,
 } from "./sharpen.js";
-import { NSW_REGION } from "./regions.js";
+import { NSW_REGION, WORLD } from "./regions.js";
+import { SIM_NZ, SIM_REGIONS, SIM_UTAH } from "./simRegions.js";
 
 // Made-up areas near Katoomba: a z15 range of two by two z14 tiles.
 const area = (over: Partial<SharpenedArea>): SharpenedArea => ({
@@ -305,5 +312,155 @@ describe("LIDAR_JOB_COPY", () => {
   it("names a new job in one place", () => {
     const verb = PLACE_VERBS.find((v) => v.id === "makeTopo")!;
     expect(verb.label).toBe(LIDAR_JOB_COPY.makeHere);
+  });
+});
+
+describe("sharpenOffer", () => {
+  const UPLOADING = [NSW_REGION, ...SIM_REGIONS].filter(
+    (r) => r.sharpen.mode === "upload",
+  );
+
+  // Mutation: delete a region's `portal` from regions.ts or simRegions.ts, or
+  // give it an address that is not https, and the dialog names a portal it
+  // cannot link to.
+  it("gives every upload region a portal", () => {
+    expect(UPLOADING.map((r) => r.id)).toEqual(["nsw", "simutah"]);
+    for (const region of UPLOADING) {
+      const offer = sharpenOffer(region);
+      if (offer.mode !== "upload") throw new Error(region.id);
+      expect(offer.portal.name, region.id).not.toBe("");
+      expect(offer.portal.url, region.id).toMatch(/^https:\/\/\S+$/);
+    }
+  });
+
+  // Mutation: in sharpen.ts change `(region ?? WORLD).sharpen` to
+  // `REGIONS[0]!.sharpen`, and Utah is sent to ELVIS.
+  it("offers the region's own portal and vegetation model", () => {
+    expect(sharpenOffer(NSW_REGION)).toEqual({
+      mode: "upload",
+      portal: {
+        name: "ELVIS",
+        url: "https://elevation.fsdf.org.au/",
+        steps: "elvis",
+      },
+      vegetation: true,
+    });
+    expect(sharpenOffer(SIM_UTAH)).toMatchObject({
+      mode: "upload",
+      portal: { name: "USGS", steps: "link" },
+      vegetation: false,
+    });
+  });
+
+  // Mutation: in sharpen.ts change `SHARPEN_OFF_REASON[entry.reason]` to
+  // `SHARPEN_OFF_REASON["no-lidar"]`, or make the two sentences the same.
+  it("says why a region that is off is off", () => {
+    expect(sharpenOffer(SIM_NZ)).toEqual({
+      mode: "off",
+      reason: SHARPEN_OFF_REASON["already-fine"],
+    });
+    expect(sharpenOffer(WORLD)).toEqual({
+      mode: "off",
+      reason: SHARPEN_OFF_REASON["no-lidar"],
+    });
+    expect(SHARPEN_OFF_REASON["already-fine"]).not.toBe(
+      SHARPEN_OFF_REASON["no-lidar"],
+    );
+  });
+
+  // Mutation: in sharpen.ts change `const entry: RegionSharpen = (region ?? WORLD).sharpen;`
+  // to `(region ?? REGIONS[0]!).sharpen`, and a map over no region offers
+  // ELVIS's errand.
+  it("is off with no LiDAR over ground no region declares", () => {
+    expect(sharpenOffer(null)).toEqual({
+      mode: "off",
+      reason: SHARPEN_OFF_REASON["no-lidar"],
+    });
+  });
+});
+
+describe("sharpenOfferFor", () => {
+  const all = [NSW_REGION, ...SIM_REGIONS];
+  const inUtah = { west: -112.97, south: 37.26, east: -112.93, north: 37.3 };
+  const atSea = { west: 0, south: 0, east: 0.1, north: 0.1 };
+
+  // Mutation: in sharpen.ts replace `if (!box) return sharpenOffer(view);` and
+  // the `return sharpenOffer(` call after it with `return sharpenOffer(view);`,
+  // and a Utah place's Sharpen offers ELVIS because the map is over New South Wales.
+  it("lets the box's region decide, whatever the map shows", () => {
+    expect(sharpenOfferFor(inUtah, NSW_REGION, all)).toEqual(
+      sharpenOffer(SIM_UTAH),
+    );
+  });
+
+  // Mutation: in sharpen.ts end the box branch with `?? view` after the
+  // `regionOfArea(...)` call, and a box in no region is offered the map's
+  // region's errand.
+  it("is off for a box in no region, with no fall back to the map's region", () => {
+    expect(sharpenOfferFor(atSea, NSW_REGION, all)).toEqual({
+      mode: "off",
+      reason: SHARPEN_OFF_REASON["no-lidar"],
+    });
+  });
+
+  // Mutation: in sharpen.ts change `if (!box) return sharpenOffer(view);` to
+  // `if (!box) return sharpenOffer(null);`, and the map's own entry points
+  // ignore the region in view.
+  it("reads the map's region for an action about no box", () => {
+    expect(sharpenOfferFor(null, SIM_NZ, all)).toEqual(sharpenOffer(SIM_NZ));
+    expect(sharpenOfferFor(null, NSW_REGION, all)).toEqual(
+      sharpenOffer(NSW_REGION),
+    );
+  });
+});
+
+describe("sharpenOfferForJob", () => {
+  const all = [SIM_NZ, SIM_UTAH, NSW_REGION];
+
+  // Mutation: in sharpen.ts change `sharpenOfferFor(footprint, null, regions)`
+  // to `sharpenOffer(null)`, and a job's footprint no longer decides.
+  it("is judged by the job's footprint when it has one", () => {
+    const inSydney = { west: 150.2, south: -33.8, east: 150.3, north: -33.7 };
+    // Utah is the first upload region here, so only the footprint can give NSW's.
+    expect(sharpenOfferForJob(inSydney, all)).toEqual(sharpenOffer(NSW_REGION));
+  });
+
+  // Mutation: in sharpen.ts change `regions.find((r) => r.sharpen.mode === "upload")`
+  // to `null`, and a failed job, which has no footprint, reads as off.
+  it("is the first upload region's for a job with no footprint", () => {
+    expect(sharpenOfferForJob(null, all)).toEqual(sharpenOffer(SIM_UTAH));
+    expect(sharpenOfferForJob(null, [NSW_REGION])).toEqual(
+      sharpenOffer(NSW_REGION),
+    );
+  });
+
+  // Mutation: in sharpen.ts change `if (offer?.mode === "upload") return offer;`
+  // to `if (offer) return offer;`, and a footprint centred in a region that is
+  // off, or in none, reads as off.
+  it("is the first upload region's too when the footprint's own ground is off", () => {
+    const inNz = { west: 169.2, south: -44.1, east: 169.3, north: -44.0 };
+    const atSea = { west: 0, south: 0, east: 0.1, north: 0.1 };
+    expect(sharpenOfferForJob(inNz, all)).toEqual(sharpenOffer(SIM_UTAH));
+    expect(sharpenOfferForJob(atSea, all)).toEqual(sharpenOffer(SIM_UTAH));
+  });
+
+  // Mutation: in sharpen.ts change `?? null);` at the end of
+  // `sharpenOfferForJob` to `?? REGIONS[0]!);`, and a world with no upload
+  // region offers an errand there is nowhere to do.
+  it("is off where no region takes an upload", () => {
+    expect(sharpenOfferForJob(null, [SIM_NZ])).toEqual(sharpenOffer(null));
+  });
+});
+
+describe("sharpenUnavailable", () => {
+  // Mutation: in sharpen.ts change `offer.mode === "off"` in
+  // `sharpenUnavailable` to `offer.mode !== "off"`, or write different words as
+  // the state there instead of reading the Terrain layers' (`MAP_TERRAIN.copy.notHere`).
+  it("says Not available here, with the region's reason, only where it is off", () => {
+    expect(sharpenUnavailable(sharpenOffer(NSW_REGION))).toBeNull();
+    expect(sharpenUnavailable(sharpenOffer(SIM_NZ))).toEqual({
+      state: MAP_TERRAIN.copy.notHere,
+      reason: SHARPEN_OFF_REASON["already-fine"],
+    });
   });
 });

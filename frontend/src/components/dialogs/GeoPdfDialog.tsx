@@ -2,7 +2,7 @@
 // area, on one sheet of paper, at one scale: the form asks the paper and the
 // scale, which size the area, then where it is, then what goes on top. For a
 // GIS (GeoTIFF, GeoPackage, MBTiles) the area is a free box with no paper, and
-// the file holds the statewide terrain over it (`AreaExportFields`).
+// the file holds the terrain of the area's region over it (`AreaExportFields`).
 //
 // Nothing here is live — the paper is drawn on the map while you pick an area
 // (App's frame), and everything else only matters once Make it renders it —
@@ -36,6 +36,7 @@ import { sanitizeDecimalInput } from "../../numberInput";
 import {
   extentFieldErrors,
   coordTooltip,
+  exportGridLabel,
   extentFieldText,
   hasExtentFieldError,
   parseExtentField,
@@ -83,8 +84,10 @@ import {
   geoPdfTooLarge,
   GEOPDF_TOO_LARGE,
   MAP_TERRAIN,
+  type AreaBbox,
   type AreaExportFormat,
   type AreaExportLayer,
+  t,
   type SharpenedArea,
   TERRAIN_LAYER_KEYS,
   type GeoPdfConfig,
@@ -156,13 +159,26 @@ const FORMAT_OPTIONS: ChipOption<FormatChoice>[] = [
   })),
 ];
 
-const GIS_FORMAT_NOTES: Record<AreaExportFormat, string> = {
-  geotiff:
-    "A .zip of rasters in GDA2020 / MGA, for QGIS or ArcGIS: heights in metres, slope in degrees, and hillshade.",
-  gpkg: "One file for QGIS: the rasters in GDA2020 / MGA, and the contours as lines that carry their height.",
-  mbtiles:
-    "Map data for Gaia, Locus or OruxMaps, drawn over their own map, with slope in your slope bands as they are now.",
-};
+/**
+ * What a format is, for the Format rail. A GeoTIFF or GeoPackage names the
+ * grid its rasters are warped to (`areaExportGrid`, the one the worker uses);
+ * before a box is drawn it names the one declared region's grid, and with
+ * two or more says only that the grid follows the ground (`exportGridLabel`).
+ */
+function gisFormatNote(
+  format: AreaExportFormat,
+  area: AreaBbox | null,
+): string {
+  const grid = exportGridLabel(area) ?? t`the grid of the area you choose`;
+  switch (format) {
+    case "geotiff":
+      return t`A .zip of rasters in ${grid}, for QGIS or ArcGIS: heights in metres, slope in degrees, and hillshade.`;
+    case "gpkg":
+      return t`One file for QGIS: the rasters in ${grid}, and the contours as lines that carry their height.`;
+    case "mbtiles":
+      return t`Map data for Gaia, Locus or OruxMaps, drawn over their own map, with slope in your slope bands as they are now.`;
+  }
+}
 
 const COORD_OPTIONS: ChipOption<CoordMode>[] = [
   { value: "latlon", label: "Lat/Lon" },
@@ -1006,7 +1022,7 @@ function GeoPdfDialog({
                 setFormat(next);
                 setError(null);
               }}
-              hint={gisFormat ? GIS_FORMAT_NOTES[gisFormat] : undefined}
+              hint={gisFormat ? gisFormatNote(gisFormat, gisArea) : undefined}
             />
           </section>
 

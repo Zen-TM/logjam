@@ -1,0 +1,96 @@
+{
+  "_comment": "Which region an area export reads its archives from: the region holding the centre of the box [west, south, east, north], else the first touching it, among the regions that declare heights, slope and contours; else null. `cases` are made-up boxes over NSW and the simulated regions. `madeUp` are made-up regions on a flat map (each a box [west, south, east, north] and the archives it declares) with boxes over them. Read by shared/src/areaExport.test.ts (areaExportRegion) and topo/tests/test_regions.py (TestExportRegion), so the API that names the grid and the worker that reads the archives cannot pick differently.",
+  "cases": [
+    {
+      "why": "inside NSW",
+      "bbox": [150.3, -33.72, 150.32, -33.7],
+      "region": "nsw"
+    },
+    {
+      "why": "centre off NSW's northern border, the box over it",
+      "bbox": [153.0, -28.3, 153.2, -28.1],
+      "region": "nsw"
+    },
+    {
+      "why": "centre off NSW's western border, the box over it",
+      "bbox": [140.5, -33.3, 141.1, -32.7],
+      "region": "nsw"
+    },
+    {
+      "why": "all of it at sea",
+      "bbox": [155.5, -34.0, 156.5, -33.5],
+      "region": null
+    },
+    {
+      "why": "inside the heights' coverage box and all in Victoria",
+      "bbox": [144.2, -36.8, 144.3, -36.7],
+      "region": null
+    },
+    {
+      "why": "simulated New Zealand's first ring",
+      "bbox": [169.22, -44.08, 169.24, -44.06],
+      "region": "simnz"
+    },
+    {
+      "why": "simulated New Zealand's second ring",
+      "bbox": [175.6, -37.12, 175.62, -37.1],
+      "region": "simnz"
+    },
+    {
+      "why": "inside simulated Utah",
+      "bbox": [-112.95, 37.27, -112.93, 37.29],
+      "region": "simutah"
+    },
+    {
+      "why": "centre past simulated Utah's east edge, the box over it",
+      "bbox": [-112.89, 37.28, -112.83, 37.3],
+      "region": "simutah"
+    }
+  ],
+  "madeUp": {
+    "regions": [
+      {
+        "id": "bare",
+        "box": [10, 10, 20, 20],
+        "archives": []
+      },
+      {
+        "id": "noslope",
+        "box": [30, 10, 40, 20],
+        "archives": ["heights", "contours"]
+      },
+      {
+        "id": "full",
+        "box": [15, 10, 25, 20],
+        "archives": ["heights", "slope", "contours"]
+      },
+      {
+        "id": "other",
+        "box": [5, 22, 17, 30],
+        "archives": ["heights", "slope", "contours"]
+      }
+    ],
+    "cases": [
+      {
+        "why": "centred in a region with no archives, over one that has them",
+        "bbox": [8, 12, 16, 18],
+        "region": "full"
+      },
+      {
+        "why": "centred in none, over two that have them: the first listed",
+        "bbox": [16, 19, 18, 23],
+        "region": "full"
+      },
+      {
+        "why": "centred in a later region that an earlier one also touches: the one holding the centre",
+        "bbox": [9, 16, 17, 29],
+        "region": "other"
+      },
+      {
+        "why": "inside a region with heights and contours but no slope",
+        "bbox": [32, 12, 38, 18],
+        "region": null
+      }
+    ]
+  }
+}

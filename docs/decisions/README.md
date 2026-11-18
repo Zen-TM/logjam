@@ -156,3 +156,4 @@ supersede instead.
 | [0049](0049-what-a-map-offers-follows-the-ground-it-shows-and-an-accounts-chosen-regions-only-set-defaults.md) | What a map offers follows the ground it shows; an account's chosen regions only set defaults | 2026-11-14 | Accepted |
 | [0050](0050-user-facing-text-goes-through-one-catalogue-function.md) | User-facing text goes through one catalogue function, keyed by its English | 2026-11-14 | Accepted |
 | [0051](0051-a-lettered-grade-is-stored-as-its-rank.md) | A lettered grade is stored as its rank | 2026-11-14 | Accepted |
+| [0052](0052-a-new-regions-heights-are-a-mapterhorn-extract-transcoded-to-adr-0030-tiles.md) | A new region's heights are a Mapterhorn extract, transcoded to ADR 0030 tiles and hosted by Logjam | 2026-11-14 | Accepted |

@@ -1039,6 +1039,38 @@ describe("Make a map, for GIS", () => {
       expect(within(format).getByRole("radio", { name })).toBeTruthy();
   });
 
+  // Mutation: write "GDA2020 / MGA" in the note whatever the box (the text it
+  // had before regions), and a box outside New South Wales is told its files
+  // are MGA when the worker warps them to UTM.
+  it("names the grid the files will be in, for the box's ground", () => {
+    const { unmount } = render(dialog({ open: true, areaSeed: seed }));
+    chooseGis("GeoTIFF");
+    expect(
+      screen.getByText(/rasters in GDA2020 \/ MGA, for QGIS/),
+    ).toBeTruthy();
+    chooseGis("GeoPackage");
+    expect(
+      screen.getByText(/rasters in GDA2020 \/ MGA, and the contours/),
+    ).toBeTruthy();
+    unmount();
+
+    // Bendigo: no region has terrain there, so the grid is UTM.
+    const bendigo = { north: -36.7, south: -36.8, east: 144.3, west: 144.2 };
+    render(dialog({ open: true, areaSeed: bendigo }));
+    chooseGis("GeoTIFF");
+    expect(screen.getByText(/rasters in WGS 84 \/ UTM, for QGIS/)).toBeTruthy();
+  });
+
+  // Mutation: drop the one-region branch of `exportGridLabel`, and the note
+  // before a box is drawn says "the grid of the area you choose" in NSW.
+  it("names the one declared region's grid before a box is drawn", () => {
+    render(dialog({ open: true }));
+    chooseGis("GeoTIFF");
+    expect(
+      screen.getByText(/rasters in GDA2020 \/ MGA, for QGIS/),
+    ).toBeTruthy();
+  });
+
   // A GIS file is a free box: no paper, and only the layers the format holds.
   // Mutation: render the GeoPDF body whatever the format, or list every layer.
   it("drops the paper and offers only the format's layers", () => {

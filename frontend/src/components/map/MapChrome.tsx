@@ -7,12 +7,14 @@ import {
   type ReactNode,
 } from "react";
 import type * as maplibregl from "maplibre-gl";
+import type { SharpenUnavailable } from "@logjam/shared";
 import {
   MapButton,
   MapButtonGroup,
   Icon,
   Menu,
   NorthNeedle,
+  Tooltip,
   useEscape,
   useOutsidePress,
   type MenuEntry,
@@ -28,6 +30,8 @@ type MapToolBase = {
   id: string;
   label: string;
   icon: Glyph;
+  /** Where the map is the tool cannot run: `state` is drawn beside its label, `reason` is the tooltip. */
+  unavailable?: SharpenUnavailable;
 };
 export type MapTool =
   | (MapToolBase & { onSelect: () => void })
@@ -221,6 +225,34 @@ export default function MapChrome({
                       </button>
                     )}
                   />
+                ) : tool.unavailable ? (
+                  // Stays focusable and says why, as a disabled Button does
+                  // (shared/DESIGN.md §5); pressing it does nothing.
+                  <Tooltip
+                    key={tool.id}
+                    content={tool.unavailable.reason}
+                    placement="top-end"
+                    openOnPress
+                  >
+                    {(describedById) => (
+                      <button
+                        type="button"
+                        aria-disabled
+                        aria-describedby={describedById}
+                        {...item}
+                        className={`${item.className} ${classes.trayUnavailable}`}
+                      >
+                        {face}
+                        {/* Without it the name reads "Sharpen an areaNot
+                            available here", and axe's label-content-name-
+                            mismatch cannot match it to what is drawn. It
+                            renders no gap: the tray item is a flex row. */}{" "}
+                        <span className={classes.trayState}>
+                          {tool.unavailable!.state}
+                        </span>
+                      </button>
+                    )}
+                  </Tooltip>
                 ) : (
                   <button
                     key={tool.id}

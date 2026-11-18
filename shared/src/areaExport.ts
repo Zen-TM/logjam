@@ -1,13 +1,14 @@
-// An export of an area: the statewide terrain over a box, as raw data for a
+// An export of an area: the terrain of a box's region over it, as raw data for a
 // GIS (GeoTIFF, GeoPackage) or a styled map for an offline app (MBTiles), made
 // by the export worker (topo/area_export.py, which mirrors these declarations:
 // topo/tests/test_area_export.py).
-import { boxCentre, gridZoneOf } from "./grids.js";
+import { boxCentre, gridZoneOf, type GridId } from "./grids.js";
 import { nswContourStyle } from "./contourRules.js";
 import {
   layerIn,
-  regionInView,
+  regionAt,
   REGIONS,
+  regionsTouching,
   regionTouchesBox,
   type Region,
 } from "./regions.js";
@@ -45,24 +46,54 @@ export type AreaBbox = {
   north: number;
 };
 
+/** The archives an export reads: a region without all of them is no export region (`areaExportRegion`). */
+const EXPORT_ARCHIVES = ["heights", "slope", "contours"] as const;
+
+const hasExportArchives = (region: Region): boolean =>
+  EXPORT_ARCHIVES.every((layer) => layerIn(region, layer) !== null);
+
 /**
- * The EPSG code of the grid the worker warps an export of this box to: the
- * grid of a region with heights, in the zone at the box's centre. That is the
- * region with heights holding the centre, else the first region with heights
- * touching the box (the regions `areaInTerrainRegion` admits a box by, and
- * the ones the data comes from), so a box over the edge of NSW stays in MGA
- * however its centre falls. UTM when no region with heights touches the box.
- * The API stores the code on the job beside the box, so the worker needs no
- * regions of its own. Guard: `areaExport.test.ts`.
+ * The region an export of this box reads its archives from: the region
+ * holding the box's centre, else the first region touching the box, among the
+ * regions that declare heights, slope and contours (the regions
+ * `areaInTerrainRegion` admits a box by), so a box over the edge of NSW is
+ * exported from NSW however its centre falls. Null when none touches it.
+ * `WORLD` has no border and is never the answer.
+ * topo/regions.py `export_region` is the same choice, for the worker that
+ * reads the archives: `__fixtures__/export-region.json` holds the two equal
+ * (this file's test and topo/tests/test_regions.py read it).
+ */
+export function areaExportRegion(
+  bbox: AreaBbox,
+  regions: readonly Region[] = REGIONS,
+): Region | null {
+  const exporting = regions.filter(hasExportArchives);
+  const { lon, lat } = boxCentre(bbox);
+  return (
+    regionAt(lon, lat, exporting) ?? regionsTouching(bbox, exporting)[0] ?? null
+  );
+}
+
+/** The grid an export of this box is warped to: its region's, UTM where no export region touches the box. */
+export function areaExportGrid(
+  bbox: AreaBbox,
+  regions: readonly Region[] = REGIONS,
+): GridId {
+  return areaExportRegion(bbox, regions)?.grid ?? "utm";
+}
+
+/**
+ * The EPSG code of the grid the worker warps an export of this box to
+ * (`areaExportGrid`), in the zone at the box's centre. The API stores the
+ * code on the job beside the box, so the grid the worker uses is the one the
+ * dialog names. Guard: `areaExport.test.ts`.
  */
 export function areaExportEpsg(
   bbox: AreaBbox,
   regions: readonly Region[] = REGIONS,
 ): number {
   const { lon, lat } = boxCentre(bbox);
-  const withHeights = regions.filter((each) => layerIn(each, "heights"));
-  const region = regionInView(bbox, withHeights);
-  return gridZoneOf(region?.grid ?? "utm", lon, lat).epsg;
+  return gridZoneOf(areaExportGrid(bbox, regions), lon, lat).epsg;
 }
 
 /**
@@ -80,10 +111,11 @@ export const AREA_EXPORT_MAX_SIDE_KM = 100;
 export const AREA_EXPORT_TOO_LARGE = say`A map can be up to 100 km on a side. Choose a smaller area, or split it into smaller maps.`;
 
 /**
- * Names every region with terrain, which `say` cannot take as a hole: a
- * region's name is not a sentence. Guard: `areaExport.test.ts`.
+ * Names no region: a sentence that lists them goes stale when one is added.
+ * Guard: `areaExport.test.ts` ("names no region in its refusal"); the
+ * worker's copy is held to this one by `test_area_export.py`.
  */
-export const AREA_EXPORT_OUTSIDE_TERRAIN = say`That area is outside NSW, where the statewide terrain is. Choose an area in NSW.`;
+export const AREA_EXPORT_OUTSIDE_TERRAIN = say`Terrain isn't available for that area. Choose an area where it is.`;
 
 /** What the worker says when an export fails for no reason the owner can act
  *  on. Logjam Web offers Report a bug beside exactly this sentence; the
@@ -112,18 +144,17 @@ export function areaExportTooLarge(bbox: AreaBbox): boolean {
 }
 
 /**
- * Whether the box touches a region with terrain, by its border, a quick check
- * at submit. The border runs a little outside the real one, so a box just
+ * Whether the box touches a region an export can read (`areaExportRegion`), by
+ * its border, a quick check at submit. The border runs a little outside the real one, so a box just
  * over it passes, and the worker, finding no tiles, fails it with the same
- * sentence (topo/area_export.py `AreaOutsideNsw`).
+ * sentence (topo/area_export.py `AreaOutsideTerrain`).
  */
 export function areaInTerrainRegion(
   bbox: AreaBbox,
   regions: readonly Region[] = REGIONS,
 ): boolean {
   return regions.some(
-    (region) =>
-      layerIn(region, "heights") !== null && regionTouchesBox(region, bbox),
+    (region) => hasExportArchives(region) && regionTouchesBox(region, bbox),
   );
 }
 
