@@ -15,12 +15,21 @@ vi.mock("../api/apiFetch", () => ({ apiFetch }));
 vi.mock("./overlayDownloads", () => ({ downloadTopoOverlay }));
 vi.mock("./registryDb", () => ({ listArtifacts }));
 vi.mock("./networkPolicy", () => ({ canRunNow: async () => true }));
-vi.mock("react-native", () => ({ AppState: {} }));
-vi.mock("../map/connectivity", () => ({ subscribeReconnect: vi.fn() }));
-
-const { runTopoAutoDownload, setTopoAutoDownloadEnabled } = await import(
-  "./topoAutoDownload"
+const appState = vi.hoisted(() => ({
+  currentState: "active",
+  addEventListener: () => ({ remove: () => {} }),
+}));
+const subscribeReconnect = vi.hoisted(() =>
+  vi.fn((_onReconnect: () => void) => () => {}),
 );
+vi.mock("react-native", () => ({ AppState: appState }));
+vi.mock("../map/connectivity", () => ({ subscribeReconnect }));
+
+const {
+  registerTopoAutoDownload,
+  runTopoAutoDownload,
+  setTopoAutoDownloadEnabled,
+} = await import("./topoAutoDownload");
 
 const layer = (name: string) => ({
   name,
@@ -59,5 +68,50 @@ describe("runTopoAutoDownload dedupe", () => {
     await runTopoAutoDownload();
     expect(downloadTopoOverlay).toHaveBeenCalledOnce();
     expect(downloadTopoOverlay.mock.calls[0][0].layer).toBe("slope");
+  });
+});
+
+describe("a regained signal", () => {
+  beforeEach(() => {
+    store.clear();
+    vi.clearAllMocks();
+    vi.useFakeTimers();
+    appState.currentState = "active";
+    setTopoAutoDownloadEnabled(true);
+    apiFetch.mockResolvedValue({ jobs: [] });
+  });
+
+  /** Registers, then fires the reconnect edge the way NetInfo would. */
+  const reconnect = async () => {
+    const cleanup = registerTopoAutoDownload();
+    const onReconnect = subscribeReconnect.mock.calls[0][0];
+    await vi.advanceTimersByTimeAsync(60_000);
+    apiFetch.mockClear();
+    onReconnect();
+    await vi.advanceTimersByTimeAsync(0);
+    cleanup();
+  };
+
+  // Mutation: drop the `=== "background"` return from `requestRun`.
+  it("fetches nothing while the app is in the background (ADR 0013)", async () => {
+    appState.currentState = "background";
+    await reconnect();
+    expect(apiFetch).not.toHaveBeenCalled();
+  });
+
+  // Mutation: invert the guard in `requestRun` to `!== "background"`, and
+  // nothing runs in front.
+  it("checks when the app is in front", async () => {
+    await reconnect();
+    expect(apiFetch).toHaveBeenCalledOnce();
+  });
+
+  // Android reports "unknown" until the first AppState event, and the check at
+  // launch runs inside that window.
+  // Mutation: `!== "active"` in `requestRun`.
+  it("checks while AppState is still unknown", async () => {
+    appState.currentState = "unknown";
+    await reconnect();
+    expect(apiFetch).toHaveBeenCalledOnce();
   });
 });

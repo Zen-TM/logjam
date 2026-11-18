@@ -96,6 +96,7 @@ import { SlopeBandsEditor } from "./SlopeBandsEditor";
 import { pickCoverageCarrier } from "./coverageLayers";
 import { terrainSwitch, type TerrainSwitchState } from "./terrainSwitches";
 import type { BasemapId, MapArtifact } from "./sourceResolver";
+import { savedAreaTotals } from "../offline/artifactGroups";
 
 type Tab = SectionKeysOn<typeof MAP_LAYERS, "gps">;
 
@@ -837,13 +838,7 @@ function OfflineTab({
   const { assetHue } = useHues();
   const styles = useStyles();
 
-  const savedRegions = artifacts.filter(
-    (artifact) => artifact.kind === "basemap-region",
-  );
-  const savedBytes = savedRegions.reduce(
-    (sum, artifact) => sum + artifact.sizeBytes,
-    0,
-  );
+  const { areas: savedAreas, bytes: savedBytes } = savedAreaTotals(artifacts);
 
   return (
     <View style={styles.body}>
@@ -870,12 +865,10 @@ function OfflineTab({
         icon="device"
         hue={assetHue.region}
         title={
-          savedRegions.length === 1
-            ? "1 offline map"
-            : `${savedRegions.length} offline maps`
+          savedAreas === 1 ? "1 offline map" : `${savedAreas} offline maps`
         }
         subtitle={
-          savedRegions.length === 0
+          savedAreas === 0
             ? "Save an offline map to use maps with no signal"
             : `${(savedBytes / 1024 / 1024).toFixed(0)} MB · rename or delete in Saved`
         }

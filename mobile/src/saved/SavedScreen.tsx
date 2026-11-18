@@ -161,6 +161,7 @@ import {
   isRegionArtifact,
   overlayJobId,
   regionGroupKey,
+  savedAreaGroups,
 } from "../offline/artifactGroups";
 import {
   groupRegionJobs,
@@ -998,7 +999,7 @@ export function SavedScreen({
     // (no groupId) group under their own id and stand alone, unchanged.
     // A card sits where it was first saved (the oldest of its files), so an
     // update, which writes newer files, does not move it.
-    const regionCards = groupArtifacts(regionArtifacts, regionGroupKey)
+    const regionCards = savedAreaGroups(artifacts)
       .map((group) => ({ group, dates: cardDates(group.members) }))
       .sort((a, b) => b.dates.savedAt.localeCompare(a.dates.savedAt));
     for (const { group, dates } of regionCards) {
