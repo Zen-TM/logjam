@@ -28,7 +28,18 @@
    it is the quieter line. */
 .labelProminent {
   composes: rowTitle from "../textRoles.generated.module.css";
+  padding: 0;
   color: var(--color-text);
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
 }
 
 .labelRow {

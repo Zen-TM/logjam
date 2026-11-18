@@ -460,6 +460,31 @@ describe("a plan's page ends its views with their add buttons", () => {
     expect(onDrawRoute).toHaveBeenCalledWith(plan);
   });
 
+  // Mutation: drop the `<ListEnd>` under the forms, and a plan with forms has
+  // its add only in the hero's menu.
+  it("ends the Forms with Add a form", () => {
+    renderPanel({ view: { ...plan, forms: [contacts] } });
+    fireEvent.click(screen.getByRole("radio", { name: /^Forms/ }));
+    expect(
+      screen.getAllByRole("button", { name: planAddVerbLabel("form") }),
+    ).toHaveLength(1);
+  });
+
+  // A member's adds are the four that put a place or way in the plan, so the
+  // hero is the Add menu and the Map ends with the same buttons.
+  it("gives a member the Add menu in the hero and the item adds at the Map's end", () => {
+    renderPanel({ view: { ...plan, myRole: "member", places: [place] } });
+    fireEvent.click(screen.getByRole("radio", { name: /^Map/ }));
+    expect(
+      screen.getAllByRole("button", { name: planAddVerbLabel("copy") }),
+    ).toHaveLength(1);
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+    for (const id of ["copy", "newPlace", "route", "import"] as const)
+      expect(
+        screen.getByRole("menuitem", { name: planAddVerbLabel(id) }),
+      ).toBeTruthy();
+  });
+
   // Mutation: draw the end button without the role check, and a member is
   // offered a section the API refuses.
   it("leaves a member without the write-up's add", () => {

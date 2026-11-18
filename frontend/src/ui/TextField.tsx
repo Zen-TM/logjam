@@ -90,6 +90,29 @@ function Field({
   );
 }
 
+/** A question answered by several controls (chips, tick boxes): its prompt,
+ *  the hint, the controls, then the error, drawn as a text field's are. */
+export function FieldGroup({
+  label,
+  hint,
+  error,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  error?: string | null;
+  children: ReactNode;
+}) {
+  return (
+    <fieldset className={classes.group}>
+      <legend className={classes.labelProminent}>{label}</legend>
+      {hint && <p className={classes.hint}>{hint}</p>}
+      {children}
+      <FieldError message={error ?? null} />
+    </fieldset>
+  );
+}
+
 /** A control that sits beside text fields in a row (Select on map). Shaped like
  *  a field, with an unseen label above it, so it lines up with the inputs
  *  whatever the hint or error under them does. Rows using it align to the

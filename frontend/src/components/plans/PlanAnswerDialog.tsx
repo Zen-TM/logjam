@@ -30,6 +30,7 @@ import {
   Dialog,
   ErrorBanner,
   FieldError,
+  FieldGroup,
   NumberField,
   TextArea,
   TextField,
@@ -104,27 +105,20 @@ function QuestionField({
     case "yesNo": {
       const options = tripPlanQuestionChoices(question);
       return (
-        <div className={classes.question}>
-          <span className={classes.questionPrompt} aria-hidden>
-            {label}
-          </span>
-          {help && <p className={classes.note}>{help}</p>}
+        <FieldGroup label={label} hint={help} error={error}>
           <ChipRail
             label={question.label}
             options={options}
             value={typeof value === "string" ? value : ""}
             onChange={onChange}
           />
-          <FieldError message={error} />
-        </div>
+        </FieldGroup>
       );
     }
     case "multiChoice": {
       const ticked = Array.isArray(value) ? value : [];
       return (
-        <fieldset className={classes.question}>
-          <legend className={classes.questionPrompt}>{label}</legend>
-          {help && <p className={classes.note}>{help}</p>}
+        <FieldGroup label={label} hint={help} error={error}>
           {(question.options ?? []).map((option) => (
             <Checkbox
               key={option.id}
@@ -139,8 +133,7 @@ function QuestionField({
               }
             />
           ))}
-          <FieldError message={error} />
-        </fieldset>
+        </FieldGroup>
       );
     }
     case "agree":

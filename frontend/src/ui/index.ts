@@ -14,6 +14,7 @@ export { SwitchRow, Toggle } from "./Toggle";
 export { Checkbox } from "./Choice";
 export {
   FieldBeside,
+  FieldGroup,
   LiveNumberField,
   NumberField,
   SearchField,

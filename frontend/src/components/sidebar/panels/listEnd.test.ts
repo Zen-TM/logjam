@@ -8,8 +8,8 @@ import { describe, expect, it } from "vitest";
  * has rows (UX §9): adding is where the eye lands after scrolling down. Each
  * panel names the button once and draws it in both places. Friends is the
  * exception, with Place types and Plans: the hero's add is already there, so a
- * second at the end of the rows would be a duplicate. A plan's write-up and
- * map views also end with theirs, as Logjam GPS does.
+ * second at the end of the rows would be a duplicate. A plan's write-up, map and
+ * forms views also end with theirs, as Logjam GPS does.
  *
  * Mutation that turns it red: delete a panel's `<ListEnd>` line, put a
  * different button in the empty state than at the end, or add a `<ListEnd>`
@@ -22,6 +22,7 @@ const PANELS: [file: string, button: string][] = [
   ["TripLogsPanel.tsx", "addTripButtons"],
   ["RoutesPanel.tsx", "addWayButtons"],
   ["../../plans/PlanDetailPanel.tsx", "addSectionButton"],
+  ["../../plans/PlanDetailPanel.tsx", "addFormButton"],
   ["../../plans/PlanItems.tsx", "addCopy"],
 ];
 
@@ -34,7 +35,7 @@ const HERO_ADD_ONLY = [
 ];
 
 describe("a list ends with its empty state's add button", () => {
-  it.each(PANELS)("%s", (file, button) => {
+  it.each(PANELS)("%s: %s", (file, button) => {
     const source = readFileSync(join(DIR, file), "utf8");
     expect(source).toContain(`<ListEnd>{${button}}</ListEnd>`);
     // Defined once and drawn in two places: the empty state (or the hero) and the end.

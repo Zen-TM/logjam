@@ -408,6 +408,18 @@ export default function PlanDetailPanel({
   const canBuildForms = addVerbs.some((verb) => verb.id === "form");
   const formsFull = plan.forms.length >= TRIP_PLAN_MAX_FORMS;
   const formsFullReason = `${TRIP_PLAN_MAX_FORMS} forms at most`;
+  // The empty state's button and the end of the forms' are the same one.
+  const addFormButton = canBuildForms && (
+    <Button
+      variant="filled"
+      icon="add"
+      disabled={formsFull}
+      disabledReason={formsFullReason}
+      onClick={() => setBuilding({ id: null })}
+    >
+      {planAddVerbLabel("form")}
+    </Button>
+  );
 
   const counts = tripPlanCounts(plan);
 
@@ -642,19 +654,7 @@ export default function PlanDetailPanel({
                 ? copy.formsEmptyBodyLeader
                 : copy.formsEmptyBody
             }
-            actions={
-              canBuildForms && (
-                <Button
-                  variant="filled"
-                  icon="add"
-                  disabled={formsFull}
-                  disabledReason={formsFullReason}
-                  onClick={() => setBuilding({ id: null })}
-                >
-                  {planAddVerbLabel("form")}
-                </Button>
-              )
-            }
+            actions={addFormButton}
           />
         ) : (
           plan.forms.map((form) => (
@@ -701,6 +701,9 @@ export default function PlanDetailPanel({
               }
             />
           ))
+        )}
+        {plan.forms.length > 0 && addFormButton && (
+          <ListEnd>{addFormButton}</ListEnd>
         )}
       </div>
     ),
