@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   PAIRED_STAT_LABELS as L,
   pairedStatLayout,
@@ -52,5 +52,24 @@ describe("pairedStatLayout", () => {
   it("never names a label in two pairs", () => {
     const labels = STAT_PAIRS.flat();
     expect(new Set(labels).size).toBe(labels.length);
+  });
+});
+
+describe("isLiveReadStat", () => {
+  // Mutation: compare with the English "Time" and "Distance" instead of
+  // `PAIRED_STAT_LABELS`: the pseudo-language's labels stop matching.
+  it("finds the time and distance rows in a language other than English", async () => {
+    (globalThis as { LOGJAM_LANGUAGE?: string }).LOGJAM_LANGUAGE = "en-XA";
+    vi.resetModules();
+    try {
+      const mod = await import("./statPairs.js");
+      expect(mod.PAIRED_STAT_LABELS.time).not.toBe("Time");
+      expect(mod.isLiveReadStat(mod.PAIRED_STAT_LABELS.time)).toBe(true);
+      expect(mod.isLiveReadStat(mod.PAIRED_STAT_LABELS.distance)).toBe(true);
+      expect(mod.isLiveReadStat(mod.PAIRED_STAT_LABELS.ascent)).toBe(false);
+    } finally {
+      delete (globalThis as { LOGJAM_LANGUAGE?: string }).LOGJAM_LANGUAGE;
+      vi.resetModules();
+    }
   });
 });

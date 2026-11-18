@@ -248,6 +248,8 @@ const STOP_REASON =
 const SENDER = "the User-Agent the API sends RopeWiki, which reads it";
 const ROPEWIKI_COLUMN =
   "a column header of RopeWiki's published CSV, matched against its own spelling";
+const WIPE_NOTE =
+  "why a store survives a sign-out, kept for developers: no screen shows it, one test reads its length";
 const DEV_NOTE = "a note on a field, read by developers";
 const CLI_REFUSAL =
   "what the announce script refuses a file for, logged for the maintainer who runs it";
@@ -523,6 +525,19 @@ export const DATA_LITERALS: Readonly<
   },
   "mobile/src/map/mapLabelText.ts": {
     "Noto Sans Medium": FONT,
+  },
+  "mobile/src/offline/wipedStores.ts": {
+    "A sync cursor and a schema version: nothing the user made.": WIPE_NOTE,
+    "Whether an import is drawn and where its bytes are: the file itself is a synced row.":
+      WIPE_NOTE,
+    "Working files, deleted after use.": WIPE_NOTE,
+    "Research logs from a developer toggle that is off by default, with no coordinates in them.":
+      WIPE_NOTE,
+    "Forecasts, fetched again with one press.": WIPE_NOTE,
+    "Public gauge readings, fetched again online.": WIPE_NOTE,
+    "Map files, written again when the map opens.": WIPE_NOTE,
+    "The account's list of sharpened areas, fetched again online.": WIPE_NOTE,
+    "A plan's files, downloaded again from the plan with one press.": WIPE_NOTE,
   },
   "mobile/src/screens/settings/NotificationSettingsScreen.tsx": {
     "Logjam GPS": PRODUCT,

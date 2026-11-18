@@ -16,6 +16,7 @@ import {
   formatDistanceM,
   formatSpeedMps,
   formatHeight,
+  isLiveReadStat,
   PAIRED_STAT_LABELS,
   pairedStatLayout,
   speedSeries,
@@ -108,8 +109,7 @@ export function TrackStatsBody({
     storedClimb,
   }).map((row) => ({
     ...row,
-    instrument:
-      elapsedMs != null && (row.label === "Time" || row.label === "Distance"),
+    instrument: elapsedMs != null && isLiveReadStat(row.label),
   }));
 
   // The stored climb and the chart below can come from different sources

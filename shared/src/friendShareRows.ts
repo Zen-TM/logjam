@@ -275,14 +275,15 @@ export function copyConfirm(args: {
   /** The single row's name, when only one is being copied. */
   itemName?: string;
   /**
-   * The kind, lower-case, when only one row is being copied — a place brings
-   * its route with it and a route does not, and the sentence has to be right
-   * about which. Omit for a mixed or multi-row copy, which says neither.
+   * The row's entity code (`"place"`, `"route"`), when only one row is being
+   * copied — a place brings its route with it and a route does not, and the
+   * sentence has to be right about which. A code, never a display word, because
+   * it is compared. Omit for a mixed or multi-row copy, which says neither.
    */
-  kindLabel?: string;
+  entityType?: string;
 }): { title: string; body: string } {
   const one = args.count === 1;
-  const withRoute = one && args.kindLabel === "place";
+  const withRoute = one && args.entityType === "place";
   const owner = args.friendName ?? t`the owner`;
   const Owner = args.friendName ?? t`The owner`;
   return {

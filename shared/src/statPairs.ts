@@ -34,6 +34,11 @@ export const STAT_PAIRS: readonly (readonly [string, string])[] = [
   [L.level, L.flow],
 ];
 
+/** Time and distance are the two a live recording reads off the wall clock and the walk, not off the points. */
+export function isLiveReadStat(label: string): boolean {
+  return label === L.time || label === L.distance;
+}
+
 /**
  * A grid's stats laid out by the pairs: a stat whose partner is on the grid
  * follows it directly, one without a partner spans the row.

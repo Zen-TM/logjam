@@ -29,6 +29,7 @@ import {
   type FieldStat,
   type LoadState,
   type LogbookRange,
+  logbookRangeById,
   type LogbookStats,
   type ScopedCustomFieldDef,
   type SectionKeysOn,
@@ -110,9 +111,10 @@ function AnalyticsPanel({
   const [activity, setActivity] = useState<string | null>(null);
   // Remembered like a preference, as on the phone: the window numbers are read
   // in should not reset every visit.
-  const [rangeLabel, setRangeLabel] = useStoredState(
+  // The id, not the label: the label is in the language of the day.
+  const [rangeId, setRangeId] = useStoredState<string | null>(
     "logjam.logbookStatsRange",
-    t`All time`,
+    null,
   );
   const rootRef = useRef<HTMLDivElement>(null);
 
@@ -120,8 +122,7 @@ function AnalyticsPanel({
     () => logbookRanges(tripLogs.map((trip) => tripYear(trip.date))),
     [tripLogs],
   );
-  const range: LogbookRange =
-    ranges.find((entry) => entry.label === rangeLabel) ?? ranges[0];
+  const range: LogbookRange = logbookRangeById(ranges, rangeId);
 
   const stats = useMemo(
     () =>
@@ -236,11 +237,11 @@ function AnalyticsPanel({
             <ChipRail
               label={t`Period`}
               options={ranges.map((entry) => ({
-                value: entry.label,
+                value: entry.id,
                 label: entry.label,
               }))}
-              value={range.label}
-              onChange={setRangeLabel}
+              value={range.id}
+              onChange={setRangeId}
             />
           </div>
         )}
