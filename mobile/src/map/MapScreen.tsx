@@ -99,6 +99,7 @@ import {
   NSW_FIRE,
   slopeReliefColor,
   SLOPE_MIN_ZOOM,
+  hillshadeExaggeration,
   zoomFadeIn,
   terrainBeforeIds,
   type TerrainLayerKey,
@@ -5243,7 +5244,15 @@ export function MapScreen({
               // Lit from the map, not the default viewport: MapLibre Native
               // uploads a viewport light once (hillshade_layer_tweaker.cpp), so
               // the shading would depend on the bearing the layer mounted at.
-              paint={{ "hillshade-illumination-anchor": "map" }}
+              paint={{
+                "hillshade-illumination-anchor": "map",
+                "hillshade-exaggeration": hillshadeExaggeration(
+                  Math.max(
+                    r.layerMinZoom ?? 0,
+                    NSW_REGION.terrain.hillshade.minzoom,
+                  ),
+                ) as unknown as number,
+              }}
             />
           </ResolvedSource>
         ))}
