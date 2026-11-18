@@ -31,34 +31,37 @@ import { relativeTime } from "./syncHealth";
  * name rather than being hidden: an unlabelled field is a copy gap, not a
  * reason to withhold what the user typed.
  */
-const FIELD_LABEL: Record<string, string> = {
-  name: t`name`,
-  altNames: t`other names`,
-  notes: t`notes`,
-  gaugeId: t`river gauge`,
+const FIELD_LABEL: Record<string, { lower: string; capital: string }> = {
+  name: { lower: t`name`, capital: t`Name` },
+  altNames: { lower: t`other names`, capital: t`Other names` },
+  notes: { lower: t`notes`, capital: t`Notes` },
+  gaugeId: { lower: t`river gauge`, capital: t`River gauge` },
   // Keyed by FIELD KEY now, because the seven grades are field values rather
   // than columns — same words, one level in.
-  num_abseils: t`abseil count`,
-  longest_abseil: t`longest abseil`,
-  v_grade: t`water grade`,
-  a_grade: t`difficulty grade`,
-  commitment: t`commitment grade`,
-  aca_technical: t`ACA technical grade`,
-  aca_water: t`ACA water grade`,
-  aca_time: t`ACA time grade`,
-  aca_risk: t`ACA risk rating`,
-  quality: t`star rating`,
-  hours: t`trip time`,
-  date: t`date`,
-  displayName: t`title`,
-  types: t`trip type`,
-  customFields: t`attributes`,
-  placeIds: t`linked places`,
-  elevation: t`elevation`,
-  symbol: t`symbol`,
-  color: t`colour`,
-  latitude: t`position`,
-  longitude: t`position`,
+  num_abseils: { lower: t`abseil count`, capital: t`Abseil count` },
+  longest_abseil: { lower: t`longest abseil`, capital: t`Longest abseil` },
+  v_grade: { lower: t`water grade`, capital: t`Water grade` },
+  a_grade: { lower: t`difficulty grade`, capital: t`Difficulty grade` },
+  commitment: { lower: t`commitment grade`, capital: t`Commitment grade` },
+  aca_technical: {
+    lower: t`ACA technical grade`,
+    capital: t`ACA technical grade`,
+  },
+  aca_water: { lower: t`ACA water grade`, capital: t`ACA water grade` },
+  aca_time: { lower: t`ACA time grade`, capital: t`ACA time grade` },
+  aca_risk: { lower: t`ACA risk rating`, capital: t`ACA risk rating` },
+  quality: { lower: t`star rating`, capital: t`Star rating` },
+  hours: { lower: t`trip time`, capital: t`Trip time` },
+  date: { lower: t`date`, capital: t`Date` },
+  displayName: { lower: t`title`, capital: t`Title` },
+  types: { lower: t`trip type`, capital: t`Trip type` },
+  customFields: { lower: t`attributes`, capital: t`Attributes` },
+  placeIds: { lower: t`linked places`, capital: t`Linked places` },
+  elevation: { lower: t`elevation`, capital: t`Elevation` },
+  symbol: { lower: t`symbol`, capital: t`Symbol` },
+  color: { lower: t`colour`, capital: t`Colour` },
+  latitude: { lower: t`position`, capital: t`Position` },
+  longitude: { lower: t`position`, capital: t`Position` },
 };
 
 /**
@@ -71,8 +74,19 @@ const FIELD_LABEL: Record<string, string> = {
  */
 const UNRENDERABLE_FIELDS = new Set(["latitude", "longitude"]);
 
+/** The listed field keys, for the guard in syncIssueDisplay.test.ts. */
+export const FIELD_LABEL_KEYS = Object.keys(FIELD_LABEL);
+
 export function fieldLabel(field: string): string {
-  return FIELD_LABEL[field] ?? field;
+  return FIELD_LABEL[field]?.lower ?? field;
+}
+
+/** The label opening a line or a sentence: a message of its own, not the lower-case one with its first letter changed by code. */
+export function capitalFieldLabel(field: string): string {
+  return (
+    FIELD_LABEL[field]?.capital ??
+    field.charAt(0).toUpperCase() + field.slice(1)
+  );
 }
 
 function addNamedTitle(entity: OutboxEntity, name: string): string {
@@ -407,20 +421,18 @@ export function opChanges(op: ParkedOp): OpChange[] {
       )) {
         // Internal `_`-prefixed entries are not something the user typed.
         if (key.startsWith("_")) continue;
-        const innerLabel = fieldLabel(key);
         changes.push({
-          label: innerLabel.charAt(0).toUpperCase() + innerLabel.slice(1),
+          label: capitalFieldLabel(key),
           value: fieldValueText(key, inner),
           rejected: rejected.has("fieldValues"),
         });
       }
       continue;
     }
-    const label = fieldLabel(field);
     changes.push({
       // Sentence case, because this is a line of its own rather than a phrase
       // inside one ("Trip time: 6 hours", not "trip time: 6").
-      label: label.charAt(0).toUpperCase() + label.slice(1),
+      label: capitalFieldLabel(field),
       value: fieldValueText(field, value),
       rejected: rejected.has(field),
     });
@@ -513,8 +525,7 @@ function shelfTitleWithoutName(capitalLabel: string, entity: string): string {
  * agreement with a plural field label.
  */
 export function shelfTitle(entry: ShelfEntry): string {
-  const label = fieldLabel(entry.field);
-  const capitalLabel = label.charAt(0).toUpperCase() + label.slice(1);
+  const capitalLabel = capitalFieldLabel(entry.field);
   if (entry.entityName) {
     return t`${capitalLabel} for “${entry.entityName}” changed on two devices`;
   }
@@ -646,8 +657,7 @@ export function readableValue(field: string, value: unknown): string {
     return Object.entries(value as Record<string, unknown>)
       .filter(([key]) => !key.startsWith("_"))
       .map(([key, inner]) => {
-        const label = fieldLabel(key);
-        return `${label.charAt(0).toUpperCase()}${label.slice(1)}: ${fieldValueText(key, inner)}`;
+        return `${capitalFieldLabel(key)}: ${fieldValueText(key, inner)}`;
       })
       .join("; ");
   }
@@ -689,8 +699,8 @@ export function bulkDiscardBody({
     clauses.push(
       plural(
         editCount,
-        "One change is dropped and what you typed is deleted",
-        "# changes are dropped and what you typed is deleted",
+        "One change is dropped and what you typed is deleted.",
+        "# changes are dropped and what you typed is deleted.",
       ),
     );
   }
@@ -698,8 +708,8 @@ export function bulkDiscardBody({
     clauses.push(
       plural(
         uploadCount,
-        "One waiting upload is deleted from this phone, original untouched",
-        "# waiting uploads are deleted from this phone, originals untouched",
+        "One waiting upload is deleted from this phone, original untouched.",
+        "# waiting uploads are deleted from this phone, originals untouched.",
       ),
     );
   }
@@ -707,13 +717,13 @@ export function bulkDiscardBody({
     clauses.push(
       plural(
         lostCount,
-        "One earlier version is deleted — it is the only copy left. Yours stays",
-        "# earlier versions are deleted — they are the only copies left. Yours stay",
+        "One earlier version is deleted — it is the only copy left. Yours stays.",
+        "# earlier versions are deleted — they are the only copies left. Yours stay.",
       ),
     );
   }
   if (clauses.length === 0) return t`Nothing is selected.`;
-  return `${clauses.join(". ")}.`;
+  return clauses.join(" ");
 }
 
 /**

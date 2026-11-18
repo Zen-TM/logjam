@@ -12,14 +12,14 @@ const nouns = (places: number | undefined, trips: number | undefined) => {
 export function undoToastMessage(result: UndoImportResult): string {
   const removed = nouns(result.deletedPlaces, result.deletedTrips);
   const restored = nouns(result.restoredPlaces, result.restoredTrips);
-  const parts = [
-    removed && t`${removed} removed`,
-    restored && t`${restored} restored`,
-  ].filter(Boolean);
   const head =
-    parts.length > 0
-      ? t`Import undone — ${parts.join(", ")}.`
-      : t`Import undone.`;
+    removed && restored
+      ? t`Import undone — ${removed} removed, ${restored} restored.`
+      : removed
+        ? t`Import undone — ${removed} removed.`
+        : restored
+          ? t`Import undone — ${restored} restored.`
+          : t`Import undone.`;
   const kept = result.keptFields
     ? plural(
         result.keptFields,

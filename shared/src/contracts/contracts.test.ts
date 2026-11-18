@@ -34,6 +34,7 @@ import {
   noFriendsMessage,
   sendCopyLabel,
   sharePromise,
+  sharedWayNote,
   lidarJobSharePromise,
   STATS,
   statsEmptyActivityBody,
@@ -1851,6 +1852,24 @@ describe("sentences written whole for each count or case", () => {
     expect(tripTitleHint(null)).toBe("Defaults to “Untitled trip”");
     expect(tripTitleHint("Claustral Canyon")).toBe(
       "Defaults to Claustral Canyon",
+    );
+  });
+});
+
+describe("sharedWayNote", () => {
+  // Mutation: delete the `via.place === null` branch in share.ts and the unnamed
+  // case reads "as part of null".
+  it("is one whole sentence for a way shared alone, with a named place, and with an unnamed one", () => {
+    const tail =
+      "you can see it, but not change it. Removing that place is what stops it showing here.";
+    expect(sharedWayNote(null)).toBe(
+      "Shared with you — you can see it, but not change it.",
+    );
+    expect(sharedWayNote({ place: "Claustral" })).toBe(
+      `Shared with you as part of Claustral — ${tail}`,
+    );
+    expect(sharedWayNote({ place: null })).toBe(
+      `Shared with you as part of a place — ${tail}`,
     );
   });
 });

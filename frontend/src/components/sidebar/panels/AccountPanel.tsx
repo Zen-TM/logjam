@@ -8,6 +8,7 @@ import {
   type SectionKeysOn,
   formatDayMonth,
   localDay,
+  rich,
   t,
 } from "@logjam/shared";
 
@@ -35,6 +36,7 @@ import {
   ErrorBanner,
   LoadingState,
 } from "../../../ui";
+import { Rich } from "../../../ui/rich";
 import Footer from "../../Footer";
 import classes from "./AccountPanel.module.css";
 
@@ -140,6 +142,13 @@ function AccountPanel({
     ? formatDayMonth(localDay(new Date(currentUser.monthlyComputeResetAt)))
     : null;
 
+  const credits = currentUser
+    ? formatCreditsOf(
+        currentUser.monthlyComputeUsage,
+        currentUser.monthlyComputeCredits,
+      )
+    : "";
+
   // Exhaustive by type: a section the contract names and this panel does not
   // draw, or the reverse, fails `tsc` (`ACCOUNT`, shared/src/contracts).
   const sections: Record<
@@ -189,17 +198,18 @@ function AccountPanel({
             )}
           />
           <p className={classes.meterLabel}>
-            {formatCreditsOf(
-              currentUser.monthlyComputeUsage,
-              currentUser.monthlyComputeCredits,
-            )}
-            {creditsResetLabel && (
-              <span className={classes.meterHint}>
-                {" "}
-                {t`· resets ${creditsResetLabel}`}
-              </span>
-            )}
-            <span className={classes.meterHint}> · {copy.creditsHint}</span>
+            <Rich
+              parts={
+                creditsResetLabel
+                  ? rich`${credits} <hint>· resets ${creditsResetLabel} · ${copy.creditsHint}</hint>`
+                  : rich`${credits} <hint>· ${copy.creditsHint}</hint>`
+              }
+              tags={{
+                hint: (text) => (
+                  <span className={classes.meterHint}>{text}</span>
+                ),
+              }}
+            />
           </p>
         </>
       ) : null,

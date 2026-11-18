@@ -92,11 +92,17 @@ export const SHARE_SENTENCES = {
   linkedFile: t`The file is linked to the place, so friends you share the place with can see it. It stays in Saved, and unlinking it later leaves it there.`,
 } as const;
 
-/** What a way shared with you is to you, and what stops it showing. */
-export function sharedWayNote(viaPlaceName: string | null): string {
-  return viaPlaceName
-    ? t`Shared with you as part of ${viaPlaceName} — you can see it, but not change it. Removing that place is what stops it showing here.`
-    : t`Shared with you — you can see it, but not change it.`;
+/**
+ * What a way shared with you is to you, and what stops it showing. `via` is
+ * null for a way shared on its own, `{ place: name }` for one that came with a
+ * place, and `{ place: null }` for one whose place the reader cannot name. Each
+ * is a whole message, so no fragment of one sits in a hole of another.
+ */
+export function sharedWayNote(via: { place: string | null } | null): string {
+  if (!via) return t`Shared with you — you can see it, but not change it.`;
+  if (via.place === null)
+    return t`Shared with you as part of a place — you can see it, but not change it. Removing that place is what stops it showing here.`;
+  return t`Shared with you as part of ${via.place} — you can see it, but not change it. Removing that place is what stops it showing here.`;
 }
 
 /** The count's unit on a friend's sharing screen. */

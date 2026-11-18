@@ -1,5 +1,6 @@
 import { ApiError } from "@logjam/shared";
 import { describe, expect, it } from "vitest";
+import { unavailableReasonText } from "../auth/capabilities";
 import { shareGrantNotFound } from "./notOnServer";
 
 const notFound = new ApiError(404, "/shares/place/x", "POST");
@@ -13,12 +14,13 @@ describe("shareGrantNotFound", () => {
     expect(shareGrantNotFound(new Error("offline"), true)).toBeNull();
   });
 
-  // Mutation: ignore `stillHeld` and a place deleted elsewhere says to sync.
-  it("reuses the needs-upload wording while the phone still holds the row", () => {
-    expect(shareGrantNotFound(notFound, true)).toEqual({
-      message: "Needs to sync first.",
-      syncFixes: true,
-    });
+  // Mutation: ignore `stillHeld` and a place deleted elsewhere says to sync;
+  // or reword either `Needs to sync first` (here or in capabilities.ts) and the
+  // two copies differ.
+  it("says the needs-upload reason, with a full stop, while the phone still holds the row", () => {
+    const grant = shareGrantNotFound(notFound, true);
+    expect(grant?.syncFixes).toBe(true);
+    expect(grant?.message).toBe(unavailableReasonText("needs-upload") + ".");
   });
 
   it("says it was deleted once the mirror has dropped the row", () => {

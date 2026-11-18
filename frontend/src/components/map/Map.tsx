@@ -3563,8 +3563,7 @@ function Map({
       }
       const scale = scaleNow(geoPdfPick(), measureGeoPdfScale);
       if (geoPdfScaleTextRef.current && scale !== null)
-        geoPdfScaleTextRef.current.textContent =
-          Math.round(scale).toLocaleString();
+        geoPdfScaleTextRef.current.textContent = t`Keep 1:${Math.round(scale).toLocaleString()}`;
     };
     update();
     map.on("move", update);
@@ -3877,12 +3876,7 @@ function Map({
           <div className={classes.geoPdfConfirmBar}>
             <Checkbox
               card
-              label={
-                <>
-                  {t`Keep 1:`}
-                  <span ref={geoPdfScaleTextRef} />
-                </>
-              }
+              label={<span ref={geoPdfScaleTextRef}>{t`Keep 1:${""}`}</span>}
               checked={geoPdfKeptScale !== null}
               onChange={setGeoPdfKeepScale}
             />

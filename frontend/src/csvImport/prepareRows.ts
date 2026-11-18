@@ -20,11 +20,16 @@ import { ROLE_LABELS, GRADE_RANGES, type PlaceFieldRole } from "./placeColumns";
 import type { ColumnRole } from "./detectColumns";
 import { toIsoDate, type DateFormat } from "./detectDateFormat";
 import { parseByRole, type MismatchKind } from "./placeValueParsers";
-import { describeDroppedPlaceRow, describeDroppedTripRow } from "./rowSkip";
+import {
+  describeDroppedPlaceRow,
+  describeDroppedTripRow,
+  skippedRowLine as droppedRowLine,
+  type DropReason,
+} from "./rowSkip";
 
 /** A source row the importer dropped: the file line and why, kept as data so
  *  nothing reads it back out of a sentence. */
-export type SkippedRow = { line: number; reason: string };
+export type SkippedRow = { line: number; reason: DropReason };
 
 // Per-place-row prepared input, plus the raw file name string used as the
 // match key and stable provenance.
@@ -389,8 +394,13 @@ export function prepareTripRows(args: {
     if (!isoDate) {
       droppedRows += 1;
       const line = lines?.[rowIndex] ?? rowIndex + 2;
-      const dropReason = describeDroppedTripRow(null, rawDate);
-      skippedRows.push({ line, reason: dropReason ?? "" });
+      skippedRows.push({
+        line,
+        reason: describeDroppedTripRow(null, rawDate) ?? {
+          kind: "date",
+          raw: "",
+        },
+      });
       return;
     }
     const customFields: Record<string, unknown> = {};
@@ -449,10 +459,9 @@ export function tripRowDecision(result: MatchResult): "link" | "review" {
   return result.confidence === "auto" && result.best ? "link" : "review";
 }
 
-/** A dropped row as the result lists it: "Row 4: latitude "x" couldn't be
- *  read — skipped". */
+/** A dropped row as the result lists it. */
 export function skippedRowLine({ line, reason }: SkippedRow): string {
-  return t`Row ${line}: ${reason} — skipped`;
+  return droppedRowLine(line, reason);
 }
 
 /** The confirm step's line about dropped rows: "1 row can't be read and will

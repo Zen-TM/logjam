@@ -147,7 +147,7 @@ export default function SlopeSettings({ value, onChange }: Props) {
         <span className={styles.head}>{t`From °`}</span>
         <span className={styles.head}>
           {t`To °`}
-          <InfoTip label={t`an angle`} content={ANGLE_TOOLTIP} />
+          <InfoTip label={t`About an angle`} content={ANGLE_TOOLTIP} />
         </span>
         <span className={styles.head}>{t`Colour`}</span>
         <span />

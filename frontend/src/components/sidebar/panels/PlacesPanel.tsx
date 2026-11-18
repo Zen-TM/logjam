@@ -66,6 +66,7 @@ import { useIsMobile } from "../../../useIsMobile";
 import type { PanelId } from "../panels";
 import RopeWikiReviewDialog from "../../dialogs/RopeWikiReviewDialog";
 import ConfirmDialog from "../../dialogs/ConfirmDialog";
+import { importSummary } from "../../dialogs/ropeWikiCounts";
 import { useToast } from "../../feedback/ToastProvider";
 import { messageFromError } from "../../../errors/messageFromError";
 import {
@@ -525,15 +526,6 @@ function PlacesPanel({
       // Summarise what happened automatically, and flag what still needs review,
       // so the import isn't silent. The corpus is a hand-refreshed
       // snapshot, so date it (RopeWiki blocks server-side fetches).
-      const done = [
-        result.added > 0 ? plural(result.added, "# added", "# added") : null,
-        result.autoLinked > 0
-          ? plural(result.autoLinked, "# linked", "# linked")
-          : null,
-        result.updated > 0
-          ? plural(result.updated, "# updated", "# updated")
-          : null,
-      ].filter(Boolean);
       const review =
         result.review.length > 0
           ? plural(
@@ -545,10 +537,12 @@ function PlacesPanel({
       const source = result.sourceUpdatedAt
         ? t`source ${formatNumericDay(localDay(new Date(result.sourceUpdatedAt)))}`
         : null;
-      const summary = done.length > 0 ? done.join(", ") : t`no new places`;
-      const parts = [t`RopeWiki import: ${summary}`, review, source].filter(
-        Boolean,
-      );
+      // " · " only decorates the clauses; each one is a whole message.
+      const parts = [
+        importSummary(result.added, result.autoLinked, result.updated),
+        review,
+        source,
+      ].filter(Boolean);
       toast.done(parts.join(" · "));
     } catch (err) {
       console.error(err);

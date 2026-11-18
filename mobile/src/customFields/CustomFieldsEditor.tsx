@@ -571,23 +571,49 @@ function defRowKey(def: ScopedCustomFieldDef): string {
 
 function fieldSummary(def: ScopedCustomFieldDef): string {
   const base = typeLabel(def.type);
+  const { min, max } = def;
   // ONE-SIDED BOUNDS COUNT. Requiring both would print a bare "Integer" for a
   // min-only field whose own title says "(0+)".
-  if (def.min != null && def.max != null)
-    return `${base} · ${def.min}–${def.max}`;
-  if (def.min != null) return `${base} · ${def.min}+`;
-  if (def.max != null) {
+  if (min != null && max != null) {
     switch (def.type) {
       case "string":
-        return t`Text · up to ${def.max}`;
+        return t`Text · ${min}–${max}`;
       case "integer":
-        return t`Integer · up to ${def.max}`;
+        return t`Integer · ${min}–${max}`;
       case "float":
-        return t`Decimal · up to ${def.max}`;
+        return t`Decimal · ${min}–${max}`;
       case "date":
-        return t`Date · up to ${def.max}`;
+        return t`Date · ${min}–${max}`;
       case "boolean":
-        return t`Yes / No · up to ${def.max}`;
+        return t`Yes / No · ${min}–${max}`;
+    }
+  }
+  if (min != null) {
+    switch (def.type) {
+      case "string":
+        return t`Text · ${min}+`;
+      case "integer":
+        return t`Integer · ${min}+`;
+      case "float":
+        return t`Decimal · ${min}+`;
+      case "date":
+        return t`Date · ${min}+`;
+      case "boolean":
+        return t`Yes / No · ${min}+`;
+    }
+  }
+  if (max != null) {
+    switch (def.type) {
+      case "string":
+        return t`Text · up to ${max}`;
+      case "integer":
+        return t`Integer · up to ${max}`;
+      case "float":
+        return t`Decimal · up to ${max}`;
+      case "date":
+        return t`Date · up to ${max}`;
+      case "boolean":
+        return t`Yes / No · up to ${max}`;
     }
   }
   return base;
