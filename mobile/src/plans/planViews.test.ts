@@ -130,6 +130,13 @@ describe("formSheetBack", () => {
       null,
     );
   });
+  // Mutation: restrict the `direct` rule to `verbs`, and Back from the "to
+  // answer" card's answer opens a read view the user never opened.
+  it("goes nowhere from an answer opened straight from the card", () => {
+    expect(formSheetBack({ formId: "f", mode: "answer", direct: true })).toBe(
+      null,
+    );
+  });
   // Mutation: return null for every ⋯, and the sheet's own ⋯ loses its way back.
   it("goes back to the form from the sheet's own ⋯ and from answering", () => {
     expect(formSheetBack({ formId: "f", mode: "verbs" })).toEqual({

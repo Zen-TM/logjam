@@ -62,7 +62,8 @@ const copy = TRIP_PLAN_FORMS.copy;
 const OFFLINE = unavailableReasonText("needs-connection");
 
 /** `verbs`: the form's ⋯ (a leader's Delete form), as rows. `direct`: opened
- *  from the Forms list's ⋯, with no form behind it to go back to. */
+ *  from the Forms list's ⋯ or the "to answer" card, with no form behind it to
+ *  go back to. */
 export type FormSheetState = {
   formId: string;
   mode: "read" | "answer" | "verbs";

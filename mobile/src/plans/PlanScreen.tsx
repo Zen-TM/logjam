@@ -486,7 +486,11 @@ function PlanPage({
                       disabled={!online}
                       disabledReason={OFFLINE}
                       onPress={() =>
-                        setFormSheet({ formId: form.id, mode: "answer" })
+                        setFormSheet({
+                          formId: form.id,
+                          mode: "answer",
+                          direct: true,
+                        })
                       }
                     />
                   ))}

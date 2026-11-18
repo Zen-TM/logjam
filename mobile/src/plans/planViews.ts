@@ -66,15 +66,15 @@ export function formWidenLocked(
 
 /**
  * Where Back goes from a form sheet's answer or ⋯ layer: the form it was
- * opened from, or nowhere when the ⋯ was pressed on the Forms list, which has
- * no form behind it (the sheet's close then returns to the list).
+ * opened from, or nowhere when it was opened straight from the Forms list's ⋯
+ * or the "to answer" card, which have no form behind them (the sheet's close
+ * then returns to where it opened).
  */
 export function formSheetBack(state: {
   formId: string;
   mode: "read" | "answer" | "verbs";
   direct?: boolean;
 }): { formId: string; mode: "read" } | null {
-  if (state.mode === "read" || (state.mode === "verbs" && state.direct))
-    return null;
+  if (state.mode === "read" || state.direct) return null;
   return { formId: state.formId, mode: "read" };
 }

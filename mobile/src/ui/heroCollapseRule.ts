@@ -122,7 +122,8 @@ export function heroReach(input: { collapsed: boolean; moving: boolean }): {
 
 /**
  * Where the list view starts: under the header as folded, so its scroll bar
- * does too. The full hero lies over the first `distance` of it.
+ * starts there. At the top of the page the full hero still lies over the
+ * first `distance` of the list view, hiding the thumb until the hero folds.
  *
  * Guard: heroCollapse.test.ts.
  */

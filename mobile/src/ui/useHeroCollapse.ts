@@ -71,9 +71,10 @@ type Scrollable = {
  * nearer end (`snapTarget`). State changes once per gesture, not per frame.
  *
  * The list view starts under the header as folded (`listStyle`), not at the
- * top of the screen, so its scroll bar starts below the header too: Android
- * has no scroll indicator inset. The hero in full covers the first `distance`
- * of the list, which `inset()` leaves as room.
+ * top of the screen, so its scroll bar starts below the folded header (Android
+ * has no scroll indicator inset). At the top of the page the full hero still
+ * lies over the first `distance` of the list view, which `inset()` leaves as
+ * room.
  *
  * A page that is shown again (a tab, or a screen the user came back to) keeps
  * its scroll offset and its header follows it: the offset is only read while
@@ -371,7 +372,7 @@ export function useHeroCollapse() {
     measure,
     headerHeight,
     /** The list view's own style, beside the screen's: it starts under the
-     *  folded header, so its scroll bar does. */
+     *  folded header, so its scroll bar starts there. */
     listStyle: { marginTop: top },
     /** Where a pull to refresh draws, from the list's top: under the full header. */
     refreshOffset: headerHeight - top,
