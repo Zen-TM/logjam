@@ -4,10 +4,11 @@
 //
 // PRIVACY: what goes to the external service (OpenStreetMap Nominatim) is the
 // user-typed place string and, when the map shows a region, that region's
-// whole bounds so its places rank first. The bounds are the same for everyone
-// looking at that region: the map's own view, centre and zoom never leave the
-// device, and outside every region nothing about the view is sent. No place
-// names, coordinates, or account data go through this path (geocode.test.ts).
+// whole bounds so its places rank first, plus its country code where it
+// declares one. These are the same for everyone looking at that region: the
+// map's own view, centre and zoom never leave the device, and outside every
+// region nothing about the view is sent. No place names, coordinates, or
+// account data go through this path (geocode.test.ts).
 // It goes only when the user asks (shared/DESIGN.md §13): Nominatim's usage
 // policy forbids search-as-you-type on its API.
 
@@ -39,8 +40,17 @@ export function geocodeBias(
   regions: readonly Region[] = REGIONS,
   world: Region = WORLD,
 ): LonLatBox | null {
+  const region = biasRegion(view, regions, world);
+  return region ? regionBounds(region) : null;
+}
+
+function biasRegion(
+  view: LonLatBox | null | undefined,
+  regions: readonly Region[],
+  world: Region,
+): Region | null {
   const region = view ? regionInWrappedView(view, regions, world) : null;
-  return region && region.borders.length > 0 ? regionBounds(region) : null;
+  return region && region.borders.length > 0 ? region : null;
 }
 
 // Nominatim's viewbox is lon1,lat1,lon2,lat2 (two opposite corners); with
@@ -93,13 +103,17 @@ export async function geocode(
   query: string,
   signal?: AbortSignal,
   view?: LonLatBox | null,
+  regions: readonly Region[] = REGIONS,
+  world: Region = WORLD,
 ): Promise<GeocodeResult[]> {
   const trimmed = query.trim();
   if (trimmed.length < GEOCODE_MIN_QUERY_LENGTH) return [];
-  const bias = geocodeBias(view);
-  // The bias is part of the key: the same name asked from another region has
-  // another answer.
-  const key = `${trimmed.toLowerCase()}|${bias ? viewbox(bias) : ""}`;
+  const region = biasRegion(view, regions, world);
+  const bias = region ? regionBounds(region) : null;
+  // The bias and the country are part of the key: the same name asked from
+  // another region has another answer.
+  const country = region?.geocoderCountry;
+  const key = `${trimmed.toLowerCase()}|${bias ? viewbox(bias) : ""}|${country ?? ""}`;
   const cached = answers.get(key);
   if (cached) return cached;
   await waitForSlot(signal);
@@ -107,6 +121,7 @@ export async function geocode(
   const params = new URLSearchParams({
     format: "jsonv2",
     q: trimmed,
+    ...(country ? { countrycodes: country } : {}),
     limit: String(RESULT_LIMIT),
     ...(bias ? { viewbox: viewbox(bias), bounded: "0" } : {}),
   });

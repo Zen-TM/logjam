@@ -313,9 +313,10 @@
           Foundation&rsquo;s Nominatim service
           (<code>nominatim.openstreetmap.org</code>) along with your IP
           address. When the map is showing a region Logjam covers,
-          the request also carries the rectangle around that whole region, so
-          the service can rank nearer places first; over any other ground it
-          carries nothing extra. The service therefore learns whether the map
+          the request also carries the rectangle around that whole region and
+          the code of the country it lies in, so the service searches that
+          country and ranks nearer places first; over
+          any other ground it carries nothing extra. The service therefore learns whether the map
           is over a covered region, never where in it. The map&rsquo;s view,
           your position and your places are never sent.</li>
       <li><strong>Weather:</strong> when you press &ldquo;Show the weather
