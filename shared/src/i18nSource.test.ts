@@ -3,8 +3,6 @@ import { describe, expect, it } from "vitest";
 import {
   bareCopyIn,
   bareCopyFailures,
-  ceilingFailures,
-  directoryOf,
   messageProblems,
   importProblems,
   messagesIn,
@@ -451,32 +449,31 @@ describe("importProblems", () => {
 });
 
 describe("scanSources", () => {
+  const found = (scan: ReturnType<typeof scanSources>) =>
+    scan.bare.map((b) => b.file);
+
   // Mutation: drop the backslash replacement at the top of `scanSources`.
   it("keys a path from any platform the same way", () => {
     const source = 'export const a = "Open the file";';
     expect(
-      scanSources(ts, "shared", [
-        { path: "sub\\b.ts", source },
-        { path: "i18nCatalogues\\en-US.ts", source },
-      ]).counts,
-    ).toEqual({ sub: 1 });
+      found(
+        scanSources(ts, "shared", [
+          { path: "sub\\b.ts", source },
+          { path: "i18nCatalogues\\en-US.ts", source },
+        ]),
+      ),
+    ).toEqual(["sub/b.ts"]);
   });
 
   // Mutation: drop the `in EXEMPT_FILES` test from `scanSources`.
-  it("counts bare literals per directory and skips an exempt file", () => {
+  it("finds bare literals in every file and skips an exempt one", () => {
     const scan = scanSources(ts, "shared", [
       { path: "a.ts", source: 'export const a = "Open the file";' },
       { path: "sub/b.ts", source: 'export const b = "Open the file";' },
       { path: "sub/c.ts", source: 'export const c = "Close the file";' },
       { path: "ozUltimate.ts", source: 'export const d = "Pipeline Canyon";' },
     ]);
-    expect(scan.counts).toEqual({ ".": 1, sub: 2 });
-  });
-
-  // Mutation: make `directoryOf` return "." for every path.
-  it("names the directory of a path", () => {
-    expect(directoryOf("a.ts")).toBe(".");
-    expect(directoryOf("components/dialogs/A.tsx")).toBe("components/dialogs");
+    expect(found(scan)).toEqual(["a.ts", "sub/b.ts", "sub/c.ts"]);
   });
 });
 
@@ -487,11 +484,11 @@ describe("scanSources and the catalogue folder", () => {
   it("does not count a catalogue's entries as bare copy, anywhere else it does", () => {
     expect(
       scanSources(ts, "shared", [{ path: "i18nCatalogues/en-US.ts", source }])
-        .counts,
-    ).toEqual({});
+        .bare,
+    ).toEqual([]);
     expect(
-      scanSources(ts, "shared", [{ path: "other/en-US.ts", source }]).counts,
-    ).toEqual({ other: 1 });
+      scanSources(ts, "shared", [{ path: "other/en-US.ts", source }]).bare,
+    ).toHaveLength(1);
   });
 });
 
@@ -544,59 +541,6 @@ describe("bareCopyFailures", () => {
     ]);
     expect(failure).toContain("3 bare literals");
     expect(failure).toContain("  a.ts: 3, 9\n  sub/b.ts: 1");
-  });
-});
-
-describe("ceilingFailures", () => {
-  // Mutation: delete the codemod's two commands from the `count > ceiling` message.
-  it("tells whoever is over a ceiling to write the new text through t, and names the codemod for a whole directory", () => {
-    const [failure] = ceilingFailures({ a: 3 }, { a: 2 });
-    expect(failure).toContain("Write the text through t, plural, rich or say");
-    expect(failure).toContain("converts a whole directory");
-    expect(failure).toContain("node scripts/i18n-extract.mjs");
-    expect(failure).toContain("node scripts/i18n-identity-check.mjs");
-  });
-
-  // Mutation: change `count > ceiling` to `count >= ceiling`.
-  it("is empty when the ceilings are exactly the counts", () => {
-    expect(ceilingFailures({ a: 2, b: 1 }, { a: 2, b: 1 })).toEqual([]);
-    expect(ceilingFailures({ a: 0 }, {})).toEqual([]);
-  });
-
-  // Mutation: delete the `count > ceiling` branch.
-  it("fails on new copy above a ceiling, and on a directory with no ceiling", () => {
-    expect(ceilingFailures({ a: 3 }, { a: 2 }).join()).toContain(
-      "3 bare literals, ceiling 2",
-    );
-    expect(ceilingFailures({ new: 1 }, {}).join()).toContain("new: 1");
-  });
-
-  const hits = [
-    { file: "a.ts", line: 3, dir: "a" },
-    { file: "a.ts", line: 9, dir: "a" },
-    { file: "sub/b.ts", line: 1, dir: "b" },
-  ];
-
-  // Mutation: delete the `hit.dir === dir` test, so every directory's hits are listed.
-  it("lists file and lines for a directory above its ceiling only", () => {
-    const [failure] = ceilingFailures({ a: 2, b: 1 }, { a: 1, b: 1 }, hits);
-    expect(failure).toContain("a.ts: 3, 9");
-    expect(failure).not.toContain("b.ts");
-  });
-
-  // Mutation: list the hits for a directory below its ceiling too.
-  it("keeps a stale ceiling's message to one line", () => {
-    expect(ceilingFailures({ a: 1 }, { a: 2 }, hits)[0]).not.toContain("\n");
-  });
-
-  // Mutation: delete the `count < ceiling` branch.
-  it("fails on a ceiling left above the count, so it only falls", () => {
-    expect(ceilingFailures({ a: 1 }, { a: 2 }).join()).toContain(
-      "Lower the ceiling to 1",
-    );
-    expect(ceilingFailures({}, { gone: 4 }).join()).toContain(
-      "delete the entry",
-    );
   });
 });
 
