@@ -1,5 +1,6 @@
 // Putting a way into a place's one route slot: Logjam GPS's `AddWaySheet` and
-// Logjam Web's `AddWayDialog`, opened from the place page's Route section.
+// Logjam Web's `AddWayDialog`, opened from a place's Route section (on its page
+// and in its edit dialog).
 // "Way" is the umbrella word for a route, a recording or an import in labels
 // and prose; the three stay distinct in code and in the lists.
 //

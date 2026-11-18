@@ -594,6 +594,41 @@ describe("adding a route from the edit dialog", () => {
   });
 });
 
+// "Open way" leaves the place page, and the edit dialog goes with it.
+describe("the edit dialog's Open way", () => {
+  const editDialog = () => screen.findByRole("dialog", { name: "Edit place" });
+  const withRoute = {
+    routes: [route({ id: "r1", name: "Claustral line", placeId: "p1" })],
+  };
+  const openWay = (dialog: HTMLElement) =>
+    within(dialog).findByRole("button", { name: "Open way" });
+
+  // Mutation: drop `leaveBlockedReason` from the Open way button, and a press
+  // with edits typed unmounts the dialog and loses them unasked.
+  it("waits while the form holds edits, and the dialog stays", async () => {
+    const onOpenRoute = vi.fn();
+    renderPanel({ verbRequest: { id: "edit" }, onOpenRoute, ...withRoute });
+    const dialog = await editDialog();
+    fireEvent.change(within(dialog).getByRole("textbox", { name: /^Name/ }), {
+      target: { value: "Claustral Canyon" },
+    });
+    const button = await openWay(dialog);
+    expect(button.getAttribute("aria-disabled")).toBe("true");
+    fireEvent.click(button);
+    expect(onOpenRoute).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog", { name: "Edit place" })).toBeTruthy();
+  });
+
+  it("opens the way while the form is clean", async () => {
+    const onOpenRoute = vi.fn();
+    renderPanel({ verbRequest: { id: "edit" }, onOpenRoute, ...withRoute });
+    fireEvent.click(await openWay(await editDialog()));
+    expect(onOpenRoute).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "r1" }),
+    );
+  });
+});
+
 describe("the place panel's notes", () => {
   // Mutation: draw `current.notes` as a raw paragraph again, and Markdown in a
   // note (shared with a sharee too) shows as typed.

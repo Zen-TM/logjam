@@ -41,7 +41,7 @@ export default function PlaceRouteSection({
   onFilled,
   onDeleteFile,
   onDrawRoute,
-  drawBlockedReason,
+  leaveBlockedReason,
 }: {
   place: Pick<TPlace, "id" | "name">;
   owned: boolean;
@@ -59,8 +59,9 @@ export default function PlaceRouteSection({
   onFilled: () => void;
   onDeleteFile: (file: MediaItem) => void;
   onDrawRoute: () => void;
-  /** Why the map's pen cannot be taken up from where this is shown, just now. */
-  drawBlockedReason?: string;
+  /** Why this cannot take the user away from where it is shown just now: the
+   *  pen and the way's own page both would (a form with edits stays open). */
+  leaveBlockedReason?: string;
 }) {
   const toast = useToast();
   const [addingWay, setAddingWay] = useState(false);
@@ -92,6 +93,9 @@ export default function PlaceRouteSection({
                 icon="forward"
                 label="Open way"
                 onClick={() => onOpenRoute(drawnRoute)}
+                {...(leaveBlockedReason
+                  ? { disabled: true, disabledReason: leaveBlockedReason }
+                  : { disabled: false })}
               />
               {owned && (
                 <IconButton
@@ -179,7 +183,7 @@ export default function PlaceRouteSection({
             media={media}
             onClose={() => setAddingWay(false)}
             onDrawRoute={onDrawRoute}
-            drawBlockedReason={drawBlockedReason}
+            drawBlockedReason={leaveBlockedReason}
             onFilled={onFilled}
           />
         </>

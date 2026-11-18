@@ -689,7 +689,7 @@ function PlaceDetailPanel({
     (m) => mediaCategory(m.mediaType) !== "track",
   );
 
-  const routeSection = (draw: () => void, drawBlockedReason?: string) => (
+  const routeSection = (draw: () => void, leaveBlockedReason?: string) => (
     <PlaceRouteSection
       place={current}
       owned={isOwnedPlace}
@@ -708,7 +708,7 @@ function PlaceDetailPanel({
       }}
       onDeleteFile={setFileToDelete}
       onDrawRoute={draw}
-      drawBlockedReason={drawBlockedReason}
+      leaveBlockedReason={leaveBlockedReason}
     />
   );
 
@@ -1149,8 +1149,8 @@ function PlaceDetailPanel({
         onCustomFieldDefsChange={onPlaceCustomFieldDefsChange}
         placeTypes={placeTypes}
         onMediaChanged={reloadPlaceMedia}
-        // The pen takes the map over from under the dialog, so unsaved edits
-        // would go: the row waits until the form holds none.
+        // The pen and the way's own page take the panel, and the dialog with
+        // it, so unsaved edits would go: both wait until the form holds none.
         routeSection={(clean) =>
           routeSection(
             () => {
