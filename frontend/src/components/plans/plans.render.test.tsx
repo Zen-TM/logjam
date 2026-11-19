@@ -411,6 +411,43 @@ describe("answering a form's chip and tick-box questions", () => {
   });
 });
 
+describe("a question's hint", () => {
+  // Mutation: draw `FieldGroup`'s hint before its controls, and the chip and
+  // tick-box questions show it above while the text questions show it below.
+  it.each(["choice", "multiChoice"] as const)(
+    "sits under a %s question's controls",
+    (kind) => {
+      render(
+        <PlanFormFields
+          form={{
+            ...contacts,
+            questions: [
+              {
+                id: "q1",
+                kind,
+                label: "Wetsuit size",
+                required: false,
+                help: "Your usual size",
+                options: [{ id: "a", label: "S" }],
+              } as never,
+            ],
+          }}
+          draft={{}}
+          onChange={() => {}}
+        />,
+      );
+      const control = screen
+        .getAllByRole(kind === "choice" ? "radio" : "checkbox")
+        .at(-1)!;
+      const hint = screen.getByText("Your usual size");
+      expect(
+        control.compareDocumentPosition(hint) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+    },
+  );
+});
+
 describe("a plan's page ends its views with their add buttons", () => {
   const section = { id: "s1", title: "Gear", body: "", position: 0 } as never;
   const place = {
