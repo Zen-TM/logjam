@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import request from "supertest";
 import { HeadObjectCommand } from "@aws-sdk/client-s3";
 import { s3 } from "../services/awsClients";
+import { createPlanFile } from "../lib/planItems";
 import { randomUUID } from "crypto";
 import prisma from "../services/prisma";
 import {
@@ -187,6 +188,8 @@ describe("POST /plans/:id/items (a new place or way, made in the plan)", () => {
   // The boundary: who may write into a plan. Mutation: requirePlanWrite → a
   // plan-exists check in the POST and touchPlanAsMember → touchPlan in
   // createPlanPlace and createPlanRoute; either alone is caught by the other.
+  // Mutation: drop the archivedAt throw from requirePlanWrite and from
+  // touchPlanAsMember (both: each alone is caught by the other).
   it("writes nothing for someone not in the plan, invited, or removed", async () => {
     const bodies = [
       { kind: "place", new: newPlace() },
@@ -220,6 +223,9 @@ describe("POST /plans/:id/items (a new place or way, made in the plan)", () => {
     expect(await planRows()).toEqual({ places: 0, routes: 0 });
   });
 
+  // Mutation: requirePlanWrite → a plan-exists check in the POST and
+  // touchPlanAsMember → touchPlan in createPlanPlace (both: each alone is
+  // caught by the other).
   it("refuses a write to an archived plan, leader or not", async () => {
     await prisma.tripPlan.update({
       where: { id: planId },
@@ -507,8 +513,8 @@ describe("a way imported straight into the plan", () => {
     expect(await used(BOB_ID)).toBe(before);
   });
 
-  // Mutation: remove the P2002 skip in chargeAndWrite, and the loser deletes
-  // the object the winner's row points at.
+  // Mutation: remove the kept-row check in chargeAndWrite, and the loser
+  // deletes the object the winner's row points at.
   it("keeps the file when two confirms of one upload race", async () => {
     const before = await used(BOB_ID);
     const mediaId = await upload(BOB_SUB);
@@ -533,9 +539,58 @@ describe("a way imported straight into the plan", () => {
     expect(await used(BOB_ID)).toBe(before + BigInt(GPX.length));
   });
 
+  // Mutation: decide the delete in chargeAndWrite by the P2002 code alone
+  // (not by whether a row holds the keys), and a loser stopped by the quota
+  // deletes the winner's object.
+  it("keeps the winner's file when the losing confirm fails its quota check", async () => {
+    const mediaId = await upload(BOB_SUB);
+    expect((await confirm(BOB_SUB, mediaId)).status).toBe(201);
+    const row = await prisma.media.findUniqueOrThrow({
+      where: { id: mediaId },
+    });
+    const user = await prisma.user.findUniqueOrThrow({
+      where: { id: BOB_ID },
+      select: { storageUsedBytes: true, storageQuotaBytes: true },
+    });
+    // No room for the winner's bytes again: the loser's charge goes over.
+    await prisma.user.update({
+      where: { id: BOB_ID },
+      data: { storageQuotaBytes: user.storageUsedBytes },
+    });
+    try {
+      await expect(
+        createPlanFile({ id: BOB_ID }, planId, {
+          mediaId,
+          bytes: BigInt(GPX.length),
+          mediaType: meta.mediaType,
+          filename: meta.filename,
+          displayName: null,
+          metadata: meta.metadata,
+          color: null,
+        }),
+      ).rejects.toMatchObject({ statusCode: 507 });
+    } finally {
+      await prisma.user.update({
+        where: { id: BOB_ID },
+        data: { storageQuotaBytes: user.storageQuotaBytes },
+      });
+    }
+    await expect(
+      s3.send(
+        new HeadObjectCommand({
+          Bucket: process.env.S3_BUCKET_MEDIA ?? "",
+          Key: row.s3KeyDisplay,
+        }),
+      ),
+    ).resolves.toBeTruthy();
+    expect(await prisma.media.count({ where: { planId } })).toBe(1);
+  });
+
   // The boundary again, for a file: who may write into a plan.
   // Mutation: requirePlanWrite → requirePlanMember in the presign route (the
   // confirm's archived check is touchPlanAsMember's, in createPlanFile).
+  // Mutation: read body.sizeBytes unchecked in the presign route (drop
+  // validateUploadSizes), or drop the "never uploaded" 400 from uploadedSize.
   it("takes nothing from someone not in the plan, or into an archived one", async () => {
     expect((await presign(CAROL_SUB)).status).toBe(404);
     const mediaId = await upload(BOB_SUB);

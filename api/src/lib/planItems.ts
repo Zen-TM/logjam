@@ -233,16 +233,17 @@ async function chargeAndWrite<T>(
       return write(tx);
     });
   } catch (err) {
-    // A row with this id already exists: a concurrent confirm of the same
-    // upload won, and its row points at these very keys. Guard:
-    // __tests__/planItemsNew.test.ts ("keeps the file when two confirms of one upload race").
-    if (
-      !(
-        err instanceof Prisma.PrismaClientKnownRequestError &&
-        err.code === "P2002"
-      )
-    )
-      await deleteS3KeysBestEffort(keys.bucket, keys.keys);
+    // A row already holds these keys: a concurrent confirm of the same upload
+    // won, and its file must stay whatever stopped this one (P2002 on the
+    // insert, the quota check, or the plan changing). A copy's keys are fresh,
+    // so none has a row. Guard: __tests__/planItemsNew.test.ts ("keeps the
+    // file when two confirms of one upload race" and "keeps the winner's file
+    // when the losing confirm fails its quota check").
+    const kept = await prisma.media.findFirst({
+      where: { s3KeyDisplay: { in: keys.keys } },
+      select: { id: true },
+    });
+    if (!kept) await deleteS3KeysBestEffort(keys.bucket, keys.keys);
     throw err;
   }
 }
