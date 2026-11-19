@@ -118,7 +118,7 @@ export function FieldGroup({
       >
         {label}
       </Prompt>
-      {children}
+      <div className={classes.controls}>{children}</div>
       {hint && <p className={classes.hint}>{hint}</p>}
       <FieldError message={error ?? null} />
     </Root>
