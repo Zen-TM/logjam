@@ -220,7 +220,7 @@ export default function PlanItems({
           })}
         </div>
       ))}
-      {shown.length > 0 && addCopy && <ListEnd>{addCopy}</ListEnd>}
+      {shown.length > 0 && !archived && <ListEnd>{addCopy}</ListEnd>}
 
       <ConfirmDialog
         open={saving != null}

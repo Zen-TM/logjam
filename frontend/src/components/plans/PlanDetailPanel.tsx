@@ -623,7 +623,7 @@ export default function PlanDetailPanel({
             </section>
           ))
         )}
-        {plan.sections.length > 0 && addSectionButton && (
+        {plan.sections.length > 0 && canAddSection && (
           <ListEnd>{addSectionButton}</ListEnd>
         )}
       </div>
@@ -702,7 +702,7 @@ export default function PlanDetailPanel({
             />
           ))
         )}
-        {plan.forms.length > 0 && addFormButton && (
+        {plan.forms.length > 0 && canBuildForms && (
           <ListEnd>{addFormButton}</ListEnd>
         )}
       </div>
