@@ -120,6 +120,8 @@ export const PLAN_ITEM_ADD_VERBS = [
   "import",
 ] as const satisfies readonly PlanAddVerbId[];
 
+export type PlanItemAddVerbId = (typeof PLAN_ITEM_ADD_VERBS)[number];
+
 /** A section's ⋯. */
 export const PLAN_SECTION_VERBS = [
   { id: "edit", icon: "edit", label: "Edit", roles: WRITERS },
@@ -205,9 +207,10 @@ export function planItemAddVerbs(
   platform: ContractPlatform,
   role: TripPlanRole,
   archived: boolean,
-): PlanVerb<PlanAddVerbId>[] {
+): PlanVerb<PlanItemAddVerbId>[] {
   return planVerbsFor(PLAN_ADD_VERBS, platform, role, { archived }).filter(
-    (verb) => (PLAN_ITEM_ADD_VERBS as readonly string[]).includes(verb.id),
+    (verb): verb is PlanVerb<PlanItemAddVerbId> =>
+      (PLAN_ITEM_ADD_VERBS as readonly string[]).includes(verb.id),
   );
 }
 

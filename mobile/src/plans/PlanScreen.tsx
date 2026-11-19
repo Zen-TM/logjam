@@ -51,7 +51,7 @@ import {
   TRIP_PLAN_PAGE,
   WAY_IMPORT,
   type DateOnly,
-  type PlanAddVerbId,
+  type PlanItemAddVerbId,
   type PlanVerb,
   type SectionKeysOn,
   type TripPlanItem,
@@ -837,7 +837,7 @@ function Items({
   online: boolean;
   /** The ways this caller may put a place or way in the plan (none when it
    *  is archived). */
-  verbs: PlanVerb<PlanAddVerbId>[];
+  verbs: PlanVerb<PlanItemAddVerbId>[];
   /** The caller's user id: a member changes only what they added. */
   me: string | null;
   onInfo: (message: string, tone?: "done" | "error") => void;
@@ -880,7 +880,7 @@ function Items({
       })
       .finally(() => setImporting(false));
   };
-  const run: Partial<Record<PlanAddVerbId, () => void>> = {
+  const run: Record<PlanItemAddVerbId, () => void> = {
     copy: () => setAdding(true),
     newPlace: () => {
       atPicker.current = true;
@@ -900,10 +900,10 @@ function Items({
             icon={verb.icon}
             variant="outlineAccent"
             loading={verb.id === "import" && importing}
-            disabled={!online || importing}
+            disabled={!online}
             disabledReason={OFFLINE}
             reasonShown
-            onPress={() => run[verb.id]?.()}
+            onPress={run[verb.id]}
           />
         ))}
         {online ? null : <Text style={styles.offline}>{OFFLINE}</Text>}
