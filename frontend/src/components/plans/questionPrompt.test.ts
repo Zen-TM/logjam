@@ -10,7 +10,8 @@ import { describe, expect, it } from "vitest";
  * with `prominentLabel` and the chip and tick-box questions are a `FieldGroup`,
  * whose legend is the same prominent label.
  *
- * Mutation: delete `prominentLabel` from one question in PlanAnswerDialog, or
+ * Mutation: delete `prominentLabel` from one question (agree included) in
+ * PlanAnswerDialog, or
  * make `.labelProminent` compose `detail`.
  */
 const DIR = dirname(fileURLToPath(import.meta.url));
@@ -25,12 +26,16 @@ describe("a plan form's question prompt", () => {
     const kit = read("../../ui/TextField.module.css");
     expect(roleOf(kit, "labelProminent")).toBe("rowTitle");
     expect(roleOf(kit, "hint")).toBe("detail");
+    // The tick box that agrees to something, as the text fields.
+    expect(roleOf(read("../../ui/Choice.module.css"), "titleProminent")).toBe(
+      "rowTitle",
+    );
   });
 
   it("is asked by every kind of question", () => {
     const source = read("PlanAnswerDialog.tsx");
-    // text and phone, long text, number
-    expect(source.match(/\bprominentLabel\b/g)).toHaveLength(3);
+    // text and phone, long text, number, agree
+    expect(source.match(/\bprominentLabel\b/g)).toHaveLength(4);
     // choice and yes/no, multiple choice
     expect(source.match(/<FieldGroup\b/g)).toHaveLength(2);
   });

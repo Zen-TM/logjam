@@ -35,11 +35,20 @@
 .group {
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
+  gap: var(--form-label);
   min-width: 0;
   margin: 0;
   padding: 0;
   border: 0;
+}
+
+/* The controls keep a row's gap between them, apart from the label, hint and
+   error at the field's own. */
+.controls {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
 }
 
 /* A legend is not a flex item, so the gap never reaches it. */
