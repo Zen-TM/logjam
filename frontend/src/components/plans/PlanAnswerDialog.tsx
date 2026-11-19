@@ -106,12 +106,15 @@ function QuestionField({
       const options = tripPlanQuestionChoices(question);
       return (
         <FieldGroup label={label} hint={help} error={error} named>
-          <ChipRail
-            label={question.label}
-            options={options}
-            value={typeof value === "string" ? value : ""}
-            onChange={onChange}
-          />
+          {(describedBy) => (
+            <ChipRail
+              label={question.label}
+              options={options}
+              value={typeof value === "string" ? value : ""}
+              onChange={onChange}
+              describedBy={describedBy}
+            />
+          )}
         </FieldGroup>
       );
     }
@@ -142,6 +145,7 @@ function QuestionField({
           <Checkbox
             label={label}
             description={help}
+            prominentLabel
             checked={value === true}
             onChange={onChange}
           />

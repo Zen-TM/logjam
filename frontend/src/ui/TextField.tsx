@@ -94,7 +94,8 @@ function Field({
  *  the controls, the hint, then the error: a text field's order. The
  *  legend names the group. `named` is for controls that name themselves (a
  *  radio group): the prompt is then drawn for the eye only, so a screen reader
- *  does not hear the question twice. */
+ *  does not hear the question twice, and the controls are a function that
+ *  takes the ids of the hint and error to describe themselves with. */
 export function FieldGroup({
   label,
   hint,
@@ -105,22 +106,34 @@ export function FieldGroup({
   label: string;
   hint?: string;
   error?: string | null;
-  named?: boolean;
-  children: ReactNode;
-}) {
+} & (
+  | { named?: false; children: ReactNode }
+  | { named: true; children: (describedBy: string | undefined) => ReactNode }
+)) {
+  const id = useId();
+  const described = describedBy(id, hint, error);
   const Root = named ? "div" : "fieldset";
   const Prompt = named ? "span" : "legend";
   return (
-    <Root className={classes.group}>
+    <Root
+      className={classes.group}
+      aria-describedby={named ? undefined : described}
+    >
       <Prompt
         className={classes.labelProminent}
         aria-hidden={named || undefined}
       >
         {label}
       </Prompt>
-      <div className={classes.controls}>{children}</div>
-      {hint && <p className={classes.hint}>{hint}</p>}
-      <FieldError message={error ?? null} />
+      <div className={classes.controls}>
+        {typeof children === "function" ? children(described) : children}
+      </div>
+      {hint && (
+        <p id={`${id}-hint`} className={classes.hint}>
+          {hint}
+        </p>
+      )}
+      <FieldError id={`${id}-error`} message={error ?? null} />
     </Root>
   );
 }
