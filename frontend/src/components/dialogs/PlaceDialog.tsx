@@ -904,7 +904,7 @@ function PlaceDialog({
     // yet saved has no page to add a way on, so its route is a file uploaded
     // against the draft.
     route: place ? (
-      routeSection?.(!isDirty)
+      routeSection?.(!isDirty && uploading === 0 && !saving)
     ) : (
       <section className={classes.section}>
         <SectionHeader title={PLACE_FORM.copy.route} />

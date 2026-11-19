@@ -201,6 +201,34 @@ describe("PlaceDialog, route section", () => {
     expect(await screen.findByText("edited route section")).toBeTruthy();
     expect(screen.queryByText(PLACE_PAGE.copy.routeEmpty)).toBeNull();
   });
+
+  // Mutation: pass `!isDirty` alone as `clean`, and an upload still landing
+  // leaves the pen and the way's page open to a leave that skips Discard.
+  it("is not clean while an upload is still landing", async () => {
+    render(
+      <ToastProvider>
+        <PlaceDialog
+          place={place("p1", "Claustral")}
+          open
+          onClose={() => {}}
+          onSaved={() => {}}
+          onPickCoords={() => {}}
+          onCancelPickCoords={() => {}}
+          customFieldDefs={[]}
+          onCustomFieldDefsChange={() => {}}
+          placeTypes={[CANYON]}
+          routeSection={(clean) => (
+            <p>{clean ? "clean route section" : "edited route section"}</p>
+          )}
+        />
+      </ToastProvider>,
+    );
+    expect(await screen.findByText("clean route section")).toBeTruthy();
+    fireEvent.click(screen.getAllByText("Start slow upload")[0]);
+    expect(await screen.findByText("edited route section")).toBeTruthy();
+    fireEvent.click(screen.getAllByText("Finish slow upload")[0]);
+    expect(await screen.findByText("clean route section")).toBeTruthy();
+  });
 });
 
 // Uploads land on the server the moment they finish, so Discard has to take
