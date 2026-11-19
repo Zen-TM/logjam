@@ -1,6 +1,6 @@
-// "Add a way": every way of filling ONE place's single route slot, from the
-// place page's Route section, with no edit dialog. Logjam GPS's `AddWaySheet`
-// is the same panel; its words are `ADD_WAY`'s.
+// "Add a way": every way of filling ONE place's single route slot, from a
+// place's Route section, on its page and in its edit dialog. Logjam GPS's
+// `AddWaySheet` is the same panel; its words are `ADD_WAY`'s.
 //
 //   a route you drew      → the Route row is linked (Route.placeId)
 //   draw on the map       → the map's pen; the save writes the link
