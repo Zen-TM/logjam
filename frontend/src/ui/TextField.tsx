@@ -91,7 +91,7 @@ function Field({
 }
 
 /** A question answered by several controls (chips, tick boxes): its prompt,
- *  the hint, the controls, then the error, drawn as a text field's are. The
+ *  the controls, the hint, then the error: a text field's order. The
  *  legend names the group. `named` is for controls that name themselves (a
  *  radio group): the prompt is then drawn for the eye only, so a screen reader
  *  does not hear the question twice. */
@@ -118,8 +118,8 @@ export function FieldGroup({
       >
         {label}
       </Prompt>
-      {hint && <p className={classes.hint}>{hint}</p>}
       {children}
+      {hint && <p className={classes.hint}>{hint}</p>}
       <FieldError message={error ?? null} />
     </Root>
   );
