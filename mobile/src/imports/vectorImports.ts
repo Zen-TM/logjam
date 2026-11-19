@@ -155,6 +155,30 @@ export async function importVectorSource(
   }
 }
 
+type ParsedVector = ReturnType<typeof parseVectorImport>;
+
+/** The name an import goes by: the file's own, else its filename. */
+function vectorImportName(
+  parsed: ParsedVector,
+  filename: string,
+  sentBy: string | null,
+): string {
+  return importDisplayName({
+    contentName: parsed.name ?? null,
+    filename,
+    sentBy,
+  });
+}
+
+/** What the API takes with a track file (the account's upload and a plan's). */
+function vectorImportMetadata(parsed: ParsedVector) {
+  return {
+    bbox: parsed.bbox,
+    featureCount: parsed.features.length,
+    positionCount: parsed.stats.positions,
+  };
+}
+
 /** A staged file's text, as the parser reads it: a KMZ as the KML inside. */
 async function readVectorText(
   sourceUri: string,
@@ -207,11 +231,7 @@ async function parseAndStore(
     // derivation is lossy (only `name` and `coordTimes` survive), so a second
     // device rebuilding from it would hold strictly less than this one does.
     // The GeoJSON stays a local convenience, re-derivable from the bytes.
-    const name = importDisplayName({
-      contentName: parsed.name ?? null,
-      filename: displayName,
-      sentBy,
-    });
+    const name = vectorImportName(parsed, displayName, sentBy);
     const mediaId = await createStandaloneMediaLocal({
       filePath: sourceUriStored,
       filename: `${name}.${format}`,
@@ -226,11 +246,7 @@ async function parseAndStore(
           ...(await listStandaloneMedia("track")),
         ].map((m) => m.color),
       ),
-      metadata: {
-        bbox: parsed.bbox,
-        featureCount: parsed.features.length,
-        positionCount: parsed.stats.positions,
-      },
+      metadata: vectorImportMetadata(parsed),
     });
     await upsertImportViewState({
       mediaId,
@@ -321,11 +337,7 @@ export async function importVectorFileIntoPlan(
     const { sourceName, text } = await readVectorText(staged.uri, asset.name);
     const parsed = parseVectorImport(sourceName, text);
     const format = sourceExtension(sourceName);
-    const name = importDisplayName({
-      contentName: parsed.name ?? null,
-      filename: asset.name,
-      sentBy: null,
-    });
+    const name = vectorImportName(parsed, asset.name, null);
     await FileSystem.writeAsStringAsync(upload, text);
     await uploadPlanFile(planId, {
       uri: upload,
@@ -333,11 +345,7 @@ export async function importVectorFileIntoPlan(
       filename: `${name}.${format}`,
       mediaType: MIME_BY_FORMAT[format],
       displayName: name,
-      metadata: {
-        bbox: parsed.bbox,
-        featureCount: parsed.features.length,
-        positionCount: parsed.stats.positions,
-      },
+      metadata: vectorImportMetadata(parsed),
     });
     return { status: "added", name };
   } finally {

@@ -6,8 +6,8 @@
 // default) or an entry that was never written, and either one throws or loses
 // a column on every installed phone the first time it opens the new build.
 //
-// `LEGACY_DDL` is the oldest shape this code still upgrades: the three tables
-// that have gained columns, as they were before any `ADDED_COLUMNS` entry. It
+// `LEGACY_DDL` is the oldest shape this code still upgrades: the tables that
+// have gained columns, as they were before any `ADDED_COLUMNS` entry. It
 // is a frozen literal on purpose. Built from `SCHEMA_SQL` minus
 // `ADDED_COLUMNS`, an entry deleted from the list would vanish from the old
 // shape too, and nothing would notice. Each test then replays the first `k`
