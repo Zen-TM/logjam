@@ -436,9 +436,10 @@ describe("a question's hint", () => {
           onChange={() => {}}
         />,
       );
-      const control = screen
-        .getAllByRole(kind === "choice" ? "radio" : "checkbox")
-        .at(-1)!;
+      const controls = screen.getAllByRole(
+        kind === "choice" ? "radio" : "checkbox",
+      );
+      const control = controls[controls.length - 1];
       const hint = screen.getByText("Your usual size");
       expect(
         control.compareDocumentPosition(hint) &
