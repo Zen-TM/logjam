@@ -187,6 +187,8 @@ describe("POST /plans/:id/items (a new place or way, made in the plan)", () => {
   // The boundary: who may write into a plan. Mutation: requirePlanWrite → a
   // plan-exists check in the POST and touchPlanAsMember → touchPlan in
   // createPlanPlace and createPlanRoute; either alone is caught by the other.
+  // Mutation: drop the archivedAt throw from requirePlanWrite and from
+  // touchPlanAsMember (both: each alone is caught by the other).
   it("writes nothing for someone not in the plan, invited, or removed", async () => {
     const bodies = [
       { kind: "place", new: newPlace() },
@@ -220,6 +222,9 @@ describe("POST /plans/:id/items (a new place or way, made in the plan)", () => {
     expect(await planRows()).toEqual({ places: 0, routes: 0 });
   });
 
+  // Mutation: requirePlanWrite → a plan-exists check in the POST and
+  // touchPlanAsMember → touchPlan in createPlanPlace (both: each alone is
+  // caught by the other).
   it("refuses a write to an archived plan, leader or not", async () => {
     await prisma.tripPlan.update({
       where: { id: planId },
@@ -536,6 +541,8 @@ describe("a way imported straight into the plan", () => {
   // The boundary again, for a file: who may write into a plan.
   // Mutation: requirePlanWrite → requirePlanMember in the presign route (the
   // confirm's archived check is touchPlanAsMember's, in createPlanFile).
+  // Mutation: read body.sizeBytes unchecked in the presign route (drop
+  // validateUploadSizes), or drop the "never uploaded" 400 from uploadedSize.
   it("takes nothing from someone not in the plan, or into an archived one", async () => {
     expect((await presign(CAROL_SUB)).status).toBe(404);
     const mediaId = await upload(BOB_SUB);
