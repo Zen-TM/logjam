@@ -8,7 +8,10 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PLACE_FORM, PLACE_PAGE, SYSTEM_PLACE_TYPE_IDS } from "@logjam/shared";
 
-import PlaceDialog from "./PlaceDialog";
+import PlaceDialog, {
+  type RouteSlot,
+  type RouteSlotContext,
+} from "./PlaceDialog";
 import { ToastProvider } from "../feedback/ToastProvider";
 import { deleteMedia } from "../../placeUtils";
 import { ApiError } from "../../errors/ApiError";
@@ -174,12 +177,23 @@ describe("PlaceDialog, route section", () => {
     expect(await screen.findByText(PLACE_PAGE.copy.routeEmpty)).toBeTruthy();
   });
 
-  // Mutation: render the upload for an existing place too, or ignore
-  // `routeSection`, and the place page's section is not what shows.
-  it("shows the section it is handed for an existing place, clean until edited", async () => {
-    const routeSection = vi.fn((clean: boolean) => (
-      <p>{clean ? "clean route section" : "edited route section"}</p>
-    ));
+  // The slot the page would hand over, reduced to what the form tells it.
+  const slot = (ctx: RouteSlotContext): RouteSlot => ({
+    section: (
+      <>
+        <p>{ctx.leaveBlockedReason ?? "nothing blocks a leave"}</p>
+        <button type="button" onClick={() => ctx.setAddingWay(true)}>
+          Add a way here
+        </button>
+      </>
+    ),
+    dialog: ctx.addingWay ? (
+      <button type="button" onClick={() => ctx.setAddingWay(false)}>
+        Close the way dialog
+      </button>
+    ) : null,
+  });
+  const renderEdit = () =>
     render(
       <ToastProvider>
         <PlaceDialog
@@ -192,42 +206,49 @@ describe("PlaceDialog, route section", () => {
           customFieldDefs={[]}
           onCustomFieldDefsChange={() => {}}
           placeTypes={[CANYON]}
-          routeSection={routeSection}
+          routeSlot={slot}
         />
       </ToastProvider>,
     );
-    expect(await screen.findByText("clean route section")).toBeTruthy();
+
+  // Mutation: render the upload for an existing place too, or ignore
+  // `routeSlot`, and the place page's section is not what shows.
+  it("shows the section it is handed for an existing place, saying why a leave waits once edited", async () => {
+    renderEdit();
+    expect(await screen.findByText("nothing blocks a leave")).toBeTruthy();
     fireEvent.change(box(/^Name/), { target: { value: "Claustral Canyon" } });
-    expect(await screen.findByText("edited route section")).toBeTruthy();
+    expect(await screen.findByText("Save your changes first.")).toBeTruthy();
     expect(screen.queryByText(PLACE_PAGE.copy.routeEmpty)).toBeNull();
   });
 
-  // Mutation: pass `!isDirty` alone as `clean`, and an upload still landing
-  // leaves the pen and the way's page open to a leave that skips Discard.
-  it("is not clean while an upload is still landing", async () => {
-    render(
-      <ToastProvider>
-        <PlaceDialog
-          place={place("p1", "Claustral")}
-          open
-          onClose={() => {}}
-          onSaved={() => {}}
-          onPickCoords={() => {}}
-          onCancelPickCoords={() => {}}
-          customFieldDefs={[]}
-          onCustomFieldDefsChange={() => {}}
-          placeTypes={[CANYON]}
-          routeSection={(clean) => (
-            <p>{clean ? "clean route section" : "edited route section"}</p>
-          )}
-        />
-      </ToastProvider>,
-    );
-    expect(await screen.findByText("clean route section")).toBeTruthy();
+  // Mutation: drop the `uploading > 0` arm of the reason, and a leave mid-
+  // upload is offered with no word about why it should wait.
+  it("says an upload is landing while one is, not that there are edits", async () => {
+    renderEdit();
+    await screen.findByText("nothing blocks a leave");
     fireEvent.click(screen.getAllByText("Start slow upload")[0]);
-    expect(await screen.findByText("edited route section")).toBeTruthy();
+    // The Cancel button says it too: the section is the one beside the Add a way button.
+    expect(
+      (await screen.findByText("Add a way here")).previousElementSibling
+        ?.textContent,
+    ).toBe("Uploading…");
     fireEvent.click(screen.getAllByText("Finish slow upload")[0]);
-    expect(await screen.findByText("clean route section")).toBeTruthy();
+    expect(await screen.findByText("nothing blocks a leave")).toBeTruthy();
+  });
+
+  // Mutation: leave `open` as the prop alone, and the form stays over the Add a
+  // way dialog; or reset the form when it returns, and the typed name is lost.
+  it("steps aside while the way dialog is open, and is as it was after", async () => {
+    renderEdit();
+    fireEvent.change(box(/^Name/), { target: { value: "Claustral Canyon" } });
+    fireEvent.click(await screen.findByText("Add a way here"));
+    await screen.findByText("Close the way dialog");
+    expect(screen.queryByRole("dialog", { name: "Edit place" })).toBeNull();
+    fireEvent.click(screen.getByText("Close the way dialog"));
+    expect(
+      await screen.findByRole("dialog", { name: "Edit place" }),
+    ).toBeTruthy();
+    expect(box(/^Name/).value).toBe("Claustral Canyon");
   });
 });
 

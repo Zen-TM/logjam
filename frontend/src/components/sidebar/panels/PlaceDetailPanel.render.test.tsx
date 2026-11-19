@@ -511,8 +511,9 @@ describe("adding a route from the edit dialog", () => {
   const editDialog = () => screen.findByRole("dialog", { name: "Edit place" });
 
   // Mutation: give PlaceDialog back its own route uploader, or drop the
-  // `routeSection` prop from the panel's PlaceDialog, and the dialog has no
-  // "Add a way" button.
+  // `routeSlot` prop from the panel's PlaceDialog, and the dialog has no "Add a
+  // way" button; keep the form open (`open={open && !addingWay}`), and it
+  // stands under the dialog.
   it("opens the place page's Add a way dialog, and links a drawn route", async () => {
     const onRoutesChanged = vi.fn();
     renderPanel({
@@ -527,6 +528,8 @@ describe("adding a route from the edit dialog", () => {
     const addWay = await screen.findByRole("dialog", {
       name: ADD_WAY.copy.title,
     });
+    // One modal at a time: the form steps aside, and is back after.
+    expect(screen.queryByRole("dialog", { name: "Edit place" })).toBeNull();
     fireEvent.click(
       within(addWay).getByRole("button", {
         name: new RegExp(ADD_WAY.copy.routeTitle),
@@ -585,7 +588,10 @@ describe("adding a route from the edit dialog", () => {
     expect(await screen.findByText("Save your changes first.")).toBeTruthy();
     fireEvent.click(draw);
     expect(onDrawRoute).not.toHaveBeenCalled();
-    expect(screen.getByRole("dialog", { name: "Edit place" })).toBeTruthy();
+    fireEvent.click(within(addWay).getByRole("button", { name: "Cancel" }));
+    expect(
+      await screen.findByRole("dialog", { name: "Edit place" }),
+    ).toBeTruthy();
     expect(
       within(addWay).getByRole("button", {
         name: new RegExp(ADD_WAY.copy.routeTitle),

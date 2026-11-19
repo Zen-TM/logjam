@@ -1,7 +1,6 @@
 // One place's Route section: the way in the slot, and "Add a way". The place
 // page and the edit dialog both render this, so a way is added the same way
 // from either.
-import { useState } from "react";
 import {
   ADD_WAY,
   PLACE_PAGE,
@@ -20,7 +19,6 @@ import {
   type TRoute,
 } from "../../../placeUtils";
 import { Button, IconButton, IconTile, Row, SectionHeader } from "../../../ui";
-import AddWayDialog from "../../dialogs/AddWayDialog";
 import { useToast } from "../../feedback/ToastProvider";
 import { boundsOfPoints } from "./waysModel";
 import classes from "./PlaceDetailPanel.module.css";
@@ -33,14 +31,12 @@ export default function PlaceRouteSection({
   shared,
   routes,
   media,
-  currentUserId,
   onFocusBounds,
   onOpenRoute,
   onRoutesChanged,
   onReloadMedia,
-  onFilled,
   onDeleteFile,
-  onDrawRoute,
+  onAddWay,
   leaveBlockedReason,
 }: {
   place: Pick<TPlace, "id" | "name">;
@@ -50,21 +46,18 @@ export default function PlaceRouteSection({
   routes: TRoute[];
   /** This place's attachments: a track file may fill the slot. */
   media: MediaItem[];
-  currentUserId: string | null;
   onFocusBounds: (bounds: [number, number, number, number]) => void;
   onOpenRoute: (route: TRoute) => void;
   onRoutesChanged: () => void;
   onReloadMedia: () => void;
-  /** The slot was filled: refetch the routes, the media and the quota. */
-  onFilled: () => void;
   onDeleteFile: (file: MediaItem) => void;
-  onDrawRoute: () => void;
-  /** Why this cannot take the user away from where it is shown just now: the
-   *  pen and the way's own page both would (a form with edits stays open). */
+  /** Open the Add a way dialog, which its owner draws: a modal is not nested. */
+  onAddWay: () => void;
+  /** Why Open way cannot take the user away from where this is shown just
+   *  now: it replaces the page, and a form over it goes too. */
   leaveBlockedReason?: string;
 }) {
   const toast = useToast();
-  const [addingWay, setAddingWay] = useState(false);
   const slot = placeRoute(place.id, routes, media);
   const track = slot?.kind === "file" ? slot.file : null;
   const drawnRoute = slot?.kind === "drawn" ? slot.route : null;
@@ -162,31 +155,17 @@ export default function PlaceRouteSection({
         <p className={classes.muted}>{PLACE_PAGE.copy.routeEmpty}</p>
       )}
       {owned && (
-        <>
-          <div>
-            <Button
-              compact
-              icon={drawnRoute || track ? "replace" : "add"}
-              onClick={() => setAddingWay(true)}
-            >
-              {drawnRoute || track
-                ? ADD_WAY.copy.replaceTitle
-                : ADD_WAY.copy.title}
-            </Button>
-          </div>
-          <AddWayDialog
-            open={addingWay}
-            placeId={place.id}
-            placeName={place.name}
-            routes={routes}
-            currentUserId={currentUserId}
-            media={media}
-            onClose={() => setAddingWay(false)}
-            onDrawRoute={onDrawRoute}
-            drawBlockedReason={leaveBlockedReason}
-            onFilled={onFilled}
-          />
-        </>
+        <div>
+          <Button
+            compact
+            icon={drawnRoute || track ? "replace" : "add"}
+            onClick={onAddWay}
+          >
+            {drawnRoute || track
+              ? ADD_WAY.copy.replaceTitle
+              : ADD_WAY.copy.title}
+          </Button>
+        </div>
       )}
     </section>
   );

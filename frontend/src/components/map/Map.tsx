@@ -831,22 +831,18 @@ function Map({
 
   // True whenever any coord-pick mode is active — read by once-on-load layer
   // handlers to suppress marker selection during picking.
+  const pickMode =
+    pickingCoords ||
+    (selectingFilterArea ?? false) ||
+    // The topo bbox draw belongs here too and was missing: without it, the
+    // click that anchors a corner over a place marker also opened that
+    // place's panel behind the box being drawn.
+    (selectingBbox ?? false) ||
+    (selectingGeoPdfExtent ?? false);
   const pickModeRef = useRef(false);
   useEffect(() => {
-    pickModeRef.current =
-      pickingCoords ||
-      (selectingFilterArea ?? false) ||
-      // The topo bbox draw belongs here too and was missing: without it, the
-      // click that anchors a corner over a place marker also opened that
-      // place's panel behind the box being drawn.
-      (selectingBbox ?? false) ||
-      (selectingGeoPdfExtent ?? false);
-  }, [
-    pickingCoords,
-    selectingFilterArea,
-    selectingBbox,
-    selectingGeoPdfExtent,
-  ]);
+    pickModeRef.current = pickMode;
+  }, [pickMode]);
 
   // Route draw/edit mode, read by the once-on-load layer handlers.
   const drawingRouteRef = useRef(false);
@@ -2163,11 +2159,14 @@ function Map({
       };
       map.once("click", handleClick);
       return () => {
-        map.getCanvas().style.cursor = "";
+        // An armed Measure or Draw tool keeps its crosshair after the pick.
+        map.getCanvas().style.cursor = drawingRouteRef.current
+          ? "crosshair"
+          : "";
         map.off("click", handleClick);
       };
     } else {
-      map.getCanvas().style.cursor = "";
+      map.getCanvas().style.cursor = drawingRouteRef.current ? "crosshair" : "";
     }
   }, [pickingCoords, mapLoaded]);
 
@@ -2436,7 +2435,8 @@ function Map({
     // a handful of markers is far cheaper than diffing them.
     for (const marker of vertexMarkersRef.current) marker.remove();
     vertexMarkersRef.current = [];
-    if (!drawingRoute) return;
+    // No handles under a pick: a click on one would also remove its vertex.
+    if (!drawingRoute || pickMode) return;
 
     // ONE HANDLE PER ANCHOR. Snapped filler gets none: it is geometry the tool
     // produced, not points the user placed, so a 1.5 km snapped run reads as
@@ -2514,7 +2514,7 @@ function Map({
       for (const marker of vertexMarkersRef.current) marker.remove();
       vertexMarkersRef.current = [];
     };
-  }, [drawPoints, drawAnchorIndices, drawingRoute, mapLoaded]);
+  }, [drawPoints, drawAnchorIndices, drawingRoute, pickMode, mapLoaded]);
 
   // Drag the drawn line between two anchors to introduce one there. Distinct
   // from clicking the map, which appends to the END of the route — this is how
@@ -2549,6 +2549,8 @@ function Map({
     }
 
     const onDown = (e: maplibregl.MapMouseEvent) => {
+      // A pick armed over the draft owns the press.
+      if (pickModeRef.current) return;
       // A press that landed on a vertex handle belongs to that handle.
       if (Date.now() - handlePressedAt.current < HANDLE_CLICK_SUPPRESS_MS)
         return;

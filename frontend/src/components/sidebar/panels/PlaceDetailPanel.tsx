@@ -54,12 +54,16 @@ import { useToast } from "../../feedback/ToastProvider";
 import { messageFromError } from "../../../errors/messageFromError";
 import { PlaceGauge } from "../../gauges/PlaceGauge";
 import { PlaceWeather } from "../../weather/PlaceWeather";
-import PlaceDialog from "../../dialogs/PlaceDialog";
+import PlaceDialog, {
+  type RouteSlot,
+  type RouteSlotContext,
+} from "../../dialogs/PlaceDialog";
 import ShareDialog from "../../dialogs/ShareDialog";
 import { NoteBody } from "../../plans/WriteUpBody";
 import TripLogDialog from "../../dialogs/TripLogDialog";
 import ConfirmDialog from "../../dialogs/ConfirmDialog";
 import PlaceRouteSection from "./PlaceRouteSection";
+import AddWayDialog from "../../dialogs/AddWayDialog";
 import type {
   TPlace,
   TFriend,
@@ -263,6 +267,7 @@ function PlaceDetailPanel({
   const [removing, setRemoving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [showShareDialog, setShowShareDialog] = useState(false);
+  const [addingWay, setAddingWay] = useState(false);
   const [fileToDelete, setFileToDelete] = useState<MediaItem | null>(null);
   const [deletingFile, setDeletingFile] = useState(false);
 
@@ -689,29 +694,6 @@ function PlaceDetailPanel({
     (m) => mediaCategory(m.mediaType) !== "track",
   );
 
-  const routeSection = (draw: () => void, leaveBlockedReason?: string) => (
-    <PlaceRouteSection
-      place={current}
-      owned={isOwnedPlace}
-      shared={isShared}
-      routes={routes}
-      media={placeMedia}
-      currentUserId={currentUserId}
-      onFocusBounds={onFocusBounds}
-      onOpenRoute={onOpenRoute}
-      onRoutesChanged={onRoutesChanged}
-      onReloadMedia={reloadPlaceMedia}
-      onFilled={() => {
-        reloadPlaceMedia();
-        onRoutesChanged();
-        onQuotaChanged();
-      }}
-      onDeleteFile={setFileToDelete}
-      onDrawRoute={draw}
-      leaveBlockedReason={leaveBlockedReason}
-    />
-  );
-
   const copy = PLACE_PAGE.copy;
   const sources = placeSources(current.fieldValues);
   const placeStatusKey = isOwnedPlace
@@ -727,6 +709,52 @@ function PlaceDetailPanel({
 
   // Exhaustive by type: a section the contract names and this page does not
   // draw, or the reverse, fails `tsc` (`PLACE_PAGE`, shared/src/contracts).
+  // The Route section and its Add a way dialog, for the page and for the edit
+  // dialog alike. The dialog is drawn apart from the section so its owner can
+  // step aside for it: one modal at a time.
+  const routeSlot = (
+    { leaveBlockedReason, addingWay, setAddingWay }: RouteSlotContext,
+    draw: () => void,
+  ): RouteSlot => ({
+    section: (
+      <PlaceRouteSection
+        place={current}
+        owned={isOwnedPlace}
+        shared={isShared}
+        routes={routes}
+        media={placeMedia}
+        onFocusBounds={onFocusBounds}
+        onOpenRoute={onOpenRoute}
+        onRoutesChanged={onRoutesChanged}
+        onReloadMedia={reloadPlaceMedia}
+        onDeleteFile={setFileToDelete}
+        onAddWay={() => setAddingWay(true)}
+        leaveBlockedReason={leaveBlockedReason}
+      />
+    ),
+    dialog: isOwnedPlace ? (
+      <AddWayDialog
+        open={addingWay}
+        placeId={current.id}
+        placeName={current.name}
+        routes={routes}
+        currentUserId={currentUserId}
+        media={placeMedia}
+        onClose={() => setAddingWay(false)}
+        onDrawRoute={draw}
+        drawBlockedReason={leaveBlockedReason}
+        onFilled={() => {
+          reloadPlaceMedia();
+          onRoutesChanged();
+          onQuotaChanged();
+        }}
+      />
+    ) : null,
+  });
+  const pageRoute = routeSlot({ addingWay, setAddingWay }, () =>
+    onDrawRoute(current.id),
+  );
+
   const sections: Record<
     SectionKeysOn<typeof PLACE_PAGE, "web">,
     () => ReactNode
@@ -967,7 +995,7 @@ function PlaceDetailPanel({
     ),
 
     // One route per place (the API enforces it).
-    route: () => routeSection(() => onDrawRoute(current.id)),
+    route: () => pageRoute.section,
 
     // NAVIGATIONAL ONLY: a link grants no visibility (ADR 0019;
     // api/src/__tests__/placeLinks.test.ts), so this is the owner's own filing
@@ -1138,6 +1166,8 @@ function PlaceDetailPanel({
         </div>
       </div>
 
+      {pageRoute.dialog}
+
       <PlaceDialog
         place={current}
         open={showEdit && !pickingCoords}
@@ -1150,15 +1180,12 @@ function PlaceDetailPanel({
         placeTypes={placeTypes}
         onMediaChanged={reloadPlaceMedia}
         // The pen and the way's own page take the panel, and the dialog with
-        // it, so unsaved edits would go: both wait until the form holds none.
-        routeSection={(clean) =>
-          routeSection(
-            () => {
-              setShowEdit(false);
-              onDrawRoute(current.id);
-            },
-            clean ? undefined : "Save your changes first.",
-          )
+        // it: the slot says so while the form holds anything to lose.
+        routeSlot={(ctx) =>
+          routeSlot(ctx, () => {
+            setShowEdit(false);
+            onDrawRoute(current.id);
+          })
         }
       />
 

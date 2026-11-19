@@ -1324,19 +1324,22 @@ function App() {
   const requestCancelRoute = () =>
     draftChanged ? setRouteConfirm("cancel") : cancelDrawingRoute();
 
-  // Escape leaves an armed Measure or Draw tool, as its × does (the route's
-  // goes through the discard confirm). Heard on the document because the user
-  // is on the map, where no panel holds the key; a layer above it (a dialog, a
-  // menu, a field) has already consumed the press.
-  const cancelArmedTool = useEffectEvent(() => {
-    if (drawingRoute) requestCancelRoute();
+  // Escape closes one layer per press. A pick armed over a tool is the top
+  // one, so it ends first; then an armed Measure or Draw tool leaves, as its ×
+  // does (the route's goes through the discard confirm). Heard on the document
+  // because the user is on the map, where no panel holds the key; a layer above
+  // it (a dialog, a menu, a field) has already consumed the press.
+  const escapeTopLayer = useEffectEvent(() => {
+    if (pickingCoords) cancelPickingCoords();
+    else if (drawingRoute) requestCancelRoute();
     else setActivePanel(null);
   });
   const toolArmed = measuring || drawingRoute;
   // The panel is a landmark to skip to only beside the map: a phone has a sheet.
   const isNarrow = useIsMobile();
+  const escapable = toolArmed || pickingCoords;
   useEffect(() => {
-    if (!toolArmed) return;
+    if (!escapable) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape" || event.defaultPrevented) return;
       if (
@@ -1346,11 +1349,11 @@ function App() {
       )
         return;
       event.preventDefault();
-      cancelArmedTool();
+      escapeTopLayer();
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [toolArmed]);
+  }, [escapable]);
 
   // While checking for an existing session, show a branded splash instead of
   // a blank flash before the sign-in form or map appears.
