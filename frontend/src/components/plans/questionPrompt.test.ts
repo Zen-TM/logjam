@@ -4,15 +4,17 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 /**
- * Answering a plan's form, a question reads above its hint: the label takes
- * the `rowTitle` role in the text colour, the hint stays `detail` and muted.
- * The kit's field label is `detail` too, so each text-like question opts in
- * with `prominentLabel` and the chip and tick-box questions are a `FieldGroup`,
- * whose legend is the same prominent label.
+ * Answering a plan's form, a question reads above its hint, and the hint
+ * sits between the question and its answer: the label takes the `rowTitle`
+ * role in the text colour, the hint stays `detail` and muted. The kit's field
+ * label is `detail` too, and so is a `FieldGroup`'s legend by default, so
+ * every question opts in with `prominentLabel` (on its field, its
+ * `FieldGroup` or agree's `Checkbox`), and every question but agree opts in
+ * with `hintAbove`, whose hint is the tick box's own description.
  *
- * Mutation: delete `prominentLabel` from one question (agree included) in
- * PlanAnswerDialog, or
- * make `.labelProminent` compose `detail`.
+ * Mutation: delete `prominentLabel` or `hintAbove` from one question (agree
+ * excepted for `hintAbove`) in PlanAnswerDialog, or make `.labelProminent`
+ * compose `detail`.
  */
 const DIR = dirname(fileURLToPath(import.meta.url));
 const read = (path: string) => readFileSync(join(DIR, path), "utf8");
@@ -34,9 +36,11 @@ describe("a plan form's question prompt", () => {
 
   it("is asked by every kind of question", () => {
     const source = read("PlanAnswerDialog.tsx");
-    // text and phone, long text, number, agree
-    expect(source.match(/\bprominentLabel\b/g)).toHaveLength(4);
-    // choice and yes/no, multiple choice
-    expect(source.match(/<FieldGroup\b/g)).toHaveLength(2);
+    // text and phone, long text, number, agree, choice, multiple choice
+    expect(source.match(/\bprominentLabel\b/g)).toHaveLength(6);
+    // the same, bar agree, whose hint is the tick box's own description
+    expect(source.match(/\bhintAbove\b/g)).toHaveLength(5);
+    // choice and yes/no, multiple choice, agree
+    expect(source.match(/<FieldGroup\b/g)).toHaveLength(3);
   });
 });

@@ -471,8 +471,13 @@ test.describe("desktop", () => {
     await expect(dialog).toHaveCount(0);
 
     // Add a copy: alice's own places and ways, ticked and priced.
-    await aside.getByRole("button", { name: "Add", exact: true }).click();
-    await page.getByRole("menuitem", { name: "Add a place or way" }).click();
+    // The Map's one Add a place or way button holds every way in.
+    await aside.getByRole("button", { name: "Add a place or way" }).click();
+    await expect(page.getByRole("menu")).toBeVisible();
+    await expectNoViolations(page, "[role='menu']");
+    await page
+      .getByRole("menuitem", { name: "Add one of your places" })
+      .click();
     await expect(dialog.getByRole("radio", { name: /^Places/ })).toBeVisible();
     await dialog.getByRole("checkbox").first().check();
     await expectNoViolations(page, "dialog");
@@ -481,7 +486,7 @@ test.describe("desktop", () => {
 
     // New place: a point picked on the map, then the form. Closed unsaved:
     // nothing is written.
-    await aside.getByRole("button", { name: "Add", exact: true }).click();
+    await aside.getByRole("button", { name: "Add a place or way" }).click();
     await page.getByRole("menuitem", { name: "New place" }).click();
     await expect(
       page.getByText("Click the map to select a location"),

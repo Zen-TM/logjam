@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   act,
+  within,
   cleanup,
   fireEvent,
   render,
@@ -12,6 +13,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ComponentProps } from "react";
 import {
   planAddVerbLabel,
+  PLAN_ITEM_ADD,
+  PLAN_ITEM_ADD_VERBS,
   TRIP_PLAN_MAX_FORMS,
   MAX_PLACES_PER_TRIP,
   TRIP_PLACES_CAP_SENTENCE,
@@ -416,41 +419,41 @@ describe("answering a form's chip and tick-box questions", () => {
 });
 
 describe("a question's hint", () => {
-  // Mutation: draw `FieldGroup`'s hint before its controls, and the chip and
-  // tick-box questions show it above while the text questions show it below.
-  it.each(["choice", "multiChoice"] as const)(
-    "sits under a %s question's controls",
-    (kind) => {
-      render(
-        <PlanFormFields
-          form={{
-            ...contacts,
-            questions: [
-              {
-                id: "q1",
-                kind,
-                label: "Wetsuit size",
-                required: false,
-                help: "Your usual size",
-                options: [{ id: "a", label: "S" }],
-              } as never,
-            ],
-          }}
-          draft={{}}
-          onChange={() => {}}
-        />,
-      );
-      const controls = screen.getAllByRole(
-        kind === "choice" ? "radio" : "checkbox",
-      );
-      const control = controls[controls.length - 1];
-      const hint = screen.getByText("Your usual size");
-      expect(
-        control.compareDocumentPosition(hint) &
-          Node.DOCUMENT_POSITION_FOLLOWING,
-      ).toBeTruthy();
-    },
-  );
+  // Mutation: drop `hintAbove` from one kind of question in PlanAnswerDialog
+  // (or draw `FieldGroup`'s hint after its controls), and that question shows
+  // its hint under the answer while the others show it under the question.
+  it.each([
+    ["text", "textbox"],
+    ["longText", "textbox"],
+    ["number", "textbox"],
+    ["choice", "radio"],
+    ["multiChoice", "checkbox"],
+  ] as const)("sits between a %s question and its controls", (kind, role) => {
+    render(
+      <PlanFormFields
+        form={{
+          ...contacts,
+          questions: [
+            {
+              id: "q1",
+              kind,
+              label: "Wetsuit size",
+              required: false,
+              help: "Your usual size",
+              options: [{ id: "a", label: "S" }],
+            } as never,
+          ],
+        }}
+        draft={{}}
+        onChange={() => {}}
+      />,
+    );
+    const control = screen.getAllByRole(role)[0];
+    const hint = screen.getByText("Your usual size");
+    expect(
+      hint.compareDocumentPosition(control) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
 });
 
 describe("a plan's page ends its views with their add buttons", () => {
@@ -483,27 +486,64 @@ describe("a plan's page ends its views with their add buttons", () => {
     ).toBeTruthy();
   });
 
+  /** The Map view's one add button's menu. */
+  const itemAddMenu = () => {
+    fireEvent.click(screen.getByRole("button", { name: PLAN_ITEM_ADD.label }));
+    return within(screen.getByRole("menu", { name: PLAN_ITEM_ADD.label }));
+  };
+
   // Mutation: drop the `<ListEnd>` under the map's rows, and a plan with
   // places has no add at the end of them.
-  it("ends the Map with Add a place or way", () => {
+  it("ends the Map with the one Add a place or way button", () => {
     renderPanel({ view: { ...plan, places: [place] } });
     fireEvent.click(screen.getByRole("radio", { name: /^Map/ }));
     // The row, not the empty state: the add under it is what is being checked.
     expect(screen.getByRole("button", { name: "Claustral" })).toBeTruthy();
     expect(
-      screen.getAllByRole("button", { name: planAddVerbLabel("copy") }),
+      screen.getAllByRole("button", { name: PLAN_ITEM_ADD.label }),
     ).toHaveLength(1);
+    // The ways to make one are its menu, not buttons of their own.
+    for (const id of PLAN_ITEM_ADD_VERBS)
+      expect(
+        screen.queryByRole("button", { name: planAddVerbLabel(id) }),
+      ).toBeNull();
   });
 
-  // Mutation: leave one of the three out of ITEM_ADD_VERBS, and a plan has no
-  // way to make a place, draw a way or import one from its own page.
-  it("ends the Map with the three ways to make one in the plan too", () => {
-    renderPanel({ view: { ...plan, places: [place] } });
+  // Mutation: leave one verb out of the menu, or let the empty state draw its
+  // own buttons, and a plan with nothing in it has no way to copy, make, draw
+  // or import from its own page.
+  it("offers copy, make, draw and import under the button, empty or not", () => {
+    renderPanel();
     fireEvent.click(screen.getByRole("radio", { name: /^Map/ }));
-    for (const id of ["newPlace", "route", "import"] as const)
+    expect(
+      screen.getAllByRole("button", { name: PLAN_ITEM_ADD.label }),
+    ).toHaveLength(1);
+    const menu = itemAddMenu();
+    for (const id of PLAN_ITEM_ADD_VERBS)
       expect(
-        screen.getAllByRole("button", { name: planAddVerbLabel(id) }),
-      ).toHaveLength(1);
+        menu.getByRole("menuitem", { name: planAddVerbLabel(id) }),
+      ).toBeTruthy();
+  });
+
+  // Mutation: send both collection verbs to the Places tab, and "one of your
+  // ways" opens on the places.
+  it("opens the collection dialog on the tab its menu item names", () => {
+    renderPanel({
+      own: {
+        places: [{ id: "a", name: "Claustral" } as TPlace],
+        routes: [],
+        files: [],
+      },
+    });
+    fireEvent.click(screen.getByRole("radio", { name: /^Map/ }));
+    fireEvent.click(
+      itemAddMenu().getByRole("menuitem", {
+        name: planAddVerbLabel("copyWay"),
+      }),
+    );
+    expect(
+      screen.getByRole("radio", { name: /^Ways/ }).getAttribute("aria-checked"),
+    ).toBe("true");
   });
 
   // Mutation: send the pick to the account's own place form, or skip the
@@ -514,7 +554,9 @@ describe("a plan's page ends its views with their add buttons", () => {
     renderPanel({ onPickPoint });
     fireEvent.click(screen.getByRole("radio", { name: /^Map/ }));
     fireEvent.click(
-      screen.getByRole("button", { name: planAddVerbLabel("newPlace") }),
+      itemAddMenu().getByRole("menuitem", {
+        name: planAddVerbLabel("newPlace"),
+      }),
     );
     expect(onPickPoint).toHaveBeenCalledTimes(1);
     act(() => onPickPoint.mock.calls[0]![0](-33.5, 150.25));
@@ -564,7 +606,7 @@ describe("a plan's page ends its views with their add buttons", () => {
     renderPanel({ onDrawRoute });
     fireEvent.click(screen.getByRole("radio", { name: /^Map/ }));
     fireEvent.click(
-      screen.getByRole("button", { name: planAddVerbLabel("route") }),
+      itemAddMenu().getByRole("menuitem", { name: planAddVerbLabel("route") }),
     );
     expect(onDrawRoute).toHaveBeenCalledWith(plan);
   });
@@ -579,20 +621,21 @@ describe("a plan's page ends its views with their add buttons", () => {
     ).toHaveLength(1);
   });
 
-  // A member's adds are the four that put a place or way in the plan, so the
-  // hero is the Add menu and the Map ends with the same buttons.
-  it("gives a member the Add menu in the hero and the item adds at the Map's end", () => {
+  // A member's adds are the five that put a place or way in the plan, so the
+  // hero is the Add menu and the Map ends with the one button.
+  it("gives a member the Add menu in the hero and the one button at the Map's end", () => {
     renderPanel({ view: { ...plan, myRole: "member", places: [place] } });
     fireEvent.click(screen.getByRole("radio", { name: /^Map/ }));
     // The row, not the empty state: the add under it is what is being checked.
     expect(screen.getByRole("button", { name: "Claustral" })).toBeTruthy();
     expect(
-      screen.getAllByRole("button", { name: planAddVerbLabel("copy") }),
+      screen.getAllByRole("button", { name: PLAN_ITEM_ADD.label }),
     ).toHaveLength(1);
     fireEvent.click(screen.getByRole("button", { name: "Add" }));
-    for (const id of ["copy", "newPlace", "route", "import"] as const)
+    const hero = within(screen.getByRole("menu", { name: "Add to this plan" }));
+    for (const id of PLAN_ITEM_ADD_VERBS)
       expect(
-        screen.getByRole("menuitem", { name: planAddVerbLabel(id) }),
+        hero.getByRole("menuitem", { name: planAddVerbLabel(id) }),
       ).toBeTruthy();
   });
 
@@ -618,7 +661,7 @@ describe("a plan's page ends its views with their add buttons", () => {
     fireEvent.click(screen.getByRole("radio", { name: /^Map/ }));
     expect(screen.getByRole("button", { name: "Claustral" })).toBeTruthy();
     expect(
-      screen.queryByRole("button", { name: planAddVerbLabel("copy") }),
+      screen.queryByRole("button", { name: PLAN_ITEM_ADD.label }),
     ).toBeNull();
   });
 

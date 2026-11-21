@@ -22,7 +22,7 @@ import {
   mediaDisplayName,
   messageFromError,
   planAddVerbLabel,
-  planItemAddVerbs,
+  planItemAddMenu,
   tripPlanAddedMessage,
   planItemVerbs,
   TRIP_PLAN_MAX_FORMS,
@@ -55,6 +55,7 @@ import {
   type PlanVerb,
   type SectionKeysOn,
   type TripPlanItem,
+  type TripPlanItemGroup,
   type TripPlanPageView,
   type TripPlanView,
 } from "@logjam/shared";
@@ -566,7 +567,7 @@ function PlanPage({
         <Items
           plan={plan}
           online={online}
-          verbs={planItemAddVerbs("gps", plan.myRole, archived)}
+          verbs={planItemAddMenu("gps", plan.myRole, archived)?.verbs ?? []}
           me={myId}
           onInfo={notify}
           onError={(text) => notify(text, "error")}
@@ -848,6 +849,7 @@ function Items({
   const theme = useTheme();
   const [saving, setSaving] = useState<SaveCopyTarget | null>(null);
   const [adding, setAdding] = useState(false);
+  const [addGroup, setAddGroup] = useState<TripPlanItemGroup>("places");
   const addingMounted = useOnceOpened(adding);
   const styles = useStyles();
   const [newPlaceAt, setNewPlaceAt] = useState<{
@@ -866,6 +868,10 @@ function Items({
       if (point) setNewPlaceAt(point);
     }, []),
   );
+  const openCopies = (group: TripPlanItemGroup) => {
+    setAddGroup(group);
+    setAdding(true);
+  };
   const [importing, setImporting] = useState(false);
   const importWay = () => {
     setImporting(true);
@@ -881,7 +887,8 @@ function Items({
       .finally(() => setImporting(false));
   };
   const run: Record<PlanItemAddVerbId, () => void> = {
-    copy: () => setAdding(true),
+    copyPlace: () => openCopies("places"),
+    copyWay: () => openCopies("ways"),
     newPlace: () => {
       atPicker.current = true;
       onPickPoint();
@@ -911,6 +918,7 @@ function Items({
           <AddCopySheet
             plan={plan}
             visible={adding}
+            startGroup={addGroup}
             online={online}
             me={me}
             onClose={() => setAdding(false)}

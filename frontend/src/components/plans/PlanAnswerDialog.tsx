@@ -29,7 +29,6 @@ import {
   ChipRail,
   Dialog,
   ErrorBanner,
-  FieldError,
   FieldGroup,
   NumberField,
   TextArea,
@@ -64,6 +63,7 @@ function QuestionField({
           label={label}
           hint={help}
           prominentLabel
+          hintAbove
           required={question.required}
           type={question.kind === "phone" ? "tel" : "text"}
           autoComplete={question.kind === "phone" ? "tel" : "off"}
@@ -79,6 +79,7 @@ function QuestionField({
           label={label}
           hint={help}
           prominentLabel
+          hintAbove
           required={question.required}
           maxLength={TRIP_PLAN_LONG_TEXT_ANSWER_MAX_LENGTH}
           error={error}
@@ -88,24 +89,30 @@ function QuestionField({
       );
     case "number":
       return (
-        <div className={classes.question}>
-          <NumberField
-            label={label}
-            hint={help}
-            prominentLabel
-            required={question.required}
-            constraints={{ integer: true, min: 0 }}
-            value={typeof value === "string" ? value : ""}
-            onChange={onChange}
-          />
-          <FieldError message={error} />
-        </div>
+        <NumberField
+          label={label}
+          hint={help}
+          prominentLabel
+          hintAbove
+          required={question.required}
+          constraints={{ integer: true, min: 0 }}
+          value={typeof value === "string" ? value : ""}
+          onChange={onChange}
+          leftError={error}
+        />
       );
     case "choice":
     case "yesNo": {
       const options = tripPlanQuestionChoices(question);
       return (
-        <FieldGroup label={label} hint={help} error={error} named>
+        <FieldGroup
+          label={label}
+          hint={help}
+          error={error}
+          prominentLabel
+          hintAbove
+          named
+        >
           {(describedBy) => (
             <ChipRail
               label={question.label}
@@ -121,7 +128,13 @@ function QuestionField({
     case "multiChoice": {
       const ticked = Array.isArray(value) ? value : [];
       return (
-        <FieldGroup label={label} hint={help} error={error}>
+        <FieldGroup
+          label={label}
+          hint={help}
+          error={error}
+          prominentLabel
+          hintAbove
+        >
           {(question.options ?? []).map((option) => (
             <Checkbox
               key={option.id}
@@ -141,16 +154,18 @@ function QuestionField({
     }
     case "agree":
       return (
-        <div className={classes.question}>
-          <Checkbox
-            label={label}
-            description={help}
-            prominentLabel
-            checked={value === true}
-            onChange={onChange}
-          />
-          <FieldError message={error} />
-        </div>
+        <FieldGroup named error={error}>
+          {(describedBy) => (
+            <Checkbox
+              label={label}
+              description={help}
+              prominentLabel
+              describedBy={describedBy}
+              checked={value === true}
+              onChange={onChange}
+            />
+          )}
+        </FieldGroup>
       );
   }
 }

@@ -13,7 +13,7 @@ import {
   mediaDisplayName,
   messageFromError,
   placeMatchesSearch,
-  planAddVerbLabel,
+  PLAN_ITEM_ADD,
   tripPlanAddCopiesLabel,
   tripPlanAddCopyPriceLine,
   tripPlanAddOutcome,
@@ -78,6 +78,7 @@ const keyOf = tripPlanAddKey;
 export function AddCopySheet({
   plan,
   visible,
+  startGroup,
   online,
   me,
   onClose,
@@ -85,6 +86,8 @@ export function AddCopySheet({
 }: {
   plan: TripPlanView;
   visible: boolean;
+  /** The tab it opens on: places or ways. */
+  startGroup: TripPlanItemGroup;
   /** The caller's user id: only their own routes are theirs to add. */
   me: string | null;
   online: boolean;
@@ -128,7 +131,7 @@ export function AddCopySheet({
     if (visible) {
       setTicked([]);
       setSearch("");
-      setGroup("places");
+      setGroup(startGroup);
       setError(null);
     }
   }
@@ -261,7 +264,7 @@ export function AddCopySheet({
       onClose={onClose}
       // Not while adding: the run's end would land on the next session.
       closable={!busy}
-      title={planAddVerbLabel("copy")}
+      title={PLAN_ITEM_ADD.label}
       footer={
         <View style={styles.footer}>
           {error ? <ErrorBanner message={error} /> : null}

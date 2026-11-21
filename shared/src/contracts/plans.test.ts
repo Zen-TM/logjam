@@ -20,8 +20,9 @@ import {
   planVerbs,
   planVerbsFor,
   PLAN_ADD_VERBS,
+  PLAN_ITEM_ADD,
   PLAN_ITEM_ADD_VERBS,
-  planItemAddVerbs,
+  planItemAddMenu,
   PLAN_FORM_VERBS,
   PLAN_SECTION_VERBS,
   PLAN_VERB_LISTS,
@@ -428,7 +429,8 @@ describe("a plan's verbs", () => {
     const ids = PLAN_ADD_VERBS.map((verb) => verb.id) as string[];
     for (const id of PLAN_ITEM_ADD_VERBS) expect(ids).toContain(id);
     expect([...PLAN_ITEM_ADD_VERBS]).toEqual([
-      "copy",
+      "copyPlace",
+      "copyWay",
       "newPlace",
       "route",
       "import",
@@ -441,17 +443,26 @@ describe("a plan's verbs", () => {
     ).toEqual([...PLAN_ITEM_ADD_VERBS]);
   });
 
-  // Mutation: skip the `PLAN_ITEM_ADD_VERBS` filter, or ignore `archived`, and a
-  // client's Map view offers the write-up, form or invite verbs, or adds on an
-  // archived plan.
+  // Mutation: skip the PLAN_ITEM_ADD_VERBS filter, and the one button's menu
+  // offers the write-up, form or invite verbs; ignore `archived`, and a
+  // finished plan offers adds the API refuses; reorder the declaration, and
+  // the new-item verbs lose their rule.
   it.each(["web", "gps"] as const)(
-    "gives %s's Map view the item add verbs a role may run",
+    "gives %s's one Add a place or way button its menu, by role and archive",
     (platform) => {
-      const ids = (role: "leader" | "editor" | "member", archived = false) =>
-        planItemAddVerbs(platform, role, archived).map((verb) => verb.id);
-      for (const role of ["leader", "editor", "member"] as const)
-        expect(ids(role)).toEqual([...PLAN_ITEM_ADD_VERBS]);
-      expect(ids("leader", true)).toEqual([]);
+      expect(PLAN_ITEM_ADD.label).toBe("Add a place or way");
+      for (const role of ["leader", "editor", "member"] as const) {
+        const menu = planItemAddMenu(platform, role, false)!;
+        expect(menu.label).toBe(PLAN_ITEM_ADD.label);
+        expect(menu.verbs.map((verb) => verb.id)).toEqual([
+          ...PLAN_ITEM_ADD_VERBS,
+        ]);
+        // A rule between what is copied from the account and what is made.
+        expect(
+          menu.verbs.filter((verb) => verb.separated).map((verb) => verb.id),
+        ).toEqual(["newPlace"]);
+      }
+      expect(planItemAddMenu(platform, "leader", true)).toBeNull();
     },
   );
 
@@ -462,7 +473,8 @@ describe("a plan's verbs", () => {
         ids(planVerbsFor(PLAN_ADD_VERBS, platform, "leader", live)),
       ).toEqual([
         "section",
-        "copy",
+        "copyPlace",
+        "copyWay",
         "newPlace",
         "route",
         "import",

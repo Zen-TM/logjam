@@ -142,8 +142,7 @@ import {
   MAP_TERRAIN,
   canyonOffersFor,
   opensPreview,
-  PLAN_ADD_VERBS,
-  planVerbsFor,
+  planItemAddMenu,
   TRIP_PLAN_PAGE,
   tripPlansBadgeCount,
   tripPlanTripLogPrefill,
@@ -852,9 +851,8 @@ function App() {
     if (
       pick &&
       planOnMap &&
-      planVerbsFor(PLAN_ADD_VERBS, "web", planOnMap.myRole, {
-        archived: planOnMap.archivedAt != null,
-      }).some((verb) => verb.id === "copy")
+      planItemAddMenu("web", planOnMap.myRole, planOnMap.archivedAt != null) !=
+        null
     )
       setPlanAddCopy(pick);
   };
