@@ -28,6 +28,10 @@ appId: earth.logjam.gps.dev
     times: 5
     commands:
       - tapOn: "Wait"
+# The dialog may have ended the wait above before the app showed anything.
+- extendedWaitUntil:
+    visible: "Not now|Places|There was a problem loading the project."
+    timeout: 120000
 # The dev client's own error screen (it could not reach Metro): its Reload retries.
 - runFlow:
     when:
