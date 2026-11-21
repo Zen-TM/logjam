@@ -19,6 +19,7 @@ export function Field({
   label,
   hint,
   prominentLabel,
+  hintAbove,
   error,
   aside,
   requiredMark,
@@ -32,6 +33,9 @@ export function Field({
   /** A question someone answers: the label is set above its hint, in the text
    *  colour, instead of looking like it. */
   prominentLabel?: boolean;
+  /** Draws the hint between the label and the control, not under it: a
+   *  question the hint belongs to before it is answered. */
+  hintAbove?: boolean;
   /** This control's validation message, drawn by `FieldError`. */
   error?: string | null;
   aside?: React.ReactNode;
@@ -45,6 +49,7 @@ export function Field({
 }) {
   const styles = useStyles();
   const labelStyle = prominentLabel ? styles.labelProminent : styles.label;
+  const hintLine = hint ? <Text style={styles.hint}>{hint}</Text> : null;
   const end =
     aside ??
     (requiredMark ? (
@@ -61,8 +66,9 @@ export function Field({
       ) : (
         <Text style={labelStyle}>{label}</Text>
       )}
+      {hintAbove ? hintLine : null}
       {children}
-      {hint ? <Text style={styles.hint}>{hint}</Text> : null}
+      {hintAbove ? null : hintLine}
       <FieldError message={error} reserve={reserveError} />
     </View>
   );

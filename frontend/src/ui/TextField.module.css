@@ -21,6 +21,7 @@
    titles, which a field label sitting under one must not mimic. */
 .label {
   composes: detail from "../textRoles.generated.module.css";
+  padding: 0;
   color: var(--color-text-muted);
 }
 

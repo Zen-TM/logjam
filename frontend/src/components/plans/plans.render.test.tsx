@@ -419,41 +419,41 @@ describe("answering a form's chip and tick-box questions", () => {
 });
 
 describe("a question's hint", () => {
-  // Mutation: draw `FieldGroup`'s hint before its controls, and the chip and
-  // tick-box questions show it above while the text questions show it below.
-  it.each(["choice", "multiChoice"] as const)(
-    "sits under a %s question's controls",
-    (kind) => {
-      render(
-        <PlanFormFields
-          form={{
-            ...contacts,
-            questions: [
-              {
-                id: "q1",
-                kind,
-                label: "Wetsuit size",
-                required: false,
-                help: "Your usual size",
-                options: [{ id: "a", label: "S" }],
-              } as never,
-            ],
-          }}
-          draft={{}}
-          onChange={() => {}}
-        />,
-      );
-      const controls = screen.getAllByRole(
-        kind === "choice" ? "radio" : "checkbox",
-      );
-      const control = controls[controls.length - 1];
-      const hint = screen.getByText("Your usual size");
-      expect(
-        control.compareDocumentPosition(hint) &
-          Node.DOCUMENT_POSITION_FOLLOWING,
-      ).toBeTruthy();
-    },
-  );
+  // Mutation: drop `hintAbove` from one kind of question in PlanAnswerDialog
+  // (or draw `FieldGroup`'s hint after its controls), and that question shows
+  // its hint under the answer while the others show it under the question.
+  it.each([
+    ["text", "textbox"],
+    ["longText", "textbox"],
+    ["number", "textbox"],
+    ["choice", "radio"],
+    ["multiChoice", "checkbox"],
+  ] as const)("sits between a %s question and its controls", (kind, role) => {
+    render(
+      <PlanFormFields
+        form={{
+          ...contacts,
+          questions: [
+            {
+              id: "q1",
+              kind,
+              label: "Wetsuit size",
+              required: false,
+              help: "Your usual size",
+              options: [{ id: "a", label: "S" }],
+            } as never,
+          ],
+        }}
+        draft={{}}
+        onChange={() => {}}
+      />,
+    );
+    const control = screen.getAllByRole(role)[0];
+    const hint = screen.getByText("Your usual size");
+    expect(
+      hint.compareDocumentPosition(control) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
 });
 
 describe("a plan's page ends its views with their add buttons", () => {
