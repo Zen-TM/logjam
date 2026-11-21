@@ -13,9 +13,21 @@ appId: earth.logjam.gps.dev
 - openLink: "logjamdev://expo-development-client/?url=http%3A%2F%2F127.0.0.1%3A8081"
 # On a fresh install the crash-report question covers the screen, and the tabs
 # are not visible behind it.
+# Or Android's own "isn't responding" dialog, raised for the launcher or the
+# system UI while the emulator's software GPU has the cores busy. It covers the
+# app and hides it from Maestro, and the script's hide_error_dialogs only stops
+# ones raised after it ran.
 - extendedWaitUntil:
-    visible: "Not now|Places|There was a problem loading the project."
+    visible: "Not now|Places|There was a problem loading the project.|.* isn't responding"
     timeout: 120000
+# Wait closes it, and the dialogs are about other processes, not the app. A
+# second one can sit under the first.
+- repeat:
+    while:
+      visible: ".* isn't responding"
+    times: 5
+    commands:
+      - tapOn: "Wait"
 # The dev client's own error screen (it could not reach Metro): its Reload retries.
 - runFlow:
     when:
