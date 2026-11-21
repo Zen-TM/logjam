@@ -2,7 +2,7 @@
 // area's files come from frontend/scripts/sign_in_terrain.py; only the one
 // shown is downloaded.
 import { useEffect, useState } from "react";
-import { areaKeys, pickArea } from "./signInTerrain";
+import { areaKeys, pickArea } from "./signInTerrainUtils";
 
 export type Terrain = {
   name: string;
