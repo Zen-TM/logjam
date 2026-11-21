@@ -32,6 +32,7 @@ import {
   isValidLongitude,
   coordinateNumber,
   PLACE_PAGE,
+  changedSince,
   deleteSourceLabel,
   sourceRows,
   sourcesPatch,
@@ -193,13 +194,22 @@ function PlaceDialog({
   // Tracks a pick-on-map cycle, so returning from it doesn't reset the form.
   const [picking, setPicking] = useState(false);
 
-  // Snapshot of the form fields as populated below, taken in the same step
-  // that sets them — used by the unsaved-changes guard to tell a real edit
-  // apart from "the dialog is open". Sources/fieldValues are
-  // compared by JSON value, not identity.
-  const [initialFormSnapshot, setInitialFormSnapshot] = useState<string | null>(
-    null,
-  );
+  // The form fields as populated below, taken in the same step that sets them.
+  // The unsaved-changes guard compares with it to tell a real edit apart from
+  // "the dialog is open" (Sources/fieldValues by JSON value, not identity), and
+  // a save sends only what differs, so a field the user never touched keeps
+  // whatever a refetch brought in while the dialog was open.
+  const [seeded, setSeeded] = useState<{
+    name: string;
+    altNames: string;
+    latitude: string;
+    longitude: string;
+    notes: string;
+    sources: SourceRow[];
+    fieldValues: Record<string, string>;
+    placeTypeId: string;
+  } | null>(null);
+  const initialFormSnapshot = seeded ? JSON.stringify(seeded) : null;
   // Bumped by each populate, so the refs that track one open of the form start
   // over with it (the effect after this block).
   const [formSession, setFormSession] = useState(0);
@@ -275,18 +285,16 @@ function PlaceDialog({
     setSources(initialSources);
     setFieldValues(initialFieldValues);
     setPlaceTypeId(initialPlaceTypeId);
-    setInitialFormSnapshot(
-      JSON.stringify({
-        name: initialName,
-        altNames: initialAltNames,
-        latitude: initialLatitude,
-        longitude: initialLongitude,
-        notes: initialNotes,
-        sources: initialSources,
-        fieldValues: initialFieldValues,
-        placeTypeId: initialPlaceTypeId,
-      }),
-    );
+    setSeeded({
+      name: initialName,
+      altNames: initialAltNames,
+      latitude: initialLatitude,
+      longitude: initialLongitude,
+      notes: initialNotes,
+      sources: initialSources,
+      fieldValues: initialFieldValues,
+      placeTypeId: initialPlaceTypeId,
+    });
     setError(null);
     setSourceError(null);
     setShowFieldErrors(false);
@@ -472,21 +480,17 @@ function PlaceDialog({
         typeFieldDefs.some(
           (def) => customFieldValueError(def, getFieldValue(def.key)) != null,
         );
-      if (invalid) {
-        setError(PLACE_FORM.copy.fixFields);
-        setSaving(false);
-        return;
-      }
-
       // Non-http(s) links are refused rather than stored to later render as a
       // clickable href, and only sources the user changed are checked
       // (shared/src/placeSources.test.ts).
-      const sourcesResult = sourcesPatch(sources, place?.fieldValues);
+      const sourcesResult = sourcesPatch(sources, seeded?.sources ?? []);
       if ("error" in sourcesResult) {
         setSourceError({
           index: sourcesResult.index,
           message: sourcesResult.error,
         });
+      }
+      if (invalid || "error" in sourcesResult) {
         setError(PLACE_FORM.copy.fixFields);
         setSaving(false);
         return;
@@ -500,13 +504,15 @@ function PlaceDialog({
       // store. `setFieldValues` drops the empty ones rather than storing nulls:
       // a stored null renders as a filled-in-but-blank field and satisfies a
       // "has a value" filter.
+      // And only the ones the user changed since the form opened: the rest
+      // keep what the place holds now.
+      const touched = changedSince(seeded?.fieldValues ?? {}, fieldValues);
       const attributes: Record<string, unknown> = {};
       for (const def of typeFieldDefs) {
-        attributes[def.key] = coerceFieldValue(
-          getFieldValue(def.key),
-          def.type,
-        );
+        if (def.key in touched)
+          attributes[def.key] = coerceFieldValue(touched[def.key], def.type);
       }
+      const fieldPatch = { ...attributes, ...sourcesResult.patch };
 
       const data = {
         name: name.trim(),
@@ -518,14 +524,24 @@ function PlaceDialog({
         longitude: parsedLng,
         placeTypeId,
         notes: notes || null,
-        fieldValues: withFieldValues(place?.fieldValues ?? {}, {
-          ...attributes,
-          ...sourcesResult.patch,
-        }),
+        fieldValues: withFieldValues(place?.fieldValues ?? {}, fieldPatch),
       };
 
       if (isEdit) {
-        await updatePlace(place.id, data);
+        // Only what the user changed, so a pull that landed while the dialog
+        // was open is not overwritten by what it opened with (last write wins
+        // per field).
+        const edit: Partial<typeof data> = {};
+        if (name !== seeded?.name) edit.name = data.name;
+        if (altNames !== seeded?.altNames) edit.altNames = data.altNames;
+        if (latitude !== seeded?.latitude) edit.latitude = data.latitude;
+        if (longitude !== seeded?.longitude) edit.longitude = data.longitude;
+        if (placeTypeId !== seeded?.placeTypeId)
+          edit.placeTypeId = data.placeTypeId;
+        if (notes !== seeded?.notes) edit.notes = data.notes;
+        if (Object.keys(fieldPatch).length > 0)
+          edit.fieldValues = data.fieldValues;
+        if (Object.keys(edit).length > 0) await updatePlace(place.id, edit);
       } else if (draftPlaceId) {
         // A draft was already created to hold uploaded media — persist the form.
         await updatePlace(draftPlaceId, data);

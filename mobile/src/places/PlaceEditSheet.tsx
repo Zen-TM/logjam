@@ -43,6 +43,7 @@ import {
 } from "./coordinateText";
 import type { MirrorPlace } from "../sync/mirrorStore";
 import { createPlaceLocal, updatePlaceLocal } from "../sync/outbox";
+import { placeEditChanges, type PlaceFormValues } from "./placeEditChanges";
 import { attachMediaLocal } from "../sync/mediaUpload";
 import { AddWaySheet } from "./AddWaySheet";
 import {
@@ -64,7 +65,6 @@ import { CustomFieldValueInputs } from "../customFields/CustomFieldValues";
 import {
   coerceCustomFields,
   fieldValueStrings,
-  sameFieldValues,
   withoutClearedFields,
 } from "../customFields/fieldValueCoercion";
 import { useFieldDefs } from "../customFields/useFieldDefs";
@@ -115,19 +115,8 @@ import {
  * They live in component state and leave only through the outbox's authed push;
  * nothing here is logged, and the failure copy is ours rather than the error's.
  */
-type FormValues = {
-  name: string;
-  altNames: string;
-  latitude: string;
-  longitude: string;
-  notes: string;
-  placeTypeId: string;
-  fieldValues: Record<string, string>;
-  sources: SourceRow[];
-};
-
 /** An emptied field is the same as one never filled, so it is left out. */
-const formFingerprint = (values: FormValues) =>
+const formFingerprint = (values: PlaceFormValues) =>
   JSON.stringify({
     ...values,
     fieldValues: Object.entries(values.fieldValues)
@@ -233,8 +222,10 @@ export function PlaceEditSheet({
     message: string;
   } | null>(null);
   const [dateFieldKey, setDateFieldKey] = useState<string | null>(null);
-  // The form as seeded, to tell an edit from an untouched sheet (§10).
-  const [pristine, setPristine] = useState("");
+  // The form as seeded: tells an edit from an untouched sheet (§10), and is
+  // what a save compares with, so it sends only what the user changed.
+  const [seeded, setSeeded] = useState<PlaceFormValues | null>(null);
+  const pristine = seeded ? formFingerprint(seeded) : "";
   const [editingField, setEditingField] = useState<ScopedCustomFieldDef | null>(
     null,
   );
@@ -265,7 +256,7 @@ export function PlaceEditSheet({
     setSourceError(null);
     setFormError(null);
     setSaving(false);
-    const start: FormValues = {
+    const start: PlaceFormValues = {
       name: place?.name ?? "",
       altNames: (place?.altNames ?? []).join(", "),
       // An existing place shows its position as its page does, to five places;
@@ -298,7 +289,7 @@ export function PlaceEditSheet({
     setPlaceTypeId(start.placeTypeId);
     setFieldValues(start.fieldValues);
     setSources(start.sources);
-    setPristine(formFingerprint(start));
+    setSeeded(start);
     setMode("form");
     setEditingField(null);
     setDateFieldKey(null);
@@ -386,6 +377,29 @@ export function PlaceEditSheet({
     ],
   );
 
+  const form: PlaceFormValues = useMemo(
+    () => ({
+      name,
+      altNames,
+      latitude,
+      longitude,
+      notes,
+      placeTypeId,
+      fieldValues,
+      sources,
+    }),
+    [
+      name,
+      altNames,
+      latitude,
+      longitude,
+      notes,
+      placeTypeId,
+      fieldValues,
+      sources,
+    ],
+  );
+
   const save = useCallback(async () => {
     setNameError(null);
     setLatitudeError(null);
@@ -441,7 +455,7 @@ export function PlaceEditSheet({
     );
     // The same check Logjam Web runs, and only on sources the user changed.
     // Merged like a field value below: null removes the key.
-    const sourcesResult = sourcesPatch(sources, place?.fieldValues);
+    const sourcesResult = sourcesPatch(sources, seeded?.sources ?? []);
     setNameError(nameProblem);
     setLatitudeError(latitudeProblem);
     setLongitudeError(longitudeProblem);
@@ -468,35 +482,14 @@ export function PlaceEditSheet({
     setSaving(true);
     try {
       if (place) {
-        // Field-scoped: push only what changed, so a concurrent edit to another
-        // field on another device isn't clobbered (§6 LWW).
-        const changes: Record<string, unknown> = {};
-        if (draft.name !== place.name) changes.name = draft.name;
-        if (!sameList(draft.altNames, place.altNames))
-          changes.altNames = draft.altNames;
-        if (draft.latitude != null && draft.latitude !== place.latitude) {
-          changes.latitude = draft.latitude;
-        }
-        if (draft.longitude != null && draft.longitude !== place.longitude) {
-          changes.longitude = draft.longitude;
-        }
-        if (draft.notes !== place.notes) changes.notes = draft.notes;
-        if (placeTypeId !== place.placeTypeId)
-          changes.placeTypeId = placeTypeId;
-        // `fieldValues` is replaced wholesale by the server, so the edit is
-        // built OVER the place's existing values — any key another client
-        // added would otherwise be dropped by an edit made on the phone.
-        // Built OVER the stored values, never rebuilt from the form: that is
-        // what keeps another client's key, and — on a type change — the OLD
-        // type's values, which the server needs in the payload to park them in
-        // `foreignFields` rather than lose them (§2.6).
-        const nextValues = withFieldValues(place.fieldValues, {
-          ...effectiveCustomFields,
-          ...sourcesResult.patch,
+        const changes = placeEditChanges({
+          seeded: seeded ?? form,
+          form,
+          parsed: draft,
+          current: place,
+          typeFieldDefs,
+          sourcesPatch: sourcesResult.patch,
         });
-        if (!sameFieldValues(nextValues, place.fieldValues ?? {})) {
-          changes.fieldValues = nextValues;
-        }
         if (Object.keys(changes).length === 0) {
           onClose();
           return;
@@ -541,6 +534,8 @@ export function PlaceEditSheet({
     place,
     draft,
     fieldValues,
+    form,
+    seeded,
     onClose,
     onSaved,
     latitudeShown,
@@ -584,17 +579,7 @@ export function PlaceEditSheet({
 
   const dirty =
     mode === "form" &&
-    (formFingerprint({
-      name,
-      altNames,
-      latitude,
-      longitude,
-      notes,
-      placeTypeId,
-      fieldValues,
-      sources,
-    }) !== pristine ||
-      hasStagedMedia(staged));
+    (formFingerprint(form) !== pristine || hasStagedMedia(staged));
 
   const sections: Record<SectionKeysOn<typeof PLACE_FORM, "gps">, ReactNode> = {
     // The two below are for a NEW place only (`onlyWhenAdding` in the
@@ -1034,10 +1019,6 @@ function typeName(
   types: { id: string; name: string }[] | null,
 ): string {
   return types?.find((type) => type.id === typeId)?.name ?? "place";
-}
-
-function sameList(a: string[], b: string[]): boolean {
-  return a.length === b.length && a.every((entry, index) => entry === b[index]);
 }
 
 const useStyles = makeStyles((theme, textRole) => ({

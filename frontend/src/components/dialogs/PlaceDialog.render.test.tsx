@@ -6,11 +6,16 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { PLACE_FORM, PLACE_PAGE, SYSTEM_PLACE_TYPE_IDS } from "@logjam/shared";
+import {
+  PLACE_FORM,
+  PLACE_PAGE,
+  SOURCES_FIELD_KEY,
+  SYSTEM_PLACE_TYPE_IDS,
+} from "@logjam/shared";
 
 import PlaceDialog from "./PlaceDialog";
 import { ToastProvider } from "../feedback/ToastProvider";
-import { deleteMedia } from "../../placeUtils";
+import { deleteMedia, updatePlace } from "../../placeUtils";
 import { ApiError } from "../../errors/ApiError";
 import type { TPlace, TPlaceType } from "../../placeUtils";
 
@@ -18,6 +23,7 @@ vi.mock("../../placeUtils", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../placeUtils")>()),
   getPlaceDetail: vi.fn(async () => ({ media: [] })),
   deleteMedia: vi.fn(async () => {}),
+  updatePlace: vi.fn(async () => ({})),
 }));
 // The real one needs a file chooser: this one "uploads" (m1, m2, ...) on a
 // press, and reports a slow one on another.
@@ -267,5 +273,79 @@ describe("PlaceDialog, editing, after an upload", () => {
         .getByRole("button", { name: "Cancel" })
         .getAttribute("aria-disabled"),
     ).toBeNull();
+  });
+});
+
+const save = () =>
+  fireEvent.click(
+    screen.getByRole("button", { name: PLACE_FORM.copy.saveSubmit }),
+  );
+
+// A refetch can land while the dialog is open. A save sends what the user
+// changed, never the text the dialog opened with.
+describe("PlaceDialog, saving an edit", () => {
+  beforeEach(() => vi.mocked(updatePlace).mockClear());
+
+  const stored = (notes: string, link: string): TPlace =>
+    ({
+      ...place("p1", "Alpha Gorge"),
+      notes,
+      fieldValues: { [SOURCES_FIELD_KEY]: [["Guide", link]] },
+    }) as unknown as TPlace;
+
+  // Mutation: build the save from every form field again, or compare the
+  // sources with the place as it is by then, and the notes and the source list
+  // the refetch brought in are overwritten by the ones the dialog opened with.
+  it("leaves a field alone that a refetch changed while it was open", async () => {
+    const { rerender } = render(
+      dialog(stored("Old note", "https://old.example")),
+    );
+    fireEvent.change(nameBox(), { target: { value: "Alpha Gorge 2" } });
+
+    rerender(dialog(stored("Newer note", "https://new.example")));
+    save();
+
+    await waitFor(() => expect(updatePlace).toHaveBeenCalledTimes(1));
+    expect(updatePlace).toHaveBeenCalledWith("p1", { name: "Alpha Gorge 2" });
+  });
+
+  // Mutation: send every field once any one changed, and the name, position
+  // and sources travel with the notes.
+  it("builds a changed notes field and nothing else over the place as it is", async () => {
+    const { rerender } = render(
+      dialog(stored("Old note", "https://old.example")),
+    );
+    fireEvent.change(screen.getByLabelText(/^Notes/), {
+      target: { value: "Mine" },
+    });
+
+    rerender(dialog(stored("Newer note", "https://new.example")));
+    save();
+
+    await waitFor(() => expect(updatePlace).toHaveBeenCalledTimes(1));
+    expect(updatePlace).toHaveBeenCalledWith("p1", { notes: "Mine" });
+  });
+
+  // Mutation: run the sources check after the early return for the other
+  // checks again, and the link's error shows only on the second press.
+  it("shows a bad link's error on the first press, with the other errors", async () => {
+    render(dialog(place("p1", "Alpha Gorge")));
+    fireEvent.change(nameBox(), { target: { value: "" } });
+    fireEvent.click(
+      screen.getByRole("button", { name: PLACE_FORM.copy.addSource }),
+    );
+    fireEvent.change(screen.getByLabelText(PLACE_FORM.copy.sourceLabel), {
+      target: { value: "Guide" },
+    });
+    fireEvent.change(screen.getByLabelText(PLACE_FORM.copy.sourceLink), {
+      target: { value: "javascript:alert(1)" },
+    });
+    save();
+
+    expect(
+      await screen.findByText(PLACE_FORM.copy.sourceLinkInvalid),
+    ).toBeTruthy();
+    expect(screen.getByText(PLACE_FORM.copy.nameMissing)).toBeTruthy();
+    expect(updatePlace).not.toHaveBeenCalled();
   });
 });

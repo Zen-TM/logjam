@@ -122,21 +122,30 @@ describe("a place form's source rows", () => {
         ["", "https://a.example"],
       ],
     };
-    expect(sourcesPatch(sourceRows(stored), stored)).toEqual({ patch: {} });
+    const seeded = sourceRows(stored);
+    expect(sourcesPatch(seeded, seeded)).toEqual({ patch: {} });
     // Touched: the same rows now meet the rules.
-    const touched = [...sourceRows(stored), { label: "New", url: "" }];
-    expect(sourcesPatch(touched, stored)).toEqual({
+    const touched = [...seeded, { label: "New", url: "" }];
+    expect(sourcesPatch(touched, seeded)).toEqual({
       error: PLACE_FORM.copy.sourceLinkInvalid,
       index: 0,
     });
     const fixed = [{ label: "RopeWiki", url: "https://ropewiki.com/x" }];
-    expect(sourcesPatch(fixed, stored)).toEqual({
+    expect(sourcesPatch(fixed, seeded)).toEqual({
       patch: { [SOURCES_FIELD_KEY]: [["RopeWiki", "https://ropewiki.com/x"]] },
     });
-    expect(sourcesPatch([], stored)).toEqual({
+    expect(sourcesPatch([], seeded)).toEqual({
       patch: { [SOURCES_FIELD_KEY]: null },
     });
-    expect(sourcesPatch([], {})).toEqual({ patch: {} });
+    expect(sourcesPatch([], [])).toEqual({ patch: {} });
+  });
+
+  // Mutation: compare the rows with the place as it is at save time instead of
+  // with the rows the form opened with, and a list a sync pulled in while the
+  // form was open is overwritten by the stale one the form still shows.
+  it("leaves a list pulled in while the form was open alone", () => {
+    const opened = [{ label: "Old", url: "https://old.example" }];
+    expect(sourcesPatch(opened, opened)).toEqual({ patch: {} });
   });
 
   it("round-trips: rows -> pairs -> rows", () => {
@@ -170,7 +179,7 @@ describe("both clients edit sources through the shared helpers", () => {
     (_name, file) => {
       const source = readFileSync(join(repo, file), "utf8");
       expect(source).toContain("sourceRows(");
-      expect(source).toContain("sourcesPatch(sources, place?.fieldValues)");
+      expect(source).toContain("sourcesPatch(sources, seeded?.sources ?? [])");
       expect(source).not.toContain("cleanSources(");
       expect(source).toContain("deleteSourceLabel(");
       for (const words of [
@@ -183,10 +192,32 @@ describe("both clients edit sources through the shared helpers", () => {
     },
   );
 
+  // Mutation: compare a form with the place as it is at save time in either
+  // client, and a field a sync pulled in while the form was open is
+  // overwritten by the text the form opened with.
+  it.each([
+    ["Logjam Web", "frontend/src/components/dialogs/PlaceDialog.tsx"],
+    ["Logjam GPS", "mobile/src/places/placeEditChanges.ts"],
+  ] as const)(
+    "%s sends only the attributes the user changed",
+    (_name, file) => {
+      expect(readFileSync(join(repo, file), "utf8")).toContain(
+        "changedSince(seeded",
+      );
+    },
+  );
+
   // Mutation: build a save from the form's sources alone and the key is
   // never merged, so an edit on the phone drops or ignores the list.
   it("merges the cleaned list under the reserved key on a save", () => {
-    const source = readFileSync(join(repo, clients[1][1]), "utf8");
-    expect(source.match(/\.\.\.sourcesResult\.patch/g)).toHaveLength(2);
+    const sheet = readFileSync(join(repo, clients[1][1]), "utf8");
+    // The create merges it; the edit hands it to `placeEditChanges`, which does.
+    expect(sheet.match(/\.\.\.sourcesResult\.patch/g)).toHaveLength(1);
+    expect(sheet.match(/sourcesPatch: sourcesResult\.patch/g)).toHaveLength(1);
+    const edit = readFileSync(
+      join(repo, "mobile/src/places/placeEditChanges.ts"),
+      "utf8",
+    );
+    expect(edit).toContain("...args.sourcesPatch");
   });
 });
