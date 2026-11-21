@@ -5,6 +5,7 @@ import { DatabaseSync } from "node:sqlite";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   cleanSources,
+  placeEditChanges,
   setFieldValues,
   SOURCES_FIELD_KEY,
   sourceRows,
@@ -48,7 +49,6 @@ vi.mock("expo-crypto", () => ({
 
 const { createPlaceLocal, updatePlaceLocal } = await import("./outbox");
 const { getMirrorPlace, upsertPlace } = await import("./mirrorStore");
-const { placeEditChanges } = await import("../places/placeEditChanges");
 
 const TYPE = "b0000000-0000-4000-8000-000000000001";
 
@@ -169,6 +169,7 @@ describe("a place's source links", () => {
         longitude: null,
         notes: null,
       },
+      touched: { latitude: false, longitude: false },
       current: place as NonNullable<typeof place>,
       typeFieldDefs: [],
       sourcesPatch: result.patch,

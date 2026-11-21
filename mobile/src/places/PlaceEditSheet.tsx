@@ -18,6 +18,8 @@ import {
   isValidLatitude,
   isValidLongitude,
   placeAttributesTitle,
+  placeEditChanges,
+  type PlaceFormValues,
   PLACE_FORM,
   type SectionKeysOn,
   setFieldValues as withFieldValues,
@@ -43,7 +45,6 @@ import {
 } from "./coordinateText";
 import type { MirrorPlace } from "../sync/mirrorStore";
 import { createPlaceLocal, updatePlaceLocal } from "../sync/outbox";
-import { placeEditChanges, type PlaceFormValues } from "./placeEditChanges";
 import { attachMediaLocal } from "../sync/mediaUpload";
 import { AddWaySheet } from "./AddWaySheet";
 import {
@@ -486,6 +487,10 @@ export function PlaceEditSheet({
           seeded: seeded ?? form,
           form,
           parsed: draft,
+          touched: {
+            latitude: latitudeEdited,
+            longitude: longitudeEdited,
+          },
           current: place,
           typeFieldDefs,
           sourcesPatch: sourcesResult.patch,
@@ -536,6 +541,8 @@ export function PlaceEditSheet({
     fieldValues,
     form,
     seeded,
+    latitudeEdited,
+    longitudeEdited,
     onClose,
     onSaved,
     latitudeShown,

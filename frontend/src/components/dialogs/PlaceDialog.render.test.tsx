@@ -286,9 +286,10 @@ const save = () =>
 describe("PlaceDialog, saving an edit", () => {
   beforeEach(() => vi.mocked(updatePlace).mockClear());
 
-  const stored = (notes: string, link: string): TPlace =>
+  const stored = (notes: string, link: string, latitude = -33.74): TPlace =>
     ({
       ...place("p1", "Alpha Gorge"),
+      latitude,
       notes,
       fieldValues: { [SOURCES_FIELD_KEY]: [["Guide", link]] },
     }) as unknown as TPlace;
@@ -302,11 +303,26 @@ describe("PlaceDialog, saving an edit", () => {
     );
     fireEvent.change(nameBox(), { target: { value: "Alpha Gorge 2" } });
 
-    rerender(dialog(stored("Newer note", "https://new.example")));
+    rerender(dialog(stored("Newer note", "https://new.example", -33.8)));
     save();
 
     await waitFor(() => expect(updatePlace).toHaveBeenCalledTimes(1));
     expect(updatePlace).toHaveBeenCalledWith("p1", { name: "Alpha Gorge 2" });
+  });
+
+  // Mutation: leave the coordinates out of `placeEditChanges`'s result, or pass
+  // `touched` false for them, and a typed position is never sent.
+  it("sends a position the user typed, over the one a pull brought in", async () => {
+    const { rerender } = render(
+      dialog(stored("Old note", "https://old.example")),
+    );
+    fireEvent.change(box(/^Latitude/), { target: { value: "-33.9" } });
+
+    rerender(dialog(stored("Old note", "https://old.example", -33.8)));
+    save();
+
+    await waitFor(() => expect(updatePlace).toHaveBeenCalledTimes(1));
+    expect(updatePlace).toHaveBeenCalledWith("p1", { latitude: -33.9 });
   });
 
   // Mutation: send every field once any one changed, and the name, position

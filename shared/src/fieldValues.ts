@@ -97,11 +97,15 @@ export function changedSince(
   seeded: Record<string, string>,
   current: Record<string, string>,
 ): Record<string, string> {
-  return Object.fromEntries(
-    Object.entries(current).filter(
-      ([key, text]) => text !== (seeded[key] ?? ""),
-    ),
-  );
+  const changed: Record<string, string> = {};
+  for (const key of new Set([
+    ...Object.keys(seeded),
+    ...Object.keys(current),
+  ])) {
+    const text = current[key] ?? "";
+    if (text !== (seeded[key] ?? "")) changed[key] = text;
+  }
+  return changed;
 }
 
 /** The user-visible keys — internal `_`-prefixed entries excluded. */

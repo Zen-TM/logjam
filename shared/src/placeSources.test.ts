@@ -123,7 +123,15 @@ describe("a place form's source rows", () => {
       ],
     };
     const seeded = sourceRows(stored);
-    expect(sourcesPatch(seeded, seeded)).toEqual({ patch: {} });
+    // A copy, not the same array: unchanged means equal rows.
+    expect(
+      sourcesPatch(
+        seeded,
+        seeded.map((row) => ({ ...row })),
+      ),
+    ).toEqual({
+      patch: {},
+    });
     // Touched: the same rows now meet the rules.
     const touched = [...seeded, { label: "New", url: "" }];
     expect(sourcesPatch(touched, seeded)).toEqual({
@@ -138,14 +146,6 @@ describe("a place form's source rows", () => {
       patch: { [SOURCES_FIELD_KEY]: null },
     });
     expect(sourcesPatch([], [])).toEqual({ patch: {} });
-  });
-
-  // Mutation: compare the rows with the place as it is at save time instead of
-  // with the rows the form opened with, and a list a sync pulled in while the
-  // form was open is overwritten by the stale one the form still shows.
-  it("leaves a list pulled in while the form was open alone", () => {
-    const opened = [{ label: "Old", url: "https://old.example" }];
-    expect(sourcesPatch(opened, opened)).toEqual({ patch: {} });
   });
 
   it("round-trips: rows -> pairs -> rows", () => {
@@ -192,21 +192,6 @@ describe("both clients edit sources through the shared helpers", () => {
     },
   );
 
-  // Mutation: compare a form with the place as it is at save time in either
-  // client, and a field a sync pulled in while the form was open is
-  // overwritten by the text the form opened with.
-  it.each([
-    ["Logjam Web", "frontend/src/components/dialogs/PlaceDialog.tsx"],
-    ["Logjam GPS", "mobile/src/places/placeEditChanges.ts"],
-  ] as const)(
-    "%s sends only the attributes the user changed",
-    (_name, file) => {
-      expect(readFileSync(join(repo, file), "utf8")).toContain(
-        "changedSince(seeded",
-      );
-    },
-  );
-
   // Mutation: build a save from the form's sources alone and the key is
   // never merged, so an edit on the phone drops or ignores the list.
   it("merges the cleaned list under the reserved key on a save", () => {
@@ -214,10 +199,7 @@ describe("both clients edit sources through the shared helpers", () => {
     // The create merges it; the edit hands it to `placeEditChanges`, which does.
     expect(sheet.match(/\.\.\.sourcesResult\.patch/g)).toHaveLength(1);
     expect(sheet.match(/sourcesPatch: sourcesResult\.patch/g)).toHaveLength(1);
-    const edit = readFileSync(
-      join(repo, "mobile/src/places/placeEditChanges.ts"),
-      "utf8",
-    );
+    const edit = readFileSync(join(repo, "shared/src/placeEdit.ts"), "utf8");
     expect(edit).toContain("...args.sourcesPatch");
   });
 });

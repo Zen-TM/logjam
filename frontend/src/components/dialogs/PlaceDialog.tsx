@@ -14,7 +14,6 @@ import type {
 } from "@logjam/shared";
 import {
   abandonConfirm,
-  coerceFieldValue,
   contractSectionKeys,
   placeAttributesTitle,
   PLACE_FORM,
@@ -32,8 +31,10 @@ import {
   isValidLongitude,
   coordinateNumber,
   PLACE_PAGE,
-  changedSince,
   deleteSourceLabel,
+  placeEditChanges,
+  touchedFieldValues,
+  type PlaceFormValues,
   sourceRows,
   sourcesPatch,
   type SourceRow,
@@ -199,16 +200,7 @@ function PlaceDialog({
   // "the dialog is open" (Sources/fieldValues by JSON value, not identity), and
   // a save sends only what differs, so a field the user never touched keeps
   // whatever a refetch brought in while the dialog was open.
-  const [seeded, setSeeded] = useState<{
-    name: string;
-    altNames: string;
-    latitude: string;
-    longitude: string;
-    notes: string;
-    sources: SourceRow[];
-    fieldValues: Record<string, string>;
-    placeTypeId: string;
-  } | null>(null);
+  const [seeded, setSeeded] = useState<PlaceFormValues | null>(null);
   const initialFormSnapshot = seeded ? JSON.stringify(seeded) : null;
   // Bumped by each populate, so the refs that track one open of the form start
   // over with it (the effect after this block).
@@ -504,15 +496,15 @@ function PlaceDialog({
       // store. `setFieldValues` drops the empty ones rather than storing nulls:
       // a stored null renders as a filled-in-but-blank field and satisfies a
       // "has a value" filter.
-      // And only the ones the user changed since the form opened: the rest
-      // keep what the place holds now.
-      const touched = changedSince(seeded?.fieldValues ?? {}, fieldValues);
-      const attributes: Record<string, unknown> = {};
-      for (const def of typeFieldDefs) {
-        if (def.key in touched)
-          attributes[def.key] = coerceFieldValue(touched[def.key], def.type);
-      }
-      const fieldPatch = { ...attributes, ...sourcesResult.patch };
+      // The attributes the user filled in: a new place has none seeded.
+      const fieldPatch = {
+        ...touchedFieldValues(
+          seeded?.fieldValues ?? {},
+          fieldValues,
+          typeFieldDefs,
+        ),
+        ...sourcesResult.patch,
+      };
 
       const data = {
         name: name.trim(),
@@ -527,20 +519,32 @@ function PlaceDialog({
         fieldValues: withFieldValues(place?.fieldValues ?? {}, fieldPatch),
       };
 
+      const form: PlaceFormValues = {
+        name,
+        altNames,
+        latitude,
+        longitude,
+        notes,
+        placeTypeId,
+        fieldValues,
+        sources,
+      };
       if (isEdit) {
         // Only what the user changed, so a pull that landed while the dialog
-        // was open is not overwritten by what it opened with (last write wins
-        // per field).
-        const edit: Partial<typeof data> = {};
-        if (name !== seeded?.name) edit.name = data.name;
-        if (altNames !== seeded?.altNames) edit.altNames = data.altNames;
-        if (latitude !== seeded?.latitude) edit.latitude = data.latitude;
-        if (longitude !== seeded?.longitude) edit.longitude = data.longitude;
-        if (placeTypeId !== seeded?.placeTypeId)
-          edit.placeTypeId = data.placeTypeId;
-        if (notes !== seeded?.notes) edit.notes = data.notes;
-        if (Object.keys(fieldPatch).length > 0)
-          edit.fieldValues = data.fieldValues;
+        // was open is not overwritten by what it opened with.
+        const was = seeded ?? form;
+        const edit = placeEditChanges({
+          seeded: was,
+          form,
+          parsed: data,
+          touched: {
+            latitude: latitude !== was.latitude,
+            longitude: longitude !== was.longitude,
+          },
+          current: place,
+          typeFieldDefs,
+          sourcesPatch: sourcesResult.patch,
+        });
         if (Object.keys(edit).length > 0) await updatePlace(place.id, edit);
       } else if (draftPlaceId) {
         // A draft was already created to hold uploaded media — persist the form.

@@ -1131,7 +1131,7 @@ export function NotificationsScreen({
         initialNumToRender={12}
         maxToRenderPerBatch={8}
         windowSize={5}
-        removeClippedSubviews
+        removeClippedSubviews={false}
         keyboardShouldPersistTaps="handled"
         {...mergeScrollProps(heroCollapse.scrollProps, pull.scrollProps)}
         ListHeaderComponent={
