@@ -12,7 +12,7 @@
 // The list rule is unaffected, and nothing here is logged or persisted: the
 // point lives in the map screen's state until the sheet is dismissed.
 import { useEffect, useMemo, useState } from "react";
-import { Clipboard, Text, View } from "react-native";
+import { Text, View } from "react-native";
 import {
   MAP_POINT,
   MAP_POINT_NO_FIX_NOTE,
@@ -22,13 +22,13 @@ import {
   mapPointVerbs,
   type MapPointCoord,
   type MapPointElevation,
-  type MapPointFact,
   type MapPointView,
 } from "@logjam/shared";
 
 import { spacing, makeStyles, muted } from "../theme";
 import { BottomSheet, Row, StatGrid, type Stat } from "../ui";
 import { slopeAt } from "../offline/demLookup";
+import { factStat } from "./factStat";
 import { useElevationProfile } from "./useElevationProfile";
 import { useWeather } from "../weather/useWeather";
 import { showWeatherRow } from "../weather/weatherState";
@@ -149,20 +149,6 @@ export function MapPointSheet({
 }
 
 /**
- * A copyable fact's press: each fact says what it copies and what to say
- * after. React Native's clipboard cannot refuse, so `failed` is Logjam Web's.
- */
-const copyFact =
-  (
-    copy: NonNullable<MapPointFact["copy"]>,
-    onInfo: (message: string) => void,
-  ) =>
-  () => {
-    Clipboard.setString(copy.text);
-    onInfo(copy.copied);
-  };
-
-/**
  * The viewer's own position, as the receiver last gave it. Nothing to do with
  * it, so no verbs, no slope and no forecast: only the figures, and none of them
  * asks anyone anything but the terrain tiles the map already reads.
@@ -207,13 +193,7 @@ function FixDetail({
     elevation,
     from: null,
     fix: { atMs: fix.atMs, accuracyM: fix.accuracyM, nowMs: openedAt },
-  }).map((fact) => ({
-    label: fact.label,
-    value: fact.value,
-    ...(fact.note ? { note: fact.note } : {}),
-    ...(fact.span ? { span: true } : {}),
-    ...(fact.copy ? { onCopy: copyFact(fact.copy, onInfo) } : {}),
-  }));
+  }).map((fact) => factStat(fact, onInfo));
   return (
     <View style={styles.body}>
       <StatGrid stats={stats} />
@@ -308,13 +288,7 @@ function PointDetail({
     land,
     fire,
     coverage,
-  }).map((fact) => ({
-    label: fact.label,
-    value: fact.value,
-    ...(fact.note ? { note: fact.note } : {}),
-    ...(fact.span ? { span: true } : {}),
-    ...(fact.copy ? { onCopy: copyFact(fact.copy, onInfo) } : {}),
-  }));
+  }).map((fact) => factStat(fact, onInfo));
 
   if (view === "weather") return <WeatherView weather={weather} />;
 

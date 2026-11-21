@@ -70,7 +70,10 @@ const NZTM_ZONE: GridZone = {
  * index outside 0 to 59 is a longitude past 180°, as MapLibre reports a view
  * panned over the date line; it names the zone it wraps to and keeps its
  * longitudes unwrapped, so a clip against them still works.
- * It has no Norway or Svalbard exceptions and no polar grid, which no region needs.
+ * It has no Norway or Svalbard exceptions and no polar grid. A grid reference
+ * outside every region uses these zones too, so in south-west Norway and on
+ * Svalbard its zone differs from the local maps' (Bergen reads 31V, not 32V),
+ * though it still pastes back into search to the same point.
  */
 function utmZone(index: number, south: boolean): GridZone {
   const zone = (((index % 60) + 60) % 60) + 1;
@@ -194,25 +197,61 @@ export function toGridAt(
   return { ...toGrid(lat, lon, zone), zone };
 }
 
+/** A latitude's MGRS band: C to X, 8° each from 80°S, with X running on to 84°N. */
+function utmBand(lat: number): string {
+  return "CDEFGHJKLMNPQRSTUVWX"[Math.min(19, Math.floor((lat + 80) / 8))]!;
+}
+
+/** One run of a grid reference's text, for a client that sets it in type. */
+export type GridReferencePart = {
+  text: string;
+  /** The figures that name the 100 km square, which a client sets apart. */
+  square?: true;
+};
+
+export type GridReference = {
+  /** "MGA 56 250899 6266450": what `parseGridReference` reads back. */
+  text: string;
+  /** The same text in runs, the square's figures marked apart from the rest. */
+  parts: readonly GridReferencePart[];
+};
+
 /**
- * A point as a guidebook gives it: the grid and zone, then the 100 m figures
- * of the easting and the northing ("MGA 56 508 664", "NZTM 490 275"). The
- * figures are cut off, not rounded, as a map is read: the reference names the
- * 100 m square the point is in by its south-west corner, and rounding would
- * name the square next door about half the time. Null past UTM's latitudes,
- * where no grid here answers. Guard: grids.test.ts ("six-figure references").
+ * A point's full grid reference, to the metre: the zone, then the easting and
+ * the northing ("MGA 56 250899 6266450", "NZTM 1749046 5427521", "UTM 31U
+ * 448251 5411932"). It is the format search reads, so a copied reference
+ * pastes back to the same point. A UTM reference carries its latitude band,
+ * which search reads as the hemisphere. The figures are cut off, not rounded,
+ * as a map is read: the reference names the square the point is in by its
+ * south-west corner.
+ *
+ * `parts` marks the figures above the last five, which name the 100 km square
+ * ("2" and "62" above). A guidebook leaves them out ("508 664"), so a
+ * client sets them apart and the figures a reader matches stand out. Null past UTM's latitudes, where no grid here answers.
+ * Guard: grids.test.ts ("full grid references").
  */
-export function sixFigureReference(
+export function gridReferenceAt(
   lat: number,
   lon: number,
   regions: readonly Region[] = REGIONS,
-): string | null {
+): GridReference | null {
   if (!(lat >= -80 && lat <= 84)) return null;
   const { easting, northing, zone } = toGridAt(lat, lon, regions);
   if (!Number.isFinite(easting) || !Number.isFinite(northing)) return null;
+  const name = zone.grid === "utm" ? `${zone.name}${utmBand(lat)}` : zone.name;
+  // Six digits at least: search reads a shorter northing (just north of the
+  // equator) as nothing.
   const figures = (metres: number) =>
-    String(Math.floor(metres / 100) % 1000).padStart(3, "0");
-  return `${zone.name} ${figures(easting)} ${figures(northing)}`;
+    String(Math.floor(metres)).padStart(6, "0");
+  const [e, n] = [figures(easting), figures(northing)];
+  const split = (digits: string): GridReferencePart[] => [
+    { text: digits.slice(0, -5), square: true },
+    { text: digits.slice(-5) },
+  ];
+  return {
+    text: `${name} ${e} ${n}`,
+    parts: [{ text: `${name} ` }, ...split(e), { text: " " }, ...split(n)],
+  };
 }
 
 /**

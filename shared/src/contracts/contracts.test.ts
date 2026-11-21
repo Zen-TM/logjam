@@ -52,6 +52,7 @@ import {
   MAP_MEASURE_VERBS,
   MAP_SNAP_OPTIONS,
   mapPointFacts,
+  positionFacts,
   mapHoldVerbs,
   mapPointStepBack,
   mapPointVerbs,
@@ -1149,7 +1150,7 @@ describe("the map point panel", () => {
     });
     expect(facts.map((fact) => [fact.key, fact.value])).toEqual([
       ["position", "-33.65000, 150.35000"],
-      ["gridReference", "MGA 56 542 734"],
+      ["gridReference", "MGA 56 254245 6273499"],
       ["elevation", "412 m"],
     ]);
     // The position and the grid reference each take the line and copy
@@ -1163,13 +1164,19 @@ describe("the map point panel", () => {
     expect(facts[1]).toMatchObject({
       label: "Grid reference",
       span: true,
-      copy: { text: "MGA 56 542 734", copied: "Grid reference copied." },
+      copy: {
+        text: "MGA 56 254245 6273499",
+        copied: "Grid reference copied.",
+      },
     });
     expect(facts.slice(2).some((fact) => fact.copy)).toBe(false);
   });
 
-  // Mutation: read the grid from NSW alone, or show a dash where no grid
-  // answers: the row is the ground's grid, or absent.
+  // The regions passed in decide the grid: a point in simulated New Zealand
+  // reads NZTM, though the real regions alone would read it as UTM.
+  // Mutation: drop `input.regions` from mapPointFacts' `positionFacts` call,
+  // or show a dash where no grid answers: the row is the ground's grid, or
+  // absent.
   it("gives the grid reference in the ground's grid, and none past UTM's", () => {
     const at = (latitude: number, longitude: number) =>
       mapPointFacts({
@@ -1178,8 +1185,26 @@ describe("the map point panel", () => {
         from: null,
         regions: [...REGIONS, ...SIM_REGIONS],
       }).find((fact) => fact.key === "gridReference")?.value;
-    expect(at(48.85, 2.35)).toMatch(/^UTM 31 \d{3} \d{3}$/);
+    expect(at(-44.055, 169.25)).toMatch(/^NZTM \d{7} \d{7}$/);
+    expect(at(48.85, 2.35)).toMatch(/^UTM 31U \d{6} \d{7}$/);
     expect(at(85, 10)).toBeUndefined();
+  });
+
+  // The place and plan place pages show positionFacts, so "What is here?"
+  // opens with exactly those rows. Mutation: drop `parts` from the grid
+  // reference fact, and neither client can set the square's figures small.
+  it("opens What is here? with the position facts, square figures marked", () => {
+    const position = positionFacts(point);
+    expect(
+      mapPointFacts({
+        point,
+        elevation: { state: "checking" },
+        from: null,
+      }).slice(0, 2),
+    ).toEqual(position);
+    expect(
+      position[1]?.parts?.filter((part) => part.square).map((p) => p.text),
+    ).toEqual(["2", "62"]);
   });
 
   it("adds distance and bearing only from a fix the device already has", () => {

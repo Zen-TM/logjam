@@ -3,12 +3,11 @@
 // in plan mode. Read-only here: a plan place is edited in the plan, not saved
 // over the caller's own, and works offline from the cached plan.
 import { useMemo, useState } from "react";
-import { Clipboard, Text, View } from "react-native";
+import { Text, View } from "react-native";
 import {
   attributeRows,
   canyonGradeRows,
   formatElevationM,
-  mapPointPosition,
   messageFromError,
   pluralCount,
   userFieldValues,
@@ -24,6 +23,7 @@ import {
 
 import { unavailableReasonText } from "../auth/capabilities";
 import { placeTypeGlyph } from "../places/placeTypeIcon";
+import { PositionRows } from "../places/PositionRows";
 import { AttributeTable } from "../customFields/CustomFieldValues";
 import { MediaViewer, type ViewerMedia } from "../media/MediaViewer";
 import { NoteBody } from "./WriteUpBody";
@@ -91,7 +91,6 @@ export function PlanPlaceSheet({
     : [];
   const type = place ? tripPlanPlaceType(place) : null;
   const setAside = place ? tripPlanSetAsideRows(place) : [];
-  const position = place ? mapPointPosition(place) : "";
   // A plan place is always of a system type, so the system definitions
   // label its attributes.
   const attributes = place
@@ -134,21 +133,15 @@ export function PlanPlaceSheet({
           ) : null}
           {place.notes ? <NoteBody notes={place.notes} /> : null}
           <SectionHeader title={PLACE_PAGE.copy.position} />
-          <Row
-            icon="place"
-            title={position}
-            subtitle={
+          <PositionRows
+            point={place}
+            onCopied={onInfo}
+            coordinatesLabel={tripPlanCopyCoordinatesLabel(place.name)}
+            coordinatesSubtitle={
               place.elevation != null
                 ? formatElevationM(place.elevation)
                 : undefined
             }
-            right={<Icon idea="copy" size={20} color={theme.textMuted} />}
-            accessibilityLabel={tripPlanCopyCoordinatesLabel(place.name)}
-            // RN core Clipboard, as the place page's copy.
-            onPress={() => {
-              Clipboard.setString(position);
-              onInfo(PLACE_PAGE.copy.copyPosition);
-            }}
           />
           {attributes.length > 0 ? <AttributeTable rows={attributes} /> : null}
           {setAside.length > 0 ? (

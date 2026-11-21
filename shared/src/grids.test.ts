@@ -5,11 +5,11 @@ import {
   fromGrid,
   gridConvergence,
   gridIdAt,
+  gridReferenceAt,
   gridZoneAt,
   gridZonesFor,
   mgaZone,
   parseGridReference,
-  sixFigureReference,
   toGrid,
   toGridAt,
   type GridId,
@@ -464,44 +464,78 @@ describe("typed grid references", () => {
   });
 });
 
-describe("six-figure references", () => {
+describe("full grid references", () => {
   /** The point at a grid position, so each case names its figures exactly. */
   const at = (easting: number, northing: number, lon: number, lat: number) =>
     fromGrid(easting, northing, gridZoneAt(lon, lat, MADE_UP));
+  const reference = (lat: number, lon: number) =>
+    gridReferenceAt(lat, lon, MADE_UP)?.text;
 
-  // Mutation: round instead of cutting off, and 250899 reads as square 509,
-  // the one east of the point.
-  it("names the 100 m square the point is in, by its south-west corner", () => {
-    const { lat, lon } = at(250899, 6266450, 150.31, -33.71);
-    expect(sixFigureReference(lat, lon, MADE_UP)).toBe("MGA 56 508 664");
+  // Mutation: round instead of cutting off, and 250899.7 reads as 250900,
+  // the metre east of the point.
+  it("names the metre the point is in, by its south-west corner", () => {
+    const { lat, lon } = at(250899.7, 6266450.6, 150.31, -33.71);
+    expect(reference(lat, lon)).toBe("MGA 56 250899 6266450");
   });
 
-  // Mutation: drop the `padStart`, and 300512 reads as "5", not "005".
-  it("keeps the leading zeros of each three figures", () => {
-    const { lat, lon } = at(300512, 6200040, 150.8, -34.3);
-    expect(sixFigureReference(lat, lon, MADE_UP)).toBe("MGA 56 005 000");
-  });
-
-  // Mutation: name every reference "MGA", or read the zone from NSW alone.
+  // Mutation: name every reference "MGA", read the zone from NSW alone, or
+  // drop the band letter from UTM's.
   it("reads the grid of the ground at the point", () => {
     const nz = at(1749046, 5427521, 174.8, -41.3);
-    expect(sixFigureReference(nz.lat, nz.lon, MADE_UP)).toBe("NZTM 490 275");
-    expect(sixFigureReference(-35.1, 147.4, MADE_UP)).toMatch(
-      /^MGA 55 \d{3} \d{3}$/,
-    );
-    expect(sixFigureReference(38.6, -110.7, MADE_UP)).toMatch(
-      /^UTM 12 \d{3} \d{3}$/,
-    );
-    expect(sixFigureReference(48.85, 2.35, MADE_UP)).toMatch(
-      /^UTM 31 \d{3} \d{3}$/,
-    );
+    expect(reference(nz.lat, nz.lon)).toBe("NZTM 1749046 5427521");
+    expect(reference(-35.1, 147.4)).toMatch(/^MGA 55 \d{6} \d{7}$/);
+    expect(reference(38.6, -110.7)).toMatch(/^UTM 12S \d{6} \d{7}$/);
+    expect(reference(48.85, 2.35)).toMatch(/^UTM 31U \d{6} \d{7}$/);
+    expect(reference(-33.9, 18.4)).toMatch(/^UTM 34H \d{6} \d{7}$/);
+  });
+
+  // The figures above the last five name the 100 km square; the parts set
+  // them apart and still spell the text.
+  // Mutation: split at `slice(0, -3)`, and the square reads "250", not "2".
+  it("marks the 100 km square's figures", () => {
+    const { lat, lon } = at(250899, 6266450, 150.31, -33.71);
+    const { text, parts } = gridReferenceAt(lat, lon, MADE_UP)!;
+    expect(parts.map((part) => part.text).join("")).toBe(text);
+    expect(parts.filter((part) => part.square).map((p) => p.text)).toEqual([
+      "2",
+      "62",
+    ]);
+    const nz = at(1749046, 5427521, 174.8, -41.3);
+    expect(
+      gridReferenceAt(nz.lat, nz.lon, MADE_UP)!
+        .parts.filter((part) => part.square)
+        .map((part) => part.text),
+    ).toEqual(["17", "54"]);
+  });
+
+  // What is copied pastes back into search, from a map over another
+  // hemisphere, to the same point.
+  // Mutation: drop the band letter (Paris then reads south of the equator
+  // from a southern map), or the `padStart` (a northing just north of the
+  // equator is five figures, which search refuses).
+  it("pastes back into search to the same point", () => {
+    const points = [
+      { lat: -33.71, lon: 150.31, near: { lat: 48.85, lon: 2.35 } },
+      { lat: -41.3, lon: 174.8, near: { lat: 48.85, lon: 2.35 } },
+      { lat: 38.6, lon: -110.7, near: { lat: -33.9, lon: 18.4 } },
+      { lat: 48.85, lon: 2.35, near: { lat: -33.9, lon: 18.4 } },
+      { lat: -33.9, lon: 18.4, near: { lat: 48.85, lon: 2.35 } },
+      { lat: 0.3, lon: -78.5, near: { lat: -33.9, lon: 18.4 } },
+    ];
+    for (const { lat, lon, near } of points) {
+      const text = reference(lat, lon)!;
+      const read = parseGridReference(text, near, MADE_UP);
+      expect(read, text).not.toBeNull();
+      expect(read!.lat, text).toBeCloseTo(lat, 4);
+      expect(read!.lon, text).toBeCloseTo(lon, 4);
+    }
   });
 
   // Mutation: drop the latitude check, and a point by the pole gets a UTM
   // reference that UTM does not define.
   it("gives none past UTM's latitudes", () => {
-    expect(sixFigureReference(85, 10, MADE_UP)).toBeNull();
-    expect(sixFigureReference(-81, 10, MADE_UP)).toBeNull();
-    expect(sixFigureReference(84, 10, MADE_UP)).not.toBeNull();
+    expect(reference(85, 10)).toBeUndefined();
+    expect(reference(-81, 10)).toBeUndefined();
+    expect(reference(84, 10)).toMatch(/^UTM 32X /);
   });
 });

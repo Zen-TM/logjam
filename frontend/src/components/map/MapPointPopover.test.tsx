@@ -409,14 +409,19 @@ describe("the point popover's panel", () => {
       .getAllByRole("term", { hidden: true })
       .map((term) => term.textContent);
     expect(labels.slice(0, 2)).toEqual(["Coordinates", "Grid reference"]);
-    fireEvent.click(
-      screen.getByRole("button", {
-        name: "Grid reference: MGA 56 508 664. Copy",
-        hidden: true,
-      }),
-    );
+    const button = screen.getByRole("button", {
+      name: "Grid reference: MGA 56 250888 6266493. Copy",
+      hidden: true,
+    });
+    // The 100 km square's figures are set apart, and the text still reads
+    // whole. Mutation: draw `stat.value` in place of its parts in StatGrid.
+    expect(button.textContent).toBe("MGA 56 250888 6266493");
+    expect(
+      [...button.querySelectorAll("span span")].map((span) => span.textContent),
+    ).toEqual(["2", "62"]);
+    fireEvent.click(button);
     await act(async () => {});
-    expect(writeText).toHaveBeenCalledWith("MGA 56 508 664");
+    expect(writeText).toHaveBeenCalledWith("MGA 56 250888 6266493");
     expect(toast.done).toHaveBeenCalledWith(MAP_POINT.copy.gridReferenceCopied);
   });
 });

@@ -14,7 +14,8 @@
 // a DETAIL surface, which is what this is: the user asked about this exact
 // spot. Nothing here is logged, toasted or persisted; the point lives in the
 // map's state until the panel is dismissed.
-import { sixFigureReference } from "../grids.js";
+import { gridReferenceAt, type GridReferencePart } from "../grids.js";
+import { t } from "../i18n.js";
 import { haversineMeters } from "../placeGeo.js";
 import type { Region } from "../regions.js";
 import { formatHeight } from "../units.js";
@@ -67,8 +68,8 @@ export const MAP_POINT = {
     { key: "coverage" },
   ],
   copy: {
-    position: "Coordinates",
-    gridReference: "Grid reference",
+    position: t`Coordinates`,
+    gridReference: t`Grid reference`,
     elevation: "Elevation",
     distance: "Distance",
     bearing: "Bearing",
@@ -97,8 +98,8 @@ export const MAP_POINT = {
     markerSavedHere: "Saved on this phone",
     coordinatesCopied: "Coordinates copied.",
     coordinatesCopyFailed: "Couldn't copy the coordinates.",
-    gridReferenceCopied: "Grid reference copied.",
-    gridReferenceCopyFailed: "Couldn't copy the grid reference.",
+    gridReferenceCopied: t`Grid reference copied.`,
+    gridReferenceCopyFailed: t`Couldn't copy the grid reference.`,
   },
 } as const satisfies ScreenContract;
 
@@ -286,7 +287,52 @@ export type MapPointFact = {
    * (or `failed`, where the platform's clipboard can refuse).
    */
   copy?: { text: string; copied: string; failed: string };
+  /** `value` in runs a client may set apart: a grid reference's square figures. */
+  parts?: readonly GridReferencePart[];
 };
+
+/**
+ * Where a point is, as every screen that shows a position gives it: the
+ * coordinates, then the grid reference of the ground's grid (none past UTM's
+ * latitudes). Each copies itself. "What is here?" opens with these, and the
+ * place and plan place pages show them under their Position heading.
+ * Guard: contracts.test.ts ("position facts").
+ */
+export function positionFacts(
+  point: MapPointCoord,
+  regions?: readonly Region[],
+): MapPointFact[] {
+  const copy = MAP_POINT.copy;
+  const coordinates = mapPointPosition(point);
+  const facts: MapPointFact[] = [
+    {
+      key: "position",
+      label: copy.position,
+      value: coordinates,
+      span: true,
+      copy: {
+        text: coordinates,
+        copied: copy.coordinatesCopied,
+        failed: copy.coordinatesCopyFailed,
+      },
+    },
+  ];
+  const reference = gridReferenceAt(point.latitude, point.longitude, regions);
+  if (reference)
+    facts.push({
+      key: "gridReference",
+      label: copy.gridReference,
+      value: reference.text,
+      parts: reference.parts,
+      span: true,
+      copy: {
+        text: reference.text,
+        copied: copy.gridReferenceCopied,
+        failed: copy.gridReferenceCopyFailed,
+      },
+    });
+  return facts;
+}
 
 /** The position as shown and as copied: five places is under two metres. */
 export function mapPointPosition(point: MapPointCoord): string {
@@ -334,36 +380,7 @@ export function mapPointFacts(input: {
   const { point, elevation, from, slopeDegrees, land, fire, coverage, fix } =
     input;
   const copy = MAP_POINT.copy;
-  const facts: MapPointFact[] = [
-    {
-      key: "position",
-      label: copy.position,
-      value: mapPointPosition(point),
-      span: true,
-      copy: {
-        text: mapPointPosition(point),
-        copied: copy.coordinatesCopied,
-        failed: copy.coordinatesCopyFailed,
-      },
-    },
-  ];
-  const gridReference = sixFigureReference(
-    point.latitude,
-    point.longitude,
-    input.regions,
-  );
-  if (gridReference)
-    facts.push({
-      key: "gridReference",
-      label: copy.gridReference,
-      value: gridReference,
-      span: true,
-      copy: {
-        text: gridReference,
-        copied: copy.gridReferenceCopied,
-        failed: copy.gridReferenceCopyFailed,
-      },
-    });
+  const facts = positionFacts(point, input.regions);
   facts.push({
     key: "elevation",
     label: elevation.state === "receiver" ? copy.gpsAltitude : copy.elevation,

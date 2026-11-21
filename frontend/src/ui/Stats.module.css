@@ -132,3 +132,9 @@
   margin: 0;
   color: var(--color-text);
 }
+
+/* A grid reference's 100 km square figures: dimmed, at the value's own size,
+   so the figures a guidebook gives stand out. */
+.square {
+  color: var(--color-text-muted);
+}

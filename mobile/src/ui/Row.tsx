@@ -1,3 +1,4 @@
+import type { GridReferencePart } from "@logjam/shared";
 import type { ComponentProps } from "react";
 import {
   Pressable,
@@ -21,6 +22,7 @@ import {
 } from "../theme";
 import { holdTick } from "./holdTick";
 import { Icon, type Glyph } from "./Icon";
+import { PartsText } from "./PartsText";
 import { BADGE_SIZE, halfRadius } from "./pill";
 
 /** Past this drawn text size a row's trailing column stops fitting beside its words. */
@@ -45,6 +47,7 @@ const LARGE_TEXT = 1.3;
 // pinned to the row's bottom edge for in-flight work, drawn in the accent.
 export function Row({
   title,
+  titleParts,
   subtitle,
   leading,
   icon,
@@ -78,6 +81,8 @@ export function Row({
   style,
 }: {
   title: string;
+  /** `title` in runs drawn apart (`PartsText`): a grid reference's figures. */
+  titleParts?: readonly GridReferencePart[];
   subtitle?: string;
   leading?: React.ReactNode;
   icon?: Glyph;
@@ -192,7 +197,7 @@ export function Row({
             style={[styles.title, disabled && styles.disabled]}
             numberOfLines={titleNumberOfLines}
           >
-            {title}
+            <PartsText value={title} parts={titleParts} />
           </Text>
           {subtitle ? (
             <Text style={styles.subtitle} numberOfLines={subtitleNumberOfLines}>

@@ -11,12 +11,10 @@ import {
   type CarrierId,
   type Region,
   type MapPointCoord,
-  type MapPointFact,
   type MapPointVerbId,
 } from "@logjam/shared";
 import { useElevationPoint } from "../../placeUtils";
 import { useIsMobile } from "../../useIsMobile";
-import { useToast } from "../feedback/ToastProvider";
 import { WeatherView } from "../weather/WeatherView";
 import { useOnline, useWeather } from "../weather/useWeather";
 import {
@@ -29,6 +27,7 @@ import {
 } from "../../ui";
 import { coverageAt, fireAt, landClassAt } from "./layerOrder";
 import { PointAnchor } from "./PointAnchor";
+import { useFactStat } from "./useFactStat";
 import classes from "./MapPointPopover.module.css";
 
 /**
@@ -71,7 +70,6 @@ export default function MapPointPopover({
   onMeasure: (point: MapPointCoord) => void;
   onDrawRoute: (point: MapPointCoord) => void;
 }) {
-  const toast = useToast();
   // On narrow web the tab bar owns the bottom of the screen, and a panel below
   // the point would cover it (and sit too close to its buttons to press): it
   // opens above the point there instead.
@@ -130,13 +128,7 @@ export default function MapPointPopover({
   // for the cell's own DEM, which in canyon country can be far from the spot.
   const checkingHeight = loading;
 
-  // Each copyable fact says what it copies and what to say after.
-  const copyFact = (copy: NonNullable<MapPointFact["copy"]>) => () => {
-    void navigator.clipboard
-      .writeText(copy.text)
-      .then(() => toast.done(copy.copied))
-      .catch(() => toast.error(copy.failed));
-  };
+  const factStat = useFactStat();
   const stats: Stat[] = mapPointFacts({
     point,
     elevation:
@@ -150,13 +142,7 @@ export default function MapPointPopover({
     land,
     fire,
     coverage,
-  }).map((fact) => ({
-    label: fact.label,
-    value: fact.value,
-    ...(fact.note ? { note: fact.note } : {}),
-    ...(fact.span ? { span: true } : {}),
-    ...(fact.copy ? { onCopy: copyFact(fact.copy) } : {}),
-  }));
+  }).map(factStat);
 
   const close = () => {
     onClose();
