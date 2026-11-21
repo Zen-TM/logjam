@@ -1,0 +1,38 @@
+import type { GridReferencePart } from "@logjam/shared";
+import { Text } from "react-native";
+
+import { makeStyles, muted } from "../theme";
+
+/**
+ * A value inside a `Text`, its runs drawn apart: a grid reference's 100 km
+ * square figures a size down and dimmed, as on Logjam Web. Visual only: the caller's
+ * accessibility label reads the plain value.
+ */
+export function PartsText({
+  value,
+  parts,
+}: {
+  value: string;
+  parts?: readonly GridReferencePart[];
+}) {
+  const styles = useStyles();
+  if (!parts) return <>{value}</>;
+  return (
+    <>
+      {parts.map((part, index) =>
+        part.square ? (
+          <Text key={index} style={styles.square}>
+            {part.text}
+          </Text>
+        ) : (
+          part.text
+        ),
+      )}
+    </>
+  );
+}
+
+// A nested `Text` cannot be raised or spaced, so Logjam GPS only sizes and dims them.
+const useStyles = makeStyles((theme, textRole) => ({
+  square: muted(theme, textRole.rowTitle),
+}));

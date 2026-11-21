@@ -7,9 +7,9 @@ import {
   canyonGradeRows,
   formatElevationM,
   formatFieldValue,
-  mapPointPosition,
   mediaCategory,
   PLACE_PAGE,
+  positionFacts,
   SYSTEM_FIELD_DEFS,
   TRIP_PLAN_PAGE,
   tripPlanAddedByLine,
@@ -19,7 +19,7 @@ import {
   type TripPlanPlace,
 } from "@logjam/shared";
 import { Hero, SectionHeader, StatGrid, type Stat } from "../../ui";
-import { useToast } from "../feedback/ToastProvider";
+import { useFactStat } from "../map/useFactStat";
 import { PlaceTypeIcon } from "../sidebar/panels/placeTypeIcon";
 import PlaceSlideshow from "../media/PlaceSlideshow";
 import { NoteBody } from "./WriteUpBody";
@@ -35,10 +35,9 @@ export default function PlanPlacePage({
   place: TripPlanPlace;
   onBack: () => void;
 }) {
-  const toast = useToast();
+  const factStat = useFactStat();
   const type = tripPlanPlaceType(place);
   const setAside = tripPlanSetAsideRows(place);
-  const position = mapPointPosition(place);
   const attributes = canyonGradeRows(
     attributeRows(SYSTEM_FIELD_DEFS, userFieldValues(place.fieldValues)),
     place.fieldValues,
@@ -48,26 +47,11 @@ export default function PlanPlacePage({
   );
 
   const positionStats: Stat[] = [
-    {
-      label: "Coordinates",
-      value: position,
-      span: true,
-      onCopy: () => void copyPosition(),
-    },
+    ...positionFacts(place).map(factStat),
     ...(place.elevation != null
       ? [{ label: "Elevation", value: formatElevationM(place.elevation) }]
       : []),
   ];
-
-  async function copyPosition() {
-    try {
-      await navigator.clipboard.writeText(position);
-      toast.done(copy.copyPosition);
-    } catch (err) {
-      console.error(err);
-      toast.error(planCopy.placeCopyFailed);
-    }
-  }
 
   return (
     <div className={classes.root}>

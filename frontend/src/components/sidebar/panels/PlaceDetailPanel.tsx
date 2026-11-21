@@ -41,7 +41,7 @@ import {
   PLACE_PAGE,
   PLACE_PAGE_PRIMARY_VERBS,
   WEATHER,
-  formatPlacePosition,
+  positionFacts,
   gaugeFeedAt,
   placeAttributesTitle,
   placeSectionTitle,
@@ -57,6 +57,7 @@ import {
 } from "@logjam/shared";
 import classes from "./PlaceDetailPanel.module.css";
 import { useToast } from "../../feedback/ToastProvider";
+import { useFactStat } from "../../map/useFactStat";
 import { messageFromError } from "../../../errors/messageFromError";
 import { PlaceGauge } from "../../gauges/PlaceGauge";
 import { PlaceWeather } from "../../weather/PlaceWeather";
@@ -272,6 +273,7 @@ function PlaceDetailPanel({
   onDrawRoute: (placeId: string) => void;
 }) {
   const toast = useToast();
+  const factStat = useFactStat();
   const [showEdit, setShowEdit] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   // `copyAndRemoveConfirm` uses the same confirmation wording as Logjam GPS.
@@ -473,22 +475,6 @@ function PlaceDetailPanel({
   // The place is definitely there from here down; keep a narrowed binding so
   // the callbacks below don't each have to re-check it.
   const current = place;
-
-  const coordinates = formatPlacePosition(current.latitude, current.longitude);
-
-  /** The one thing a coordinate is FOR: getting it into whatever the user is
-   *  navigating with, so the coordinates are the control. */
-  async function handleCopyCoordinates() {
-    try {
-      await navigator.clipboard.writeText(coordinates);
-      toast.done(PLACE_PAGE.copy.copyPosition);
-    } catch (err) {
-      // A browser that refuses the clipboard (no permission, no secure
-      // context) must say so rather than looking like it worked.
-      console.error(err);
-      toast.error("Couldn't copy the coordinates.");
-    }
-  }
 
   // NO `mediaLeftBehind`: whether photos come is the account's remembered
   // preference and this app has no switch for it, so the confirm promises
@@ -783,20 +769,11 @@ function PlaceDetailPanel({
       ) : null,
 
     // WHERE IT IS, as the thing people actually do with it: copy the
-    // coordinates into whatever they are navigating with.
+    // coordinates or the grid reference into whatever they navigate with.
     position: () => (
       <section className={classes.section}>
         <SectionHeader title={copy.position} />
-        <StatGrid
-          stats={[
-            {
-              label: "Coordinates",
-              value: coordinates,
-              span: true,
-              onCopy: () => void handleCopyCoordinates(),
-            },
-          ]}
-        />
+        <StatGrid stats={positionFacts(current).map(factStat)} />
       </section>
     ),
 

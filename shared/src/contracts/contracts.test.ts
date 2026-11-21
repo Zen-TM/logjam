@@ -52,6 +52,7 @@ import {
   MAP_MEASURE_VERBS,
   MAP_SNAP_OPTIONS,
   mapPointFacts,
+  positionFacts,
   mapHoldVerbs,
   mapPointStepBack,
   mapPointVerbs,
@@ -1149,12 +1150,61 @@ describe("the map point panel", () => {
     });
     expect(facts.map((fact) => [fact.key, fact.value])).toEqual([
       ["position", "-33.65000, 150.35000"],
+      ["gridReference", "MGA 56 254245 6273499"],
       ["elevation", "412 m"],
     ]);
-    // The position takes the line and copies where it is pressed; the rest do
-    // not. Mutation: drop `copyable` and both clients lose the press.
-    expect(facts[0]).toMatchObject({ span: true, copyable: true });
-    expect(facts.slice(1).some((fact) => fact.copyable)).toBe(false);
+    // The position and the grid reference each take the line and copy
+    // themselves where pressed; the rest do not. Mutation: drop either's
+    // `copy`, or give the grid reference the position's text, and both
+    // clients copy the wrong thing or nothing.
+    expect(facts[0]).toMatchObject({
+      span: true,
+      copy: { text: "-33.65000, 150.35000", copied: "Coordinates copied." },
+    });
+    expect(facts[1]).toMatchObject({
+      label: "Grid reference",
+      span: true,
+      copy: {
+        text: "MGA 56 254245 6273499",
+        copied: "Grid reference copied.",
+      },
+    });
+    expect(facts.slice(2).some((fact) => fact.copy)).toBe(false);
+  });
+
+  // The regions passed in decide the grid: a point in simulated New Zealand
+  // reads NZTM, though the real regions alone would read it as UTM.
+  // Mutation: drop `input.regions` from mapPointFacts' `positionFacts` call,
+  // or show a dash where no grid answers: the row is the ground's grid, or
+  // absent.
+  it("gives the grid reference in the ground's grid, and none past UTM's", () => {
+    const at = (latitude: number, longitude: number) =>
+      mapPointFacts({
+        point: { latitude, longitude },
+        elevation: { state: "checking" },
+        from: null,
+        regions: [...REGIONS, ...SIM_REGIONS],
+      }).find((fact) => fact.key === "gridReference")?.value;
+    expect(at(-44.055, 169.25)).toMatch(/^NZTM \d{7} \d{7}$/);
+    expect(at(48.85, 2.35)).toMatch(/^UTM 31U \d{6} \d{7}$/);
+    expect(at(85, 10)).toBeUndefined();
+  });
+
+  // The place and plan place pages show positionFacts, so "What is here?"
+  // opens with exactly those rows. Mutation: drop `parts` from the grid
+  // reference fact, and neither client can set the square's figures small.
+  it("opens What is here? with the position facts, square figures marked", () => {
+    const position = positionFacts(point);
+    expect(
+      mapPointFacts({
+        point,
+        elevation: { state: "checking" },
+        from: null,
+      }).slice(0, 2),
+    ).toEqual(position);
+    expect(
+      position[1]?.parts?.filter((part) => part.square).map((p) => p.text),
+    ).toEqual(["2", "62"]);
   });
 
   it("adds distance and bearing only from a fix the device already has", () => {
@@ -1165,13 +1215,14 @@ describe("the map point panel", () => {
     });
     expect(facts.map((fact) => fact.key)).toEqual([
       "position",
+      "gridReference",
       "elevation",
       "distance",
       "bearing",
     ]);
-    expect(facts[1].value).toBe("Checking…");
-    expect(facts[2].value).toMatch(/^1\.1 km$|^1,?1\d\d m$/);
-    expect(facts[3].value).toMatch(/^N 0°$|^N 360°$|^N \d+°$/);
+    expect(facts[2].value).toBe("Checking…");
+    expect(facts[3].value).toMatch(/^1\.1 km$|^1,?1\d\d m$/);
+    expect(facts[4].value).toMatch(/^N 0°$|^N 360°$|^N \d+°$/);
   });
 
   // Mutation: show a dash or a zero for an unknown slope, and a point outside
@@ -1220,7 +1271,7 @@ describe("the map point panel", () => {
       elevation: { state: "unavailable" },
       from: null,
     });
-    expect(unavailable[1]).toMatchObject({
+    expect(unavailable[2]).toMatchObject({
       value: "—",
       note: "Needs a connection",
     });
@@ -1323,19 +1374,20 @@ describe("the map point panel", () => {
     });
     expect(keys(facts)).toEqual([
       "position",
+      "gridReference",
       "elevation",
       "accuracy",
       "fixAge",
     ]);
-    expect(facts[2].value).toBe("± 8 m");
-    expect(facts[3].value).toBe("12 s ago");
+    expect(facts[3].value).toBe("± 8 m");
+    expect(facts[4].value).toBe("12 s ago");
     expect(
       mapPointFacts({
         point,
         elevation: { state: "known", metres: 412 },
         from: null,
         fix: { ...fix, accuracyM: null },
-      })[2].value,
+      })[3].value,
     ).toBe("Not reported");
     expect(
       keys(
@@ -1352,7 +1404,7 @@ describe("the map point panel", () => {
       point,
       elevation: { state: "receiver", metres: 1021.6 },
       from: null,
-    })[1];
+    })[2];
     expect([receiver.label, receiver.value]).toEqual([
       "GPS altitude",
       "1022 m",

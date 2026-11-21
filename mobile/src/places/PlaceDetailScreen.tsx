@@ -13,7 +13,6 @@
 // username-only; recipients never see this section at all.
 import { Fragment, useCallback, useState, type ReactNode } from "react";
 import {
-  Clipboard,
   Linking,
   Platform,
   ScrollView,
@@ -28,7 +27,6 @@ import {
   PLACE_PAGE,
   PLACE_PAGE_PRIMARY_VERBS,
   placeLinkedToast,
-  formatPlacePosition,
   gaugeFeedAt,
   placeAttributesTitle,
   placeSectionTitle,
@@ -64,6 +62,7 @@ import { useFieldDefs } from "../customFields/useFieldDefs";
 import { AttributeTable } from "../customFields/CustomFieldValues";
 import { useConnectivity } from "../map/connectivity";
 import { MapCoverageRow } from "../offline/MapCoverageRow";
+import { PositionRows } from "./PositionRows";
 import { PLACE_FOCUS_DEGREES } from "../saved/bboxOfPoints";
 import { PlaceGaugeSection } from "../gauges/PlaceGaugeSection";
 import { PlaceWeatherSection } from "../weather/PlaceWeatherSection";
@@ -101,7 +100,6 @@ import {
   EmptyState,
   ErrorState,
   Hero,
-  Icon,
   IconButton,
   LoadingState,
   Row,
@@ -293,16 +291,6 @@ export function PlaceDetailScreen({
     place.fieldValues,
   );
 
-  // Position is what every place has. Type-specific attributes render in the
-  // type's own attribute table below rather than in bespoke stat tiles.
-  const position = formatPlacePosition(place.latitude, place.longitude);
-  const copyPosition = () => {
-    // RN core Clipboard: deprecated upstream but still shipped, and it needs no
-    // native module — the same copy the waypoint and tapped-point sheets use.
-    Clipboard.setString(position);
-    notify(PLACE_PAGE.copy.copyPosition, "done");
-  };
-
   /**
    * One of the three actions on a parked value. The place is re-read from the
    * mirror after it lands, because all three change the row — adopt also
@@ -408,12 +396,10 @@ export function PlaceDetailScreen({
     position: () => (
       <>
         <SectionHeader title={copy.position} />
-        <Row
-          icon="place"
-          title={position}
-          right={<Icon idea="copy" size={20} color={theme.textMuted} />}
-          accessibilityLabel={`Copy the coordinates of ${place.name}`}
-          onPress={copyPosition}
+        <PositionRows
+          point={place}
+          onCopied={(message) => notify(message, "done")}
+          coordinatesLabel={`Copy the coordinates of ${place.name}`}
         />
         <MapCoverageRow
           bbox={[

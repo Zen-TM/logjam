@@ -29,12 +29,31 @@ describe("the tap sheet", () => {
     expect(sheet.match(/mapPointVerbs\(/g)).toHaveLength(1);
   });
 
-  // Mutation: build a stat from `mapPointFacts` without wiring `copyable` to
-  // `onCopy`, and a coordinates figure stops copying where it is pressed.
-  it("copies every coordinates figure where it is pressed", () => {
+  // Mutation: build a stat from `mapPointFacts` other than with `factStat`,
+  // or drop `factStat`'s `copy` to `onCopy` wiring, and the coordinates and
+  // grid reference stop copying where they are pressed.
+  it("copies every copyable figure where it is pressed", () => {
     const sheet = read("MapPointSheet.tsx");
     expect(sheet.match(/mapPointFacts\(/g)).toHaveLength(2);
-    expect(sheet.match(/fact\.copyable/g)).toHaveLength(2);
+    expect(
+      sheet.match(/\.map\(\(fact\) => factStat\(fact, onInfo\)\)/g),
+    ).toHaveLength(2);
+    expect(read("factStat.ts")).toContain(
+      "...(fact.copy ? { onCopy: copyFact(fact.copy, onInfo) } : {})",
+    );
+  });
+
+  // Mutation: draw a place page's coordinates as a Row of its own again, and
+  // Logjam GPS's place and plan place pages lose the grid reference.
+  it("gives the place pages the same position rows", () => {
+    for (const file of [
+      "../places/PlaceDetailScreen.tsx",
+      "../plans/PlanPlaceSheet.tsx",
+    ])
+      expect(read(file), file).toContain("<PositionRows");
+    expect(read("../places/PositionRows.tsx")).toContain(
+      "positionFacts(point).map(",
+    );
   });
 
   // Mutation: give the sheet a plain `onClose={onClose}` again, and the back
