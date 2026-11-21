@@ -22,6 +22,9 @@ export type StoredRouteDraft = {
   anchors: number[];
   /** Set when the draft is an EDIT of a saved route, so Save updates it. */
   editingRouteId: string | null;
+  /** Set when the route is being drawn for a place's route slot: Save puts it
+   *  on that place. */
+  placeId: string | null;
 };
 
 export async function readRouteDraft(): Promise<StoredRouteDraft | null> {
@@ -30,15 +33,21 @@ export async function readRouteDraft(): Promise<StoredRouteDraft | null> {
     pointsJson: string;
     anchorsJson: string;
     editingRouteId: string | null;
+    placeId: string | null;
   }>(
-    "SELECT pointsJson, anchorsJson, editingRouteId FROM route_draft WHERE id = 1",
+    "SELECT pointsJson, anchorsJson, editingRouteId, placeId FROM route_draft WHERE id = 1",
   );
   if (!row) return null;
   try {
     const points = JSON.parse(row.pointsJson) as RoutePoint[];
     const anchors = JSON.parse(row.anchorsJson) as number[];
     if (points.length === 0) return null;
-    return { points, anchors, editingRouteId: row.editingRouteId };
+    return {
+      points,
+      anchors,
+      editingRouteId: row.editingRouteId,
+      placeId: row.placeId,
+    };
   } catch {
     // Unparseable = nothing to restore. Dropping a corrupt draft is better
     // than refusing to open the map over it.
@@ -49,16 +58,18 @@ export async function readRouteDraft(): Promise<StoredRouteDraft | null> {
 export async function saveRouteDraft(draft: StoredRouteDraft): Promise<void> {
   const db = await getOfflineDb();
   await db.runAsync(
-    `INSERT INTO route_draft (id, pointsJson, anchorsJson, editingRouteId, savedAt)
-     VALUES (1, ?, ?, ?, ?)
+    `INSERT INTO route_draft (id, pointsJson, anchorsJson, editingRouteId, placeId, savedAt)
+     VALUES (1, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        pointsJson = excluded.pointsJson,
        anchorsJson = excluded.anchorsJson,
        editingRouteId = excluded.editingRouteId,
+       placeId = excluded.placeId,
        savedAt = excluded.savedAt`,
     JSON.stringify(draft.points),
     JSON.stringify(draft.anchors),
     draft.editingRouteId,
+    draft.placeId,
     new Date().toISOString(),
   );
 }
