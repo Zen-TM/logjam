@@ -1,6 +1,6 @@
-// "Add a way": every way of filling ONE place's single route slot, from the
-// place page's Route section, with no edit dialog. Logjam GPS's `AddWaySheet`
-// is the same panel; its words are `ADD_WAY`'s.
+// "Add a way": every way of filling ONE place's single route slot, from a
+// place's Route section, on its page and in its edit dialog. Logjam GPS's
+// `AddWaySheet` is the same panel; its words are `ADD_WAY`'s.
 //
 //   a route you drew      → the Route row is linked (Route.placeId)
 //   draw on the map       → the map's pen; the save writes the link
@@ -77,6 +77,7 @@ export default function AddWayDialog({
   onClose,
   onFilled,
   onDrawRoute,
+  drawBlockedReason,
 }: {
   open: boolean;
   placeId: string;
@@ -91,6 +92,8 @@ export default function AddWayDialog({
   onFilled: () => void;
   /** Hand over to the map's pen; the save links the route to this place. */
   onDrawRoute: () => void;
+  /** Why the pen cannot be taken up just now: the row stays, disabled, saying so. */
+  drawBlockedReason?: string;
 }) {
   const toast = useToast();
   const confirm = useConfirm();
@@ -287,7 +290,8 @@ export default function AddWayDialog({
                 leading={<IconTile icon="draw" hue="var(--hue-route)" />}
                 title={ADD_WAY.copy.drawTitle}
                 subtitle={ADD_WAY.copy.drawSubtitle}
-                disabled={busy}
+                disabled={busy || drawBlockedReason !== undefined}
+                disabledReason={drawBlockedReason}
                 onOpen={() => {
                   close();
                   onDrawRoute();
