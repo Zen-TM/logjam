@@ -643,13 +643,8 @@ export default function PlanDetailPanel({
         myUserId={myUserId}
         onChanged={refetch}
         onSaved={onOwnChanged}
-        add={
-          itemAdd && {
-            label: itemAdd.label,
-            icon: itemAdd.icon,
-            entries: menuEntries(itemAdd.verbs, (id) => addRunners[id]()),
-          }
-        }
+        add={itemAdd}
+        onAdd={(id) => addRunners[id]()}
         onOpen={onOpenItem}
         onView={(place) => openPlacePage(place.id)}
       />

@@ -13,7 +13,9 @@ import {
   TRIP_PLAN_PAGE,
   tripPlanAddedByLine,
   tripPlanSavedMessage,
+  type PlanItemAddVerbId,
   type PlanItemVerbId,
+  type PlanVerb,
   type TripPlanItem,
   type TripPlanPlace,
   type TripPlanView,
@@ -28,7 +30,6 @@ import {
   Row,
   SectionHeader,
   type Glyph,
-  type MenuEntry,
 } from "../../ui";
 import ConfirmDialog from "../dialogs/ConfirmDialog";
 import { useToast } from "../feedback/ToastProvider";
@@ -75,6 +76,7 @@ export default function PlanItems({
   onChanged,
   onSaved,
   add,
+  onAdd,
   onOpen,
   onView,
 }: {
@@ -86,7 +88,12 @@ export default function PlanItems({
    *  they were charged for went. */
   onSaved: () => void;
   /** The one Add a place or way button's menu; none on an archived plan. */
-  add: { label: string; icon: Glyph; entries: MenuEntry[] } | null;
+  add: {
+    label: string;
+    icon: Glyph;
+    verbs: PlanVerb<PlanItemAddVerbId>[];
+  } | null;
+  onAdd: (verb: PlanItemAddVerbId) => void;
   /** Fit the map to it. */
   onOpen: (item: TripPlanItem) => void;
   /** A place's page, one step inside the plan. */
@@ -138,7 +145,7 @@ export default function PlanItems({
     <Menu
       label={add.label}
       title={add.label}
-      entries={add.entries}
+      entries={menuEntries(add.verbs, onAdd)}
       trigger={(props) => (
         <Button
           {...props}
