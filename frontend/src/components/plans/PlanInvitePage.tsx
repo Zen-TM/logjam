@@ -29,6 +29,7 @@ import {
   SearchField,
   SectionHeader,
   StatusPill,
+  FieldGroup,
 } from "../../ui";
 import { useToast } from "../feedback/ToastProvider";
 import { messageFromError } from "../../errors/messageFromError";
@@ -192,10 +193,7 @@ export default function PlanInvitePage({
             onChange={(event) => setQuery(event.target.value)}
           />
         </div>
-        <div className={classes.question}>
-          <span className={classes.questionLabel} aria-hidden>
-            {copy.role}
-          </span>
+        <FieldGroup label={copy.role} named>
           <ChipRail
             label={copy.role}
             value={role}
@@ -205,7 +203,7 @@ export default function PlanInvitePage({
               label: tripPlanRoleWord(value),
             }))}
           />
-        </div>
+        </FieldGroup>
         {TRIP_PLAN_ROLES_PICK_ORDER.map((value) => (
           <p key={value} className={classes.note}>
             <strong>{tripPlanRoleWord(value)}</strong>{" "}
