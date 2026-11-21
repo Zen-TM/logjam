@@ -622,6 +622,7 @@ function Map({
   flyToBounds,
   onFlyToBoundsConsumed,
   panelOpen,
+  toolsLocked,
   sheetOpen = false,
   placeHighlight,
   placeTypes,
@@ -780,6 +781,8 @@ function Map({
   onFlyToBoundsConsumed?: () => void;
   /** A page is open over the map's left edge; the chrome moves clear of it. */
   panelOpen: boolean;
+  /** A form's own pick is armed: no tool may start over it. */
+  toolsLocked?: boolean;
   /** A sheet is open beside that page (the Places filters). */
   sheetOpen?: boolean;
   /** The Places row under the pointer; its pin is lit. A channel, not a prop
@@ -2159,11 +2162,14 @@ function Map({
       };
       map.once("click", handleClick);
       return () => {
-        map.getCanvas().style.cursor = "";
+        // An armed Measure or Draw tool keeps its crosshair after the pick.
+        map.getCanvas().style.cursor = drawingRouteRef.current
+          ? "crosshair"
+          : "";
         map.off("click", handleClick);
       };
     } else {
-      map.getCanvas().style.cursor = "";
+      map.getCanvas().style.cursor = drawingRouteRef.current ? "crosshair" : "";
     }
   }, [pickingCoords, mapLoaded]);
 
@@ -3700,6 +3706,7 @@ function Map({
         layersButton={layersButton}
         tools={webMapTools(mapToolActions)}
         selectingArea={selectingArea}
+        toolsLocked={toolsLocked}
         notices={notices}
         search={
           // Live during a point pick or a route draw (a quick fly-to), off

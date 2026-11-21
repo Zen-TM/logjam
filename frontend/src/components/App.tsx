@@ -338,6 +338,9 @@ function App() {
 
   // Coordinate picking mode for PlaceDialog
   const [pickingCoords, setPickingCoords] = useState(false);
+  // The pick is the Add a place tool's own, so the other tools may take over
+  // from it; a form's pick (false) is not theirs to end.
+  const [toolPick, setToolPick] = useState(false);
   const coordsCallbackRef = useRef<((lat: number, lng: number) => void) | null>(
     null,
   );
@@ -618,11 +621,13 @@ function App() {
     coordsCallbackRef.current?.(lat, lng);
     coordsCallbackRef.current = null;
     setPickingCoords(false);
+    setToolPick(false);
   }, []);
 
   const cancelPickingCoords = useCallback(() => {
     coordsCallbackRef.current = null;
     setPickingCoords(false);
+    setToolPick(false);
   }, []);
 
   /**
@@ -1684,20 +1689,35 @@ function App() {
   // Verbs that START on the map; `MAP_TOOLS` names them and orders them.
   // Handed to Map as actions, not built here: `startMeasuring` writes a ref, and
   // react-hooks/refs refuses a function that does passed to a call in render.
+  // One tool cancels another, both ways: a tool chosen over the Add a place
+  // pick ends it first. (The tray is shut while a form's pick is armed.)
+  const endToolPick = () => {
+    if (toolPick) cancelPickingCoords();
+  };
   const mapToolActions: MapToolActions = {
-    measure: { onSelect: () => startMeasuring() },
-    route: { onSelect: () => startDrawingRoute() },
+    measure: {
+      onSelect: () => {
+        endToolPick();
+        startMeasuring();
+      },
+    },
+    route: {
+      onSelect: () => {
+        endToolPick();
+        startDrawingRoute();
+      },
+    },
     // Where first: the form opens on the spot picked, and a cancel opens
     // nothing. It ends an armed Measure or Draw tool first, by that tool's own
     // way out (a route with points asks before it goes), and closes the page
-    // beside the map, a plan's included, as a filter's area pick does. Over a
-    // pick already armed (a form's Select on map) it does nothing: a second
-    // callback would replace the form's and lose its pick.
+    // beside the map, a plan's included, as a filter's area pick does. Chosen
+    // again over its own pick it does nothing.
     place: {
       onSelect: () => {
         if (pickingCoords) return;
         const pick = () => {
           setActivePanel(null);
+          setToolPick(true);
           startPickingCoords((latitude, longitude) => {
             setAddPlaceAt({ latitude, longitude });
             setShowAdd(true);
@@ -1711,6 +1731,7 @@ function App() {
     },
     makeMap: {
       onSelect: () => {
+        endToolPick();
         setBoxPick((pick) => endBox(pick, "export"));
         freshExportDialog();
         setShowGeoPdf(true);
@@ -1718,7 +1739,12 @@ function App() {
     },
     // The dialog draws the area itself ("Draw the area"), as the Layers
     // popover's Sharpen button opens it.
-    sharpen: { onSelect: () => setShowTopo(true) },
+    sharpen: {
+      onSelect: () => {
+        endToolPick();
+        setShowTopo(true);
+      },
+    },
   };
   // Mobile: any map-selection flow needs the bottom sheet out of the way so the
   // map is tappable. Collapses the sheet to peek; restored when the flow ends.
@@ -2227,9 +2253,11 @@ function App() {
             onTopoFlyConsumed={() => setTopoFlyTarget(null)}
             flyToPlace={flyToPlace}
             onFlyToPlaceConsumed={() => setFlyToPlace(null)}
-            // The page steps aside for a pick, so the map is measured from its
-            // own edge then: the pick's pill and Cancel centre on what shows.
-            panelOpen={activePanel !== null && !mapInteractionActive}
+            // The page is out of sight while the UI is dimmed for a pick, so
+            // the map is measured from its own edge then: the pick's pill and
+            // Cancel centre on what shows. (A topo pick leaves it up.)
+            panelOpen={activePanel !== null && !dimUI}
+            toolsLocked={pickingCoords && !toolPick}
             sheetOpen={sidebarSheetOpen}
             placeHighlight={placeHighlight}
             placeTypes={placeTypes}

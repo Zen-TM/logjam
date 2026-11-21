@@ -48,15 +48,13 @@ test("cancelling the pick opens nothing", async ({ page }) => {
   );
 });
 
-// Mutation: drop `if (pickingCoords) return;` from the tool in App.tsx, and
-// the tool's callback replaces the form's, so its pick is lost.
-test("the tool does nothing while a form's own Select on map is armed", async ({
+// Mutation: drop `toolsLocked` from the Tools button (Map.tsx, MapChrome.tsx),
+// and a tool chosen over a form's pick replaces the form's callback and loses
+// its pick.
+test("Tools is off while a form's own Select on map is armed", async ({
   page,
 }) => {
-  await page.goto("/");
-  const canvas = page.locator("canvas.maplibregl-canvas");
-  await expect(canvas).toBeVisible({ timeout: 15_000 });
-  await expect(page.getByRole("button", { name: "Zoom in" })).toBeEnabled();
+  const canvas = await openMap(page);
   await page.getByRole("button", { name: "Places", exact: true }).click();
   await page
     .locator("aside")
@@ -66,13 +64,10 @@ test("the tool does nothing while a form's own Select on map is armed", async ({
   await page.getByRole("menuitem", { name: "Add a place" }).click();
   const form = page.getByRole("dialog", { name: "Add a place" });
   await form.getByRole("button", { name: "Select on map" }).click();
-  await expect(page.getByText("the map to select a location")).toBeVisible();
-
-  await page.getByRole("button", { name: "Tools", exact: true }).click();
-  await page
-    .getByRole("group", { name: "Tools" })
-    .getByRole("button", { name: "Add a place" })
-    .click();
+  await expect(pickPill(page)).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Tools", exact: true }),
+  ).toBeDisabled();
   await canvas.click({ position: { x: 800, y: 500 } });
   await expect(page.getByRole("dialog", { name: "Add a place" })).toHaveCount(
     1,
@@ -84,6 +79,24 @@ const tools = (page: Page) =>
   page.getByRole("button", { name: "Tools", exact: true });
 const tray = (page: Page) => page.getByRole("group", { name: "Tools" });
 const pickPill = (page: Page) => page.getByText("the map to select a location");
+
+/** The pick's pill and Cancel sit on the middle of the map, not of what a page
+ *  beside it leaves. */
+async function expectPickCentred(page: Page) {
+  const centreX = async (locator: Locator) => {
+    const box = (await locator.boundingBox())!;
+    return box.x + box.width / 2;
+  };
+  const map = await centreX(page.locator("#map"));
+  expect(Math.abs((await centreX(pickPill(page))) - map)).toBeLessThan(2);
+  expect(
+    Math.abs(
+      (await centreX(
+        page.getByRole("button", { name: "Cancel", exact: true }),
+      )) - map,
+    ),
+  ).toBeLessThan(2);
+}
 
 async function openMap(page: Page) {
   await page.goto("/");
@@ -139,9 +152,8 @@ test("the tool ends an armed Measure, and asks before it drops a route with poin
   await expect(draw).toHaveCount(0);
 });
 
-// Mutation: put `activePanel !== null` back as the Map's `panelOpen` (App.tsx),
-// or drop `setActivePanel(null)` from the tool: the pill and Cancel are laid
-// out beside a page that is not there, and a plan's bar crowds the pill.
+// Mutation: drop `setActivePanel(null)` from the tool: the page stays beside the
+// pick (it is still in the document), and a plan's bar crowds the pill.
 for (const [device, viewport] of [
   ["desktop", { width: 1440, height: 900 }],
   ["phone", { width: 390, height: 844 }],
@@ -175,22 +187,12 @@ for (const [device, viewport] of [
       await press(tools(page));
       await press(tray(page).getByRole("button", { name: "Add a place" }));
       await expect(pickPill(page)).toBeVisible();
-      // Back on the user's own map: no plan bar beside the pill.
+      // Back on the user's own map: no page and no plan bar beside the pill.
+      await expect(page.locator("aside")).toHaveCount(0);
       await expect(
         page.getByRole("button", { name: "Back to my map" }),
       ).toHaveCount(0);
-
-      const centreX = async (locator: Locator) => {
-        const box = (await locator.boundingBox())!;
-        return box.x + box.width / 2;
-      };
-      const map = await centreX(page.locator("#map"));
-      const pill = await centreX(pickPill(page));
-      const cancel = await centreX(
-        page.getByRole("button", { name: "Cancel", exact: true }),
-      );
-      expect(Math.abs(pill - map)).toBeLessThan(2);
-      expect(Math.abs(cancel - map)).toBeLessThan(2);
+      await expectPickCentred(page);
     });
   }
 }
@@ -220,19 +222,7 @@ test("a form's own pick centres its pill and Cancel too, with the place page ope
     .getByRole("button", { name: "Select on map" })
     .click();
   await expect(pickPill(page)).toBeVisible();
-  const centreX = async (locator: Locator) => {
-    const box = (await locator.boundingBox())!;
-    return box.x + box.width / 2;
-  };
-  const map = await centreX(page.locator("#map"));
-  expect(Math.abs((await centreX(pickPill(page))) - map)).toBeLessThan(2);
-  expect(
-    Math.abs(
-      (await centreX(
-        page.getByRole("button", { name: "Cancel", exact: true }),
-      )) - map,
-    ),
-  ).toBeLessThan(2);
+  await expectPickCentred(page);
 });
 
 // A box pick (Make a map → GeoTIFF → Pick on the map) over an armed Draw tool:
@@ -278,4 +268,83 @@ test("under a box pick the drawn line and its handles are inert, and come back a
     .getByRole("button", { name: "Cancel" })
     .click();
   await expect(handles).toHaveCount(2);
+});
+
+// Mutation: leave the pick's `panelOpen` off for every pick (`!mapInteractionActive`
+// instead of `!dimUI` in App.tsx): the topo pick keeps its page on screen, and
+// the search box slides under it.
+test("a topo pick leaves the open page where it is, and the map's chrome beside it", async ({
+  page,
+}) => {
+  await openMap(page);
+  await page.getByRole("button", { name: "Places", exact: true }).click();
+  const search = page.getByLabel("Search places and locations");
+  const before = (await search.boundingBox())!.x;
+  await tools(page).click();
+  await tray(page).getByText("Sharpen an area").click();
+  const dialog = page.locator("dialog[open]");
+  await dialog.getByRole("button", { name: /Haven.t got one/ }).click();
+  await dialog.getByRole("button", { name: "Draw the area" }).click();
+  await expect(page.locator("dialog[open]")).toHaveCount(0);
+  await expect(page.getByText("Click to set a corner")).toBeVisible();
+  await expect(page.locator("aside")).toBeVisible();
+  expect(Math.abs((await search.boundingBox())!.x - before)).toBeLessThan(2);
+});
+
+// Mutation: put `style.cursor = ""` back in the pick's effect (Map.tsx), and a
+// pick that ends over an armed Draw tool leaves it without its crosshair. The
+// search box is how a place page opens while a route is being drawn.
+test("the armed Draw tool keeps its crosshair when a form's pick is cancelled", async ({
+  page,
+}) => {
+  const canvas = await openMap(page);
+  await tools(page).click();
+  await tray(page).getByRole("button", { name: "Draw a route" }).click();
+  await expect(canvas).toHaveCSS("cursor", "crosshair");
+  await page.getByLabel("Search places and locations").fill("Hidden Slot");
+  await page
+    .getByRole("option", { name: new RegExp(SEED_NAMES.hiddenSlot) })
+    .first()
+    .click();
+  await page
+    .locator("aside")
+    .getByRole("button", { name: /^Actions for / })
+    .first()
+    .click();
+  await page.getByRole("menuitem", { name: "Edit place" }).click();
+  await page
+    .getByRole("dialog", { name: "Edit place" })
+    .getByRole("button", { name: "Select on map" })
+    .click();
+  await expect(pickPill(page)).toBeVisible();
+  await page.getByRole("button", { name: "Cancel", exact: true }).click();
+  await expect(canvas).toHaveCSS("cursor", "crosshair");
+});
+
+// Mutation: drop `endToolPick()` from a tool's action (App.tsx), and a tool
+// chosen over the Add a place pick starts with the pick still armed.
+test("a tool chosen over the Add a place pick ends the pick and starts", async ({
+  page,
+}) => {
+  await openMap(page);
+  const aside = page.locator("aside");
+  await tools(page).click();
+  await tray(page).getByRole("button", { name: "Add a place" }).click();
+  await expect(pickPill(page)).toBeVisible();
+  await tools(page).click();
+  await tray(page).getByRole("button", { name: "Measure distance" }).click();
+  await expect(pickPill(page)).toHaveCount(0);
+  await expect(
+    aside.getByRole("heading", { level: 2, name: "Measure distance" }),
+  ).toBeVisible();
+
+  await tools(page).click();
+  await tray(page).getByRole("button", { name: "Add a place" }).click();
+  await expect(pickPill(page)).toBeVisible();
+  await tools(page).click();
+  await tray(page).getByRole("button", { name: "Draw a route" }).click();
+  await expect(pickPill(page)).toHaveCount(0);
+  await expect(
+    aside.getByRole("heading", { level: 2, name: "New route" }),
+  ).toBeVisible();
 });
