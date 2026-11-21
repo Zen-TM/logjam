@@ -34,7 +34,7 @@ const pulled = {
   },
 };
 
-const parsed = {
+const parsed: Parameters<typeof placeEditChanges>[0]["parsed"] = {
   name: "Alpha Gorge",
   altNames: [],
   latitude: pulled.latitude,
