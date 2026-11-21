@@ -28,6 +28,7 @@ import {
   Row,
   SectionHeader,
   type Glyph,
+  type MenuEntry,
 } from "../../ui";
 import ConfirmDialog from "../dialogs/ConfirmDialog";
 import { useToast } from "../feedback/ToastProvider";
@@ -73,7 +74,7 @@ export default function PlanItems({
   myUserId,
   onChanged,
   onSaved,
-  adds,
+  add,
   onOpen,
   onView,
 }: {
@@ -84,9 +85,8 @@ export default function PlanItems({
   /** The caller's own lists or storage changed: a copy landed, or a thing
    *  they were charged for went. */
   onSaved: () => void;
-  /** The verbs that put a place or way in the plan, in menu order; none on
-   *  an archived plan. */
-  adds: { id: string; label: string; icon: Glyph; run: () => void }[];
+  /** The one Add a place or way button's menu; none on an archived plan. */
+  add: { label: string; icon: Glyph; entries: MenuEntry[] } | null;
   /** Fit the map to it. */
   onOpen: (item: TripPlanItem) => void;
   /** A place's page, one step inside the plan. */
@@ -133,21 +133,23 @@ export default function PlanItems({
     delete: () => setDeleting(item),
   });
 
-  // The empty state's buttons and the end of the list's are the same ones.
-  const addCopy = !archived && adds.length > 0 && (
-    <>
-      {adds.map((verb, index) => (
+  // The empty state's button and the end of the list's are the same one.
+  const addCopy = !archived && add && (
+    <Menu
+      label={add.label}
+      title={add.label}
+      entries={add.entries}
+      trigger={(props) => (
         <Button
-          key={verb.id}
-          compact
-          variant={index === 0 ? "filled" : "outline"}
-          icon={verb.icon}
-          onClick={verb.run}
+          {...props}
+          variant="filled"
+          icon={add.icon}
+          trailingIcon="expand"
         >
-          {verb.label}
+          {add.label}
         </Button>
-      ))}
-    </>
+      )}
+    />
   );
 
   const deleteCopy = deleting

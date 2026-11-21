@@ -18,7 +18,7 @@ import {
   planVerbs,
   planVerbsFor,
   PLAN_ADD_VERBS,
-  PLAN_ITEM_ADD_VERBS,
+  planItemAddMenu,
   PLAN_VERBS,
   planSectionsMoved,
   planSectionVerbs,
@@ -40,6 +40,7 @@ import {
   tripPlanNotice,
   tripTypeLabel,
   type PlanAddVerbId,
+  type TripPlanItemGroup,
   type PlanFormVerbId,
   type PlanSectionVerbId,
   type PlanVerb,
@@ -173,6 +174,7 @@ export default function PlanDetailPanel({
   initialView?: TripPlanPageView;
 }) {
   const toast = useToast();
+  const [copyOn, setCopyOn] = useState<TripPlanItemGroup>("places");
   const [addingCopy, setAddingCopy] = useState<{
     kind: TripPlanItemKind;
     id: string;
@@ -335,8 +337,14 @@ export default function PlanDetailPanel({
 
   const addRunners: Record<PlanAddVerbId, () => void> = {
     section: () => setSectionOpen({ id: null }),
-    copy: () => {
+    copyPlace: () => {
       setTab("items");
+      setCopyOn("places");
+      setAddingCopy(NOTHING_TICKED);
+    },
+    copyWay: () => {
+      setTab("items");
+      setCopyOn("ways");
       setAddingCopy(NOTHING_TICKED);
     },
     newPlace: () => {
@@ -383,6 +391,7 @@ export default function PlanDetailPanel({
     delete: () => setConfirm({ kind: "section", section }),
   });
 
+  const itemAdd = planItemAddMenu("web", role, archived);
   const addVerbs = planVerbsFor(PLAN_ADD_VERBS, "web", role, {
     archived,
   }) as PlanVerb<PlanAddVerbId>[];
@@ -634,11 +643,13 @@ export default function PlanDetailPanel({
         myUserId={myUserId}
         onChanged={refetch}
         onSaved={onOwnChanged}
-        adds={addVerbs
-          .filter((verb) =>
-            (PLAN_ITEM_ADD_VERBS as readonly string[]).includes(verb.id),
-          )
-          .map((verb) => ({ ...verb, run: addRunners[verb.id] }))}
+        add={
+          itemAdd && {
+            label: itemAdd.label,
+            icon: itemAdd.icon,
+            entries: menuEntries(itemAdd.verbs, (id) => addRunners[id]()),
+          }
+        }
         onOpen={onOpenItem}
         onView={(place) => openPlacePage(place.id)}
       />
@@ -787,6 +798,7 @@ export default function PlanDetailPanel({
           plan={plan}
           {...own}
           user={currentUser}
+          startOn={copyOn}
           initial={
             addingCopy && addingCopy !== NOTHING_TICKED
               ? addingCopy
