@@ -5,6 +5,7 @@
 // first sit on the page as buttons, every other one is behind the ⋯. A page
 // draws no verb of its own, so Delete and Remove are never a section.
 import { fieldValue } from "../fieldValues.js";
+import { isHttpUrl } from "../placeSources.js";
 import { SOURCES_FIELD_KEY, systemFieldDef } from "../placeTypes.js";
 import { ATTRIBUTE_NOUN } from "../tripLogFields.js";
 import type { AttributeRow } from "../logbook.js";
@@ -193,14 +194,11 @@ export function placeSources(fieldValues: unknown): PlaceSource[] {
   if (!Array.isArray(stored)) return [];
   return (stored as [string, string][]).map(([label, url]) => {
     let host: string | undefined;
-    let linkable = false;
     try {
-      const parsed = new URL(url);
-      host = parsed.host;
-      linkable = parsed.protocol === "http:" || parsed.protocol === "https:";
+      host = new URL(url).host;
     } catch {
       // Not a URL: shown as a label, goes nowhere.
     }
-    return { label, url, host, linkable };
+    return { label, url, host, linkable: isHttpUrl(url) };
   });
 }
