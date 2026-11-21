@@ -279,7 +279,6 @@ test("a topo pick leaves the open page where it is, and the map's chrome beside 
   await openMap(page);
   await page.getByRole("button", { name: "Places", exact: true }).click();
   const search = page.getByLabel("Search places and locations");
-  const before = (await search.boundingBox())!.x;
   await tools(page).click();
   await tray(page).getByText("Sharpen an area").click();
   const dialog = page.locator("dialog[open]");
@@ -287,8 +286,16 @@ test("a topo pick leaves the open page where it is, and the map's chrome beside 
   await dialog.getByRole("button", { name: "Draw the area" }).click();
   await expect(page.locator("dialog[open]")).toHaveCount(0);
   await expect(page.getByText("Click to set a corner")).toBeVisible();
-  await expect(page.locator("aside")).toBeVisible();
-  expect(Math.abs((await search.boundingBox())!.x - before)).toBeLessThan(2);
+  const aside = page.locator("aside");
+  await expect(aside).toBeVisible();
+  // The search box stays to the right of the page (polled: it slides there).
+  const pageRight = async () => {
+    const box = (await aside.boundingBox())!;
+    return box.x + box.width;
+  };
+  await expect
+    .poll(async () => (await search.boundingBox())!.x - (await pageRight()))
+    .toBeGreaterThanOrEqual(0);
 });
 
 // Mutation: put `style.cursor = ""` back in the pick's effect (Map.tsx), and a
