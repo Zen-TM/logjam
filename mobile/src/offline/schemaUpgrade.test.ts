@@ -6,8 +6,8 @@
 // default) or an entry that was never written, and either one throws or loses
 // a column on every installed phone the first time it opens the new build.
 //
-// `LEGACY_DDL` is the oldest shape this code still upgrades: the three tables
-// that have gained columns, as they were before any `ADDED_COLUMNS` entry. It
+// `LEGACY_DDL` is the oldest shape this code still upgrades: the tables that
+// have gained columns, as they were before any `ADDED_COLUMNS` entry. It
 // is a frozen literal on purpose. Built from `SCHEMA_SQL` minus
 // `ADDED_COLUMNS`, an entry deleted from the list would vanish from the old
 // shape too, and nothing would notice. Each test then replays the first `k`
@@ -59,6 +59,15 @@ const LEGACY_DDL = `
     timestampMs INTEGER NOT NULL,
     PRIMARY KEY (trackId, seq)
   );
+  CREATE TABLE route_draft (
+    id             INTEGER PRIMARY KEY CHECK (id = 1),
+    pointsJson     TEXT NOT NULL,
+    anchorsJson    TEXT NOT NULL,
+    editingRouteId TEXT,
+    savedAt        TEXT NOT NULL
+  );
+  INSERT INTO route_draft (id, pointsJson, anchorsJson, savedAt)
+    VALUES (1, '[[150.4,-33.5]]', '[0]', '2026-01-01T00:00:00.000Z');
   INSERT INTO map_artifact (id, kind, logicalKey, format, sourceType, path, sizeBytes, downloadedAt)
     VALUES ('artifact-1', 'region', 'made-up', 'pmtiles', 'built', 'a.pmtiles', 10, '2026-01-01T00:00:00.000Z');
   INSERT INTO track (id, name, state, color, startedAt, updatedAt)
@@ -163,6 +172,10 @@ describe("the offline database upgrade", () => {
       expect(
         sqlite.prepare("SELECT path, sizeBytes FROM map_artifact").all(),
       ).toEqual([{ path: "a.pmtiles", sizeBytes: 10 }]);
+      // A draft saved before the place column existed is kept, for no place.
+      expect(
+        sqlite.prepare("SELECT pointsJson, placeId FROM route_draft").all(),
+      ).toEqual([{ pointsJson: "[[150.4,-33.5]]", placeId: null }]);
       expect(sqlite.prepare("SELECT name, pausedMs FROM track").all()).toEqual([
         { name: "Made-up walk", pausedMs: 0 },
       ]);

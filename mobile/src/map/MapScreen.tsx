@@ -1990,6 +1990,7 @@ export function MapScreen({
       const discard = () => {
         routeDraft.close();
         setEditingRouteId(null);
+        setDraftPlaceId(null);
         setDraftPlanId(null);
         setDraftColor(null);
         if (typeof then === "function") then();
@@ -2038,6 +2039,7 @@ export function MapScreen({
         if (stored) {
           routeDraft.open({ points: stored.points, anchors: stored.anchors });
           setEditingRouteId(stored.editingRouteId);
+          setDraftPlaceId(stored.placeId);
           // Frame it too. A HUD announcing 22 points over an empty map reads
           // as "Logjam GPS lost my route" — the camera is the confirmation that
           // it came back. Handed to an effect below because fitCameraToBbox is
@@ -2098,8 +2100,9 @@ export function MapScreen({
       points: draftPoints(draft),
       anchors: draftAnchorIndices(draft),
       editingRouteId,
+      placeId: draftPlaceId,
     }).catch(console.error);
-  }, [draft, editingRouteId]);
+  }, [draft, editingRouteId, draftPlaceId]);
 
   /** Save the drawn points as a route. Offline is the expected case, not a
    *  degraded one: createRouteLocal writes the mirror and queues the op, so the
