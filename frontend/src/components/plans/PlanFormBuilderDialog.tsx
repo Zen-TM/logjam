@@ -244,19 +244,22 @@ function Builder({
               hint={widenLocked ? copy.visibleToLocked : undefined}
               named
             >
-              <ChipRail
-                label={copy.visibleTo}
-                value={values.visibleTo}
-                onChange={(visibleTo) => set({ visibleTo })}
-                options={[
-                  { value: "leaders", label: copy.visibleToLeaders },
-                  {
-                    value: "members",
-                    label: copy.visibleToMembers,
-                    disabled: widenLocked,
-                  },
-                ]}
-              />
+              {(describedBy) => (
+                <ChipRail
+                  label={copy.visibleTo}
+                  value={values.visibleTo}
+                  onChange={(visibleTo) => set({ visibleTo })}
+                  options={[
+                    { value: "leaders", label: copy.visibleToLeaders },
+                    {
+                      value: "members",
+                      label: copy.visibleToMembers,
+                      disabled: widenLocked,
+                    },
+                  ]}
+                  describedBy={describedBy}
+                />
+              )}
             </FieldGroup>
             <SectionHeader
               title={copy.questions}

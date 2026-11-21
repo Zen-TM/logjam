@@ -102,9 +102,10 @@ function Field({
  *  are the same options a text field has. The legend names the group.
  *  `named` is for controls that name themselves (a radio group, a lone tick
  *  box): the prompt is then drawn for the eye only, so a screen reader does
- *  not hear it twice, and the controls may be a function that takes the ids of
- *  the hint and error to describe themselves with. A named group may have no
- *  prompt. */
+ *  not hear it twice. Its controls describe themselves, so with a hint or an
+ *  error they are a function that takes the ids to do it with (the compiler
+ *  refuses plain elements there); without either they may be plain elements.
+ *  A named group may have no prompt. */
 export function FieldGroup({
   label,
   hint,
@@ -114,16 +115,29 @@ export function FieldGroup({
   named = false,
   children,
 }: {
-  hint?: string;
-  error?: string | null;
   prominentLabel?: boolean;
   hintAbove?: boolean;
 } & (
-  | { label: string; named?: false; children: ReactNode }
+  | {
+      label: string;
+      named?: false;
+      hint?: string;
+      error?: string | null;
+      children: ReactNode;
+    }
   | {
       label?: string;
       named: true;
-      children: ReactNode | ((describedBy: string | undefined) => ReactNode);
+      hint?: string;
+      error?: string | null;
+      children: (describedBy: string | undefined) => ReactNode;
+    }
+  | {
+      label?: string;
+      named: true;
+      hint?: undefined;
+      error?: null;
+      children: ReactNode;
     }
 )) {
   const id = useId();
