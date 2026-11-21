@@ -323,6 +323,13 @@ jobs:
           done
           aws --endpoint-url=http://localhost:4566 s3 mb "s3://$S3_BUCKET_MEDIA"
           aws --endpoint-url=http://localhost:4566 s3 mb "s3://$S3_BUCKET_TOPO"
+      # Before the API starts: it remembers for five minutes that the layer was
+      # missing. flowNetwork.test.ts uploads it too, for a stack started without.
+      - name: Upload the flow network fixture
+        run: >-
+          aws --endpoint-url=http://localhost:4566 s3 cp
+          api/src/__tests__/__fixtures__/flow-network.gpkg
+          "s3://$S3_BUCKET_TOPO/private/flow-network/flow-network.gpkg"
       # Creates alice/bob/carol with the friendships and shares every
       # multi-actor test asserts against.
       - name: Seed

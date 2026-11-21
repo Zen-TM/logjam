@@ -20,6 +20,19 @@ import {
 export const TOPO_CEILING = "place-tracks-hit";
 
 /**
+ * The creeks upstream of a point, and the land they drain, sit between the
+ * topo band and the tracks: over the contours and slope, under every track,
+ * route and pin. `flowNetworkLayers.ts` adds them under `TOPO_CEILING`, and
+ * while they are drawn the topo band stacks under the lowest of them: the
+ * catchment's fill, or with no outline the farthest band's casing. Guards:
+ * `layerOrder.test.ts`, `flowNetworkLayers.test.ts`.
+ */
+export const FLOW_NETWORK_FLOOR = [
+  "flow-catchment-fill",
+  "flow-upstream-casing-11",
+] as const;
+
+/**
  * The gauge drops go over the topo band and under every pin, so a pin on a
  * gauge is the one pressed. Guard: `layerOrder.test.ts`.
  */
@@ -152,7 +165,8 @@ export function pressClosedGauge(
 
 /**
  * Stacks the topo entries' layers (`groups`, bottom of the map first) directly
- * under `TOPO_CEILING`, each group's layers in their own order.
+ * under `TOPO_CEILING`, or under the creeks upstream while they are drawn
+ * (`FLOW_NETWORK_FLOOR`), each group's layers in their own order.
  */
 export function stackTopoLayers(
   map: {
@@ -161,7 +175,9 @@ export function stackTopoLayers(
   },
   groups: readonly (readonly string[])[],
 ): void {
-  let before = map.getLayer(TOPO_CEILING) ? TOPO_CEILING : undefined;
+  let before = [...FLOW_NETWORK_FLOOR, TOPO_CEILING].find((id) =>
+    map.getLayer(id),
+  );
   for (const group of [...groups].reverse()) {
     const present = group.filter((lid) => map.getLayer(lid));
     for (const lid of present) map.moveLayer(lid, before);

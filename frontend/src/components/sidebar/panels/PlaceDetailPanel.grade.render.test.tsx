@@ -101,6 +101,7 @@ function renderPlace(place: TPlace, defs: ScopedCustomFieldDef[] = []) {
       onOpenRoute={noop}
       onRoutesChanged={noop}
       onDrawRoute={noop}
+      onShowCatchment={noop}
     />,
   );
 }

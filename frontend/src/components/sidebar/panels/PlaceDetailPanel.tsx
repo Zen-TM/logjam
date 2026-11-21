@@ -44,6 +44,8 @@ import {
   formatPlacePosition,
   placeAttributesTitle,
   placeSectionTitle,
+  placeOffersCatchment,
+  type MapPointCoord,
   placeSources,
   placeStatus,
   placeStatusLabel,
@@ -213,6 +215,7 @@ function PlaceDetailPanel({
   onOpenRoute,
   onRoutesChanged,
   onDrawRoute,
+  onShowCatchment,
 }: {
   place: TPlace | undefined;
   places: TPlace[];
@@ -263,6 +266,8 @@ function PlaceDetailPanel({
   onRoutesChanged: () => void;
   /** Arm the map's pen for this place's route slot. */
   onDrawRoute: (placeId: string) => void;
+  /** Draw the creeks upstream of a point on the map, as "What is here?" does. */
+  onShowCatchment: (point: MapPointCoord) => void;
 }) {
   const toast = useToast();
   const [showEdit, setShowEdit] = useState(false);
@@ -824,6 +829,25 @@ function PlaceDetailPanel({
             tripDates={tripLogs.map((t) => t.date)}
             onChange={(id) => void setGauge(id)}
           />
+        </section>
+      ) : null,
+
+    // The creeks upstream of the pin; the API sees the pin only on the press.
+    catchment: () =>
+      placeOffersCatchment(current.placeTypeId) ? (
+        <section className={classes.section}>
+          <Button
+            variant="outline"
+            icon="catchment"
+            onClick={() =>
+              onShowCatchment({
+                latitude: current.latitude,
+                longitude: current.longitude,
+              })
+            }
+          >
+            {copy.showCatchment}
+          </Button>
         </section>
       ) : null,
 

@@ -180,6 +180,20 @@
   pointer-events: none;
 }
 
+/* The tooltip's inverted surface, without its popover machinery: it follows
+   the pointer as a marker. */
+.tip {
+  composes: meta from "../textRoles.generated.module.css";
+  display: block;
+  padding: var(--space-0-5) var(--space-1);
+  border-radius: var(--radius-md);
+  background: var(--color-inverse);
+  color: var(--color-on-inverse);
+  white-space: nowrap;
+  box-shadow: var(--shadow-float);
+  pointer-events: none;
+}
+
 /* MapLibre draws the (i) as a fixed black data-URI icon, which a dark scheme
    inverted and Ghost Gum's light card swallowed. Drawn instead as a mask in the
    text colour, so it follows every scheme. */

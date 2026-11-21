@@ -4,6 +4,8 @@ import {
   MAP_POINT,
   MAP_POINT_NO_FIX_NOTE,
   WEATHER,
+  mapPointCatchment,
+  mapPointCatchmentNote,
   mapPointFacts,
   mapPointPosition,
   mapPointStepBack,
@@ -13,7 +15,7 @@ import {
   type MapPointCoord,
   type MapPointVerbId,
 } from "@logjam/shared";
-import { useElevationPoint } from "../../placeUtils";
+import { useElevationPoint, useFlowNetworkLookup } from "../../placeUtils";
 import { useIsMobile } from "../../useIsMobile";
 import { useToast } from "../feedback/ToastProvider";
 import { WeatherView } from "../weather/WeatherView";
@@ -36,8 +38,9 @@ import classes from "./MapPointPopover.module.css";
  * shows the facts and one Options row; Options holds the verbs, and the weather
  * opens from there. The coordinates copy where they are pressed.
  *
- * Mounted only while a point is being asked about, so the elevation request is
- * tied to the panel being open and never fires for a stale point.
+ * Mounted only while a point is being asked about, so the elevation and
+ * catchment requests are tied to the panel being open and never fire for a
+ * stale point.
  *
  * PRIVACY (shared/DESIGN.md §13): the coordinate goes to this panel, and to
  * the clipboard when the user presses it; the toasts are fixed sentences.
@@ -53,6 +56,7 @@ export default function MapPointPopover({
   onAddPlace,
   onMeasure,
   onDrawRoute,
+  onShowUpstream,
 }: {
   map: maplibregl.Map;
   point: MapPointCoord;
@@ -66,6 +70,8 @@ export default function MapPointPopover({
   onAddPlace: (point: MapPointCoord) => void;
   onMeasure: (point: MapPointCoord) => void;
   onDrawRoute: (point: MapPointCoord) => void;
+  /** Draws the creeks upstream of the point; they outlive this panel. */
+  onShowUpstream: (point: MapPointCoord) => void;
 }) {
   const toast = useToast();
   // On narrow web the tab bar owns the bottom of the screen, and a panel below
@@ -121,6 +127,10 @@ export default function MapPointPopover({
         ?.focus();
   }, [view]);
 
+  // The Catchment row appears once a creek is found, and not at all
+  // otherwise: the panel may grow by a line a moment after it opens.
+  const catchment = mapPointCatchment(useFlowNetworkLookup(point).lookup);
+
   // Pressed too soon, the weather would be asked without a height and answer
   // for the cell's own DEM, which in canyon country can be far from the spot.
   const checkingHeight = loading;
@@ -141,6 +151,7 @@ export default function MapPointPopover({
           : { state: "unavailable" },
     from,
     slopeDegrees: reading?.slopeDegrees ?? null,
+    catchment,
     land,
     fire,
     coverage,
@@ -158,13 +169,19 @@ export default function MapPointPopover({
     map.getCanvas().focus();
   };
 
+  const catchmentNote = mapPointCatchmentNote(catchment);
+
   const run: Record<
-    Extract<MapPointVerbId, "drawRoute" | "addPlace" | "measure" | "weather">,
+    Extract<
+      MapPointVerbId,
+      "drawRoute" | "addPlace" | "measure" | "upstream" | "weather"
+    >,
     () => void
   > = {
     drawRoute: () => onDrawRoute(point),
     addPlace: () => onAddPlace(point),
     measure: () => onMeasure(point),
+    upstream: () => onShowUpstream(point),
     weather: () => {
       setView("weather");
       weather.load();
@@ -201,6 +218,7 @@ export default function MapPointPopover({
           {view === "point" ? (
             <>
               <StatGrid stats={stats} />
+              {catchmentNote && <p className={classes.note}>{catchmentNote}</p>}
               {from === null && (
                 <p className={classes.note}>{MAP_POINT_NO_FIX_NOTE.web}</p>
               )}
@@ -240,7 +258,9 @@ export default function MapPointPopover({
                 />
               ) : (
                 <div className={classes.verbs}>
-                  {mapPointVerbs("web").map((verb) => (
+                  {mapPointVerbs("web", false, {
+                    creekFound: catchment !== null,
+                  }).map((verb) => (
                     <Row
                       key={verb.id}
                       title={verb.label}

@@ -24,6 +24,7 @@ import type {
   TPlaceType,
 } from "../../placeUtils";
 import type {
+  MapPointCoord,
   RegionBbox,
   StandaloneFile,
   ScopedCustomFieldDef,
@@ -130,6 +131,7 @@ function SidebarPanel({
   onRetryStandaloneFiles,
   onOpenWay,
   onFocusBounds,
+  onShowCatchment,
   onOpenRoute,
   onRoutesChanged,
   onOpenRouteById,
@@ -235,6 +237,8 @@ function SidebarPanel({
   onOpenWay: (way: WayItem, verb?: WayVerbId) => void;
   /** Fit the map to a box without opening anything. */
   onFocusBounds: (bounds: [number, number, number, number]) => void;
+  /** Draw the creeks upstream of a point on the map (a canyon's page). */
+  onShowCatchment: (point: MapPointCoord) => void;
   onOpenRoute: (route: TRoute) => void;
   onRoutesChanged: () => void;
   /** Open a route's page by id (an Inbox row); false when it is gone. */
@@ -536,6 +540,7 @@ function SidebarPanel({
             routes={allRoutes}
             currentUserId={currentUserId}
             onFocusBounds={onFocusBounds}
+            onShowCatchment={onShowCatchment}
             onOpenRoute={onOpenRoute}
             onRoutesChanged={onRoutesChanged}
             onDrawRoute={onDrawRouteForPlace}
