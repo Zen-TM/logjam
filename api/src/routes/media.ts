@@ -646,10 +646,19 @@ router.post(
       ) {
         // Transaction rolled back (charge undone, the old file kept); remove the uploaded
         // objects best-effort so the 507 is not masked by a cleanup failure.
-        await deleteS3KeysBestEffort(
-          MEDIA_BUCKET,
-          expectThumb ? [displayKey, thumbnailKey] : [displayKey],
-        );
+        // Unless a row already holds them: a concurrent confirm of the same
+        // upload won, and its photo must stay. Guard: __tests__/media.test.ts
+        // ("keeps the file when racing confirms of one upload fail the quota").
+        const kept = await prisma.media.findUnique({
+          where: { id: mediaId },
+          select: { id: true },
+        });
+        if (!kept) {
+          await deleteS3KeysBestEffort(
+            MEDIA_BUCKET,
+            expectThumb ? [displayKey, thumbnailKey] : [displayKey],
+          );
+        }
         throw err;
       }
       if (

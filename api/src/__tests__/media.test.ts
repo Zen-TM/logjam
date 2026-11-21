@@ -1,7 +1,12 @@
 import { describe, it, expect } from "vitest";
 import request from "supertest";
+import { HeadObjectCommand } from "@aws-sdk/client-s3";
+
+import prisma from "../services/prisma";
+import { s3 } from "../services/awsClients";
 
 import {
+  ALICE_ID,
   ALICE_SUB,
   BOB_SHARED_PLACE_ID,
   BOB_SUB,
@@ -144,6 +149,86 @@ describe("media upload lifecycle (fake auth)", () => {
     const gone = { type: "media", id: mediaId };
     expect(await tombstonesSince(ALICE_SUB, aliceCursor)).toContainEqual(gone);
     expect(await tombstonesSince(BOB_SUB, bobCursor)).toContainEqual(gone);
+  });
+
+  // Several confirms of one upload racing (a client retry, say) with room in
+  // the quota for only one: the losers fail the quota check, and their cleanup
+  // must leave the object the winner's row points at.
+  // Mutation: delete the object in the 507 branch of the confirm's catch
+  // whether or not a row holds it, and the winner's photo is gone from storage.
+  it("keeps the file when racing confirms of one upload fail the quota", async () => {
+    const placesRes = await request(API_URL).get("/places").set(AUTH);
+    const placeId: string = placesRes.body[0].id;
+    const presign = await request(API_URL)
+      .post("/media/presign")
+      .set(AUTH)
+      .send({
+        linkedType: "place",
+        linkedId: placeId,
+        filename: "race.png",
+        mediaType: "image/png",
+        sizeBytes: PNG_BYTES.length,
+        thumbnailSizeBytes: PNG_BYTES.length,
+      });
+    expect(presign.status).toBe(201);
+    const { mediaId, displayUploadUrl, thumbnailUploadUrl } = presign.body;
+    await putToPresignedUrl(displayUploadUrl, PNG_BYTES, "image/png");
+    await putToPresignedUrl(thumbnailUploadUrl, PNG_BYTES, "image/jpeg");
+
+    const user = await prisma.user.findUniqueOrThrow({
+      where: { id: ALICE_ID },
+      select: { storageUsedBytes: true, storageQuotaBytes: true },
+    });
+    // Room for exactly one charge of the file and its thumbnail.
+    await prisma.user.update({
+      where: { id: ALICE_ID },
+      data: {
+        storageQuotaBytes: user.storageUsedBytes + BigInt(2 * PNG_BYTES.length),
+      },
+    });
+    let statuses: number[];
+    try {
+      statuses = (
+        await Promise.all(
+          Array.from({ length: 6 }, () =>
+            request(API_URL)
+              .post(`/media/${mediaId as string}/confirm`)
+              .set(AUTH)
+              .send({
+                linkedType: "place",
+                linkedId: placeId,
+                filename: "race.png",
+                mediaType: "image/png",
+              }),
+          ),
+        )
+      ).map((res) => res.status);
+    } finally {
+      await prisma.user.update({
+        where: { id: ALICE_ID },
+        data: { storageQuotaBytes: user.storageQuotaBytes },
+      });
+    }
+    try {
+      expect(statuses).toContain(201);
+      // The premise: at least one confirm lost on the quota, not on the replay.
+      expect(statuses).toContain(507);
+      const row = await prisma.media.findUniqueOrThrow({
+        where: { id: mediaId },
+      });
+      await expect(
+        s3.send(
+          new HeadObjectCommand({
+            Bucket: process.env.S3_BUCKET_MEDIA ?? "",
+            Key: row.s3KeyDisplay,
+          }),
+        ),
+      ).resolves.toBeTruthy();
+    } finally {
+      await request(API_URL)
+        .delete(`/media/${mediaId as string}`)
+        .set(AUTH);
+    }
   });
 
   it("rejects an unsupported media type", async () => {
