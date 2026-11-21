@@ -22,7 +22,6 @@ import {
   mediaDisplayName,
   messageFromError,
   planAddVerbLabel,
-  planItemAddMenu,
   tripPlanAddedMessage,
   planItemVerbs,
   TRIP_PLAN_MAX_FORMS,
@@ -52,7 +51,6 @@ import {
   WAY_IMPORT,
   type DateOnly,
   type PlanItemAddVerbId,
-  type PlanVerb,
   type SectionKeysOn,
   type TripPlanItem,
   type TripPlanItemGroup,
@@ -111,6 +109,8 @@ import {
   usePlanFilesOnPhone,
 } from "./PlanDownload";
 import { openablePlanMedia, planFiles } from "./planFiles";
+import { PlanAddMenu } from "./PlanAddMenu";
+import { planAddMenuView, type PlanAddMenuView } from "./planAddMenu";
 import { PlanNewPlaceSheet } from "./PlanNewPlaceSheet";
 import { PlanPlaceSheet } from "./PlanPlaceSheet";
 import { planBbox } from "./planMap";
@@ -567,7 +567,7 @@ function PlanPage({
         <Items
           plan={plan}
           online={online}
-          verbs={planItemAddMenu("gps", plan.myRole, archived)?.verbs ?? []}
+          addMenu={planAddMenuView(plan.myRole, archived)}
           me={myId}
           onInfo={notify}
           onError={(text) => notify(text, "error")}
@@ -827,7 +827,7 @@ function WriteUp({
 function Items({
   plan,
   online,
-  verbs,
+  addMenu,
   me,
   onInfo,
   onError,
@@ -836,9 +836,8 @@ function Items({
 }: {
   plan: TripPlanView;
   online: boolean;
-  /** The ways this caller may put a place or way in the plan (none when it
-   *  is archived). */
-  verbs: PlanVerb<PlanItemAddVerbId>[];
+  /** The one Add a place or way button's menu; none on an archived plan. */
+  addMenu: PlanAddMenuView | null;
   /** The caller's user id: a member changes only what they added. */
   me: string | null;
   onInfo: (message: string, tone?: "done" | "error") => void;
@@ -851,7 +850,6 @@ function Items({
   const [adding, setAdding] = useState(false);
   const [addGroup, setAddGroup] = useState<TripPlanItemGroup>("places");
   const addingMounted = useOnceOpened(adding);
-  const styles = useStyles();
   const [newPlaceAt, setNewPlaceAt] = useState<{
     latitude: number;
     longitude: number;
@@ -896,47 +894,37 @@ function Items({
     route: onDrawRoute,
     import: importWay,
   };
-  // The buttons only dim: the words go under them (ui/Button.tsx).
-  const add =
-    verbs.length > 0 ? (
-      <ListEnd>
-        {verbs.map((verb) => (
-          <Button
-            key={verb.id}
-            label={verb.label}
-            icon={verb.icon}
-            variant="outlineAccent"
-            loading={verb.id === "import" && importing}
-            disabled={!online}
-            disabledReason={OFFLINE}
-            reasonShown
-            onPress={run[verb.id]}
-          />
-        ))}
-        {online ? null : <Text style={styles.offline}>{OFFLINE}</Text>}
-        {addingMounted ? (
-          <AddCopySheet
-            plan={plan}
-            visible={adding}
-            startGroup={addGroup}
-            online={online}
-            me={me}
-            onClose={() => setAdding(false)}
-            onDone={onInfo}
-          />
-        ) : null}
-        <PlanNewPlaceSheet
-          planId={plan.id}
-          at={newPlaceAt}
+  const add = addMenu ? (
+    <ListEnd>
+      <PlanAddMenu
+        menu={addMenu}
+        online={online}
+        busy={importing}
+        onPick={(id) => run[id]()}
+      />
+      {addingMounted ? (
+        <AddCopySheet
+          plan={plan}
+          visible={adding}
+          startGroup={addGroup}
           online={online}
-          onClose={() => setNewPlaceAt(null)}
-          onAdded={() => {
-            setNewPlaceAt(null);
-            onInfo(tripPlanAddedMessage(1, 1));
-          }}
+          me={me}
+          onClose={() => setAdding(false)}
+          onDone={onInfo}
         />
-      </ListEnd>
-    ) : null;
+      ) : null}
+      <PlanNewPlaceSheet
+        planId={plan.id}
+        at={newPlaceAt}
+        online={online}
+        onClose={() => setNewPlaceAt(null)}
+        onAdded={() => {
+          setNewPlaceAt(null);
+          onInfo(tripPlanAddedMessage(1, 1));
+        }}
+      />
+    </ListEnd>
+  ) : null;
   const [menuItem, setMenuItem] = useState<TripPlanItem | null>(null);
   /** The item's ⋯ (`PlanItemSheet`): its row's trailing control. */
   const menu = (item: TripPlanItem) =>
