@@ -2159,14 +2159,11 @@ function Map({
       };
       map.once("click", handleClick);
       return () => {
-        // An armed Measure or Draw tool keeps its crosshair after the pick.
-        map.getCanvas().style.cursor = drawingRouteRef.current
-          ? "crosshair"
-          : "";
+        map.getCanvas().style.cursor = "";
         map.off("click", handleClick);
       };
     } else {
-      map.getCanvas().style.cursor = drawingRouteRef.current ? "crosshair" : "";
+      map.getCanvas().style.cursor = "";
     }
   }, [pickingCoords, mapLoaded]);
 

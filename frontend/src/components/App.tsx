@@ -1687,16 +1687,26 @@ function App() {
   const mapToolActions: MapToolActions = {
     measure: { onSelect: () => startMeasuring() },
     route: { onSelect: () => startDrawingRoute() },
-    // Where first: the form opens on the spot picked, and a cancel opens nothing.
-    // Over a pick already armed (a form's Select on map) it does nothing: a
-    // second callback would replace the form's and lose its pick.
+    // Where first: the form opens on the spot picked, and a cancel opens
+    // nothing. It ends an armed Measure or Draw tool first, by that tool's own
+    // way out (a route with points asks before it goes), and closes the page
+    // beside the map, a plan's included, as a filter's area pick does. Over a
+    // pick already armed (a form's Select on map) it does nothing: a second
+    // callback would replace the form's and lose its pick.
     place: {
       onSelect: () => {
         if (pickingCoords) return;
-        startPickingCoords((latitude, longitude) => {
-          setAddPlaceAt({ latitude, longitude });
-          setShowAdd(true);
-        });
+        const pick = () => {
+          setActivePanel(null);
+          startPickingCoords((latitude, longitude) => {
+            setAddPlaceAt({ latitude, longitude });
+            setShowAdd(true);
+          });
+        };
+        if (drawingRoute) {
+          afterRouteCancel.current = pick;
+          requestCancelRoute();
+        } else pick();
       },
     },
     makeMap: {
@@ -2217,7 +2227,9 @@ function App() {
             onTopoFlyConsumed={() => setTopoFlyTarget(null)}
             flyToPlace={flyToPlace}
             onFlyToPlaceConsumed={() => setFlyToPlace(null)}
-            panelOpen={activePanel !== null}
+            // The page steps aside for a pick, so the map is measured from its
+            // own edge then: the pick's pill and Cancel centre on what shows.
+            panelOpen={activePanel !== null && !mapInteractionActive}
             sheetOpen={sidebarSheetOpen}
             placeHighlight={placeHighlight}
             placeTypes={placeTypes}
