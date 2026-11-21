@@ -119,7 +119,7 @@ import PlanDetailPanel from "./plans/PlanDetailPanel";
 import PlanInvitedPage from "./plans/PlanInvitedPage";
 import PlanInviteLinkDialog from "./plans/PlanInviteLinkDialog";
 import { planBounds, planMapPress } from "./plans/plansModel";
-import { usePlan, usePlans } from "../plansApi";
+import { addPlanItem, usePlan, usePlans } from "../plansApi";
 import ConfirmDialog from "./dialogs/ConfirmDialog";
 import {
   abandonConfirm,
@@ -142,12 +142,12 @@ import {
   MAP_TERRAIN,
   canyonOffersFor,
   opensPreview,
-  PLAN_ADD_VERBS,
-  planVerbsFor,
+  planItemAddMenu,
   TRIP_PLAN_PAGE,
   tripPlansBadgeCount,
   tripPlanTripLogPrefill,
   type TripPlanItemKind,
+  type TripPlanView,
   type TripPlanPageView,
 } from "@logjam/shared";
 import type { MapPointCoord, OverlaySource } from "@logjam/shared";
@@ -305,6 +305,9 @@ function App() {
   // The place whose route slot a new drawing fills, when "Add a way" asked for
   // the pen; the save links it and the way out comes back to that place.
   const [drawPlaceId, setDrawPlaceId] = useState<string | null>(null);
+  // The plan a new drawing is for, when its page asked for the pen: the save
+  // adds the way to that plan alone, and the way out comes back to its page.
+  const [drawPlanId, setDrawPlanId] = useState<string | null>(null);
   const displaceConfirm = useConfirm();
   const [savingRoute, setSavingRoute] = useState(false);
   const [namingRoute, setNamingRoute] = useState(false);
@@ -773,7 +776,10 @@ function App() {
       (activePanel === "ways" || activePanel === "plan-detail" || showWays),
   );
   const { openPicker: openWayImportPicker, input: wayImportInput } =
-    useWayImport(refetchStandaloneFiles);
+    useWayImport(() => {
+      refetchStandaloneFiles();
+      refetchCurrentUser();
+    });
   const shownStandaloneIds = useMemo(
     () => (showWays ? standaloneFiles.map((file) => file.id) : []),
     [showWays, standaloneFiles],
@@ -845,9 +851,8 @@ function App() {
     if (
       pick &&
       planOnMap &&
-      planVerbsFor(PLAN_ADD_VERBS, "web", planOnMap.myRole, {
-        archived: planOnMap.archivedAt != null,
-      }).some((verb) => verb.id === "copy")
+      planItemAddMenu("web", planOnMap.myRole, planOnMap.archivedAt != null) !=
+        null
     )
       setPlanAddCopy(pick);
   };
@@ -1290,8 +1295,10 @@ function App() {
     // being edited, or to the list a new route came from. A save calls this
     // too and then opens the saved way, which wins.
     setDrawPlaceId(null);
+    setDrawPlanId(null);
     setActivePanel(
       drawExitPanel({
+        drawPlanId,
         drawPlaceId,
         editingRouteId,
         selectedWayId: selectedWay?.id ?? null,
@@ -1419,6 +1426,7 @@ function App() {
   const startDrawingRoute = (from?: MapPointCoord) => {
     setEditingRouteId(null);
     setDrawPlaceId(null);
+    setDrawPlanId(null);
     routeDraft.reset();
     if (from) routeDraft.addAnchor([from.longitude, from.latitude]);
     const nextColor = pickNextTrackColor(routes.map((r) => r.color));
@@ -1427,6 +1435,15 @@ function App() {
     // The tool is a PAGE now, not a card over the map: the panel is where a
     // route's figures already live, and the canvas stays clear for drawing.
     setActivePanel("way-draw");
+  };
+
+  /** "Draw a route" from a plan's page: the way is made in the plan, not in
+   *  the account, in a colour the plan's other ways lack. */
+  const startDrawingRouteForPlan = (plan: TripPlanView) => {
+    startDrawingRoute();
+    setDrawPlanId(plan.id);
+    setDrawColor(pickNextTrackColor(plan.routes.map((route) => route.color)));
+    setPlanView("items");
   };
 
   /** "Draw a route on the map" from a place's Add a way. */
@@ -1455,6 +1472,7 @@ function App() {
   const startEditingRoute = (route: TRoute) => {
     setEditingRouteId(route.id);
     setDrawPlaceId(null);
+    setDrawPlanId(null);
     // Anchors come back with the route, so a snapped line reopens with the
     // user's own handful of points rather than every snapped vertex.
     routeDraft.reset({ points: route.points, anchors: route.anchors });
@@ -1508,6 +1526,13 @@ function App() {
         ...(chosenColor ? { color: chosenColor } : {}),
       };
       let result: Awaited<ReturnType<typeof createRoute>> | undefined;
+      if (drawPlanId && !editingRouteId) {
+        await addPlanItem(drawPlanId, { kind: "route", new: payload });
+        setNamingRoute(false);
+        cancelDrawingRoute();
+        toast.done(TRIP_PLAN_PAGE.copy.routeAdded);
+        return;
+      }
       if (editingRouteId) result = await updateRoute(editingRouteId, payload);
       else if (placeId) {
         try {
@@ -1936,6 +1961,8 @@ function App() {
                   }}
                   addCopyRequest={planAddCopy}
                   onAddCopyRequestConsumed={consumePlanAddCopy}
+                  onPickPoint={startPickingCoords}
+                  onDrawRoute={startDrawingRouteForPlan}
                   onBack={() => {
                     setSelectedPlanId(null);
                     setActivePanel("plans");

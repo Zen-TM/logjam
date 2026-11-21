@@ -35,9 +35,6 @@ const LEADERS: readonly TripPlanRole[] = ["leader"];
 const PRINT_ON_WEB =
   "A summary is printed or saved as a PDF, which a browser does and a phone's Logjam GPS does not.";
 
-const DRAW_ON_GPS =
-  "A route is drawn with a finger on the phone's map; Logjam Web has the map beside the page to add one from.";
-
 /** The plan's ⋯, in menu order. */
 export const PLAN_VERBS = [
   { id: "edit", icon: "edit", label: "Edit plan", roles: WRITERS },
@@ -91,8 +88,9 @@ export const PLAN_VERBS = [
   },
 ] as const satisfies readonly PlanVerbDeclaration[];
 
-/** Add ▾ on the plan's page, in menu order. The same words are the buttons
- *  an empty view and a list's end offer. */
+/** Add ▾ on the plan's page, in menu order. The write-up's and the forms'
+ *  own words are the buttons an empty view and a list's end offer; the Map
+ *  view's is the one `PLAN_ITEM_ADD` button, with the verbs between it. */
 export const PLAN_ADD_VERBS = [
   {
     id: "section",
@@ -100,15 +98,25 @@ export const PLAN_ADD_VERBS = [
     label: "Add a write-up section",
     roles: WRITERS,
   },
-  { id: "copy", icon: "add", label: "Add a place or way", roles: ANY },
+  // The five below are the one "Add a place or way" button's menu
+  // (`PLAN_ITEM_ADD`). The first two copy one of the caller's own things; the
+  // rest make the item in the plan, never in the caller's account.
   {
-    id: "route",
-    icon: "route",
-    label: "Draw a route",
+    id: "copyPlace",
+    icon: "place",
+    label: "Add one of your places",
     roles: ANY,
-    on: "gps",
-    reason: DRAW_ON_GPS,
   },
+  { id: "copyWay", icon: "route", label: "Add one of your ways", roles: ANY },
+  {
+    id: "newPlace",
+    icon: "place",
+    label: "New place",
+    roles: ANY,
+    separated: true,
+  },
+  { id: "route", icon: "route", label: "Draw a route", roles: ANY },
+  { id: "import", icon: "importedFile", label: "Import a way", roles: ANY },
   {
     id: "form",
     icon: "form",
@@ -117,6 +125,25 @@ export const PLAN_ADD_VERBS = [
   },
   { id: "invite", icon: "addFriend", label: "Invite people", roles: LEADERS },
 ] as const satisfies readonly PlanVerbDeclaration[];
+
+/** The add verbs that put a place or way in the plan, in order: the menu under
+ *  the Map view's one "Add a place or way" button on both clients, which draw
+ *  them from `PLAN_ADD_VERBS`. */
+export const PLAN_ITEM_ADD_VERBS = [
+  "copyPlace",
+  "copyWay",
+  "newPlace",
+  "route",
+  "import",
+] as const satisfies readonly PlanAddVerbId[];
+
+export type PlanItemAddVerbId = (typeof PLAN_ITEM_ADD_VERBS)[number];
+
+/** That button: the Map view's one add, for an empty view and a list's end. */
+export const PLAN_ITEM_ADD = {
+  label: "Add a place or way",
+  icon: "add",
+} as const satisfies { label: string; icon: IconIdea };
 
 /** A section's ⋯. */
 export const PLAN_SECTION_VERBS = [
@@ -166,7 +193,7 @@ export const PLAN_VERB_LISTS = [
 ] as const;
 
 export type PlanVerbId = (typeof PLAN_VERBS)[number]["id"];
-/** The add verbs both clients have (Logjam Web's Add ▾ runs one of each). */
+/** The add verbs both clients have (each client's Add ▾ runs one of each). */
 export type PlanAddVerbId = Exclude<
   (typeof PLAN_ADD_VERBS)[number],
   { on: "gps" }
@@ -194,13 +221,32 @@ export function planAddVerbLabel(
 /** What a route drawn from a plan says when it is saved but not in the plan. */
 export const planRouteNotAdded = () => ({
   title: "Route saved",
-  body: `It's in Saved, but couldn't be added to the plan. Add it from the plan's ${planAddVerbLabel("copy")}.`,
+  body: `It's in Saved, but couldn't be added to the plan. Add it from the plan's ${PLAN_ITEM_ADD.label}.`,
 });
 
 /** A plan verb's words, where one stands outside its ⋯ (the over notice's
  *  Start a trip log). */
 export function planVerbLabel(id: PlanVerbId): string {
   return PLAN_VERBS.find((verb) => verb.id === id)!.label;
+}
+
+/** The Map view's add menu: the item add verbs a role may run on one client,
+ *  in menu order (the new ones below a rule), or null when none. */
+export function planItemAddMenu(
+  platform: ContractPlatform,
+  role: TripPlanRole,
+  archived: boolean,
+): {
+  label: string;
+  icon: IconIdea;
+  verbs: PlanVerb<PlanItemAddVerbId>[];
+} | null {
+  const verbs = planVerbsFor(PLAN_ADD_VERBS, platform, role, {
+    archived,
+  }).filter((verb): verb is PlanVerb<PlanItemAddVerbId> =>
+    (PLAN_ITEM_ADD_VERBS as readonly string[]).includes(verb.id),
+  );
+  return verbs.length > 0 ? { ...PLAN_ITEM_ADD, verbs } : null;
 }
 
 /** One list's verbs a role may run on one client, on a plan in this state. */

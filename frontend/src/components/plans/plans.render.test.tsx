@@ -1,6 +1,8 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
+  act,
+  within,
   cleanup,
   fireEvent,
   render,
@@ -11,6 +13,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ComponentProps } from "react";
 import {
   planAddVerbLabel,
+  PLAN_ITEM_ADD,
+  PLAN_ITEM_ADD_VERBS,
   TRIP_PLAN_MAX_FORMS,
   MAX_PLACES_PER_TRIP,
   TRIP_PLACES_CAP_SENTENCE,
@@ -57,6 +61,7 @@ import PlanAnswerDialog, { PlanFormFields } from "./PlanAnswerDialog";
 import PlanFormBuilderDialog from "./PlanFormBuilderDialog";
 import PlanItemEditDialog from "./PlanItemEditDialog";
 import PlanAddCopyDialog from "./PlanAddCopyDialog";
+import PlanNewPlaceDialog from "./PlanNewPlaceDialog";
 import PlanTripLogPlacesDialog from "./PlanTripLogPlacesDialog";
 import type { TPlace } from "../../placeUtils";
 
@@ -248,6 +253,8 @@ function renderPanel(
       onOpenItem={() => {}}
       addCopyRequest={null}
       onAddCopyRequestConsumed={() => {}}
+      onPickPoint={() => {}}
+      onDrawRoute={() => {}}
       onBack={() => {}}
       onPlansChanged={() => {}}
       onStartTripLog={() => {}}
@@ -479,16 +486,129 @@ describe("a plan's page ends its views with their add buttons", () => {
     ).toBeTruthy();
   });
 
+  /** The Map view's one add button's menu. */
+  const itemAddMenu = () => {
+    fireEvent.click(screen.getByRole("button", { name: PLAN_ITEM_ADD.label }));
+    return within(screen.getByRole("menu", { name: PLAN_ITEM_ADD.label }));
+  };
+
   // Mutation: drop the `<ListEnd>` under the map's rows, and a plan with
   // places has no add at the end of them.
-  it("ends the Map with Add a place or way", () => {
+  it("ends the Map with the one Add a place or way button", () => {
     renderPanel({ view: { ...plan, places: [place] } });
     fireEvent.click(screen.getByRole("radio", { name: /^Map/ }));
     // The row, not the empty state: the add under it is what is being checked.
     expect(screen.getByRole("button", { name: "Claustral" })).toBeTruthy();
     expect(
-      screen.getAllByRole("button", { name: planAddVerbLabel("copy") }),
+      screen.getAllByRole("button", { name: PLAN_ITEM_ADD.label }),
     ).toHaveLength(1);
+    // The ways to make one are its menu, not buttons of their own.
+    for (const id of PLAN_ITEM_ADD_VERBS)
+      expect(
+        screen.queryByRole("button", { name: planAddVerbLabel(id) }),
+      ).toBeNull();
+  });
+
+  // Mutation: leave one verb out of the menu, or let the empty state draw its
+  // own buttons, and a plan with nothing in it has no way to copy, make, draw
+  // or import from its own page.
+  it("offers copy, make, draw and import under the button, empty or not", () => {
+    renderPanel();
+    fireEvent.click(screen.getByRole("radio", { name: /^Map/ }));
+    expect(
+      screen.getAllByRole("button", { name: PLAN_ITEM_ADD.label }),
+    ).toHaveLength(1);
+    const menu = itemAddMenu();
+    for (const id of PLAN_ITEM_ADD_VERBS)
+      expect(
+        menu.getByRole("menuitem", { name: planAddVerbLabel(id) }),
+      ).toBeTruthy();
+  });
+
+  // Mutation: send both collection verbs to the Places tab, and "one of your
+  // ways" opens on the places.
+  it("opens the collection dialog on the tab its menu item names", () => {
+    renderPanel({
+      own: {
+        places: [{ id: "a", name: "Claustral" } as TPlace],
+        routes: [],
+        files: [],
+      },
+    });
+    fireEvent.click(screen.getByRole("radio", { name: /^Map/ }));
+    fireEvent.click(
+      itemAddMenu().getByRole("menuitem", {
+        name: planAddVerbLabel("copyWay"),
+      }),
+    );
+    expect(
+      screen.getByRole("radio", { name: /^Ways/ }).getAttribute("aria-checked"),
+    ).toBe("true");
+  });
+
+  // Mutation: send the pick to the account's own place form, or skip the
+  // type, and the place lands in the wrong place.
+  it("makes a place in the plan at the point picked on the map", async () => {
+    vi.mocked(addPlanItem).mockResolvedValueOnce({ item: {} as TripPlanItem });
+    const onPickPoint = vi.fn();
+    renderPanel({ onPickPoint });
+    fireEvent.click(screen.getByRole("radio", { name: /^Map/ }));
+    fireEvent.click(
+      itemAddMenu().getByRole("menuitem", {
+        name: planAddVerbLabel("newPlace"),
+      }),
+    );
+    expect(onPickPoint).toHaveBeenCalledTimes(1);
+    act(() => onPickPoint.mock.calls[0]![0](-33.5, 150.25));
+    fireEvent.change(screen.getByLabelText(/^Name/), {
+      target: { value: "Water drop" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(addPlanItem).toHaveBeenCalledWith("p1", {
+        kind: "place",
+        new: expect.objectContaining({
+          placeTypeId: SYSTEM_PLACE_TYPE_IDS.marker,
+          name: "Water drop",
+          latitude: -33.5,
+          longitude: 150.25,
+        }),
+      }),
+    );
+  });
+
+  // Mutation: drop the placeDetailsInvalid guard from submit, and a position
+  // off the globe is sent for the API to refuse.
+  it("sends nothing while the place's details are invalid", () => {
+    vi.mocked(addPlanItem).mockClear();
+    render(
+      <PlanNewPlaceDialog
+        planId="p1"
+        at={{ latitude: -33.5, longitude: 150.25 }}
+        onSaved={() => {}}
+        onClose={() => {}}
+      />,
+    );
+    fireEvent.change(screen.getByLabelText(/^Name/), {
+      target: { value: "Water drop" },
+    });
+    fireEvent.change(screen.getByLabelText(/^Longitude/), {
+      target: { value: "999" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(addPlanItem).not.toHaveBeenCalled();
+  });
+
+  // Mutation: draw on the account (no onDrawRoute call), and the route is
+  // made where the plan can't see it.
+  it("hands the map to the route tool for this plan", () => {
+    const onDrawRoute = vi.fn();
+    renderPanel({ onDrawRoute });
+    fireEvent.click(screen.getByRole("radio", { name: /^Map/ }));
+    fireEvent.click(
+      itemAddMenu().getByRole("menuitem", { name: planAddVerbLabel("route") }),
+    );
+    expect(onDrawRoute).toHaveBeenCalledWith(plan);
   });
 
   // Mutation: drop the `<ListEnd>` under the forms, and a plan with forms has
@@ -501,17 +621,22 @@ describe("a plan's page ends its views with their add buttons", () => {
     ).toHaveLength(1);
   });
 
-  // A member's only add is Add a place or way, so the hero shows it as a plain
-  // button and the Map ends with the same one. Once a member has more adds the
-  // hero becomes the Add menu.
-  it("gives a member Add a place or way in the hero and at the Map's end", () => {
+  // A member's adds are the five that put a place or way in the plan, so the
+  // hero is the Add menu and the Map ends with the one button.
+  it("gives a member the Add menu in the hero and the one button at the Map's end", () => {
     renderPanel({ view: { ...plan, myRole: "member", places: [place] } });
     fireEvent.click(screen.getByRole("radio", { name: /^Map/ }));
     // The row, not the empty state: the add under it is what is being checked.
     expect(screen.getByRole("button", { name: "Claustral" })).toBeTruthy();
     expect(
-      screen.getAllByRole("button", { name: planAddVerbLabel("copy") }),
-    ).toHaveLength(2);
+      screen.getAllByRole("button", { name: PLAN_ITEM_ADD.label }),
+    ).toHaveLength(1);
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+    const hero = within(screen.getByRole("menu", { name: "Add to this plan" }));
+    for (const id of PLAN_ITEM_ADD_VERBS)
+      expect(
+        hero.getByRole("menuitem", { name: planAddVerbLabel(id) }),
+      ).toBeTruthy();
   });
 
   // Mutation: draw the end button without the role check, and a member is
@@ -536,7 +661,7 @@ describe("a plan's page ends its views with their add buttons", () => {
     fireEvent.click(screen.getByRole("radio", { name: /^Map/ }));
     expect(screen.getByRole("button", { name: "Claustral" })).toBeTruthy();
     expect(
-      screen.queryByRole("button", { name: planAddVerbLabel("copy") }),
+      screen.queryByRole("button", { name: PLAN_ITEM_ADD.label }),
     ).toBeNull();
   });
 

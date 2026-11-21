@@ -11,6 +11,7 @@ import {
   parseVectorImport,
 } from "@logjam/shared";
 import { uploadMedia } from "../../../placeUtils";
+import { uploadPlanFile } from "../../../plansApi";
 import { resolveMediaType } from "../../media/mediaFiles";
 
 /** `putToPresignedUrl`'s messages for a PUT that never got an answer. */
@@ -23,8 +24,14 @@ const STORAGE_UNREACHABLE = [
 /** What the file picker offers: the formats `parseVectorImport` reads. */
 export const WAY_IMPORT_ACCEPT = ".gpx,.kml,.geojson";
 
-/** Resolves to the name the import goes by in Ways. */
-export async function importWayFile(file: File): Promise<string> {
+/**
+ * Resolves to the name the import goes by in Ways, or in the plan `planId`
+ * when it is for one: the same file, stored in the plan and not the account.
+ */
+export async function importWayFile(
+  file: File,
+  planId?: string,
+): Promise<string> {
   const resolved = resolveMediaType(file);
   if (resolved?.category !== "track") {
     throw new Error(IMPORT_ERRORS.unsupportedExtension);
@@ -38,21 +45,30 @@ export async function importWayFile(file: File): Promise<string> {
     filename: file.name,
     sentBy: null,
   });
+  const metadata = {
+    bbox: parsed.bbox,
+    featureCount: parsed.features.length,
+    positionCount: parsed.stats.positions,
+  };
   try {
-    await uploadMedia({
-      linkedType: "none",
-      linkedId: null,
-      origin: "import",
-      displayName: name,
-      metadata: {
-        bbox: parsed.bbox,
-        featureCount: parsed.features.length,
-        positionCount: parsed.stats.positions,
-      },
-      file,
-      mediaType: resolved.mediaType,
-      thumbnail: null,
-    });
+    if (planId)
+      await uploadPlanFile(planId, {
+        file,
+        mediaType: resolved.mediaType,
+        displayName: name,
+        metadata,
+      });
+    else
+      await uploadMedia({
+        linkedType: "none",
+        linkedId: null,
+        origin: "import",
+        displayName: name,
+        metadata,
+        file,
+        mediaType: resolved.mediaType,
+        thumbnail: null,
+      });
   } catch (err) {
     // The storage PUT's own failures are `Error`s `messageFromError` can't
     // tell from a bug; the user's next step is the same as for an offline API.

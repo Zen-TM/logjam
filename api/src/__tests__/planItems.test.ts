@@ -1405,7 +1405,8 @@ describe("storage when someone goes", () => {
 
   // Called straight for carol, who isn't in the plan: an add that passed its
   // route check, then lost its membership before the write transaction.
-  // Mutation: swap touchPlanAsMember for touchPlan in addPlace or the route arm.
+  // Mutation: swap touchPlanAsMember for touchPlan in addPlace, the route arm,
+  // createPlanPlace or createPlanRoute.
   it("adds no place or way for one who left before the write", async () => {
     const placeId = await ownPlace(CAROL_SUB);
     const routeId = await ownRoute(CAROL_SUB);
@@ -1413,6 +1414,25 @@ describe("storage when someone goes", () => {
       for (const input of [
         { kind: "place" as const, id: placeId },
         { kind: "route" as const, id: routeId },
+        {
+          kind: "place" as const,
+          new: {
+            placeTypeId: MARKER_TYPE_ID,
+            name: "Test water drop",
+            latitude: -33.7,
+            longitude: 150.2,
+          },
+        },
+        {
+          kind: "route" as const,
+          new: {
+            name: "Test walk-out",
+            points: [
+              [150.3, -33.6],
+              [150.31, -33.61],
+            ] as [number, number][],
+          },
+        },
       ])
         await expect(
           addPlanItem({ id: CAROL_ID }, planId, input),

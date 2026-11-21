@@ -33,5 +33,7 @@ export const WAY_IMPORT = {
   menu: "Import GPX, KML or GeoJSON",
   file: "Import a file",
   saved: (name: string) => `“${name}” is saved under Imports.`,
+  /** An import made straight into a plan, not into the account. */
+  addedToPlan: (name: string) => `“${name}” is in the plan.`,
   failed: "Couldn't import that file.",
 } as const;

@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { itemPatch, itemWords } from "./planItemEdit.js";
+import {
+  itemPatch,
+  itemWords,
+  newPlaceFromWords,
+  newPlaceWords,
+} from "./planItemEdit.js";
 import { SYSTEM_PLACE_TYPE_IDS } from "./placeTypes.js";
 import type { TripPlanItem } from "./tripPlans.js";
 
@@ -78,5 +83,47 @@ describe("itemPatch", () => {
         notes: "Exit left.",
       }),
     ).toEqual({ notes: { from: "", to: "Exit left." } });
+  });
+});
+
+describe("a place made in a plan", () => {
+  const canyon = SYSTEM_PLACE_TYPE_IDS.canyon;
+
+  // Mutation: build the body without trimming, or send a blank attribute.
+  it("sends the form's words as the place's fields", () => {
+    const words = {
+      ...newPlaceWords(canyon, { latitude: -33.5, longitude: 150.25 }),
+      name: "  Test drop ",
+      altNames: "a, , b",
+      elevation: "812",
+      notes: "  ",
+      "attr:v_grade": "3",
+    };
+    expect(newPlaceFromWords(canyon, words)).toEqual({
+      placeTypeId: canyon,
+      name: "Test drop",
+      altNames: ["a", "b"],
+      latitude: -33.5,
+      longitude: 150.25,
+      elevation: 812,
+      notes: null,
+      fieldValues: { v_grade: 3 },
+    });
+  });
+
+  // Mutation: build the blank from another type's attributes.
+  it("starts with the attributes of its type, and none for a marker", () => {
+    const keys = (id: string) =>
+      Object.keys(newPlaceWords(id)).filter((key) => key.startsWith("attr:"));
+    expect(keys(canyon)).toContain("attr:v_grade");
+    expect(keys(SYSTEM_PLACE_TYPE_IDS.marker)).toEqual([]);
+  });
+
+  // The same words as an edit would start from: a new place saved untouched
+  // beside an existing one would show no change.
+  it("is the shape an existing place's edit form starts from", () => {
+    expect(
+      Object.keys(newPlaceWords(SYSTEM_PLACE_TYPE_IDS.marker)).sort(),
+    ).toEqual(Object.keys(itemWords(place)).sort());
   });
 });

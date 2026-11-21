@@ -13,6 +13,7 @@ import {
 import type {
   TripPlanFilePatch,
   TripPlanItem,
+  TripPlanNewPlace,
   TripPlanPlace,
   TripPlanPlacePatch,
   TripPlanRoutePatch,
@@ -127,4 +128,57 @@ export function itemPatch(
     }
   }
   return Object.keys(patch).length > 0 ? patch : null;
+}
+
+/**
+ * The words of a place about to be made in a plan: blank but for where it is.
+ * The same words `itemWords` gives an existing one, so the edit form fills
+ * both; a different type has different attributes, so a type change asks
+ * for these again.
+ */
+export function newPlaceWords(
+  placeTypeId: string,
+  at?: { latitude: number; longitude: number },
+): ItemWords {
+  const words: ItemWords = {
+    name: "",
+    notes: "",
+    altNames: "",
+    latitude: at ? String(at.latitude) : "",
+    longitude: at ? String(at.longitude) : "",
+    elevation: "",
+  };
+  for (const def of itemFieldDefs({ placeTypeId }))
+    words[ITEM_ATTR + def.key] = "";
+  return words;
+}
+
+/**
+ * The body that makes a place in a plan from its form's words (POST
+ * /plans/:id/items, `new`), as `itemPatch` builds an edit's: the same
+ * trimming and splitting, an attribute left blank sent as no value. The
+ * fields are assumed valid (the form checks them first).
+ */
+export function newPlaceFromWords(
+  placeTypeId: string,
+  now: ItemWords,
+): TripPlanNewPlace {
+  const fieldValues: Record<string, unknown> = {};
+  for (const def of itemFieldDefs({ placeTypeId })) {
+    const value = coerceFieldValue(now[ITEM_ATTR + def.key] ?? "", def.type);
+    if (value !== null) fieldValues[def.key] = value;
+  }
+  return {
+    placeTypeId,
+    name: now.name.trim(),
+    altNames: now.altNames
+      .split(",")
+      .map((each) => each.trim())
+      .filter(Boolean),
+    latitude: Number(now.latitude),
+    longitude: Number(now.longitude),
+    elevation: now.elevation.trim() === "" ? null : Number(now.elevation),
+    notes: now.notes.trim() || null,
+    fieldValues,
+  };
 }
