@@ -301,7 +301,9 @@ test("the armed Draw tool keeps its crosshair when a form's pick is cancelled", 
   await tools(page).click();
   await tray(page).getByRole("button", { name: "Draw a route" }).click();
   await expect(canvas).toHaveCSS("cursor", "crosshair");
-  await page.getByLabel("Search places and locations").fill("Hidden Slot");
+  await page
+    .getByLabel("Search places and locations")
+    .fill(SEED_NAMES.hiddenSlot);
   await page
     .getByRole("option", { name: new RegExp(SEED_NAMES.hiddenSlot) })
     .first()
