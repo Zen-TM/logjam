@@ -44,6 +44,8 @@ function QuestionField({
         <TextField
           label={label}
           hint={hint}
+          prominentLabel
+          hintAbove
           value={text}
           // A whole number, 0 or more, as the parser takes it: a number pad
           // still types "-", "," and ".", and a paste anything.
@@ -71,7 +73,7 @@ function QuestionField({
     case "choice":
     case "yesNo":
       return (
-        <Field label={label} hint={hint}>
+        <Field label={label} hint={hint} prominentLabel hintAbove>
           <ChipRail
             value={text}
             onChange={onChange}
@@ -86,6 +88,8 @@ function QuestionField({
           field
           label={label}
           hint={hint}
+          prominentLabel
+          hintAbove
           options={(question.options ?? []).map((option) => ({
             value: option.id,
             label: option.label,

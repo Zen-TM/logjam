@@ -53,7 +53,7 @@ import PlanPeople from "./PlanPeople";
 import PlanPlacePage from "./PlanPlacePage";
 import PlanSectionDialog from "./PlanSectionDialog";
 import PlanFormPage from "./PlanFormPage";
-import PlanAnswerDialog from "./PlanAnswerDialog";
+import PlanAnswerDialog, { PlanFormFields } from "./PlanAnswerDialog";
 import PlanFormBuilderDialog from "./PlanFormBuilderDialog";
 import PlanItemEditDialog from "./PlanItemEditDialog";
 import PlanAddCopyDialog from "./PlanAddCopyDialog";
@@ -366,24 +366,178 @@ describe("Edit form over another leader's save", () => {
   });
 });
 
-describe("a plan's page keeps its adds in the hero", () => {
-  // Mutation: put a `<ListEnd>` add back under the write-up, and the page
-  // draws the same verb twice.
-  it("draws Add a write-up section once, in the hero's menu", () => {
-    renderPanel({
-      view: {
-        ...plan,
-        myRole: "leader",
-        sections: [{ id: "s1", title: "Gear", body: "", position: 0 } as never],
-      },
-    });
+describe("answering a form's chip and tick-box questions", () => {
+  const question = (kind: "choice" | "multiChoice") =>
+    ({
+      id: "q1",
+      kind,
+      label: "Wetsuit size",
+      required: true,
+      options: [
+        { id: "a", label: "S" },
+        { id: "b", label: "M" },
+      ],
+    }) as never;
+
+  // Mutation: drop `named` from the choice question's FieldGroup, and a screen
+  // reader hears the question as a group and again as the radio group.
+  it("names a choice question once", () => {
+    render(
+      <PlanFormFields
+        form={{ ...contacts, questions: [question("choice")] }}
+        draft={{}}
+        onChange={() => {}}
+      />,
+    );
     expect(
-      screen.queryByRole("button", { name: planAddVerbLabel("section") }),
-    ).toBeNull();
+      screen.getAllByRole("radiogroup", { name: "Wetsuit size" }),
+    ).toHaveLength(1);
+    expect(screen.queryByRole("group", { name: /Wetsuit size/ })).toBeNull();
+    // The star is still shown to the eye.
+    expect(screen.getByText("Wetsuit size *")).toBeTruthy();
+  });
+
+  // Mutation: draw the multiple-choice question without its fieldset, and its
+  // tick boxes have no group name.
+  it("names a multiple-choice question by its legend", () => {
+    render(
+      <PlanFormFields
+        form={{ ...contacts, questions: [question("multiChoice")] }}
+        draft={{}}
+        onChange={() => {}}
+      />,
+    );
+    expect(screen.getByRole("group", { name: "Wetsuit size *" })).toBeTruthy();
+  });
+});
+
+describe("a question's hint", () => {
+  // Mutation: drop `hintAbove` from one kind of question in PlanAnswerDialog
+  // (or draw `FieldGroup`'s hint after its controls), and that question shows
+  // its hint under the answer while the others show it under the question.
+  it.each([
+    ["text", "textbox"],
+    ["longText", "textbox"],
+    ["number", "textbox"],
+    ["choice", "radio"],
+    ["multiChoice", "checkbox"],
+  ] as const)("sits between a %s question and its controls", (kind, role) => {
+    render(
+      <PlanFormFields
+        form={{
+          ...contacts,
+          questions: [
+            {
+              id: "q1",
+              kind,
+              label: "Wetsuit size",
+              required: false,
+              help: "Your usual size",
+              options: [{ id: "a", label: "S" }],
+            } as never,
+          ],
+        }}
+        draft={{}}
+        onChange={() => {}}
+      />,
+    );
+    const control = screen.getAllByRole(role)[0];
+    const hint = screen.getByText("Your usual size");
+    expect(
+      hint.compareDocumentPosition(control) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+});
+
+describe("a plan's page ends its views with their add buttons", () => {
+  const section = { id: "s1", title: "Gear", body: "", position: 0 } as never;
+  const place = {
+    kind: "place",
+    id: "pl1",
+    name: "Claustral",
+    altNames: [],
+    latitude: -33.5,
+    longitude: 150.25,
+    elevation: null,
+    placeTypeId: SYSTEM_PLACE_TYPE_IDS.canyon,
+    notes: null,
+    fieldValues: {},
+    addedBy: null,
+    media: [],
+  } as unknown as TripPlanPlace;
+
+  // Mutation: drop the `<ListEnd>` under the write-up's sections, and a plan
+  // with sections has its add only in the hero's menu.
+  it("ends the write-up with Add a write-up section, still in the menu", () => {
+    renderPanel({ view: { ...plan, sections: [section] } });
+    expect(
+      screen.getAllByRole("button", { name: planAddVerbLabel("section") }),
+    ).toHaveLength(1);
     fireEvent.click(screen.getByRole("button", { name: "Add" }));
     expect(
       screen.getByRole("menuitem", { name: planAddVerbLabel("section") }),
     ).toBeTruthy();
+  });
+
+  // Mutation: drop the `<ListEnd>` under the map's rows, and a plan with
+  // places has no add at the end of them.
+  it("ends the Map with Add a place or way", () => {
+    renderPanel({ view: { ...plan, places: [place] } });
+    fireEvent.click(screen.getByRole("radio", { name: /^Map/ }));
+    // The row, not the empty state: the add under it is what is being checked.
+    expect(screen.getByRole("button", { name: "Claustral" })).toBeTruthy();
+    expect(
+      screen.getAllByRole("button", { name: planAddVerbLabel("copy") }),
+    ).toHaveLength(1);
+  });
+
+  // Mutation: drop the `<ListEnd>` under the forms, and a plan with forms has
+  // its add only in the hero's menu.
+  it("ends the Forms with Add a form", () => {
+    renderPanel({ view: { ...plan, forms: [contacts] } });
+    fireEvent.click(screen.getByRole("radio", { name: /^Forms/ }));
+    expect(
+      screen.getAllByRole("button", { name: planAddVerbLabel("form") }),
+    ).toHaveLength(1);
+  });
+
+  // A member's only add is Add a place or way, so the hero shows it as a plain
+  // button and the Map ends with the same one. Once a member has more adds the
+  // hero becomes the Add menu.
+  it("gives a member Add a place or way in the hero and at the Map's end", () => {
+    renderPanel({ view: { ...plan, myRole: "member", places: [place] } });
+    fireEvent.click(screen.getByRole("radio", { name: /^Map/ }));
+    // The row, not the empty state: the add under it is what is being checked.
+    expect(screen.getByRole("button", { name: "Claustral" })).toBeTruthy();
+    expect(
+      screen.getAllByRole("button", { name: planAddVerbLabel("copy") }),
+    ).toHaveLength(2);
+  });
+
+  // Mutation: draw the end button without the role check, and a member is
+  // offered a section the API refuses.
+  it("leaves a member without the write-up's add", () => {
+    renderPanel({ view: { ...plan, myRole: "member", sections: [section] } });
+    expect(
+      screen.queryByRole("button", { name: planAddVerbLabel("section") }),
+    ).toBeNull();
+  });
+
+  // Mutation: draw the Map's end button on an archived plan, and a finished
+  // plan takes new places.
+  it("leaves an archived plan's Map without the add", () => {
+    renderPanel({
+      view: {
+        ...plan,
+        archivedAt: "2026-10-02T00:00:00.000Z",
+        places: [place],
+      },
+    });
+    fireEvent.click(screen.getByRole("radio", { name: /^Map/ }));
+    expect(screen.getByRole("button", { name: "Claustral" })).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: planAddVerbLabel("copy") }),
+    ).toBeNull();
   });
 
   // Mutation: drop `disabledReason` from the form entry, and the API refuses

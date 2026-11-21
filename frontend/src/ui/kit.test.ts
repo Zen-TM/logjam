@@ -58,6 +58,8 @@ describe("kit containers that stack children", () => {
     ["SideSheet", "body"],
     ["SideSheet", "section"],
     ["TextField", "field"],
+    ["TextField", "group"],
+    ["TextField", "controls"],
   ];
   it.each(stacks)("%s.module.css sets a gap on .%s", (css, rule) => {
     const src = readFileSync(join(__dirname, `${css}.module.css`), "utf8");
