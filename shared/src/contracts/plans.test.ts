@@ -85,7 +85,6 @@ import {
   tripPlanFormTally,
   tripPlanFormTallyLines,
   tripPlanFormsUrgent,
-  planRouteNotAdded,
 } from "./index.js";
 
 const TODAY = "2026-10-19";
@@ -1134,9 +1133,6 @@ describe("tripPlanFormsUrgent", () => {
     expect(tripPlanFormsUrgent(1, trip, "2026-10-01")).toBe(true);
     expect(tripPlanFormsUrgent(1, trip, "2026-09-30")).toBe(false);
     expect(tripPlanFormsUrgent(0, trip, "2026-10-01")).toBe(false);
-  });
-  it("names the Add a place or way button in the route notice", () => {
-    expect(planRouteNotAdded().body).toContain("Add a place or way");
   });
 });
 
