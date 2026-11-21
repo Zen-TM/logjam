@@ -272,30 +272,42 @@ test("under a box pick the drawn line and its handles are inert, and come back a
 
 // Mutation: leave the pick's `panelOpen` off for every pick (`!mapInteractionActive`
 // instead of `!dimUI` in App.tsx): the topo pick keeps its page on screen, and
-// the search box slides under it.
+// the map's chrome is measured from the map's edge instead of the page's.
 test("a topo pick leaves the open page where it is, and the map's chrome beside it", async ({
   page,
 }) => {
   await openMap(page);
   await page.getByRole("button", { name: "Places", exact: true }).click();
+  const aside = page.locator("aside");
+  await expect(aside).toBeVisible();
+  const pageRight = async () => {
+    const box = (await aside.boundingBox())!;
+    return box.x + box.width;
+  };
+  // The search box slides right as the page opens: start once it has.
   const search = page.getByLabel("Search places and locations");
+  await expect
+    .poll(async () => (await search.boundingBox())!.x - (await pageRight()))
+    .toBeGreaterThanOrEqual(0);
+
   await tools(page).click();
   await tray(page).getByText("Sharpen an area").click();
   const dialog = page.locator("dialog[open]");
   await dialog.getByRole("button", { name: /Haven.t got one/ }).click();
   await dialog.getByRole("button", { name: "Draw the area" }).click();
   await expect(page.locator("dialog[open]")).toHaveCount(0);
-  await expect(page.getByText("Click to set a corner")).toBeVisible();
-  const aside = page.locator("aside");
+  const banner = page.getByText("Click to set a corner");
+  await expect(banner).toBeVisible();
   await expect(aside).toBeVisible();
-  // The search box stays to the right of the page (polled: it slides there).
-  const pageRight = async () => {
-    const box = (await aside.boundingBox())!;
-    return box.x + box.width;
-  };
-  await expect
-    .poll(async () => (await search.boundingBox())!.x - (await pageRight()))
-    .toBeGreaterThanOrEqual(0);
+
+  // Neither is a transition, so a first sample cannot pass for a settled one:
+  // the map still measures from the page, and the banner is centred on what
+  // the page leaves of the map.
+  await expect(page.locator("#map")).toHaveAttribute("data-panel-open", "true");
+  const map = (await page.locator("#map").boundingBox())!;
+  const box = (await banner.boundingBox())!;
+  const visibleCentre = ((await pageRight()) + map.x + map.width) / 2;
+  expect(Math.abs(box.x + box.width / 2 - visibleCentre)).toBeLessThan(2);
 });
 
 // Mutation: put `style.cursor = ""` back in the pick's effect (Map.tsx), and a
