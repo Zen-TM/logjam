@@ -118,7 +118,10 @@ import {
   planModeReducer,
   planModeStart,
 } from "../plans/planMap";
-import { addDrawnRouteToPlan, drawnRouteTarget } from "../plans/addDrawnRoute";
+import {
+  drawnRouteTarget,
+  saveDrawnRouteForPlan,
+} from "../plans/addDrawnRoute";
 import { readCachedPlan } from "../plans/plansCache";
 import { PlanPlaceSheet } from "../plans/PlanPlaceSheet";
 
@@ -2123,14 +2126,23 @@ export function MapScreen({
       setSavingRoute(true);
       try {
         if (target === "plan" && draftPlanId) {
-          // Made in the plan alone: nothing is saved on this phone. A refusal
-          // (offline, a plan that is archived now) leaves the draft armed.
+          // Made in the plan alone: nothing is saved on this phone. A plan
+          // that refuses for good offers to keep the route in Saved; any other
+          // failure (offline, say) leaves the draft armed.
+          const planId = draftPlanId;
+          const route = {
+            name,
+            points,
+            anchors,
+            ...(draftColor ? { color: draftColor } : {}),
+          };
+          let saved: Awaited<ReturnType<typeof saveDrawnRouteForPlan>>;
           try {
-            await addDrawnRouteToPlan(draftPlanId, {
-              name,
-              points,
-              anchors,
-              ...(draftColor ? { color: draftColor } : {}),
+            saved = await saveDrawnRouteForPlan(planId, route, {
+              ask: confirm,
+              keep: async () => {
+                await createRouteLocal(route);
+              },
             });
           } catch (err) {
             console.error(err);
@@ -2140,12 +2152,13 @@ export function MapScreen({
             );
             return;
           }
-          const planId = draftPlanId;
+          if (saved === "declined") return;
           setNamingRoute(false);
           routeDraft.close();
           setDraftPlanId(null);
           setDraftColor(null);
-          onOpenPlan?.(planId, TRIP_PLAN_PAGE.copy.routeAdded);
+          if (saved === "added")
+            onOpenPlan?.(planId, TRIP_PLAN_PAGE.copy.routeAdded);
           return;
         }
         if (editingRouteId) {
