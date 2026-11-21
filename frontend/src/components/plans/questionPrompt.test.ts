@@ -5,15 +5,16 @@ import { describe, expect, it } from "vitest";
 
 /**
  * Answering a plan's form, a question reads above its hint, and the hint
- * sits between the question and its answer (`hintAbove`): the label takes
- * the `rowTitle` role in the text colour, the hint stays `detail` and muted.
- * The kit's field label is `detail` too, so each text-like question opts in
- * with `prominentLabel` and the chip and tick-box questions are a `FieldGroup`,
- * whose legend is the same prominent label.
+ * sits between the question and its answer: the label takes the `rowTitle`
+ * role in the text colour, the hint stays `detail` and muted. The kit's field
+ * label is `detail` too, and so is a `FieldGroup`'s legend by default, so
+ * every question opts in with `prominentLabel` (on its field, its
+ * `FieldGroup` or agree's `Checkbox`), and every question but agree opts in
+ * with `hintAbove`, whose hint is the tick box's own description.
  *
- * Mutation: delete `prominentLabel` from one question (agree included) in
- * PlanAnswerDialog, or
- * make `.labelProminent` compose `detail`.
+ * Mutation: delete `prominentLabel` or `hintAbove` from one question (agree
+ * excepted for `hintAbove`) in PlanAnswerDialog, or make `.labelProminent`
+ * compose `detail`.
  */
 const DIR = dirname(fileURLToPath(import.meta.url));
 const read = (path: string) => readFileSync(join(DIR, path), "utf8");
