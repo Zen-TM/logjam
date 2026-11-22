@@ -25,6 +25,9 @@ export type StoredRouteDraft = {
   /** Set when the route is being drawn for a plan's page: Save makes it in
    *  that plan, never in the account. */
   planId: string | null;
+  /** Set when the route is being drawn for a place's route slot: Save puts it
+   *  on that place. */
+  placeId: string | null;
 };
 
 export async function readRouteDraft(): Promise<StoredRouteDraft | null> {
@@ -34,8 +37,9 @@ export async function readRouteDraft(): Promise<StoredRouteDraft | null> {
     anchorsJson: string;
     editingRouteId: string | null;
     planId: string | null;
+    placeId: string | null;
   }>(
-    "SELECT pointsJson, anchorsJson, editingRouteId, planId FROM route_draft WHERE id = 1",
+    "SELECT pointsJson, anchorsJson, editingRouteId, planId, placeId FROM route_draft WHERE id = 1",
   );
   if (!row) return null;
   try {
@@ -47,6 +51,7 @@ export async function readRouteDraft(): Promise<StoredRouteDraft | null> {
       anchors,
       editingRouteId: row.editingRouteId,
       planId: row.planId,
+      placeId: row.placeId,
     };
   } catch {
     // Unparseable = nothing to restore. Dropping a corrupt draft is better
@@ -58,18 +63,20 @@ export async function readRouteDraft(): Promise<StoredRouteDraft | null> {
 export async function saveRouteDraft(draft: StoredRouteDraft): Promise<void> {
   const db = await getOfflineDb();
   await db.runAsync(
-    `INSERT INTO route_draft (id, pointsJson, anchorsJson, editingRouteId, planId, savedAt)
-     VALUES (1, ?, ?, ?, ?, ?)
+    `INSERT INTO route_draft (id, pointsJson, anchorsJson, editingRouteId, planId, placeId, savedAt)
+     VALUES (1, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        pointsJson = excluded.pointsJson,
        anchorsJson = excluded.anchorsJson,
        editingRouteId = excluded.editingRouteId,
        planId = excluded.planId,
+       placeId = excluded.placeId,
        savedAt = excluded.savedAt`,
     JSON.stringify(draft.points),
     JSON.stringify(draft.anchors),
     draft.editingRouteId,
     draft.planId,
+    draft.placeId,
     new Date().toISOString(),
   );
 }

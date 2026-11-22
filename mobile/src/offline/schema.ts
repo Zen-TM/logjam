@@ -151,6 +151,7 @@ export const SCHEMA_SQL = `
           anchorsJson    TEXT NOT NULL,
           editingRouteId TEXT,
           planId         TEXT,
+          placeId        TEXT,
           savedAt        TEXT NOT NULL
         );
         -- DROP TABLE IF EXISTS cleans up legacy region_download: unfinished
@@ -235,4 +236,7 @@ export const ADDED_COLUMNS: {
   { table: "track_point", column: "speedMps", definition: "REAL" },
   { table: "track_point", column: "headingDeg", definition: "REAL" },
   { table: "track_point", column: "altitudeAccuracyM", definition: "REAL" },
+  // The place a route being drawn is for, so a draft restored after a kill is
+  // still saved into that place's route slot.
+  { table: "route_draft", column: "placeId", definition: "TEXT" },
 ];

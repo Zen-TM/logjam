@@ -172,10 +172,15 @@ describe("the offline database upgrade", () => {
       expect(
         sqlite.prepare("SELECT path, sizeBytes FROM map_artifact").all(),
       ).toEqual([{ path: "a.pmtiles", sizeBytes: 10 }]);
-      // A draft saved before the plan column existed is kept, for no plan.
+      // A draft saved before the plan and place columns existed is kept, for
+      // neither.
       expect(
-        sqlite.prepare("SELECT pointsJson, planId FROM route_draft").all(),
-      ).toEqual([{ pointsJson: "[[150.4,-33.5]]", planId: null }]);
+        sqlite
+          .prepare("SELECT pointsJson, planId, placeId FROM route_draft")
+          .all(),
+      ).toEqual([
+        { pointsJson: "[[150.4,-33.5]]", planId: null, placeId: null },
+      ]);
       expect(sqlite.prepare("SELECT name, pausedMs FROM track").all()).toEqual([
         { name: "Made-up walk", pausedMs: 0 },
       ]);

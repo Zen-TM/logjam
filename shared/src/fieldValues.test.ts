@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  changedSince,
   fieldValue,
   numericFieldValue,
   setFieldValues,
@@ -27,5 +28,21 @@ describe("fieldValues", () => {
 
   it("never lists an internal `_` key as a user field", () => {
     expect(userFieldKeys({ grade: 3, _sources: {} })).toEqual(["grade"]);
+  });
+
+  // Mutation: return every entry, or compare with the place as it is now, and
+  // a save sends the text the form opened with over what a pull brought in;
+  // or walk only `current`'s keys, and a seeded text the form dropped is kept.
+  it("lists only the field texts that differ from the seeded ones", () => {
+    const seeded = { grade: "3", depth: "", permit: "yes" };
+    expect(
+      changedSince(seeded, { grade: "3", depth: "", permit: "no", extra: "x" }),
+    ).toEqual({ permit: "no", extra: "x" });
+    // Cleared is a change, and so is a seeded text the form no longer has;
+    // blank where nothing was seeded is not.
+    expect(changedSince(seeded, { grade: "", fresh: "" })).toEqual({
+      grade: "",
+      permit: "",
+    });
   });
 });

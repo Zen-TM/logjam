@@ -59,17 +59,18 @@ export function cleanSources(
 
 /**
  * What a save does about `_sources`: nothing unless the rows differ from the
- * place as it is now. Stored sources can hold what the form would refuse or drop (a CSV import
+ * rows the form was seeded with, never from the place as it is by then (a sync
+ * pull may have changed that, and an untouched list must not overwrite it).
+ * Stored sources can hold what the form would refuse or drop (a CSV import
  * keeps a scheme-less link and an unlabelled entry as they came), and an edit
  * to the name must not be refused for them or rewrite them.
  */
 export function sourcesPatch(
   rows: readonly SourceRow[],
-  fieldValues: unknown,
+  seeded: readonly SourceRow[],
 ):
   | { patch: Record<string, SourcePair[] | null> }
   | { error: string; index: number } {
-  const seeded = sourceRows(fieldValues);
   if (
     rows.length === seeded.length &&
     rows.every(
