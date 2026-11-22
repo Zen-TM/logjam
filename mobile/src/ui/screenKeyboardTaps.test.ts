@@ -4,12 +4,14 @@ import ts from "typescript";
 import { describe, expect, it } from "vitest";
 
 // A sheet is a Modal, and a Modal's content is still a child of the screen
-// that opened it as far as touches go. A vertical list under a sheet that
-// leaves `keyboardShouldPersistTaps` at its default takes the first tap on a
-// sheet's Save while a field is focused and only drops the keyboard: on a
-// phone older than Android 11, even once the keyboard is hidden and the field
-// is still focused (react-native's ScrollView).
-// Mutation: delete the prop from PlanScreen's body ScrollView.
+// that opened it as far as touches go. A list under a sheet that leaves
+// `keyboardShouldPersistTaps` at its default takes the first tap on a sheet's
+// Save (or on a chip in a rail beside the field) while a field is focused and
+// only drops the keyboard: on a phone older than Android 11, even once the
+// keyboard is hidden and the field is still focused (react-native's
+// ScrollView). Horizontal lists count too.
+// Mutation: set `keyboardShouldPersistTaps="never"` on PlanScreen's body
+// ScrollView, or delete the prop from ChipRail.
 const LISTS = new Set([
   "ScrollView",
   "Animated.ScrollView",
@@ -20,11 +22,6 @@ const LISTS = new Set([
   "HeroSectionList",
 ]);
 
-// A list that never has a field under it, or a sheet's own body.
-const EXEMPT: Record<string, string> = {
-  "ConfirmHost.tsx": "a confirm's body: text only, no field to blur",
-};
-
 function sources(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
     const path = join(dir, entry.name);
@@ -33,6 +30,24 @@ function sources(dir: string): string[] {
       ? [path]
       : [];
   });
+}
+
+// Only "handled" and "always" let a tap through; anything else, a variable
+// included, is not proof.
+function letsTapsThrough(property: ts.JsxAttribute): boolean {
+  const init = property.initializer;
+  if (init && ts.isStringLiteral(init))
+    return init.text === "handled" || init.text === "always";
+  if (
+    init &&
+    ts.isJsxExpression(init) &&
+    init.expression &&
+    ts.isStringLiteralLike(init.expression)
+  )
+    return (
+      init.expression.text === "handled" || init.expression.text === "always"
+    );
+  return false;
 }
 
 function lists(file: string): { name: string; kept: boolean }[] {
@@ -48,14 +63,14 @@ function lists(file: string): { name: string; kept: boolean }[] {
     if (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) {
       const name = node.tagName.getText(source);
       if (LISTS.has(name)) {
-        const attributes = node.attributes.properties.flatMap((property) =>
-          ts.isJsxAttribute(property) ? [property.name.getText(source)] : [],
-        );
         found.push({
           name,
-          kept:
-            attributes.includes("horizontal") ||
-            attributes.includes("keyboardShouldPersistTaps"),
+          kept: node.attributes.properties.some(
+            (property) =>
+              ts.isJsxAttribute(property) &&
+              property.name.getText(source) === "keyboardShouldPersistTaps" &&
+              letsTapsThrough(property),
+          ),
         });
       }
     }
@@ -65,17 +80,17 @@ function lists(file: string): { name: string; kept: boolean }[] {
   return found;
 }
 
-describe("a vertical list under a sheet", () => {
-  it("lets a tap on the sheet through while a field is focused", () => {
+describe("a scrolling list", () => {
+  it("lets a tap through while a field is focused", () => {
     const root = new URL("..", import.meta.url).pathname;
     const all = sources(root).flatMap((file) =>
       lists(file).map((list) => ({ file: file.slice(root.length), ...list })),
     );
     // A scan that matches nothing proves nothing.
-    expect(all.length).toBeGreaterThanOrEqual(15);
+    expect(all.length).toBeGreaterThanOrEqual(29);
     expect(
       all
-        .filter((list) => !list.kept && !(list.file in EXEMPT))
+        .filter((list) => !list.kept)
         .map((list) => `${list.file}: <${list.name}>`),
     ).toEqual([]);
   });

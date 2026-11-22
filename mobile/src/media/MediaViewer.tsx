@@ -89,6 +89,7 @@ export function MediaViewer({
           ref={listRef}
           data={items}
           horizontal
+          keyboardShouldPersistTaps="handled"
           pagingEnabled
           initialScrollIndex={startIndex}
           getItemLayout={(_data, itemIndex) => ({
