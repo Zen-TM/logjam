@@ -33,6 +33,7 @@ import {
   SectionHeader,
   Select,
   TextField,
+  FieldGroup,
 } from "../../ui";
 import ConfirmDialog from "../dialogs/ConfirmDialog";
 import { messageFromError } from "../../errors/messageFromError";
@@ -238,27 +239,28 @@ function Builder({
               }
               onChange={(event) => set({ title: event.target.value })}
             />
-            <div className={classes.question}>
-              <span className={classes.questionLabel} aria-hidden>
-                {copy.visibleTo}
-              </span>
-              <ChipRail
-                label={copy.visibleTo}
-                value={values.visibleTo}
-                onChange={(visibleTo) => set({ visibleTo })}
-                options={[
-                  { value: "leaders", label: copy.visibleToLeaders },
-                  {
-                    value: "members",
-                    label: copy.visibleToMembers,
-                    disabled: widenLocked,
-                  },
-                ]}
-              />
-              {widenLocked && (
-                <p className={classes.note}>{copy.visibleToLocked}</p>
+            <FieldGroup
+              label={copy.visibleTo}
+              hint={widenLocked ? copy.visibleToLocked : undefined}
+              named
+            >
+              {(describedBy) => (
+                <ChipRail
+                  label={copy.visibleTo}
+                  value={values.visibleTo}
+                  onChange={(visibleTo) => set({ visibleTo })}
+                  options={[
+                    { value: "leaders", label: copy.visibleToLeaders },
+                    {
+                      value: "members",
+                      label: copy.visibleToMembers,
+                      disabled: widenLocked,
+                    },
+                  ]}
+                  describedBy={describedBy}
+                />
               )}
-            </div>
+            </FieldGroup>
             <SectionHeader
               title={copy.questions}
               count={values.questions.length}
@@ -336,10 +338,7 @@ function Builder({
                   }
                 />
                 {tripPlanKindHasOptions(question.kind) && (
-                  <div className={classes.question}>
-                    <span className={classes.questionLabel} aria-hidden>
-                      {copy.options}
-                    </span>
+                  <FieldGroup label={copy.options}>
                     {(question.options ?? []).map((option, at) => (
                       <div key={option.id} className={classes.questionTools}>
                         <TextField
@@ -393,7 +392,7 @@ function Builder({
                         {copy.addOption}
                       </Button>
                     </div>
-                  </div>
+                  </FieldGroup>
                 )}
                 <Checkbox
                   label={copy.questionRequired}

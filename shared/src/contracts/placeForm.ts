@@ -20,11 +20,7 @@ export const PLACE_FORM = {
     { key: "notes" },
     // The chosen type's own attributes; `placeAttributesTitle` (the place page's) names them.
     { key: "attributes" },
-    {
-      key: "sources",
-      on: "web",
-      gap: "Logjam GPS doesn't take sources in this form yet.",
-    },
+    { key: "sources" },
     // Both clients take photos and a route while a place is being made. Logjam
     // GPS holds the picks until the place is saved; Logjam Web uploads them
     // against a draft place.
@@ -78,6 +74,13 @@ export const PLACE_FORM = {
     notes: "Notes",
     notesHint: SHARE_SENTENCES.notesHint,
     sources: "Sources",
+    sourceLabel: "Label",
+    sourceLink: "Link",
+    sourceLinkPlaceholder: "https://",
+    sourceLinkInvalid: "Source URLs must start with http:// or https://.",
+    addSource: "Add a source",
+    // Followed by the source's label, or its number when it has none.
+    deleteSource: "Delete the source",
     photos: "Photos & videos",
     route: ROUTE_NOUN.one,
   },

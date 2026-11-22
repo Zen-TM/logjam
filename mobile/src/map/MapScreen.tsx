@@ -99,6 +99,7 @@ import {
   NSW_FIRE,
   slopeReliefColor,
   SLOPE_MIN_ZOOM,
+  hillshadeExaggeration,
   zoomFadeIn,
   terrainBeforeIds,
   type TerrainLayerKey,
@@ -2321,6 +2322,62 @@ export function MapScreen({
    *  `handleMapPress` — see the retroactive dismissal below. */
   const swallowNextPress = useRef(false);
 
+  /**
+   * Opens the point sheet at `tapped` and asks the overlays what is drawn under
+   * `screenPoint` (a promise where the point must first be found: a fix is
+   * projected, since a press near the arrow is not on it). One path for a tap
+   * on the map and a press on your own arrow, so the sheet has the same rows
+   * for both. An answer for a point the sheet has since left is dropped.
+   */
+  const askAbout = useCallback(
+    (
+      tapped: MapPoint,
+      screenPoint: PressEvent["point"] | Promise<PressEvent["point"]>,
+      lngLat: [number, number],
+    ) => {
+      setTappedPoint(tapped);
+      setTappedLand(null);
+      setTappedFire(null);
+      setTappedCoverage(null);
+      landAskedFor.current = tapped;
+      void Promise.resolve(screenPoint).then((point) => {
+        if (landAskedFor.current !== tapped) return;
+        // From the tiles on the phone, so this works offline and asks no one.
+        if (landLayerIds.length > 0) {
+          mapRef.current
+            ?.queryRenderedFeatures(point, { layers: landLayerIds })
+            .then((features) => {
+              if (landAskedFor.current === tapped)
+                setTappedLand(landNameOf(features));
+            })
+            // Never a failure to show: the sheet just has no land figure.
+            .catch(() => undefined);
+        }
+        if (fireLayerIdList.length > 0) {
+          mapRef.current
+            ?.queryRenderedFeatures(point, { layers: fireLayerIdList })
+            .then((features) => {
+              if (landAskedFor.current === tapped)
+                setTappedFire(fireNameOf(features));
+            })
+            .catch(() => undefined);
+        }
+        coverageAtTap(
+          mapRef.current,
+          point,
+          lngLat,
+          coverageLayerIdList,
+          coverageCarrier,
+        )
+          .then((name) => {
+            if (landAskedFor.current === tapped) setTappedCoverage(name);
+          })
+          .catch(() => undefined);
+      });
+    },
+    [coverageCarrier, coverageLayerIdList, fireLayerIdList, landLayerIds],
+  );
+
   const handleMapPress = useCallback(
     (event: NativeSyntheticEvent<PressEvent>) => {
       if (ignoreMapPress.current) return;
@@ -2356,56 +2413,16 @@ export function MapScreen({
       setTappedFix(null);
       // A tap is not a pan, so it does not stop follow mode — looking at a
       // spot on the map or opening the point panel should not drop follow mode.
-      const tapped = { latitude: lat, longitude: lon };
-      setTappedPoint(tapped);
-      setTappedLand(null);
-      setTappedFire(null);
-      setTappedCoverage(null);
-      landAskedFor.current = tapped;
-      // From the tiles on the phone, so this works offline and asks no one.
-      if (landLayerIds.length > 0) {
-        mapRef.current
-          ?.queryRenderedFeatures(event.nativeEvent.point, {
-            layers: landLayerIds,
-          })
-          .then((features) => {
-            if (landAskedFor.current === tapped)
-              setTappedLand(landNameOf(features));
-          })
-          // Never a failure to show: the sheet just has no land figure.
-          .catch(() => undefined);
-      }
-      if (fireLayerIdList.length > 0) {
-        mapRef.current
-          ?.queryRenderedFeatures(event.nativeEvent.point, {
-            layers: fireLayerIdList,
-          })
-          .then((features) => {
-            if (landAskedFor.current === tapped)
-              setTappedFire(fireNameOf(features));
-          })
-          .catch(() => undefined);
-      }
-      coverageAtTap(
-        mapRef.current,
-        event.nativeEvent.point,
-        [lon, lat],
-        coverageLayerIdList,
-        coverageCarrier,
-      )
-        .then((name) => {
-          if (landAskedFor.current === tapped) setTappedCoverage(name);
-        })
-        .catch(() => undefined);
+      askAbout({ latitude: lat, longitude: lon }, event.nativeEvent.point, [
+        lon,
+        lat,
+      ]);
     },
     [
       addToolPoint,
       anchorDeleteSideFor,
+      askAbout,
       collectingPoints,
-      coverageCarrier,
-      coverageLayerIdList,
-      fireLayerIdList,
-      landLayerIds,
       pressedAnchorIndex,
     ],
   );
@@ -3514,18 +3531,33 @@ export function MapScreen({
           accuracyM: here.coords.accuracy,
           altitudeM: here.coords.altitude,
         });
-        setTappedLand(null);
-        setTappedFire(null);
-        setTappedCoverage(null);
-        setTappedPoint({
-          latitude: here.coords.latitude,
-          longitude: here.coords.longitude,
-        });
+        const fixLngLat: [number, number] = [
+          here.coords.longitude,
+          here.coords.latitude,
+        ];
+        // The overlays are asked about the fix itself, not the finger: a press
+        // up to 22 dp from the arrow is hundreds of metres away at low zoom.
+        // The press point is the fallback when the map cannot project it.
+        const fixPoint = (
+          mapRef.current?.project(fixLngLat) ?? Promise.reject(new Error())
+        ).catch(() => event.nativeEvent.point);
+        askAbout(
+          { latitude: here.coords.latitude, longitude: here.coords.longitude },
+          fixPoint,
+          fixLngLat,
+        );
         return;
       }
       handleMapPress(event);
     },
-    [camera.zoom, collectingPoints, dotWanted, handleMapPress, userCoord],
+    [
+      askAbout,
+      camera.zoom,
+      collectingPoints,
+      dotWanted,
+      handleMapPress,
+      userCoord,
+    ],
   );
 
   /**
@@ -5243,7 +5275,15 @@ export function MapScreen({
               // Lit from the map, not the default viewport: MapLibre Native
               // uploads a viewport light once (hillshade_layer_tweaker.cpp), so
               // the shading would depend on the bearing the layer mounted at.
-              paint={{ "hillshade-illumination-anchor": "map" }}
+              paint={{
+                "hillshade-illumination-anchor": "map",
+                "hillshade-exaggeration": hillshadeExaggeration(
+                  Math.max(
+                    r.layerMinZoom ?? 0,
+                    NSW_REGION.terrain.hillshade.minzoom,
+                  ),
+                ) as unknown as number,
+              }}
             />
           </ResolvedSource>
         ))}

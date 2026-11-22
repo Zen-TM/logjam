@@ -10,6 +10,7 @@
 import {
   invalidPlaceFields,
   isTransientSyncError,
+  SOURCES_FIELD_KEY,
   SYSTEM_FIELD_DEFS,
 } from "@logjam/shared";
 
@@ -273,10 +274,11 @@ export function opChanges(op: ParkedOp): OpChange[] {
     // see WHICH value the complaint is about, which is the whole point of
     // marking a line at all.
     if (field === "fieldValues" && value && typeof value === "object") {
-      for (const [key, inner] of Object.entries(
-        value as Record<string, unknown>,
-      )) {
-        // Internal `_`-prefixed entries are not something the user typed.
+      const values = value as Record<string, unknown>;
+      for (const [key, inner] of Object.entries(values)) {
+        // Other internal `_`-prefixed entries are not something the user typed.
+        // `_sources` is, but the blob carries it whole on every edit, so it is
+        // a line only when this edit changed it (below).
         if (key.startsWith("_")) continue;
         const innerLabel = fieldLabel(key);
         changes.push({
@@ -285,6 +287,21 @@ export function opChanges(op: ParkedOp): OpChange[] {
           rejected: rejected.has("fieldValues"),
         });
       }
+      // An update with no base to compare against cannot say what it changed.
+      const base = op.baseFields?.fieldValues as
+        | Record<string, unknown>
+        | undefined;
+      const was = base?.[SOURCES_FIELD_KEY];
+      const now = values[SOURCES_FIELD_KEY];
+      if (
+        (op.op === "create" || base !== undefined) &&
+        JSON.stringify(now ?? null) !== JSON.stringify(was ?? null)
+      )
+        changes.push({
+          label: "Sources",
+          value: sourcesText(now),
+          rejected: rejected.has("fieldValues"),
+        });
       continue;
     }
     const label = fieldLabel(field);
@@ -297,6 +314,19 @@ export function opChanges(op: ParkedOp): OpChange[] {
     });
   }
   return changes;
+}
+
+/** A place's sources for a line: their labels (the links are long and say
+ *  nothing at a glance), or "none" once the last one is gone. */
+function sourcesText(sources: unknown): string {
+  const labels = Array.isArray(sources)
+    ? sources.flatMap((pair) =>
+        Array.isArray(pair) && typeof pair[0] === "string" && pair[0]
+          ? [pair[0]]
+          : [],
+      )
+    : [];
+  return labels.length > 0 ? labels.join(", ") : "None";
 }
 
 /**

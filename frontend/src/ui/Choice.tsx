@@ -13,6 +13,9 @@ import { Icon } from "./Icon";
  * floating over the map with the buttons beside it, where a `SwitchRow`
  * cannot sit inline and a bare label would sit on the basemap.
  *
+ * `prominentLabel` is for a question someone answers: the label reads above
+ * its description, as a text field's does.
+ *
  * `labelHasLinks` is for a label with links in it. Nothing interactive goes
  * inside a `<label>` (DESIGN.md), so the line is a plain element that names the
  * input, and its words still tick the box.
@@ -25,6 +28,7 @@ export function Checkbox({
   disabled = false,
   card = false,
   describedBy,
+  prominentLabel = false,
   labelHasLinks = false,
 }: {
   label: ReactNode;
@@ -35,6 +39,7 @@ export function Checkbox({
   card?: boolean;
   /** Another element that describes it, such as why it is disabled. */
   describedBy?: string;
+  prominentLabel?: boolean;
   labelHasLinks?: boolean;
 }) {
   const descriptionId = useId();
@@ -72,7 +77,7 @@ export function Checkbox({
         {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
         <span
           id={labelId}
-          className={classes.title}
+          className={prominentLabel ? classes.titleProminent : classes.title}
           onClick={
             labelHasLinks
               ? (event) => {

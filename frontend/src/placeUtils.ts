@@ -54,19 +54,6 @@ export type { TPlace, TNotification, TTripLog, TUser } from "@logjam/shared";
 import type { TPlace, TNotification, TTripLog, TUser } from "@logjam/shared";
 import { usernameAvailable as sharedUsernameAvailable } from "@logjam/shared";
 
-// Only http(s) URLs are safe to render as a clickable <a href> or store as a
-// place source link — any other scheme (javascript:, data:, vbscript:, ...)
-// is an XSS/hygiene sink. Single source for both the save-time reject in
-// PlaceDialog and the render-time guard in PlaceDetailPanel.
-export function isHttpUrl(url: string): boolean {
-  try {
-    const parsed = new URL(url);
-    return parsed.protocol === "http:" || parsed.protocol === "https:";
-  } catch {
-    return false;
-  }
-}
-
 export type TFriend = {
   id: string;
   username: string;

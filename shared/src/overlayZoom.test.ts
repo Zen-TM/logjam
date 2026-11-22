@@ -9,6 +9,7 @@ import {
   COVERAGE_MIN_ZOOM,
   FIRE_MIN_ZOOM,
   GAUGES_MIN_ZOOM,
+  hillshadeExaggeration,
   SLOPE_MIN_ZOOM,
   zoomFadeIn,
 } from "./overlayZoom.js";
@@ -27,6 +28,14 @@ describe("zoomFadeIn", () => {
       9,
       1,
     ]);
+  });
+});
+
+describe("hillshadeExaggeration", () => {
+  // Mutation: return the bare number, and the hillshade pops in at its
+  // minzoom instead of fading in over a level.
+  it("fades from nothing at the minzoom to MapLibre's default intensity", () => {
+    expect(hillshadeExaggeration(8)).toEqual(zoomFadeIn(8, 0.5));
   });
 });
 

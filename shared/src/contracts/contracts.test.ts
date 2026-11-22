@@ -1187,6 +1187,17 @@ describe("the map point panel", () => {
     expect(MAP_POINT_VERBS.map((verb) => verb.id)).not.toContain("copy");
   });
 
+  // Mutation: drop `notAtFix` from the navigate verb, and a press on your own
+  // position offers to navigate you to where you already are; or ignore
+  // `atFix` in `mapPointVerbs`, and it offers nothing else either way.
+  it("offers every verb but Navigate at the viewer's own position", () => {
+    const ids = (atFix: boolean) =>
+      mapPointVerbs("gps", false, atFix).map((verb) => verb.id);
+    expect(ids(true)).toEqual(ids(false).filter((id) => id !== "navigate"));
+    expect(ids(true)).toContain("dropMarker");
+    expect(ids(true)).toContain("addPlace");
+  });
+
   // Mutation: give a verb `hold: "gps"` that Logjam GPS's sheet does not draw
   // (or the reverse): `MapHoldSheet` draws `mapHoldVerbs`, so this list is what
   // its hold offers. Logjam Web has no hold: a right-click opens Options.

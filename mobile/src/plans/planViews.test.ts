@@ -1,7 +1,12 @@
 import type { TripPlanSummary } from "@logjam/shared";
 import { describe, expect, it } from "vitest";
 
-import { formWidenLocked, planPageView, plansListView } from "./planViews";
+import {
+  formSheetBack,
+  formWidenLocked,
+  planPageView,
+  plansListView,
+} from "./planViews";
 
 const list = [{ id: "a" }] as TripPlanSummary[];
 
@@ -114,5 +119,34 @@ describe("formWidenLocked", () => {
       false,
     );
     expect(formWidenLocked(null)).toBe(false);
+  });
+});
+
+describe("formSheetBack", () => {
+  // Mutation: return the read layer for a `direct` ⋯, and Back from the Forms
+  // list's options opens the form's answers the user never asked for.
+  it("goes nowhere from a ⋯ pressed on the Forms list", () => {
+    expect(formSheetBack({ formId: "f", mode: "verbs", direct: true })).toBe(
+      null,
+    );
+  });
+  // Mutation: restrict the `direct` rule to `verbs`, and Back from the "to
+  // answer" card's answer opens a read view the user never opened.
+  it("goes nowhere from an answer opened straight from the card", () => {
+    expect(formSheetBack({ formId: "f", mode: "answer", direct: true })).toBe(
+      null,
+    );
+  });
+  // Mutation: return null for every ⋯, and the sheet's own ⋯ loses its way back.
+  it("goes back to the form from the sheet's own ⋯ and from answering", () => {
+    expect(formSheetBack({ formId: "f", mode: "verbs" })).toEqual({
+      formId: "f",
+      mode: "read",
+    });
+    expect(formSheetBack({ formId: "f", mode: "answer" })).toEqual({
+      formId: "f",
+      mode: "read",
+    });
+    expect(formSheetBack({ formId: "f", mode: "read" })).toBe(null);
   });
 });
