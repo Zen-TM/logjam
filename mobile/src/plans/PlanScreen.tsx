@@ -13,13 +13,16 @@ import {
   type ReactNode,
 } from "react";
 import { ScrollView, Text, View } from "react-native";
+import { useFocusEffect } from "@react-navigation/native";
 import {
   ApiError,
+  importFailureMessage,
   contractSectionKeys,
   mediaCategory,
   mediaDisplayName,
   messageFromError,
   planAddVerbLabel,
+  tripPlanAddedMessage,
   planItemVerbs,
   TRIP_PLAN_MAX_FORMS,
   tripPlanActionsFor,
@@ -45,9 +48,12 @@ import {
   TRIP_PLAN_OFFLINE,
   TRIP_PLAN_JOIN,
   TRIP_PLAN_PAGE,
+  WAY_IMPORT,
   type DateOnly,
+  type PlanItemAddVerbId,
   type SectionKeysOn,
   type TripPlanItem,
+  type TripPlanItemGroup,
   type TripPlanPageView,
   type TripPlanView,
 } from "@logjam/shared";
@@ -57,7 +63,9 @@ import {
   capabilityScreenBlock,
   unavailableReasonText,
 } from "../auth/capabilities";
+import { importVectorFileIntoPlan } from "../imports/vectorImports";
 import { useConnectivity } from "../map/connectivity";
+import { takePickedPoint } from "../map/pickedPoint";
 import { MediaViewer, type ViewerMedia } from "../media/MediaViewer";
 import { getSyncStateValue, onMirrorChanged } from "../sync/syncDb";
 import {
@@ -101,6 +109,9 @@ import {
   usePlanFilesOnPhone,
 } from "./PlanDownload";
 import { openablePlanMedia, planFiles } from "./planFiles";
+import { PlanAddMenu } from "./PlanAddMenu";
+import { planAddMenuView, type PlanAddMenuView } from "./planAddMenu";
+import { PlanNewPlaceSheet } from "./PlanNewPlaceSheet";
 import { PlanPlaceSheet } from "./PlanPlaceSheet";
 import { planBbox } from "./planMap";
 import { itemTitle, PlanItemSheet } from "./PlanItemSheet";
@@ -216,11 +227,14 @@ export function PlanScreen({
   name,
   initialView,
   joined,
+  arrival,
+  onArrivalShown,
   onBack,
   backLabel,
   onShowOnMap,
   onDownloadMap,
   onDrawRoute,
+  onPickPoint,
   onGone,
 }: {
   planId: string;
@@ -230,6 +244,11 @@ export function PlanScreen({
   initialView?: TripPlanPageView;
   /** Arrived by joining from an invite: say so once. */
   joined?: boolean;
+  /** Said once as a toast (a route drawn for the plan was added), whether this
+   *  page was just opened or was already open. */
+  arrival?: string;
+  /** `arrival` was said: the caller clears it, so it is not said again. */
+  onArrivalShown: () => void;
   onBack: () => void;
   backLabel: string;
   /** The map in plan mode, framed on the plan's items when it has any. */
@@ -239,8 +258,11 @@ export function PlanScreen({
   ) => void;
   /** The region download, framed on the plan's items. */
   onDownloadMap: (bbox: [number, number, number, number]) => void;
-  /** The map with the pen armed; the finished route is added to this plan. */
-  onDrawRoute: (planId: string) => void;
+  /** The map with the pen armed; the finished route is made in this plan, in
+   *  a colour not in `routeColors`. */
+  onDrawRoute: (planId: string, routeColors: string[]) => void;
+  /** The map's full-screen point picker; the answer is `takePickedPoint`'s. */
+  onPickPoint: () => void;
   /** The caller left or deleted the plan: back to Plans, saying so. */
   onGone: (message: string) => void;
 }) {
@@ -311,9 +333,12 @@ export function PlanScreen({
       onShowOnMap={() => onShowOnMap(planId, planBbox(cached.plan))}
       onDownloadMap={onDownloadMap}
       onDrawRoute={onDrawRoute}
+      onPickPoint={onPickPoint}
       onGone={onGone}
       onLeaving={setLeaving}
       joined={joined}
+      arrival={arrival}
+      onArrivalShown={onArrivalShown}
     />
   );
 }
@@ -333,9 +358,12 @@ function PlanPage({
   onShowOnMap,
   onDownloadMap,
   onDrawRoute,
+  onPickPoint,
   onGone,
   onLeaving,
   joined,
+  arrival,
+  onArrivalShown,
 }: {
   myId: string | null;
   cached: CachedPlan;
@@ -350,10 +378,13 @@ function PlanPage({
   backLabel: string;
   onShowOnMap: () => void;
   onDownloadMap: (bbox: [number, number, number, number]) => void;
-  onDrawRoute: (planId: string) => void;
+  onDrawRoute: (planId: string, routeColors: string[]) => void;
+  onPickPoint: () => void;
   onGone: (message: string) => void;
   onLeaving: (leaving: boolean) => void;
   joined?: boolean;
+  arrival?: string;
+  onArrivalShown: () => void;
 }) {
   const theme = useTheme();
   const pull = useRefreshFromTop();
@@ -373,6 +404,17 @@ function PlanPage({
   );
   const notify = (text: string, tone: ToastMessage["tone"] = "done") =>
     setToast({ text, tone, nonce: Date.now() });
+  // Not the initial state: the page may already be open when the map hands
+  // it back. Said when `arrival` appears, then cleared by the caller.
+  const [seenArrival, setSeenArrival] = useState<string | undefined>();
+  if (arrival !== seenArrival) {
+    setSeenArrival(arrival);
+    if (arrival)
+      setToast({ text: arrival, tone: "done", nonce: (toast?.nonce ?? 0) + 1 });
+  }
+  useEffect(() => {
+    if (arrival) onArrivalShown();
+  }, [arrival, onArrivalShown]);
   // Stable: FormSheet hands a refusal over from an effect.
   const notifyError = useCallback(
     (text: string) => setToast({ text, tone: "error", nonce: Date.now() }),
@@ -486,7 +528,11 @@ function PlanPage({
                       disabled={!online}
                       disabledReason={OFFLINE}
                       onPress={() =>
-                        setFormSheet({ formId: form.id, mode: "answer" })
+                        setFormSheet({
+                          formId: form.id,
+                          mode: "answer",
+                          direct: true,
+                        })
                       }
                     />
                   ))}
@@ -525,11 +571,17 @@ function PlanPage({
         <Items
           plan={plan}
           online={online}
-          canAdd={adds.has("copy")}
+          addMenu={planAddMenuView(plan.myRole, archived)}
           me={myId}
           onInfo={notify}
           onError={(text) => notify(text, "error")}
-          onDrawRoute={() => onDrawRoute(plan.id)}
+          onDrawRoute={() =>
+            onDrawRoute(
+              plan.id,
+              plan.routes.map((route) => route.color),
+            )
+          }
+          onPickPoint={onPickPoint}
         />
       ) : null,
     forms:
@@ -539,7 +591,9 @@ function PlanPage({
             plan={plan}
             me={myId}
             today={today}
-            onOpen={(formId, mode) => setFormSheet({ formId, mode })}
+            onOpen={(formId, mode) =>
+              setFormSheet({ formId, mode, direct: mode === "verbs" })
+            }
           />
           {adds.has("form") ? (
             <ListEnd>
@@ -779,51 +833,102 @@ function WriteUp({
 function Items({
   plan,
   online,
-  canAdd,
+  addMenu,
   me,
   onInfo,
   onError,
   onDrawRoute,
+  onPickPoint,
 }: {
   plan: TripPlanView;
   online: boolean;
-  /** The caller may Add a place or way (and it's live). */
-  canAdd: boolean;
+  /** The one Add a place or way button's menu; none on an archived plan. */
+  addMenu: PlanAddMenuView | null;
   /** The caller's user id: a member changes only what they added. */
   me: string | null;
   onInfo: (message: string, tone?: "done" | "error") => void;
   onError: (message: string) => void;
   onDrawRoute: () => void;
+  onPickPoint: () => void;
 }) {
   const theme = useTheme();
   const [saving, setSaving] = useState<SaveCopyTarget | null>(null);
   const [adding, setAdding] = useState(false);
+  const [addGroup, setAddGroup] = useState<TripPlanItemGroup>("places");
   const addingMounted = useOnceOpened(adding);
-  const styles = useStyles();
-  // The button only dims: the words go under it (ui/Button.tsx).
-  const add = canAdd ? (
+  const [newPlaceAt, setNewPlaceAt] = useState<{
+    latitude: number;
+    longitude: number;
+  } | null>(null);
+  // Set while the point picker is up; its answer is taken when this page
+  // is focused again, once (`takePickedPoint`). A cancelled pick answers
+  // nothing.
+  const atPicker = useRef(false);
+  useFocusEffect(
+    useCallback(() => {
+      if (!atPicker.current) return;
+      atPicker.current = false;
+      const point = takePickedPoint();
+      if (point) setNewPlaceAt(point);
+    }, []),
+  );
+  const openCopies = (group: TripPlanItemGroup) => {
+    setAddGroup(group);
+    setAdding(true);
+  };
+  const [importing, setImporting] = useState(false);
+  const importWay = () => {
+    setImporting(true);
+    importVectorFileIntoPlan(plan.id)
+      .then((outcome) => {
+        if (outcome.status === "added")
+          onInfo(WAY_IMPORT.addedToPlan(outcome.name));
+      })
+      .catch((err: unknown) => {
+        console.error(err);
+        onError(importFailureMessage(err, WAY_IMPORT.failed));
+      })
+      .finally(() => setImporting(false));
+  };
+  const run: Record<PlanItemAddVerbId, () => void> = {
+    copyPlace: () => openCopies("places"),
+    copyWay: () => openCopies("ways"),
+    newPlace: () => {
+      atPicker.current = true;
+      onPickPoint();
+    },
+    route: onDrawRoute,
+    import: importWay,
+  };
+  const add = addMenu ? (
     <ListEnd>
-      <Button
-        label={planAddVerbLabel("copy")}
-        icon="add"
-        variant="outlineAccent"
-        disabled={!online}
-        disabledReason={OFFLINE}
-        reasonShown
-        onPress={() => setAdding(true)}
+      <PlanAddMenu
+        menu={addMenu}
+        online={online}
+        busy={importing}
+        onPick={(id) => run[id]()}
       />
-      {online ? null : <Text style={styles.offline}>{OFFLINE}</Text>}
       {addingMounted ? (
         <AddCopySheet
           plan={plan}
           visible={adding}
+          startGroup={addGroup}
           online={online}
           me={me}
           onClose={() => setAdding(false)}
           onDone={onInfo}
-          onDrawRoute={onDrawRoute}
         />
       ) : null}
+      <PlanNewPlaceSheet
+        planId={plan.id}
+        at={newPlaceAt}
+        online={online}
+        onClose={() => setNewPlaceAt(null)}
+        onAdded={() => {
+          setNewPlaceAt(null);
+          onInfo(tripPlanAddedMessage(1, 1));
+        }}
+      />
     </ListEnd>
   ) : null;
   const [menuItem, setMenuItem] = useState<TripPlanItem | null>(null);

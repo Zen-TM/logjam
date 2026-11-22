@@ -699,7 +699,12 @@ export function PlansScreen({
       </View>
     ),
     list: (
-      <View style={[styles.list, listReady ? undefined : heroCollapse.inset()]}>
+      <View
+        style={[
+          styles.list,
+          listReady ? undefined : { paddingTop: heroCollapse.headerHeight },
+        ]}
+      >
         <ListBody
           state={
             shown.kind === "loading"
@@ -721,7 +726,7 @@ export function PlansScreen({
           }
         >
           <HeroFlatList
-            style={styles.list}
+            style={[styles.list, heroCollapse.listStyle]}
             {...mergeScrollProps(heroCollapse.scrollProps, pull.scrollProps)}
             contentContainerStyle={[styles.listContent, heroCollapse.inset()]}
             data={rows}
@@ -730,7 +735,7 @@ export function PlansScreen({
             renderItem={renderItem}
             refreshControl={
               <pull.Refresh
-                progressViewOffset={heroCollapse.headerHeight}
+                progressViewOffset={heroCollapse.refreshOffset}
                 refreshing={refreshing}
                 onRefresh={() => void poll()}
                 tintColor={theme.accent}

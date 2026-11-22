@@ -26,6 +26,12 @@ type FieldLabelling = {
   /** A line under the control saying what it means or what it takes. Visible,
    *  and read with the control, where a tooltip would be neither. */
   hint?: string;
+  /** A question someone answers: the label is set above its hint, in the text
+   *  colour, instead of looking like it. */
+  prominentLabel?: boolean;
+  /** Draws the hint between the label and the control, not under the
+   *  control: a question the hint belongs to before it is answered. */
+  hintAbove?: boolean;
   error?: string | null;
   /** Draws "Required" beside the label. The input's own `required` is what
    *  assistive technology reads; the mark is for the eye, and a form where
@@ -41,6 +47,8 @@ function Field({
   label,
   hideLabel = false,
   hint,
+  prominentLabel,
+  hintAbove,
   error,
   requiredMark,
   reserveError,
@@ -51,11 +59,17 @@ function Field({
   className?: string;
   children: ReactNode;
 }) {
+  const labelClass = prominentLabel ? classes.labelProminent : classes.label;
+  const hintLine = hint && (
+    <p id={`${inputId}-hint`} className={classes.hint}>
+      {hint}
+    </p>
+  );
   return (
     <div className={[classes.field, className].filter(Boolean).join(" ")}>
       {requiredMark && !hideLabel ? (
         <div className={classes.labelRow}>
-          <label htmlFor={inputId} className={classes.label}>
+          <label htmlFor={inputId} className={labelClass}>
             {label}
           </label>
           <span className={classes.required} aria-hidden>
@@ -65,23 +79,96 @@ function Field({
       ) : (
         <label
           htmlFor={inputId}
-          className={hideLabel ? "visually-hidden" : classes.label}
+          className={hideLabel ? "visually-hidden" : labelClass}
         >
           {label}
         </label>
       )}
+      {hintAbove && hintLine}
       {children}
-      {hint && (
-        <p id={`${inputId}-hint`} className={classes.hint}>
-          {hint}
-        </p>
-      )}
+      {!hintAbove && hintLine}
       <FieldError
         id={`${inputId}-error`}
         message={error ?? null}
         reserve={reserveError}
       />
     </div>
+  );
+}
+
+/** A question answered by several controls (chips, tick boxes), or any stack
+ *  of them that shares a hint and an error: the prompt, the controls, the
+ *  hint, then the error, as a text field's. `prominentLabel` and `hintAbove`
+ *  are the same options a text field has. The legend names the group.
+ *  `named` is for controls that name themselves (a radio group, a lone tick
+ *  box): the prompt is then drawn for the eye only, so a screen reader does
+ *  not hear it twice. Its controls describe themselves, so with a hint or an
+ *  error they are a function that takes the ids to do it with (the compiler
+ *  refuses plain elements there); without either they may be plain elements.
+ *  A named group may have no prompt. */
+export function FieldGroup({
+  label,
+  hint,
+  error,
+  prominentLabel,
+  hintAbove,
+  named = false,
+  children,
+}: {
+  prominentLabel?: boolean;
+  hintAbove?: boolean;
+} & (
+  | {
+      label: string;
+      named?: false;
+      hint?: string;
+      error?: string | null;
+      children: ReactNode;
+    }
+  | {
+      label?: string;
+      named: true;
+      hint?: string;
+      error?: string | null;
+      children: (describedBy: string | undefined) => ReactNode;
+    }
+  | {
+      label?: string;
+      named: true;
+      hint?: undefined;
+      error?: null;
+      children: ReactNode;
+    }
+)) {
+  const id = useId();
+  const described = describedBy(id, hint, error);
+  const Root = named ? "div" : "fieldset";
+  const Prompt = named ? "span" : "legend";
+  const hintLine = hint && (
+    <p id={`${id}-hint`} className={classes.hint}>
+      {hint}
+    </p>
+  );
+  return (
+    <Root
+      className={classes.group}
+      aria-describedby={named ? undefined : described}
+    >
+      {label && (
+        <Prompt
+          className={prominentLabel ? classes.labelProminent : classes.label}
+          aria-hidden={named || undefined}
+        >
+          {label}
+        </Prompt>
+      )}
+      {hintAbove && hintLine}
+      <div className={classes.controls}>
+        {typeof children === "function" ? children(described) : children}
+      </div>
+      {!hintAbove && hintLine}
+      <FieldError id={`${id}-error`} message={error ?? null} />
+    </Root>
   );
 }
 
@@ -125,6 +212,8 @@ export function TextField({
   label,
   hideLabel,
   hint,
+  prominentLabel,
+  hintAbove,
   error,
   requiredMark,
   reserveError,
@@ -142,6 +231,8 @@ export function TextField({
       label={label}
       hideLabel={hideLabel}
       hint={hint}
+      prominentLabel={prominentLabel}
+      hintAbove={hintAbove}
       error={error}
       requiredMark={requiredMark}
       reserveError={reserveError}
@@ -328,6 +419,8 @@ export function TextArea({
   label,
   hideLabel,
   hint,
+  prominentLabel,
+  hintAbove,
   error,
   requiredMark,
   reserveError,
@@ -352,6 +445,8 @@ export function TextArea({
       label={label}
       hideLabel={hideLabel}
       hint={hint}
+      prominentLabel={prominentLabel}
+      hintAbove={hintAbove}
       error={error}
       requiredMark={requiredMark}
       reserveError={reserveError}
@@ -384,6 +479,8 @@ export function Select({
   label,
   hideLabel,
   hint,
+  prominentLabel,
+  hintAbove,
   error,
   requiredMark,
   reserveError,
@@ -402,6 +499,8 @@ export function Select({
       label={label}
       hideLabel={hideLabel}
       hint={hint}
+      prominentLabel={prominentLabel}
+      hintAbove={hintAbove}
       error={error}
       requiredMark={requiredMark}
       reserveError={reserveError}

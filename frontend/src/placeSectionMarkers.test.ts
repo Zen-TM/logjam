@@ -9,13 +9,15 @@ import { PLACE_PAGE } from "@logjam/shared";
 // every flagged section through `placeSectionTitle`. Mutations that turn it
 // red: draw `copy.photos` bare in the page, or flag a section on the contract
 // that the page doesn't mark.
-const PAGE = readFileSync(
-  join(
-    dirname(fileURLToPath(import.meta.url)),
-    "components/sidebar/panels/PlaceDetailPanel.tsx",
-  ),
-  "utf8",
-);
+// The Route section lives in its own file, shared with the edit dialog.
+const PAGE = [
+  "components/sidebar/panels/PlaceDetailPanel.tsx",
+  "components/sidebar/panels/PlaceRouteSection.tsx",
+]
+  .map((file) =>
+    readFileSync(join(dirname(fileURLToPath(import.meta.url)), file), "utf8"),
+  )
+  .join("\n");
 
 describe("the owner's place page on Logjam Web", () => {
   it("marks every section a friend sees", () => {

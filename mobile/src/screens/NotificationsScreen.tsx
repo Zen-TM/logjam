@@ -1124,7 +1124,7 @@ export function NotificationsScreen({
       ) : null,
     list: () => (
       <HeroSectionList
-        style={styles.list}
+        style={[styles.list, heroCollapse.listStyle]}
         contentContainerStyle={[styles.listContent, heroCollapse.inset()]}
         sections={sections}
         keyExtractor={keyExtractor}
@@ -1143,7 +1143,7 @@ export function NotificationsScreen({
         }
         refreshControl={
           <pull.Refresh
-            progressViewOffset={heroCollapse.headerHeight}
+            progressViewOffset={heroCollapse.refreshOffset}
             refreshing={false}
             onRefresh={query.refetch}
             tintColor={theme.accent}

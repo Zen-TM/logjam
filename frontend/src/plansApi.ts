@@ -32,7 +32,7 @@ import {
   type TripPlanSummary,
   type TripPlanView,
 } from "@logjam/shared";
-import { apiFetch } from "./placeUtils";
+import { apiFetch, putToPresignedUrl } from "./placeUtils";
 import { messageFromError } from "./errors/messageFromError";
 
 const plan = (id: string) => `/plans/${encodeURIComponent(id)}`;
@@ -185,6 +185,45 @@ export const addPlanItem = (planId: string, body: TripPlanItemAdd) =>
     mediaSkipped?: number;
     mediaOutOfSpace?: true;
   }>(`${plan(planId)}/items`, { method: "POST", body });
+/**
+ * A track file (an import) straight into the plan: presign, PUT, confirm, as
+ * the account's own upload does. `meta` is sent to both, as it is there.
+ */
+export async function uploadPlanFile(
+  planId: string,
+  params: {
+    file: File;
+    mediaType: string;
+    displayName: string;
+    metadata: Record<string, unknown>;
+  },
+): Promise<TripPlanItem> {
+  const meta = {
+    filename: params.file.name,
+    mediaType: params.mediaType,
+    displayName: params.displayName,
+    metadata: params.metadata,
+  };
+  const base = `${plan(planId)}/items/media`;
+  const presigned = await apiFetch<{
+    mediaId: string;
+    displayUploadUrl: string;
+  }>(`${base}/presign`, {
+    method: "POST",
+    body: { ...meta, sizeBytes: params.file.size },
+  });
+  await putToPresignedUrl(
+    presigned.displayUploadUrl,
+    params.file,
+    params.mediaType,
+  );
+  const { item } = await apiFetch<{ item: TripPlanItem }>(
+    `${base}/${presigned.mediaId}/confirm`,
+    { method: "POST", body: meta },
+  );
+  return item;
+}
+
 const item = (planId: string, kind: TripPlanItemKind, itemId: string) =>
   `${plan(planId)}/items/${kind}/${encodeURIComponent(itemId)}`;
 /** Save a copy to the caller's own account; the body is the kind's copy shape. */

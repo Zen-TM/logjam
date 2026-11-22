@@ -430,6 +430,9 @@ export const TRIP_PLAN_PAGE = {
     itemEdit: "Edit",
     itemEditPlace: "Edit place",
     itemEditWay: "Edit way",
+    itemNewPlace: "New place",
+    itemType: "Type",
+    routeAdded: "Route added to the plan.",
     inPlan: "In the plan",
     sectionEmpty: "No text yet.",
     printFormsNote:

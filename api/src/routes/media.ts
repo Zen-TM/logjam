@@ -7,7 +7,6 @@ import { AppError, malformed } from "../middleware/errorHandler";
 import { HeadObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { s3 } from "../services/awsClients";
-import { getEnv } from "../lib/env";
 import { getParam } from "../lib/getParam";
 import { resolveUser as getUser } from "../lib/resolveUser";
 import {
@@ -19,6 +18,11 @@ import {
 import { deleteS3Keys, deleteS3KeysBestEffort } from "../lib/s3Cleanup";
 import { validateUploadSizes } from "../lib/mediaUploadValidation";
 import { toMediaItem } from "../lib/mediaPresign";
+import {
+  MEDIA_BUCKET,
+  UPLOAD_URL_TTL_SECONDS,
+  uploadedSize,
+} from "../lib/uploadedFile";
 import { mediaKeys } from "../lib/mediaKeys";
 import { exhaustedEgressOwnerIds } from "../lib/egressQuota";
 import { requirePlaceOwnerAccess } from "../lib/placeAccess";
@@ -57,8 +61,6 @@ import {
 
 const router = Router();
 
-const MEDIA_BUCKET = getEnv().S3_BUCKET_MEDIA ?? "";
-const UPLOAD_URL_TTL_SECONDS = 900; // 15 minutes
 const THUMBNAIL_MIME = "image/jpeg";
 
 /**
@@ -328,7 +330,10 @@ function parseTrackClimbOr400(body: Record<string, unknown>) {
 
 /** parseMediaMetadata, with its shape complaint turned into a 400. The message
  * names the offending FIELD and never its value — metadata holds coordinates. */
-function parseMediaMetadataOr400(origin: MediaOrigin | null, value: unknown) {
+export function parseMediaMetadataOr400(
+  origin: MediaOrigin | null,
+  value: unknown,
+) {
   try {
     return parseMediaMetadata(origin, value);
   } catch (err) {
@@ -340,7 +345,7 @@ function parseMediaMetadataOr400(origin: MediaOrigin | null, value: unknown) {
 /** Validates the file's type and name together and hands both back narrowed —
  * callers need the strings, and re-asserting them at each use is how one site
  * ends up trusting an unvalidated one. */
-function validateMediaType(
+export function validateMediaType(
   rawMediaType: unknown,
   rawFilename: unknown,
 ): { category: MediaCategory; mediaType: string; filename: string } {
@@ -535,29 +540,11 @@ router.post(
     const expectThumb = categoryHasThumbnail(category);
 
     // Authoritative size from S3 — never trust the client's declared size.
-    let displayBytes: number;
-    try {
-      const head = await s3.send(
-        new HeadObjectCommand({ Bucket: MEDIA_BUCKET, Key: displayKey }),
-      );
-      displayBytes = head.ContentLength ?? 0;
-    } catch {
-      throw new AppError(
-        400,
-        say`That file didn't finish uploading. Try again.`,
-      );
-    }
-    if (displayBytes > MEDIA_SIZE_CAPS[category]) {
-      // Best-effort orphan cleanup; the size-limit AppError below is the
-      // meaningful response, so a cleanup failure (already logged) must not
-      // mask it with a generic 500.
-      await deleteS3KeysBestEffort(MEDIA_BUCKET, [displayKey, thumbnailKey]);
-      const limitMb = Math.round(MEDIA_SIZE_CAPS[category] / 1024 / 1024);
-      throw new AppError(
-        413,
-        say`That file is too big. The limit is ${limitMb} MB.`,
-      );
-    }
+    const displayBytes = await uploadedSize(
+      displayKey,
+      MEDIA_SIZE_CAPS[category],
+      [displayKey, thumbnailKey],
+    );
 
     let thumbnailBytes = 0;
     if (expectThumb) {

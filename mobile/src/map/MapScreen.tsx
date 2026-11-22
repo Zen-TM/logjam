@@ -99,6 +99,7 @@ import {
   NSW_FIRE,
   slopeReliefColor,
   SLOPE_MIN_ZOOM,
+  hillshadeExaggeration,
   zoomFadeIn,
   terrainBeforeIds,
   type TerrainLayerKey,
@@ -107,7 +108,6 @@ import {
   nswContourStyle,
   MAP_INK,
   TRIP_PLAN_PAGE,
-  planRouteNotAdded,
   type SharpenedArea,
   type SearchPin,
   searchPinAfter,
@@ -119,7 +119,10 @@ import {
   planModeReducer,
   planModeStart,
 } from "../plans/planMap";
-import { addDrawnRouteToPlan } from "../plans/addDrawnRoute";
+import {
+  drawnRouteTarget,
+  saveDrawnRouteForPlan,
+} from "../plans/addDrawnRoute";
 import { readCachedPlan } from "../plans/plansCache";
 import { PlanPlaceSheet } from "../plans/PlanPlaceSheet";
 
@@ -918,13 +921,15 @@ export function MapScreen({
   // it.
   drawRouteFor?: {
     placeId: string | null;
-    /** Drawn from this plan's page: the finished route goes into it. */
+    /** Drawn from this plan's page: the finished route is made in it, in a
+     *  colour from `planRouteColors` that the plan's ways lack. */
     planId?: string;
+    planRouteColors?: string[];
     nonce: number;
   } | null;
   /** Back to a plan's page: its banner was tapped, or a route drawn for it
    *  was saved. */
-  onOpenPlan?: (planId: string) => void;
+  onOpenPlan?: (planId: string, notice?: string) => void;
   // "Continue recording" from the Saved tab: pick a finished track back up. An
   // id only; the row comes from this screen's own list. It lands here rather
   // than being done on Saved because arming the recorder needs the location
@@ -2040,6 +2045,7 @@ export function MapScreen({
           routeDraft.open({ points: stored.points, anchors: stored.anchors });
           setEditingRouteId(stored.editingRouteId);
           setDraftPlaceId(stored.placeId);
+          setDraftPlanId(stored.planId);
           // Frame it too. A HUD announcing 22 points over an empty map reads
           // as "Logjam GPS lost my route" — the camera is the confirmation that
           // it came back. Handed to an effect below because fitCameraToBbox is
@@ -2100,9 +2106,10 @@ export function MapScreen({
       points: draftPoints(draft),
       anchors: draftAnchorIndices(draft),
       editingRouteId,
+      planId: draftPlanId,
       placeId: draftPlaceId,
     }).catch(console.error);
-  }, [draft, editingRouteId, draftPlaceId]);
+  }, [draft, editingRouteId, draftPlanId, draftPlaceId]);
 
   /** Save the drawn points as a route. Offline is the expected case, not a
    *  degraded one: createRouteLocal writes the mirror and queues the op, so the
@@ -2115,9 +2122,49 @@ export function MapScreen({
       // Anchors ride along so a snapped route reopens with the user's own
       // handful of vertices rather than every snapped one.
       const anchors = routeDraft.anchorIndices();
-      let planForRoute: { planId: string; routeId: string } | null = null;
+      const target = drawnRouteTarget({
+        editingRouteId,
+        placeId: draftPlaceId,
+        planId: draftPlanId,
+      });
       setSavingRoute(true);
       try {
+        if (target === "plan" && draftPlanId) {
+          // Made in the plan alone: nothing is saved on this phone. A plan
+          // that refuses for good offers to keep the route in Saved; any other
+          // failure (offline, say) leaves the draft armed.
+          const planId = draftPlanId;
+          const route = {
+            name,
+            points,
+            anchors,
+            ...(draftColor ? { color: draftColor } : {}),
+          };
+          let saved: Awaited<ReturnType<typeof saveDrawnRouteForPlan>>;
+          try {
+            saved = await saveDrawnRouteForPlan(planId, route, {
+              ask: confirm,
+              keep: async () => {
+                await createRouteLocal(route);
+              },
+            });
+          } catch (err) {
+            console.error(err);
+            notify(
+              messageFromError(err, TRIP_PLAN_PAGE.copy.addCopyFailed),
+              "error",
+            );
+            return;
+          }
+          if (saved === "declined") return;
+          setNamingRoute(false);
+          routeDraft.close();
+          setDraftPlanId(null);
+          setDraftColor(null);
+          if (saved === "added")
+            onOpenPlan?.(planId, TRIP_PLAN_PAGE.copy.routeAdded);
+          return;
+        }
         if (editingRouteId) {
           await updateRouteLocal(editingRouteId, {
             name,
@@ -2154,13 +2201,12 @@ export function MapScreen({
           // was, so the user can pick a different name or back out themselves.
           if (!filled) return;
         } else {
-          const routeId = await createRouteLocal({
+          await createRouteLocal({
             name,
             points,
             anchors,
             ...(draftColor ? { color: draftColor } : {}),
           });
-          planForRoute = draftPlanId ? { planId: draftPlanId, routeId } : null;
         }
         setNamingRoute(false);
         routeDraft.close();
@@ -2168,14 +2214,6 @@ export function MapScreen({
         setDraftPlaceId(null);
         setDraftPlanId(null);
         setDraftColor(null);
-        if (planForRoute) {
-          const { planId, routeId } = planForRoute;
-          if (await addDrawnRouteToPlan(planId, routeId)) onOpenPlan?.(planId);
-          else {
-            const notAdded = planRouteNotAdded();
-            notify(`${notAdded.title}. ${notAdded.body}`, "error");
-          }
-        }
       } catch (err) {
         console.error(err);
         notify("Couldn't save that route.", "error");
@@ -3202,7 +3240,13 @@ export function MapScreen({
       setEditingRouteId(null);
       setDraftPlaceId(drawRouteFor.placeId);
       setDraftPlanId(drawRouteFor.planId ?? null);
-      setDraftColor(pickNextTrackColor(routes.data?.map((r) => r.color) ?? []));
+      setDraftColor(
+        pickNextTrackColor(
+          drawRouteFor.planId
+            ? (drawRouteFor.planRouteColors ?? [])
+            : (routes.data?.map((r) => r.color) ?? []),
+        ),
+      );
     };
     if (routeDraft.active && routeDraft.points.length > 0) {
       handleCancelRouteDraw(arm);
@@ -5277,7 +5321,15 @@ export function MapScreen({
               // Lit from the map, not the default viewport: MapLibre Native
               // uploads a viewport light once (hillshade_layer_tweaker.cpp), so
               // the shading would depend on the bearing the layer mounted at.
-              paint={{ "hillshade-illumination-anchor": "map" }}
+              paint={{
+                "hillshade-illumination-anchor": "map",
+                "hillshade-exaggeration": hillshadeExaggeration(
+                  Math.max(
+                    r.layerMinZoom ?? 0,
+                    NSW_REGION.terrain.hillshade.minzoom,
+                  ),
+                ) as unknown as number,
+              }}
             />
           </ResolvedSource>
         ))}

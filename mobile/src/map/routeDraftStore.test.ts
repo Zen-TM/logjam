@@ -25,30 +25,39 @@ beforeEach(() => {
   sqlite.exec(SCHEMA_SQL);
 });
 
+const base = { points, anchors: [0, 1], editingRouteId: null };
+
 describe("the stored route draft", () => {
+  // Mutation: leave `planId` out of the INSERT, and a draft drawn for a plan
+  // comes back after a kill as an account route that Save writes to Saved.
+  it("keeps the plan it is being drawn for", async () => {
+    await saveRouteDraft({ ...base, planId: "plan-1", placeId: null });
+    expect(await readRouteDraft()).toEqual({
+      ...base,
+      planId: "plan-1",
+      placeId: null,
+    });
+  });
+
   // Mutation: leave `placeId` out of the INSERT, and a draft drawn for a
   // place's route slot comes back after a kill with no place.
   it("keeps the place it is being drawn for", async () => {
-    await saveRouteDraft({
-      points,
-      anchors: [0, 1],
-      editingRouteId: null,
-      placeId: "place-1",
-    });
+    await saveRouteDraft({ ...base, planId: null, placeId: "place-1" });
     expect(await readRouteDraft()).toEqual({
-      points,
-      anchors: [0, 1],
-      editingRouteId: null,
+      ...base,
+      planId: null,
       placeId: "place-1",
     });
   });
 
-  // Mutation: leave `placeId` out of the ON CONFLICT update, and a later save
-  // of the same draft keeps the place it had before.
-  it("forgets the place once the draft is saved without one", async () => {
-    const base = { points, anchors: [0, 1], editingRouteId: null };
-    await saveRouteDraft({ ...base, placeId: "place-1" });
-    await saveRouteDraft({ ...base, placeId: null });
-    expect((await readRouteDraft())?.placeId).toBeNull();
+  // Mutation: leave `planId` or `placeId` out of the ON CONFLICT update, and a
+  // later save of the same draft keeps the one it had before.
+  it("forgets the plan and the place once the draft is saved without them", async () => {
+    await saveRouteDraft({ ...base, planId: "plan-1", placeId: "place-1" });
+    await saveRouteDraft({ ...base, planId: null, placeId: null });
+    expect(await readRouteDraft()).toMatchObject({
+      planId: null,
+      placeId: null,
+    });
   });
 });

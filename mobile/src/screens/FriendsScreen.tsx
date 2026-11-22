@@ -429,7 +429,7 @@ export function FriendsScreen({
     ),
     list: () => (
       <HeroFlatList
-        style={styles.list}
+        style={[styles.list, heroCollapse.listStyle]}
         {...mergeScrollProps(heroCollapse.scrollProps, pull.scrollProps)}
         contentContainerStyle={[styles.listContent, heroCollapse.inset()]}
         data={items}
@@ -437,7 +437,7 @@ export function FriendsScreen({
         removeClippedSubviews={false}
         refreshControl={
           <pull.Refresh
-            progressViewOffset={heroCollapse.headerHeight}
+            progressViewOffset={heroCollapse.refreshOffset}
             refreshing={refreshing}
             onRefresh={onRefresh}
             tintColor={theme.accent}

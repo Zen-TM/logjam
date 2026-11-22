@@ -64,6 +64,7 @@ export * from "./plans.js";
 export * from "./planVerbs.js";
 export * from "./planPerson.js";
 export * from "./planSections.js";
+export * from "./planStranded.js";
 export * from "./planOffline.js";
 
 /** Every screen contract, so `contracts.test.ts` checks a new one unasked. */

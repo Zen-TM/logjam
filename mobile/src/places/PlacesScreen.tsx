@@ -805,7 +805,7 @@ export function PlacesScreen({
 
     list: (
       <HeroFlatList
-        style={styles.list}
+        style={[styles.list, heroCollapse.listStyle]}
         {...mergeScrollProps(heroCollapse.scrollProps, pull.scrollProps)}
         contentContainerStyle={[styles.listContent, heroCollapse.inset()]}
         data={visible}
@@ -822,7 +822,7 @@ export function PlacesScreen({
         removeClippedSubviews={false}
         refreshControl={
           <pull.Refresh
-            progressViewOffset={heroCollapse.headerHeight}
+            progressViewOffset={heroCollapse.refreshOffset}
             refreshing={syncStatus.state === "syncing"}
             onRefresh={() => {
               if (!online) {

@@ -119,7 +119,7 @@ import PlanDetailPanel from "./plans/PlanDetailPanel";
 import PlanInvitedPage from "./plans/PlanInvitedPage";
 import PlanInviteLinkDialog from "./plans/PlanInviteLinkDialog";
 import { planBounds, planMapPress } from "./plans/plansModel";
-import { usePlan, usePlans } from "../plansApi";
+import { addPlanItem, usePlan, usePlans } from "../plansApi";
 import ConfirmDialog from "./dialogs/ConfirmDialog";
 import {
   abandonConfirm,
@@ -142,12 +142,12 @@ import {
   MAP_TERRAIN,
   canyonOffersFor,
   opensPreview,
-  PLAN_ADD_VERBS,
-  planVerbsFor,
+  planItemAddMenu,
   TRIP_PLAN_PAGE,
   tripPlansBadgeCount,
   tripPlanTripLogPrefill,
   type TripPlanItemKind,
+  type TripPlanView,
   type TripPlanPageView,
 } from "@logjam/shared";
 import type { MapPointCoord, OverlaySource } from "@logjam/shared";
@@ -305,6 +305,9 @@ function App() {
   // The place whose route slot a new drawing fills, when "Add a way" asked for
   // the pen; the save links it and the way out comes back to that place.
   const [drawPlaceId, setDrawPlaceId] = useState<string | null>(null);
+  // The plan a new drawing is for, when its page asked for the pen: the save
+  // adds the way to that plan alone, and the way out comes back to its page.
+  const [drawPlanId, setDrawPlanId] = useState<string | null>(null);
   const displaceConfirm = useConfirm();
   const [savingRoute, setSavingRoute] = useState(false);
   const [namingRoute, setNamingRoute] = useState(false);
@@ -338,6 +341,9 @@ function App() {
 
   // Coordinate picking mode for PlaceDialog
   const [pickingCoords, setPickingCoords] = useState(false);
+  // The pick is the Add a place tool's own, so the other tools may take over
+  // from it; a form's pick (false) is not theirs to end.
+  const [toolPick, setToolPick] = useState(false);
   const coordsCallbackRef = useRef<((lat: number, lng: number) => void) | null>(
     null,
   );
@@ -618,11 +624,13 @@ function App() {
     coordsCallbackRef.current?.(lat, lng);
     coordsCallbackRef.current = null;
     setPickingCoords(false);
+    setToolPick(false);
   }, []);
 
   const cancelPickingCoords = useCallback(() => {
     coordsCallbackRef.current = null;
     setPickingCoords(false);
+    setToolPick(false);
   }, []);
 
   /**
@@ -773,7 +781,10 @@ function App() {
       (activePanel === "ways" || activePanel === "plan-detail" || showWays),
   );
   const { openPicker: openWayImportPicker, input: wayImportInput } =
-    useWayImport(refetchStandaloneFiles);
+    useWayImport(() => {
+      refetchStandaloneFiles();
+      refetchCurrentUser();
+    });
   const shownStandaloneIds = useMemo(
     () => (showWays ? standaloneFiles.map((file) => file.id) : []),
     [showWays, standaloneFiles],
@@ -845,9 +856,8 @@ function App() {
     if (
       pick &&
       planOnMap &&
-      planVerbsFor(PLAN_ADD_VERBS, "web", planOnMap.myRole, {
-        archived: planOnMap.archivedAt != null,
-      }).some((verb) => verb.id === "copy")
+      planItemAddMenu("web", planOnMap.myRole, planOnMap.archivedAt != null) !=
+        null
     )
       setPlanAddCopy(pick);
   };
@@ -1290,8 +1300,10 @@ function App() {
     // being edited, or to the list a new route came from. A save calls this
     // too and then opens the saved way, which wins.
     setDrawPlaceId(null);
+    setDrawPlanId(null);
     setActivePanel(
       drawExitPanel({
+        drawPlanId,
         drawPlaceId,
         editingRouteId,
         selectedWayId: selectedWay?.id ?? null,
@@ -1324,19 +1336,22 @@ function App() {
   const requestCancelRoute = () =>
     draftChanged ? setRouteConfirm("cancel") : cancelDrawingRoute();
 
-  // Escape leaves an armed Measure or Draw tool, as its × does (the route's
-  // goes through the discard confirm). Heard on the document because the user
-  // is on the map, where no panel holds the key; a layer above it (a dialog, a
-  // menu, a field) has already consumed the press.
-  const cancelArmedTool = useEffectEvent(() => {
-    if (drawingRoute) requestCancelRoute();
+  // Escape closes one layer per press. A pick armed over a tool is the top
+  // one, so it ends first; then an armed Measure or Draw tool leaves, as its ×
+  // does (the route's goes through the discard confirm). Heard on the document
+  // because the user is on the map, where no panel holds the key; a layer above
+  // it (a dialog, a menu, a field) has already consumed the press.
+  const escapeTopLayer = useEffectEvent(() => {
+    if (pickingCoords) cancelPickingCoords();
+    else if (drawingRoute) requestCancelRoute();
     else setActivePanel(null);
   });
   const toolArmed = measuring || drawingRoute;
   // The panel is a landmark to skip to only beside the map: a phone has a sheet.
   const isNarrow = useIsMobile();
+  const escapable = toolArmed || pickingCoords;
   useEffect(() => {
-    if (!toolArmed) return;
+    if (!escapable) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape" || event.defaultPrevented) return;
       if (
@@ -1346,11 +1361,11 @@ function App() {
       )
         return;
       event.preventDefault();
-      cancelArmedTool();
+      escapeTopLayer();
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [toolArmed]);
+  }, [escapable]);
 
   // While checking for an existing session, show a branded splash instead of
   // a blank flash before the sign-in form or map appears.
@@ -1419,6 +1434,7 @@ function App() {
   const startDrawingRoute = (from?: MapPointCoord) => {
     setEditingRouteId(null);
     setDrawPlaceId(null);
+    setDrawPlanId(null);
     routeDraft.reset();
     if (from) routeDraft.addAnchor([from.longitude, from.latitude]);
     const nextColor = pickNextTrackColor(routes.map((r) => r.color));
@@ -1427,6 +1443,15 @@ function App() {
     // The tool is a PAGE now, not a card over the map: the panel is where a
     // route's figures already live, and the canvas stays clear for drawing.
     setActivePanel("way-draw");
+  };
+
+  /** "Draw a route" from a plan's page: the way is made in the plan, not in
+   *  the account, in a colour the plan's other ways lack. */
+  const startDrawingRouteForPlan = (plan: TripPlanView) => {
+    startDrawingRoute();
+    setDrawPlanId(plan.id);
+    setDrawColor(pickNextTrackColor(plan.routes.map((route) => route.color)));
+    setPlanView("items");
   };
 
   /** "Draw a route on the map" from a place's Add a way. */
@@ -1455,6 +1480,7 @@ function App() {
   const startEditingRoute = (route: TRoute) => {
     setEditingRouteId(route.id);
     setDrawPlaceId(null);
+    setDrawPlanId(null);
     // Anchors come back with the route, so a snapped line reopens with the
     // user's own handful of points rather than every snapped vertex.
     routeDraft.reset({ points: route.points, anchors: route.anchors });
@@ -1508,6 +1534,13 @@ function App() {
         ...(chosenColor ? { color: chosenColor } : {}),
       };
       let result: Awaited<ReturnType<typeof createRoute>> | undefined;
+      if (drawPlanId && !editingRouteId) {
+        await addPlanItem(drawPlanId, { kind: "route", new: payload });
+        setNamingRoute(false);
+        cancelDrawingRoute();
+        toast.done(TRIP_PLAN_PAGE.copy.routeAdded);
+        return;
+      }
       if (editingRouteId) result = await updateRoute(editingRouteId, payload);
       else if (placeId) {
         try {
@@ -1681,12 +1714,49 @@ function App() {
   // Verbs that START on the map; `MAP_TOOLS` names them and orders them.
   // Handed to Map as actions, not built here: `startMeasuring` writes a ref, and
   // react-hooks/refs refuses a function that does passed to a call in render.
+  // One tool cancels another, both ways: a tool chosen over the Add a place
+  // pick ends it first. (The tray is shut while a form's pick is armed.)
+  const endToolPick = () => {
+    if (toolPick) cancelPickingCoords();
+  };
   const mapToolActions: MapToolActions = {
-    measure: { onSelect: () => startMeasuring() },
-    route: { onSelect: () => startDrawingRoute() },
-    place: { onSelect: () => setShowAdd(true) },
+    measure: {
+      onSelect: () => {
+        endToolPick();
+        startMeasuring();
+      },
+    },
+    route: {
+      onSelect: () => {
+        endToolPick();
+        startDrawingRoute();
+      },
+    },
+    // Where first: the form opens on the spot picked, and a cancel opens
+    // nothing. It ends an armed Measure or Draw tool first, by that tool's own
+    // way out (a route with points asks before it goes), and closes the page
+    // beside the map, a plan's included, as a filter's area pick does. Chosen
+    // again over its own pick it does nothing.
+    place: {
+      onSelect: () => {
+        if (pickingCoords) return;
+        const pick = () => {
+          setActivePanel(null);
+          setToolPick(true);
+          startPickingCoords((latitude, longitude) => {
+            setAddPlaceAt({ latitude, longitude });
+            setShowAdd(true);
+          });
+        };
+        if (drawingRoute) {
+          afterRouteCancel.current = pick;
+          requestCancelRoute();
+        } else pick();
+      },
+    },
     makeMap: {
       onSelect: () => {
+        endToolPick();
         setBoxPick((pick) => endBox(pick, "export"));
         freshExportDialog();
         setShowGeoPdf(true);
@@ -1694,7 +1764,12 @@ function App() {
     },
     // The dialog draws the area itself ("Draw the area"), as the Layers
     // popover's Sharpen button opens it.
-    sharpen: { onSelect: () => setShowTopo(true) },
+    sharpen: {
+      onSelect: () => {
+        endToolPick();
+        setShowTopo(true);
+      },
+    },
   };
   // Mobile: any map-selection flow needs the bottom sheet out of the way so the
   // map is tappable. Collapses the sheet to peek; restored when the flow ends.
@@ -1936,6 +2011,8 @@ function App() {
                   }}
                   addCopyRequest={planAddCopy}
                   onAddCopyRequestConsumed={consumePlanAddCopy}
+                  onPickPoint={startPickingCoords}
+                  onDrawRoute={startDrawingRouteForPlan}
                   onBack={() => {
                     setSelectedPlanId(null);
                     setActivePanel("plans");
@@ -2203,7 +2280,11 @@ function App() {
             onTopoFlyConsumed={() => setTopoFlyTarget(null)}
             flyToPlace={flyToPlace}
             onFlyToPlaceConsumed={() => setFlyToPlace(null)}
-            panelOpen={activePanel !== null}
+            // The page is out of sight while the UI is dimmed for a pick, so
+            // the map is measured from its own edge then: the pick's pill and
+            // Cancel centre on what shows. (A topo pick leaves it up.)
+            panelOpen={activePanel !== null && !dimUI}
+            toolsLocked={pickingCoords && !toolPick}
             sheetOpen={sidebarSheetOpen}
             placeHighlight={placeHighlight}
             placeTypes={placeTypes}
