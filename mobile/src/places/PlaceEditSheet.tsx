@@ -14,17 +14,21 @@ import {
   ATTRIBUTE_NOUN,
   contractSectionKeys,
   defsForType,
+  deleteSourceLabel,
   isValidLatitude,
   isValidLongitude,
   placeAttributesTitle,
   PLACE_FORM,
   type SectionKeysOn,
   setFieldValues as withFieldValues,
+  sourceRows,
+  sourcesPatch,
   SYSTEM_FIELD_DEFS,
   SYSTEM_PLACE_TYPE_IDS,
   userFieldValues,
   validatePlacePayload,
   type ScopedCustomFieldDef,
+  type SourceRow,
   coordinateEntry,
 } from "@logjam/shared";
 
@@ -73,6 +77,7 @@ import {
   ErrorBanner,
   Field,
   FormStack,
+  IconButton,
   Row,
   SectionHeader,
   ChipRail,
@@ -118,6 +123,7 @@ type FormValues = {
   notes: string;
   placeTypeId: string;
   fieldValues: Record<string, string>;
+  sources: SourceRow[];
 };
 
 /** An emptied field is the same as one never filled, so it is left out. */
@@ -220,6 +226,12 @@ export function PlaceEditSheet({
   // Values are strings while editing and coerced on save, like every other
   // custom-field form.
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
+  const [sources, setSources] = useState<SourceRow[]>([]);
+  // The one Link that refused the save, under its own field.
+  const [sourceError, setSourceError] = useState<{
+    index: number;
+    message: string;
+  } | null>(null);
   const [dateFieldKey, setDateFieldKey] = useState<string | null>(null);
   // The form as seeded, to tell an edit from an untouched sheet (§10).
   const [pristine, setPristine] = useState("");
@@ -250,6 +262,7 @@ export function PlaceEditSheet({
     setNameError(null);
     setLatitudeError(null);
     setLongitudeError(null);
+    setSourceError(null);
     setFormError(null);
     setSaving(false);
     const start: FormValues = {
@@ -273,6 +286,7 @@ export function PlaceEditSheet({
       // The grades are ordinary field values, seeded by the one path every
       // other field uses.
       fieldValues: fieldValueStrings(userFieldValues(place?.fieldValues)),
+      sources: sourceRows(place?.fieldValues),
     };
     setName(start.name);
     setAltNames(start.altNames);
@@ -283,6 +297,7 @@ export function PlaceEditSheet({
     setNotes(start.notes);
     setPlaceTypeId(start.placeTypeId);
     setFieldValues(start.fieldValues);
+    setSources(start.sources);
     setPristine(formFingerprint(start));
     setMode("form");
     setEditingField(null);
@@ -375,6 +390,7 @@ export function PlaceEditSheet({
     setNameError(null);
     setLatitudeError(null);
     setLongitudeError(null);
+    setSourceError(null);
     setFormError(null);
     const effectiveCustomFields = coerceCustomFields(
       fieldValues,
@@ -423,10 +439,23 @@ export function PlaceEditSheet({
         defs: [...SYSTEM_FIELD_DEFS, ...typeFieldDefs],
       },
     );
+    // The same check Logjam Web runs, and only on sources the user changed.
+    // Merged like a field value below: null removes the key.
+    const sourcesResult = sourcesPatch(sources, place?.fieldValues);
     setNameError(nameProblem);
     setLatitudeError(latitudeProblem);
     setLongitudeError(longitudeProblem);
-    if (nameProblem || latitudeProblem || longitudeProblem) {
+    setSourceError(
+      "error" in sourcesResult
+        ? { index: sourcesResult.index, message: sourcesResult.error }
+        : null,
+    );
+    if (
+      nameProblem ||
+      latitudeProblem ||
+      longitudeProblem ||
+      "error" in sourcesResult
+    ) {
       setFormError(PLACE_FORM.copy.fixFields);
       return;
     }
@@ -455,17 +484,16 @@ export function PlaceEditSheet({
         if (placeTypeId !== place.placeTypeId)
           changes.placeTypeId = placeTypeId;
         // `fieldValues` is replaced wholesale by the server, so the edit is
-        // built OVER the place's existing values — `_sources`, which only the
-        // web writes, and any key another client added would otherwise be
-        // dropped by an edit made on the phone.
+        // built OVER the place's existing values — any key another client
+        // added would otherwise be dropped by an edit made on the phone.
         // Built OVER the stored values, never rebuilt from the form: that is
-        // what keeps `_sources`, another client's key, and — on a type change —
-        // the OLD type's values, which the server needs in the payload to park
-        // them in `foreignFields` rather than lose them (§2.6).
-        const nextValues = withFieldValues(
-          place.fieldValues,
-          effectiveCustomFields,
-        );
+        // what keeps another client's key, and — on a type change — the OLD
+        // type's values, which the server needs in the payload to park them in
+        // `foreignFields` rather than lose them (§2.6).
+        const nextValues = withFieldValues(place.fieldValues, {
+          ...effectiveCustomFields,
+          ...sourcesResult.patch,
+        });
         if (!sameFieldValues(nextValues, place.fieldValues ?? {})) {
           changes.fieldValues = nextValues;
         }
@@ -484,7 +512,13 @@ export function PlaceEditSheet({
           altNames: draft.altNames,
           notes: draft.notes,
           placeTypeId,
-          fieldValues: withFieldValues({}, effectiveCustomFields),
+          fieldValues: withFieldValues(
+            {},
+            {
+              ...effectiveCustomFields,
+              ...sourcesResult.patch,
+            },
+          ),
         });
         // After the place's own create, so each waits behind it in the outbox.
         const { failed } = await queueStagedMedia(newId, staged, (file) =>
@@ -512,6 +546,7 @@ export function PlaceEditSheet({
     latitudeShown,
     longitudeShown,
     placeTypeId,
+    sources,
     staged,
     setStaged,
     typeFieldDefs,
@@ -557,6 +592,7 @@ export function PlaceEditSheet({
       notes,
       placeTypeId,
       fieldValues,
+      sources,
     }) !== pristine ||
       hasStagedMedia(staged));
 
@@ -789,6 +825,64 @@ export function PlaceEditSheet({
           }
           chevron
           onPress={() => setMode("fields")}
+        />
+      </>
+    ),
+    sources: (
+      <>
+        <SectionHeader title={PLACE_FORM.copy.sources} />
+        {sources.map((source, index) => (
+          // Rows have no identity of their own, and are only ever added at the
+          // end or removed, so the index is a stable key within an edit.
+          <FormStack key={index}>
+            <TextField
+              label={PLACE_FORM.copy.sourceLabel}
+              value={source.label}
+              autoCapitalize="sentences"
+              onChangeText={(label) =>
+                setSources((rows) =>
+                  rows.map((row, at) =>
+                    at === index ? { ...row, label } : row,
+                  ),
+                )
+              }
+              accessory={
+                <IconButton
+                  icon="delete"
+                  accessibilityLabel={deleteSourceLabel(source, index)}
+                  color={theme.warning}
+                  onPress={() => {
+                    setSourceError(null);
+                    setSources((rows) => rows.filter((_, at) => at !== index));
+                  }}
+                />
+              }
+            />
+            <TextField
+              label={PLACE_FORM.copy.sourceLink}
+              value={source.url}
+              placeholder={PLACE_FORM.copy.sourceLinkPlaceholder}
+              keyboardType="url"
+              autoCapitalize="none"
+              autoCorrect={false}
+              error={sourceError?.index === index ? sourceError.message : null}
+              onChangeText={(url) => {
+                if (sourceError?.index === index) setSourceError(null);
+                setSources((rows) =>
+                  rows.map((row, at) => (at === index ? { ...row, url } : row)),
+                );
+              }}
+            />
+          </FormStack>
+        ))}
+        <Button
+          compact
+          variant="outlineAccent"
+          icon="add"
+          label={PLACE_FORM.copy.addSource}
+          onPress={() =>
+            setSources((rows) => [...rows, { label: "", url: "" }])
+          }
         />
       </>
     ),

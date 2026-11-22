@@ -607,6 +607,10 @@ export function PlansScreen({
     shown.kind !== "loading" &&
     shown.kind !== "failed" &&
     shown.kind !== "neverFetched";
+  // With nothing upcoming the empty state carries the one add; Past and
+  // Archived have none, so the hero keeps it there.
+  const emptyCarriesAdd =
+    listReady && bucket === "upcoming" && rows.length === 0;
   const sections: Record<
     SectionKeysOn<typeof TRIP_PLANS_LIST, "gps">,
     ReactNode
@@ -630,28 +634,20 @@ export function PlansScreen({
             onBack={onBack}
             backLabel={backLabel}
             actions={
-              compact ? (
+              emptyCarriesAdd ? undefined : (
                 <HeroAdd
                   label={copy.add}
                   icon="add"
-                  compact
+                  compact={compact}
                   disabled={!online}
                   disabledReason={unavailableReasonText("needs-connection")}
                   onPress={() => setNewOpen(true)}
                 />
-              ) : undefined
+              )
             }
           >
             {compact ? undefined : (
               <View style={styles.pills}>
-                <Button
-                  label={copy.add}
-                  icon="add"
-                  compact
-                  disabled={!online}
-                  disabledReason={unavailableReasonText("needs-connection")}
-                  onPress={() => setNewOpen(true)}
-                />
                 <SyncStatusPills online={online} pendingCount={0} />
               </View>
             )}

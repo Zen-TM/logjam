@@ -505,6 +505,136 @@ describe("adding a route from the place page", () => {
   });
 });
 
+// The edit dialog's Route section is the place page's own, so the same
+// "Add a way" dialog opens from it.
+describe("adding a route from the edit dialog", () => {
+  const editDialog = () => screen.findByRole("dialog", { name: "Edit place" });
+
+  // Mutation: give PlaceDialog back its own route uploader, or drop the
+  // `routeSlot` prop from the panel's PlaceDialog, and the dialog has no "Add a
+  // way" button; keep the form open (`open={open && !addingWay}`), and it
+  // stands under the dialog.
+  it("opens the place page's Add a way dialog, and links a drawn route", async () => {
+    const onRoutesChanged = vi.fn();
+    renderPanel({
+      verbRequest: { id: "edit" },
+      routes: [route({ id: "mine", name: "Mine" })],
+      onRoutesChanged,
+    });
+    const dialog = await editDialog();
+    fireEvent.click(
+      await within(dialog).findByRole("button", { name: ADD_WAY.copy.title }),
+    );
+    const addWay = await screen.findByRole("dialog", {
+      name: ADD_WAY.copy.title,
+    });
+    // One modal at a time: the form steps aside, and is back after.
+    expect(screen.queryByRole("dialog", { name: "Edit place" })).toBeNull();
+    fireEvent.click(
+      within(addWay).getByRole("button", {
+        name: new RegExp(ADD_WAY.copy.routeTitle),
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Mine/ }));
+    await waitFor(() =>
+      expect(api.updateRoute).toHaveBeenCalledWith("mine", { placeId: "p1" }),
+    );
+    expect(onRoutesChanged).toHaveBeenCalled();
+  });
+
+  // Mutation: hand the pen over without `setShowEdit(false)`.
+  it("closes the dialog to hand the map's pen this place", async () => {
+    const onDrawRoute = vi.fn();
+    renderPanel({ verbRequest: { id: "edit" }, onDrawRoute });
+    const dialog = await editDialog();
+    fireEvent.click(
+      await within(dialog).findByRole("button", { name: ADD_WAY.copy.title }),
+    );
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: new RegExp(ADD_WAY.copy.drawTitle),
+      }),
+    );
+    expect(onDrawRoute).toHaveBeenCalledWith("p1");
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog", { name: "Edit place" })).toBeNull(),
+    );
+  });
+
+  // Mutation: drop `drawBlockedReason` for a dirty form (the row is then
+  // pressable and closes the dialog on unsaved edits), or drop the row there
+  // (DESIGN.md §5: disabled with a reason, not absent).
+  it("keeps the pen's row, disabled with a reason, once the form holds edits", async () => {
+    const onDrawRoute = vi.fn();
+    renderPanel({ verbRequest: { id: "edit" }, onDrawRoute });
+    const dialog = await editDialog();
+    fireEvent.change(within(dialog).getByRole("textbox", { name: /^Name/ }), {
+      target: { value: "Claustral Canyon" },
+    });
+    fireEvent.click(
+      await within(dialog).findByRole("button", { name: ADD_WAY.copy.title }),
+    );
+    const addWay = await screen.findByRole("dialog", {
+      name: ADD_WAY.copy.title,
+    });
+    const draw = within(addWay).getByRole("button", {
+      name: new RegExp(ADD_WAY.copy.drawTitle),
+    });
+    expect(draw.getAttribute("aria-disabled")).toBe("true");
+    // jsdom has no Popover API: the tooltip needs these to open.
+    HTMLElement.prototype.showPopover = () => {};
+    HTMLElement.prototype.hidePopover = () => {};
+    fireEvent.focus(draw);
+    expect(await screen.findByText("Save your changes first.")).toBeTruthy();
+    fireEvent.click(draw);
+    expect(onDrawRoute).not.toHaveBeenCalled();
+    fireEvent.click(within(addWay).getByRole("button", { name: "Cancel" }));
+    expect(
+      await screen.findByRole("dialog", { name: "Edit place" }),
+    ).toBeTruthy();
+    expect(
+      within(addWay).getByRole("button", {
+        name: new RegExp(ADD_WAY.copy.routeTitle),
+      }),
+    ).toBeTruthy();
+  });
+});
+
+// "Open way" leaves the place page, and the edit dialog goes with it.
+describe("the edit dialog's Open way", () => {
+  const editDialog = () => screen.findByRole("dialog", { name: "Edit place" });
+  const withRoute = {
+    routes: [route({ id: "r1", name: "Claustral line", placeId: "p1" })],
+  };
+  const openWay = (dialog: HTMLElement) =>
+    within(dialog).findByRole("button", { name: "Open way" });
+
+  // Mutation: drop `leaveBlockedReason` from the Open way button, and a press
+  // with edits typed unmounts the dialog and loses them unasked.
+  it("waits while the form holds edits, and the dialog stays", async () => {
+    const onOpenRoute = vi.fn();
+    renderPanel({ verbRequest: { id: "edit" }, onOpenRoute, ...withRoute });
+    const dialog = await editDialog();
+    fireEvent.change(within(dialog).getByRole("textbox", { name: /^Name/ }), {
+      target: { value: "Claustral Canyon" },
+    });
+    const button = await openWay(dialog);
+    expect(button.getAttribute("aria-disabled")).toBe("true");
+    fireEvent.click(button);
+    expect(onOpenRoute).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog", { name: "Edit place" })).toBeTruthy();
+  });
+
+  it("opens the way while the form is clean", async () => {
+    const onOpenRoute = vi.fn();
+    renderPanel({ verbRequest: { id: "edit" }, onOpenRoute, ...withRoute });
+    fireEvent.click(await openWay(await editDialog()));
+    expect(onOpenRoute).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "r1" }),
+    );
+  });
+});
+
 describe("the place panel's notes", () => {
   // Mutation: draw `current.notes` as a raw paragraph again, and Markdown in a
   // note (shared with a sharee too) shows as typed.

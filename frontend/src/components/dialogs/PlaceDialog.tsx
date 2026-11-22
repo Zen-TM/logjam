@@ -23,7 +23,6 @@ import {
   buildCustomFieldDef,
   fieldValue,
   setFieldValues as withFieldValues,
-  SOURCES_FIELD_KEY,
   SYSTEM_PLACE_TYPE_IDS,
   defsForType,
   LATITUDE_RANGE,
@@ -33,6 +32,10 @@ import {
   isValidLongitude,
   coordinateNumber,
   PLACE_PAGE,
+  deleteSourceLabel,
+  sourceRows,
+  sourcesPatch,
+  type SourceRow,
 } from "@logjam/shared";
 import type { NumericFieldConstraints } from "../../numberInput";
 import type { TPlace, TPlaceType } from "../../placeUtils";
@@ -42,7 +45,6 @@ import {
   deletePlace,
   getPlaceDetail,
   createCustomField,
-  isHttpUrl,
 } from "../../placeUtils";
 import { messageFromError } from "../../errors/messageFromError";
 import { useToast } from "../feedback/ToastProvider";
@@ -67,8 +69,6 @@ import {
 } from "../../ui";
 import classes from "./PlaceDialog.module.css";
 
-type Source = { label: string; url: string };
-
 const LAT_CONSTRAINTS: NumericFieldConstraints = {
   min: LATITUDE_RANGE.min,
   max: LATITUDE_RANGE.max,
@@ -85,6 +85,15 @@ const LNG_CONSTRAINTS: NumericFieldConstraints = {
  * fields render generically through CustomFieldInput/railStops matching Logjam GPS,
  * with descriptions drawn from hints on the definitions (SYSTEM_FIELD_DEFS).
  */
+/** What the form tells the Route section it hosts. */
+export type RouteSlotContext = {
+  /** Why leaving for another page would lose this form, while it would. */
+  leaveBlockedReason?: string;
+  addingWay: boolean;
+  setAddingWay: (adding: boolean) => void;
+};
+export type RouteSlot = { section: ReactNode; dialog: ReactNode };
+
 function PlaceDialog({
   place,
   open,
@@ -96,6 +105,7 @@ function PlaceDialog({
   onCustomFieldDefsChange,
   placeTypes,
   onMediaChanged,
+  routeSlot: routeSlotFor,
   initialCoords = null,
 }: {
   place: TPlace | null;
@@ -115,6 +125,11 @@ function PlaceDialog({
   // Called after a media/track upload or delete so the opener (place detail
   // panel) can refresh its slideshow/track without waiting for a Save.
   onMediaChanged?: () => void;
+  /** Edit mode: the place page's own Route section and Add a way dialog, so a
+   *  way is added the same way from here (nothing is shown there without it).
+   *  The dialog is drawn beside this one, which steps aside while it is open
+   *  and keeps its form. */
+  routeSlot?: (ctx: RouteSlotContext) => RouteSlot;
   /** Create mode only: the spot the form opens on ("Add a place here"), so the
    *  coordinates are already in and the user names it. */
   initialCoords?: { latitude: number; longitude: number } | null;
@@ -128,7 +143,12 @@ function PlaceDialog({
   const [latitude, setLatitude] = useState("");
   const [longitude, setLongitude] = useState("");
   const [notes, setNotes] = useState("");
-  const [sources, setSources] = useState<Source[]>([]);
+  const [sources, setSources] = useState<SourceRow[]>([]);
+  // The one Link that refused the save, under its own field.
+  const [sourceError, setSourceError] = useState<{
+    index: number;
+    message: string;
+  } | null>(null);
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
   // THE TYPE, chosen first. It decides which fields the form below has, so it
   // sits at the top of the dialog rather than among them.
@@ -175,8 +195,9 @@ function PlaceDialog({
   const [media, setMedia] = useState<MediaItem[]>([]);
   const [mediaLoading, setMediaLoading] = useState(false);
   const [draftPlaceId, setDraftPlaceId] = useState<string | null>(null);
-  // Files this open of the dialog has uploaded. They are saved the moment they
-  // land, so they count as an unsaved change and Discard takes them back out.
+  // Photos and videos this open of the dialog has uploaded (and, on a new place,
+  // its route file). They are saved the moment they land, so they count as an unsaved change and Discard takes
+  // them back out.
   const [uploadedIds, setUploadedIds] = useState<string[]>([]);
   // Uploads in flight, across the dialog's drop zones.
   const [uploading, setUploading] = useState(0);
@@ -184,6 +205,10 @@ function PlaceDialog({
     setUploading((n) => n + (busy ? 1 : -1));
   const committedRef = useRef(false);
   const draftPromiseRef = useRef<Promise<string> | null>(null);
+
+  // The Add a way dialog is open over the Route section: this form steps aside
+  // for it, as for a pick, and is still here, as it was, when it closes.
+  const [addingWay, setAddingWay] = useState(false);
 
   // Tracks a pick-on-map cycle, so returning from it doesn't reset the form.
   const [picking, setPicking] = useState(false);
@@ -228,7 +253,7 @@ function PlaceDialog({
     let initialLatitude: string;
     let initialLongitude: string;
     let initialNotes: string;
-    let initialSources: Source[];
+    let initialSources: SourceRow[];
     let initialFieldValues: Record<string, string>;
     // Editing keeps the place's own type; creating defaults to Canyon, which
     // is what Logjam is for. Retyping IS allowed on an edit: miscategorising
@@ -242,12 +267,7 @@ function PlaceDialog({
       initialLatitude = String(place.latitude);
       initialLongitude = String(place.longitude);
       initialNotes = place.notes ?? "";
-      const storedSources = place.fieldValues?.[SOURCES_FIELD_KEY];
-      initialSources = (
-        Array.isArray(storedSources)
-          ? (storedSources as [string, string][])
-          : []
-      ).map(([label, url]) => ({ label, url }));
+      initialSources = sourceRows(place.fieldValues);
       // Existing field values as strings — the grades among them, which is
       // what makes them ordinary. Reads the top level of fieldValues.
       const vals: Record<string, string> = {};
@@ -288,6 +308,7 @@ function PlaceDialog({
       }),
     );
     setError(null);
+    setSourceError(null);
     setShowFieldErrors(false);
     setShowAddField(false);
     setNewFieldLabel("");
@@ -300,6 +321,7 @@ function PlaceDialog({
     setMedia([]);
     setDraftPlaceId(null);
     setUploadedIds([]);
+    setAddingWay(false);
     setFormSession((session) => session + 1);
     // Focus is the kit Dialog's: it moves to `data-autofocus` (the name field)
     // when the dialog is shown, and back to the opener on close.
@@ -313,7 +335,8 @@ function PlaceDialog({
   // Real dirty-check: current form fields vs. the snapshot taken when the
   // dialog was (re)populated — not just "the dialog is open".
   // Custom-field-def edits are excluded: they persist through their own
-  // endpoint. Uploads persist too, but only Discard can undo them.
+  // endpoint. Photo and video uploads persist too, but only Discard can undo
+  // them; a way added from the Route section is saved at once, as on the page.
   const isDirty =
     open &&
     initialFormSnapshot !== null &&
@@ -455,6 +478,7 @@ function PlaceDialog({
   async function handleSave() {
     setSaving(true);
     setError(null);
+    setSourceError(null);
     try {
       const parsedLat = coordinateNumber(latitude);
       const parsedLng = coordinateNumber(longitude);
@@ -476,21 +500,19 @@ function PlaceDialog({
         return;
       }
 
-      // Reject non-http(s) source URLs (javascript:, data:, ...)
-      // rather than storing them verbatim to later render as a clickable href
-      // (see isHttpUrl.test.ts).
-      const invalidSourceUrl = sources.some(
-        (s) => s.url.trim() && !isHttpUrl(s.url.trim()),
-      );
-      if (invalidSourceUrl) {
-        setError("Source URLs must start with http:// or https://.");
+      // Non-http(s) links are refused rather than stored to later render as a
+      // clickable href, and only sources the user changed are checked
+      // (shared/src/placeSources.test.ts).
+      const sourcesResult = sourcesPatch(sources, place?.fieldValues);
+      if ("error" in sourcesResult) {
+        setSourceError({
+          index: sourcesResult.index,
+          message: sourcesResult.error,
+        });
+        setError(PLACE_FORM.copy.fixFields);
         setSaving(false);
         return;
       }
-
-      const cleanSources: [string, string][] = sources
-        .filter((s) => s.label.trim())
-        .map((s) => [s.label.trim(), s.url.trim()]);
 
       // ONLY THE FIELDS THIS FORM SHOWED. Iterating every definition wrote a
       // null for the ones scoped to other types — and `setFieldValues` treats a
@@ -520,7 +542,7 @@ function PlaceDialog({
         notes: notes || null,
         fieldValues: withFieldValues(place?.fieldValues ?? {}, {
           ...attributes,
-          [SOURCES_FIELD_KEY]: cleanSources.length > 0 ? cleanSources : null,
+          ...sourcesResult.patch,
         }),
       };
 
@@ -616,6 +638,23 @@ function PlaceDialog({
 
   const typeName =
     placeTypes.find((type) => type.id === placeTypeId)?.name ?? null;
+
+  const routeSlot =
+    place && routeSlotFor
+      ? routeSlotFor({
+          // The reason a leave would lose something, said as the Cancel button
+          // says it while the same thing is going on.
+          leaveBlockedReason: saving
+            ? "Saving…"
+            : uploading > 0
+              ? "Uploading…"
+              : isDirty
+                ? "Save your changes first."
+                : undefined,
+          addingWay,
+          setAddingWay,
+        })
+      : null;
 
   const sections: Record<SectionKeysOn<typeof PLACE_FORM, "web">, ReactNode> = {
     type: (
@@ -821,7 +860,7 @@ function PlaceDialog({
           {sources.map((source, index) => (
             <div key={index} className={classes.source}>
               <TextField
-                label="Label"
+                label={PLACE_FORM.copy.sourceLabel}
                 className={classes.grow}
                 value={source.label}
                 onChange={(event) => {
@@ -831,11 +870,15 @@ function PlaceDialog({
                 }}
               />
               <TextField
-                label="Link"
+                label={PLACE_FORM.copy.sourceLink}
                 className={classes.grow}
                 value={source.url}
-                placeholder="https://"
+                placeholder={PLACE_FORM.copy.sourceLinkPlaceholder}
+                error={
+                  sourceError?.index === index ? sourceError.message : null
+                }
                 onChange={(event) => {
+                  if (sourceError?.index === index) setSourceError(null);
                   const next = [...sources];
                   next[index] = { ...next[index], url: event.target.value };
                   setSources(next);
@@ -843,11 +886,12 @@ function PlaceDialog({
               />
               <IconButton
                 icon="delete"
-                label={`Delete the source ${source.label || index + 1}`}
+                label={deleteSourceLabel(source, index)}
                 tone="danger"
-                onClick={() =>
-                  setSources(sources.filter((_, other) => other !== index))
-                }
+                onClick={() => {
+                  setSourceError(null);
+                  setSources(sources.filter((_, other) => other !== index));
+                }}
               />
             </div>
           ))}
@@ -857,7 +901,7 @@ function PlaceDialog({
             className={classes.addAttribute}
             onClick={() => setSources([...sources, { label: "", url: "" }])}
           >
-            Add a source
+            {PLACE_FORM.copy.addSource}
           </Button>
         </section>
       </>
@@ -893,43 +937,44 @@ function PlaceDialog({
         </section>
       </>
     ),
-    route: (
-      <>
-        <section className={classes.section}>
-          <SectionHeader title={PLACE_FORM.copy.route} />
-          {!mediaLoading && (
-            <MediaGallery
-              media={media}
-              variant="tracks"
-              canDelete
-              onDeleted={handleMediaDeleted}
-              emptyText={PLACE_PAGE.copy.routeEmpty}
-            />
-          )}
-          <MediaUpload
-            category="track"
-            maxFiles={1}
-            linkedType="place"
-            linkedId={place ? place.id : ""}
-            resolveLinkedId={place ? undefined : ensureLinkedPlaceId}
-            onUploaded={handleMediaUploaded}
-            onBusyChange={handleUploadBusy}
-            disabled={saving}
-            disabledReason={
-              media.some((m) => mediaCategory(m.mediaType) === "track")
-                ? "This place already has a route. Delete it to add another."
-                : undefined
-            }
-          />
-        </section>
-      </>
+    // An existing place has the place page's own Route section. A place not
+    // yet saved has no page to add a way on, so its route is a file uploaded
+    // against the draft.
+    route: place ? (
+      routeSlot?.section
+    ) : (
+      <section className={classes.section}>
+        <SectionHeader title={PLACE_FORM.copy.route} />
+        <MediaGallery
+          media={media}
+          variant="tracks"
+          canDelete
+          onDeleted={handleMediaDeleted}
+          emptyText={PLACE_PAGE.copy.routeEmpty}
+        />
+        <MediaUpload
+          category="track"
+          maxFiles={1}
+          linkedType="place"
+          linkedId=""
+          resolveLinkedId={ensureLinkedPlaceId}
+          onUploaded={handleMediaUploaded}
+          onBusyChange={handleUploadBusy}
+          disabled={saving}
+          disabledReason={
+            media.some((m) => mediaCategory(m.mediaType) === "track")
+              ? "This place already has a route. Delete it to add another."
+              : undefined
+          }
+        />
+      </section>
     ),
   };
 
   return (
     <>
       <Dialog
-        open={open}
+        open={open && !addingWay}
         title={isEdit ? PLACE_FORM.copy.editTitle : PLACE_FORM.copy.addTitle}
         size="large"
         // A file still landing would miss the delete Discard does.
@@ -965,6 +1010,7 @@ function PlaceDialog({
           {error && <ErrorBanner message={error} />}
         </form>
       </Dialog>
+      {routeSlot?.dialog}
 
       <DeleteCustomFieldDialog
         entity="place"
