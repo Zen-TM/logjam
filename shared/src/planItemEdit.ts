@@ -182,3 +182,22 @@ export function newPlaceFromWords(
     fieldValues,
   };
 }
+
+/**
+ * A new place's words after its type changed: a type has its own attributes,
+ * so the ones typed under the last one go and everything else stays.
+ */
+export function retypePlaceWords(
+  was: ItemWords,
+  placeTypeId: string,
+): ItemWords {
+  return {
+    ...newPlaceWords(placeTypeId),
+    name: was.name,
+    notes: was.notes,
+    altNames: was.altNames,
+    latitude: was.latitude,
+    longitude: was.longitude,
+    elevation: was.elevation,
+  };
+}

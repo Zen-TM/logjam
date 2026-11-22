@@ -14,7 +14,6 @@ import {
   messageFromError,
   placeMatchesSearch,
   PLAN_ITEM_ADD,
-  planAddVerbLabel,
   tripPlanAddCopiesLabel,
   tripPlanAddCopyPriceLine,
   tripPlanAddOutcome,
@@ -79,21 +78,21 @@ const keyOf = tripPlanAddKey;
 export function AddCopySheet({
   plan,
   visible,
+  startGroup,
   online,
   me,
   onClose,
   onDone,
-  onDrawRoute,
 }: {
   plan: TripPlanView;
   visible: boolean;
+  /** The tab it opens on: places or ways. */
+  startGroup: TripPlanItemGroup;
   /** The caller's user id: only their own routes are theirs to add. */
   me: string | null;
   online: boolean;
   onClose: () => void;
   onDone: (message: string, tone: "done" | "error") => void;
-  /** A way that is not drawn yet is made on the map, so the sheet offers it. */
-  onDrawRoute: () => void;
 }) {
   const theme = useTheme();
   const { assetHue } = useHues();
@@ -132,7 +131,7 @@ export function AddCopySheet({
     if (visible) {
       setTicked([]);
       setSearch("");
-      setGroup("places");
+      setGroup(startGroup);
       setError(null);
     }
   }
@@ -284,16 +283,6 @@ export function AddCopySheet({
     >
       <View style={styles.body}>
         <Text style={styles.muted}>{copy.addCopyLine}</Text>
-        <Row
-          icon="route"
-          hue={assetHue.route}
-          title={planAddVerbLabel("route")}
-          disabled={busy}
-          onPress={() => {
-            onClose();
-            onDrawRoute();
-          }}
-        />
         <ChipRail
           scroll
           value={group}
