@@ -85,6 +85,15 @@ const LNG_CONSTRAINTS: NumericFieldConstraints = {
  * fields render generically through CustomFieldInput/railStops matching Logjam GPS,
  * with descriptions drawn from hints on the definitions (SYSTEM_FIELD_DEFS).
  */
+/** What the form tells the Route section it hosts. */
+export type RouteSlotContext = {
+  /** Why leaving for another page would lose this form, while it would. */
+  leaveBlockedReason?: string;
+  addingWay: boolean;
+  setAddingWay: (adding: boolean) => void;
+};
+export type RouteSlot = { section: ReactNode; dialog: ReactNode };
+
 function PlaceDialog({
   place,
   open,
@@ -96,6 +105,7 @@ function PlaceDialog({
   onCustomFieldDefsChange,
   placeTypes,
   onMediaChanged,
+  routeSlot: routeSlotFor,
   initialCoords = null,
 }: {
   place: TPlace | null;
@@ -115,6 +125,11 @@ function PlaceDialog({
   // Called after a media/track upload or delete so the opener (place detail
   // panel) can refresh its slideshow/track without waiting for a Save.
   onMediaChanged?: () => void;
+  /** Edit mode: the place page's own Route section and Add a way dialog, so a
+   *  way is added the same way from here (nothing is shown there without it).
+   *  The dialog is drawn beside this one, which steps aside while it is open
+   *  and keeps its form. */
+  routeSlot?: (ctx: RouteSlotContext) => RouteSlot;
   /** Create mode only: the spot the form opens on ("Add a place here"), so the
    *  coordinates are already in and the user names it. */
   initialCoords?: { latitude: number; longitude: number } | null;
@@ -180,8 +195,9 @@ function PlaceDialog({
   const [media, setMedia] = useState<MediaItem[]>([]);
   const [mediaLoading, setMediaLoading] = useState(false);
   const [draftPlaceId, setDraftPlaceId] = useState<string | null>(null);
-  // Files this open of the dialog has uploaded. They are saved the moment they
-  // land, so they count as an unsaved change and Discard takes them back out.
+  // Photos and videos this open of the dialog has uploaded (and, on a new place,
+  // its route file). They are saved the moment they land, so they count as an unsaved change and Discard takes
+  // them back out.
   const [uploadedIds, setUploadedIds] = useState<string[]>([]);
   // Uploads in flight, across the dialog's drop zones.
   const [uploading, setUploading] = useState(0);
@@ -189,6 +205,10 @@ function PlaceDialog({
     setUploading((n) => n + (busy ? 1 : -1));
   const committedRef = useRef(false);
   const draftPromiseRef = useRef<Promise<string> | null>(null);
+
+  // The Add a way dialog is open over the Route section: this form steps aside
+  // for it, as for a pick, and is still here, as it was, when it closes.
+  const [addingWay, setAddingWay] = useState(false);
 
   // Tracks a pick-on-map cycle, so returning from it doesn't reset the form.
   const [picking, setPicking] = useState(false);
@@ -301,6 +321,7 @@ function PlaceDialog({
     setMedia([]);
     setDraftPlaceId(null);
     setUploadedIds([]);
+    setAddingWay(false);
     setFormSession((session) => session + 1);
     // Focus is the kit Dialog's: it moves to `data-autofocus` (the name field)
     // when the dialog is shown, and back to the opener on close.
@@ -314,7 +335,8 @@ function PlaceDialog({
   // Real dirty-check: current form fields vs. the snapshot taken when the
   // dialog was (re)populated — not just "the dialog is open".
   // Custom-field-def edits are excluded: they persist through their own
-  // endpoint. Uploads persist too, but only Discard can undo them.
+  // endpoint. Photo and video uploads persist too, but only Discard can undo
+  // them; a way added from the Route section is saved at once, as on the page.
   const isDirty =
     open &&
     initialFormSnapshot !== null &&
@@ -617,6 +639,23 @@ function PlaceDialog({
   const typeName =
     placeTypes.find((type) => type.id === placeTypeId)?.name ?? null;
 
+  const routeSlot =
+    place && routeSlotFor
+      ? routeSlotFor({
+          // The reason a leave would lose something, said as the Cancel button
+          // says it while the same thing is going on.
+          leaveBlockedReason: saving
+            ? "Saving…"
+            : uploading > 0
+              ? "Uploading…"
+              : isDirty
+                ? "Save your changes first."
+                : undefined,
+          addingWay,
+          setAddingWay,
+        })
+      : null;
+
   const sections: Record<SectionKeysOn<typeof PLACE_FORM, "web">, ReactNode> = {
     type: (
       <>
@@ -898,43 +937,44 @@ function PlaceDialog({
         </section>
       </>
     ),
-    route: (
-      <>
-        <section className={classes.section}>
-          <SectionHeader title={PLACE_FORM.copy.route} />
-          {!mediaLoading && (
-            <MediaGallery
-              media={media}
-              variant="tracks"
-              canDelete
-              onDeleted={handleMediaDeleted}
-              emptyText={PLACE_PAGE.copy.routeEmpty}
-            />
-          )}
-          <MediaUpload
-            category="track"
-            maxFiles={1}
-            linkedType="place"
-            linkedId={place ? place.id : ""}
-            resolveLinkedId={place ? undefined : ensureLinkedPlaceId}
-            onUploaded={handleMediaUploaded}
-            onBusyChange={handleUploadBusy}
-            disabled={saving}
-            disabledReason={
-              media.some((m) => mediaCategory(m.mediaType) === "track")
-                ? "This place already has a route. Delete it to add another."
-                : undefined
-            }
-          />
-        </section>
-      </>
+    // An existing place has the place page's own Route section. A place not
+    // yet saved has no page to add a way on, so its route is a file uploaded
+    // against the draft.
+    route: place ? (
+      routeSlot?.section
+    ) : (
+      <section className={classes.section}>
+        <SectionHeader title={PLACE_FORM.copy.route} />
+        <MediaGallery
+          media={media}
+          variant="tracks"
+          canDelete
+          onDeleted={handleMediaDeleted}
+          emptyText={PLACE_PAGE.copy.routeEmpty}
+        />
+        <MediaUpload
+          category="track"
+          maxFiles={1}
+          linkedType="place"
+          linkedId=""
+          resolveLinkedId={ensureLinkedPlaceId}
+          onUploaded={handleMediaUploaded}
+          onBusyChange={handleUploadBusy}
+          disabled={saving}
+          disabledReason={
+            media.some((m) => mediaCategory(m.mediaType) === "track")
+              ? "This place already has a route. Delete it to add another."
+              : undefined
+          }
+        />
+      </section>
     ),
   };
 
   return (
     <>
       <Dialog
-        open={open}
+        open={open && !addingWay}
         title={isEdit ? PLACE_FORM.copy.editTitle : PLACE_FORM.copy.addTitle}
         size="large"
         // A file still landing would miss the delete Discard does.
@@ -970,6 +1010,7 @@ function PlaceDialog({
           {error && <ErrorBanner message={error} />}
         </form>
       </Dialog>
+      {routeSlot?.dialog}
 
       <DeleteCustomFieldDialog
         entity="place"

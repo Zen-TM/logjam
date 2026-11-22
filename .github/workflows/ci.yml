@@ -381,16 +381,16 @@ jobs:
       - name: Build Logjam Web
         working-directory: frontend
         run: npm run build:e2e
-      # Smoke, a11y, and the Make a map and confirm specs, in one run so the
-      # browser and the two servers start once. Playwright starts the second
-      # server on 5199 itself. None of them writes, so two workers can share the
+      # Smoke, a11y, the Make a map and confirm specs, and the Add a place tool,
+      # in one run so the browser and the two servers start once. Playwright
+      # starts the second server on 5199 itself. None of them writes, so two workers can share the
       # account; the list reporter puts each case's duration in the log.
       - name: Playwright read-only specs
         working-directory: frontend
         env:
           E2E_PREVIEW: "1"
           VITE_AUTH_MODE: fake
-        run: npx playwright test e2e/smoke.spec.ts e2e/a11y.spec.ts e2e/export-area.spec.ts e2e/geopdf-dialog.spec.ts e2e/confirms.spec.ts --workers=2 --reporter=list,github,html
+        run: npx playwright test e2e/smoke.spec.ts e2e/a11y.spec.ts e2e/export-area.spec.ts e2e/geopdf-dialog.spec.ts e2e/confirms.spec.ts e2e/map-add-place.spec.ts --workers=2 --reporter=list,github,html
       # These write to the seeded account and take it back, which leaves sync
       # tombstones (api/src/__tests__/_seedBaseline.ts says what that costs a
       # later integration run): after the integration suite, never before it.
