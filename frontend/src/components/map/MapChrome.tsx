@@ -18,6 +18,7 @@ import {
   type MenuEntry,
   type Glyph,
 } from "../../ui";
+import { useIsMobile } from "../../useIsMobile";
 import { useToast } from "../feedback/ToastProvider";
 import classes from "./MapChrome.module.css";
 
@@ -49,8 +50,13 @@ function locateStateOf(button: Element): LocateState {
 /**
  * The controls floating over the map, in two edges: the ACTION edge on the right
  * (Layers in its own corner; Tools, 3D, locate and zoom stacked above the
- * credits) and the INSTRUMENT edge on the left (compass beside MapLibre's scale
- * bar). Search is top-left with notices beneath it.
+ * credits) and the INSTRUMENT edge on the left (MapLibre's scale bar). Search
+ * is top-left with notices beneath it.
+ *
+ * The compass is in the action column, above 3D, on wide web: a laptop's
+ * buttons that turn the view are together. Narrow web keeps it on the
+ * instrument edge beside the scale bar, where Logjam GPS keeps its own
+ * on-map instruments, so a phone in a browser reads like the app.
  *
  * Zoom, compass and locate are our own buttons driving the map through its
  * public API, so they share the kit's size, focus ring and labels; locate still
@@ -82,6 +88,7 @@ export default function MapChrome({
   selectingArea?: boolean;
 }) {
   const toast = useToast();
+  const narrow = useIsMobile();
   const [bearing, setBearing] = useState(0);
   const [zoom, setZoom] = useState({ atMin: false, atMax: false });
   const [locate, setLocate] = useState<LocateState>("off");
@@ -165,6 +172,17 @@ export default function MapChrome({
     map?.getContainer() ?? null,
   );
 
+  const compass = (
+    <MapButton
+      icon={NorthNeedle}
+      label="Reset north"
+      disabled={!map || selectingArea}
+      className={classes.compass}
+      style={{ "--bearing": `${bearing}deg` } as CSSProperties}
+      onClick={() => map?.resetNorthPitch()}
+    />
+  );
+
   const runTool = (action: () => void) => {
     setToolsOpen(false);
     action();
@@ -246,6 +264,7 @@ export default function MapChrome({
             onClick={() => setToolsOpen((current) => !current)}
           />
         </div>
+        {!narrow && compass}
         <MapButton
           icon="lidar"
           label="3D terrain"
@@ -277,16 +296,7 @@ export default function MapChrome({
         </MapButtonGroup>
       </div>
 
-      <div className={classes.instruments}>
-        <MapButton
-          icon={NorthNeedle}
-          label="Reset north"
-          disabled={!map || selectingArea}
-          className={classes.compass}
-          style={{ "--bearing": `${bearing}deg` } as CSSProperties}
-          onClick={() => map?.resetNorthPitch()}
-        />
-      </div>
+      {narrow && <div className={classes.instruments}>{compass}</div>}
     </>
   );
 }
