@@ -1,7 +1,7 @@
 // What a plan holds besides its write-up and forms: places, routes and files.
-// Each is a copy that belongs to the plan (no owner, `planId` set),
-// made by Add a place or way from something the adder owns, and copied back out by
-// Save a copy. One copy path per kind: a place goes through the place copy's
+// Each belongs to the plan (no owner, `planId` set): a copy made by Add a
+// place or way from something the adder owns, or a new item made straight in
+// the plan, and copied back out by Save a copy. One copy path per kind: a place goes through the place copy's
 // pieces (lib/placeCopy.ts, copyPlaceMedia.ts), a file through the same
 // server-side object copy.
 //
@@ -21,10 +21,15 @@ import {
   asFieldValues,
   asForeignFields,
   isSystemPlaceTypeId,
+  isTripPlanItemNew,
+  pickNextTrackColor,
   say,
   SYSTEM_PLACE_TYPE_IDS,
   type TripPlanFile,
   type TripPlanItemAdd,
+  type TripPlanItemCopy,
+  type TripPlanNewPlace,
+  type TripPlanNewRoute,
   type TripPlanItemKind,
   type TripPlanPlace,
   type TripPlanRoute,
@@ -32,7 +37,6 @@ import {
 } from "@logjam/shared";
 import prisma from "../services/prisma";
 import { AppError, fault } from "../middleware/errorHandler";
-import { getEnv } from "./env";
 import { touchPlan, touchPlanAsMember } from "./planAccess";
 import { dropMembership, endPlanForOthers } from "./planMembership";
 import { reconcileCopiedPlace } from "./placeCopy";
@@ -43,6 +47,8 @@ import {
   type PlaceMediaCopyResult,
 } from "./copyPlaceMedia";
 import { toMediaItem } from "./mediaPresign";
+import { mediaKeys } from "./mediaKeys";
+import { MEDIA_BUCKET } from "./uploadedFile";
 import {
   applyStorageChanges,
   assertHasStorageQuota,
@@ -51,8 +57,6 @@ import {
   storageFull,
 } from "./storageQuota";
 import { deleteS3Keys, deleteS3KeysBestEffort } from "./s3Cleanup";
-
-const MEDIA_BUCKET = getEnv().S3_BUCKET_MEDIA ?? "";
 
 export const userRef = { select: { id: true, username: true } } as const;
 
@@ -229,7 +233,17 @@ async function chargeAndWrite<T>(
       return write(tx);
     });
   } catch (err) {
-    await deleteS3KeysBestEffort(keys.bucket, keys.keys);
+    // A row already holds these keys: a concurrent confirm of the same upload
+    // won, and its file must stay whatever stopped this one (P2002 on the
+    // insert, the quota check, or the plan changing). A copy's keys are fresh,
+    // so none has a row. Guard: __tests__/planItemsNew.test.ts ("keeps the
+    // file when two confirms of one upload race" and "keeps the winner's file
+    // when the losing confirm fails its quota check").
+    const kept = await prisma.media.findFirst({
+      where: { s3KeyDisplay: { in: keys.keys } },
+      select: { id: true },
+    });
+    if (!kept) await deleteS3KeysBestEffort(keys.bucket, keys.keys);
     throw err;
   }
 }
@@ -269,6 +283,60 @@ export async function copyStandaloneFile(
   );
 }
 
+/**
+ * A track file (an import) uploaded straight into the plan: the adder is
+ * charged the size S3 reports, in the transaction that writes the row, and
+ * the object is removed again if that fails (chargeAndWrite).
+ */
+export async function createPlanFile(
+  user: { id: string },
+  planId: string,
+  file: {
+    mediaId: string;
+    bytes: bigint;
+    mediaType: string;
+    filename: string;
+    displayName: string | null;
+    metadata: Prisma.InputJsonValue;
+    color: string | null;
+  },
+): Promise<Media> {
+  const { displayKey } = mediaKeys(user.id, file.mediaId, file.mediaType);
+  return chargeAndWrite(
+    { planId },
+    user.id,
+    file.bytes,
+    { bucket: MEDIA_BUCKET, keys: [displayKey] },
+    async (tx) =>
+      tx.media.create({
+        data: {
+          id: file.mediaId,
+          ...ownerColumns({ planId }, user.id),
+          linkedType: "none",
+          linkedId: null,
+          origin: "import",
+          s3KeyDisplay: displayKey,
+          s3KeyThumbnail: null,
+          mediaType: file.mediaType,
+          filename: file.filename,
+          fileSizeBytes: file.bytes,
+          displayName: file.displayName,
+          metadata: file.metadata,
+          color:
+            file.color ??
+            pickNextTrackColor(
+              (
+                await tx.media.findMany({
+                  where: { planId, color: { not: null } },
+                  select: { color: true },
+                })
+              ).map((other) => other.color),
+            ),
+        },
+      }),
+  );
+}
+
 // ── Add a place or way ─────────────────────────────────────────────────
 
 export type AddedItem = {
@@ -279,12 +347,93 @@ export type AddedItem = {
 /**
  * Add a place or way of one of the caller's own things to the plan, charged to them.
  * Anything they don't own (a place shared with them, another plan's row, a
- * missing id) is the same 404.
+ * missing id) is the same 404. A new item (already validated by the route)
+ * is made straight in the plan instead.
  */
 export async function addPlanItem(
   user: { id: string },
   planId: string,
   input: TripPlanItemAdd,
+): Promise<AddedItem> {
+  if (isTripPlanItemNew(input)) {
+    return input.kind === "place"
+      ? createPlanPlace(user, planId, input.new)
+      : createPlanRoute(user, planId, input.new);
+  }
+  return copyIntoPlan(user, planId, input);
+}
+
+/**
+ * A place made in the plan: no owner, the creator its adder (so they can edit
+ * and delete it as any adder can). It has no photos and no link, so nothing
+ * counts against anyone's storage.
+ */
+async function createPlanPlace(
+  user: { id: string },
+  planId: string,
+  place: TripPlanNewPlace,
+): Promise<AddedItem> {
+  const row = await prisma.$transaction(async (tx) => {
+    await touchPlanAsMember(tx, planId, user.id);
+    return tx.place.create({
+      data: {
+        planId,
+        addedById: user.id,
+        placeTypeId: place.placeTypeId,
+        name: place.name,
+        altNames: place.altNames ?? [],
+        latitude: place.latitude,
+        longitude: place.longitude,
+        elevation: place.elevation ?? null,
+        notes: place.notes ?? null,
+        // An absent key and a null one are the same value.
+        fieldValues: Object.fromEntries(
+          Object.entries(place.fieldValues ?? {}).filter(
+            ([, value]) => value !== null,
+          ),
+        ) as Prisma.InputJsonValue,
+      },
+    });
+  });
+  return { id: row.id };
+}
+
+/** A way made in the plan, unlinked, in a colour the plan's other ways lack. */
+async function createPlanRoute(
+  user: { id: string },
+  planId: string,
+  route: TripPlanNewRoute,
+): Promise<AddedItem> {
+  const row = await prisma.$transaction(async (tx) => {
+    await touchPlanAsMember(tx, planId, user.id);
+    const color =
+      route.color ??
+      pickNextTrackColor(
+        (
+          await tx.route.findMany({
+            where: { planId },
+            select: { color: true },
+          })
+        ).map((other) => other.color),
+      );
+    return tx.route.create({
+      data: {
+        planId,
+        addedById: user.id,
+        name: route.name,
+        color,
+        points: route.points,
+        anchors: route.anchors ?? Prisma.DbNull,
+      },
+    });
+  });
+  return { id: row.id };
+}
+
+async function copyIntoPlan(
+  user: { id: string },
+  planId: string,
+  input: TripPlanItemCopy,
 ): Promise<AddedItem> {
   switch (input.kind) {
     case "place":
@@ -324,7 +473,7 @@ export async function addPlanItem(
 async function addPlace(
   user: { id: string },
   planId: string,
-  input: TripPlanItemAdd,
+  input: TripPlanItemCopy,
 ): Promise<AddedItem> {
   // The caller's own place, or one shared with them: adding is a copy, and a
   // sharee may already Save a copy and add that. The owner-private columns

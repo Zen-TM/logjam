@@ -5,6 +5,7 @@ import {
   TRIP_PLAN_MAX_QUESTIONS,
   currentTripPlanAnswers,
   isDateOnly,
+  isTripPlanItemNew,
   parseTripPlanAnswers,
   parseTripPlanCreate,
   parseTripPlanFilePatch,
@@ -22,7 +23,7 @@ import {
   type TripPlanQuestion,
 } from "./tripPlans.js";
 import { apiSentenceViolations } from "./copyRules.js";
-import { ROUTE_ERRORS } from "./routeValidation.js";
+import { MAX_ROUTE_POINTS, ROUTE_ERRORS } from "./routeValidation.js";
 
 function value<T>(parsed: TripPlanParsed<T>): T {
   if (!("value" in parsed)) throw new Error(JSON.stringify(parsed));
@@ -178,6 +179,101 @@ describe("item add", () => {
       null,
     ])
       expect(isMalformed(parseTripPlanItemAdd(body))).toBe(true);
+  });
+});
+
+describe("item add, new in the plan", () => {
+  const place = {
+    placeTypeId: "t",
+    name: "Test drop",
+    latitude: -33.7,
+    longitude: 150.2,
+  };
+  const route = {
+    name: " Test walk ",
+    points: [
+      [150.123456789, -33.6],
+      [150.31, -33.61],
+    ],
+  };
+
+  it("takes a place or a way to make, and says which it is", () => {
+    const made = value(
+      parseTripPlanItemAdd({
+        kind: "place",
+        new: { ...place, altNames: ["a"], elevation: null, notes: "n" },
+      }),
+    );
+    expect(made).toEqual({
+      kind: "place",
+      new: { ...place, altNames: ["a"], elevation: null, notes: "n" },
+    });
+    expect(isTripPlanItemNew(made)).toBe(true);
+    expect(
+      isTripPlanItemNew(
+        value(parseTripPlanItemAdd({ kind: "place", id: "a" })),
+      ),
+    ).toBe(false);
+  });
+
+  // Mutation: return the way's points and name as sent.
+  it("trims and rounds a way as the way tools store it", () => {
+    const made = value(parseTripPlanItemAdd({ kind: "route", new: route }));
+    expect(made).toEqual({
+      kind: "route",
+      new: {
+        name: "Test walk",
+        points: [
+          [150.123457, -33.6],
+          [150.31, -33.61],
+        ],
+        anchors: null,
+      },
+    });
+  });
+
+  // Mutation: drop onlyFields from newPlace or newRoute.
+  it("refuses what only a broken client sends", () => {
+    const bodies: unknown[] = [
+      { kind: "place", new: null },
+      { kind: "place", new: { ...place, ownerId: "x" } },
+      { kind: "place", new: { ...place, name: 3 } },
+      { kind: "place", new: { ...place, latitude: "-33" } },
+      { kind: "place", new: { ...place, placeTypeId: undefined } },
+      { kind: "place", new: { ...place, altNames: "a" } },
+      { kind: "place", new: { ...place, elevation: "4" } },
+      { kind: "place", new: { ...place, fieldValues: [] } },
+      { kind: "place", id: "a", new: place },
+      { kind: "media", new: {} },
+      { kind: "route", new: { ...route, placeId: "x" } },
+      { kind: "route", new: { ...route, name: " " } },
+      { kind: "route", new: { ...route, color: "chartreuse" } },
+      { kind: "route", new: { ...route, points: [[150.3, -33.6]] } },
+      { kind: "route", new: { ...route, anchors: [0, 9] } },
+    ];
+    for (const body of bodies)
+      expect(
+        isMalformed(parseTripPlanItemAdd(body)),
+        JSON.stringify(body),
+      ).toBe(true);
+    expect(
+      parseTripPlanItemAdd({
+        kind: "place",
+        new: { ...place, altNames: Array.from({ length: 51 }, () => "a") },
+      }),
+    ).toMatchObject({ status: 413 });
+    // Mutation: drop the cap check in newRoute, and 1001 points is a 400.
+    expect(
+      parseTripPlanItemAdd({
+        kind: "route",
+        new: {
+          ...route,
+          points: Array.from({ length: MAX_ROUTE_POINTS + 1 }, () => [
+            150, -33,
+          ]),
+        },
+      }),
+    ).toMatchObject({ status: 413 });
   });
 });
 

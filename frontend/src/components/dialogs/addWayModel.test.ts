@@ -285,13 +285,16 @@ describe("drawing a route for a place", () => {
   });
 
   // Mutation: send a place-armed cancel to "ways", and backing out of the pen
-  // strands the user in the Ways list.
-  it("leaves the tool for the place it came from, else the way or the list", () => {
+  // strands the user in the Ways list; ignore drawPlanId, and a plan's pen
+  // leaves for the list the way was never meant for.
+  it("leaves the tool for the plan or place it came from, else the way or the list", () => {
     const base = {
+      drawPlanId: null,
       drawPlaceId: null,
       editingRouteId: null,
       selectedWayId: null,
     };
+    expect(drawExitPanel({ ...base, drawPlanId: "plan1" })).toBe("plan-detail");
     expect(drawExitPanel({ ...base, drawPlaceId: "p1" })).toBe("place-detail");
     expect(
       drawExitPanel({ ...base, editingRouteId: "r1", selectedWayId: "r1" }),

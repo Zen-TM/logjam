@@ -19,6 +19,7 @@ import {
   mediaCategory,
   mediaDisplayName,
   messageFromError,
+  PLAN_ITEM_ADD,
   planAddVerbLabel,
   planItemVerbs,
   TRIP_PLAN_MAX_FORMS,
@@ -529,7 +530,7 @@ function PlanPage({
         <Items
           plan={plan}
           online={online}
-          canAdd={adds.has("copy")}
+          canAdd={adds.has("copyPlace")}
           me={myId}
           onInfo={notify}
           onError={(text) => notify(text, "error")}
@@ -810,7 +811,7 @@ function Items({
   const add = canAdd ? (
     <ListEnd>
       <Button
-        label={planAddVerbLabel("copy")}
+        label={PLAN_ITEM_ADD.label}
         icon="add"
         variant="outlineAccent"
         disabled={!online}

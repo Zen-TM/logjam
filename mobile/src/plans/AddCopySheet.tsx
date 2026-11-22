@@ -13,6 +13,7 @@ import {
   mediaDisplayName,
   messageFromError,
   placeMatchesSearch,
+  PLAN_ITEM_ADD,
   planAddVerbLabel,
   tripPlanAddCopiesLabel,
   tripPlanAddCopyPriceLine,
@@ -264,7 +265,7 @@ export function AddCopySheet({
       onClose={onClose}
       // Not while adding: the run's end would land on the next session.
       closable={!busy}
-      title={planAddVerbLabel("copy")}
+      title={PLAN_ITEM_ADD.label}
       footer={
         <View style={styles.footer}>
           {error ? <ErrorBanner message={error} /> : null}
