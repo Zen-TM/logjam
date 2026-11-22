@@ -18,6 +18,7 @@ import {
   type MenuEntry,
   type Glyph,
 } from "../../ui";
+import { useIsMobile } from "../../useIsMobile";
 import { useToast } from "../feedback/ToastProvider";
 import classes from "./MapChrome.module.css";
 
@@ -49,8 +50,13 @@ function locateStateOf(button: Element): LocateState {
 /**
  * The controls floating over the map, in two edges: the ACTION edge on the right
  * (Layers in its own corner; Tools, 3D, locate and zoom stacked above the
- * credits) and the INSTRUMENT edge on the left (compass beside MapLibre's scale
- * bar). Search is top-left with notices beneath it.
+ * credits) and the INSTRUMENT edge on the left (MapLibre's scale bar). Search
+ * is top-left with notices beneath it.
+ *
+ * The compass is in the action column, above 3D, on wide web: a laptop's
+ * buttons that turn the view are together. Narrow web keeps it on the
+ * instrument edge beside the scale bar, where Logjam GPS keeps its own
+ * on-map instruments, so a phone in a browser reads like the app.
  *
  * Zoom, compass and locate are our own buttons driving the map through its
  * public API, so they share the kit's size, focus ring and labels; locate still
@@ -67,6 +73,7 @@ export default function MapChrome({
   layersButton,
   tools,
   selectingArea = false,
+  toolsLocked = false,
 }: {
   /** Null until the map has loaded. */
   map: maplibregl.Map | null;
@@ -80,13 +87,17 @@ export default function MapChrome({
   /** While an area is being selected: a second tool can't start over it, and
    *  the map stays north-up and flat (Map.tsx), so 3D and the compass are off. */
   selectingArea?: boolean;
+  /** A pick that is not a tool's own is armed: the tray stays shut, so a tool
+   *  cannot start over it and take its callback. */
+  toolsLocked?: boolean;
 }) {
   const toast = useToast();
+  const narrow = useIsMobile();
   const [bearing, setBearing] = useState(0);
   const [zoom, setZoom] = useState({ atMin: false, atMax: false });
   const [locate, setLocate] = useState<LocateState>("off");
   const [toolsOpenState, setToolsOpen] = useState(false);
-  const toolsOpen = toolsOpenState && !selectingArea;
+  const toolsOpen = toolsOpenState && !selectingArea && !toolsLocked;
   // The tray stays drawn for `TRAY_CLOSE_MS` after it closes, to fade; under
   // reduced motion it goes at once.
   const [trayDrawn, setTrayDrawn] = useState(false);
@@ -163,6 +174,17 @@ export default function MapChrome({
     [toolsLineRef],
     () => setToolsOpen(false),
     map?.getContainer() ?? null,
+  );
+
+  const compass = (
+    <MapButton
+      icon={NorthNeedle}
+      label="Reset north"
+      disabled={!map || selectingArea}
+      className={classes.compass}
+      style={{ "--bearing": `${bearing}deg` } as CSSProperties}
+      onClick={() => map?.resetNorthPitch()}
+    />
   );
 
   const runTool = (action: () => void) => {
@@ -242,10 +264,11 @@ export default function MapChrome({
             label="Tools"
             expanded={toolsOpen}
             aria-controls={toolsOpen ? trayId : undefined}
-            disabled={selectingArea}
+            disabled={selectingArea || toolsLocked}
             onClick={() => setToolsOpen((current) => !current)}
           />
         </div>
+        {!narrow && compass}
         <MapButton
           icon="lidar"
           label="3D terrain"
@@ -277,16 +300,7 @@ export default function MapChrome({
         </MapButtonGroup>
       </div>
 
-      <div className={classes.instruments}>
-        <MapButton
-          icon={NorthNeedle}
-          label="Reset north"
-          disabled={!map || selectingArea}
-          className={classes.compass}
-          style={{ "--bearing": `${bearing}deg` } as CSSProperties}
-          onClick={() => map?.resetNorthPitch()}
-        />
-      </div>
+      {narrow && <div className={classes.instruments}>{compass}</div>}
     </>
   );
 }

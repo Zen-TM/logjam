@@ -1820,6 +1820,7 @@ export function SavedScreen({
       </CollapsingHeader>
 
       <HeroScrollView
+        style={heroCollapse.listStyle}
         {...heroCollapse.scrollProps}
         contentContainerStyle={[styles.body, heroCollapse.inset()]}
         showsVerticalScrollIndicator={false}

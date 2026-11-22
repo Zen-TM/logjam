@@ -46,7 +46,7 @@ that is not a card.
 rail │ panel 380              │ sheet 380 (optional)  │ map
      │ hero          pinned   │ Sort and filter       │ search ─ notices    Layers
      │ rails         pinned   │ …scrolls…             │
-     │ list          scrolls  │ footer: count · Done  │ compass · scale    tools …
+     │ list          scrolls  │ footer: count · Done  │ scale     compass · tools …
 ```
 
 - **A page is a panel beside the map.** The panel body neither scrolls nor

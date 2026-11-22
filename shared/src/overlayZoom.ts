@@ -22,10 +22,18 @@ export const SLOPE_MIN_ZOOM = 11;
  * picks a valley from; further out the tint covers the state in patches that
  * hide the map. Like Land, it fades in rather than drawing everywhere.
  */
-export const FIRE_MIN_ZOOM = 10;
+export const FIRE_MIN_ZOOM = 9;
 
 /**
- * Coverage, two levels deeper than Fire history. Its gaps are a valley floor
+ * MapLibre's default `hillshade-exaggeration`, which is the shading's
+ * intensity. The hillshade has no opacity, so it fades in through this: from
+ * nothing at the archive's first zoom to this a level above
+ * (`hillshadeExaggeration`).
+ */
+const HILLSHADE_EXAGGERATION = 0.5;
+
+/**
+ * Coverage, deeper than Fire history. Its gaps are a valley floor
  * or the far side of a ridge, a few hundred metres across, and the hatch
  * shows one only as lines 12 px apart: in NSW that is about 760 m between
  * lines at z10, 380 m at z11 and 190 m at z12, the first zoom that puts a few
@@ -62,4 +70,9 @@ export function zoomFadeIn(
     minzoom + ZOOM_FADE_LEVELS,
     full,
   ];
+}
+
+/** The hillshade's intensity from its first zoom: see `HILLSHADE_EXAGGERATION`. */
+export function hillshadeExaggeration(minzoom: number): unknown[] {
+  return zoomFadeIn(minzoom, HILLSHADE_EXAGGERATION);
 }

@@ -543,7 +543,7 @@ export function LogsScreen({
 
     list: (
       <HeroSectionList
-        style={styles.list}
+        style={[styles.list, heroCollapse.listStyle]}
         {...mergeScrollProps(heroCollapse.scrollProps, pull.scrollProps)}
         contentContainerStyle={[styles.listContent, heroCollapse.inset()]}
         sections={yearSections}
@@ -560,7 +560,7 @@ export function LogsScreen({
         removeClippedSubviews
         refreshControl={
           <pull.Refresh
-            progressViewOffset={heroCollapse.headerHeight}
+            progressViewOffset={heroCollapse.refreshOffset}
             refreshing={syncStatus.state === "syncing"}
             onRefresh={() => {
               if (!online) {

@@ -44,7 +44,8 @@ for ime in $(adb shell ime list -s | tr -d '\r'); do adb shell ime disable "$ime
 # The software GPU can starve the system launcher until Android raises "Pixel
 # Launcher isn't responding" over the app. That dialog is the system's, so it
 # hides "Not now" from Maestro, outlives the app's force-stop and fails the
-# retry the same way. Dialogs hidden, it never covers the app.
+# retry the same way. This hides the ones raised from here on; one raised while
+# the emulator booted is already up, and the flow's first step closes it.
 adb shell settings put global hide_error_dialogs 1
 
 # A 320x640 screen at 160 dpi cannot show the add-place form, and a sheet that
