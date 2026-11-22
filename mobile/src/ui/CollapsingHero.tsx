@@ -38,7 +38,8 @@ function reach(reachable: boolean) {
  * rows that stay pinned under it (the rail, a search bar). It floats over the
  * top of the screen and the list scrolls under it, so put it BEFORE the list in
  * the screen's root view and give the list `heroCollapse.inset()` of top
- * padding. As the list scrolls it slides up by what the hero gives up, taking
+ * padding, `heroCollapse.listStyle` in its `style` and, on its refresh control,
+ * `progressViewOffset={heroCollapse.refreshOffset}`. As the list scrolls it slides up by what the hero gives up, taking
  * the pinned rows with it; the compact row stays where it is.
  */
 export function CollapsingHeader({

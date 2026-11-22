@@ -17,7 +17,9 @@ import {
 // MapScreen.tsx; make MAP_BANNER_INSET smaller than the search pill plus two
 // gaps; give `mapBannerInsets` the inset on the wrong side (the banner would
 // cover the pill, or leave the freed corner empty); pass `mapBannerInsets` or
-// `<MapSearchBar side=` anything but the one `searchSide` in MapScreen.tsx.
+// `<MapSearchBar side=` anything but the one `searchSide` in MapScreen.tsx;
+// remove `zIndex` from the search bar root style in MapSearchBar.tsx (the notice
+// stack, drawn after it, would cover its results).
 const hasNoticeWithAction = (src: string) =>
   /<Notice\b[^>]*\baction=\{\s*<IconButton/.test(src);
 
@@ -57,5 +59,10 @@ describe("map banners", () => {
     expect(src).toContain(
       'const searchSide = controlsOnLeft ? "right" : "left"',
     );
+  });
+
+  it("draws the search bar over the notice stack that follows it", () => {
+    const src = readFileSync(join(__dirname, "MapSearchBar.tsx"), "utf8");
+    expect(src).toMatch(/\broot: \{[^}]*\bzIndex: [1-9]/);
   });
 });
