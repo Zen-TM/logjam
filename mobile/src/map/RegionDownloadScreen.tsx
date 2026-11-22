@@ -730,6 +730,7 @@ export function RegionDownloadScreen({
       <View style={styles.panel}>
         <ScrollView
           horizontal
+          keyboardShouldPersistTaps="handled"
           showsHorizontalScrollIndicator={false}
           style={styles.chipScroll}
           contentContainerStyle={styles.chipRow}

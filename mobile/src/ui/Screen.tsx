@@ -37,6 +37,7 @@ export function ScreenScroll({
 
   return (
     <ScrollView
+      keyboardShouldPersistTaps="handled"
       style={styles.root}
       contentContainerStyle={[
         styles.scrollContent,

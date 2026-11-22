@@ -241,6 +241,7 @@ export function LeaderboardScreen({
         {LEADERBOARD_SECTIONS[hero](props)}
       </CollapsingHeader>
       <HeroScrollView
+        keyboardShouldPersistTaps="handled"
         style={[styles.list, heroCollapse.listStyle]}
         contentContainerStyle={[
           styles.listContent,

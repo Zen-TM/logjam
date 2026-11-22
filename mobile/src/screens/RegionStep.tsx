@@ -54,6 +54,7 @@ export function RegionStep({
 
   return (
     <ScrollView
+      keyboardShouldPersistTaps="handled"
       style={styles.root}
       contentContainerStyle={[
         styles.content,
