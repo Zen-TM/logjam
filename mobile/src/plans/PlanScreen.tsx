@@ -631,6 +631,7 @@ function PlanPage({
       <ScrollView
         style={styles.body}
         contentContainerStyle={styles.bodyContent}
+        keyboardShouldPersistTaps="handled"
         {...pull.scrollProps}
         refreshControl={
           <pull.Refresh
@@ -960,7 +961,10 @@ function Items({
   if (plan.places.length + ways === 0)
     return (
       <>
-        <EmptyState icon="place" title={copy.itemsEmpty} />
+        {/* An archived plan takes no add, so it doesn't invite one. */}
+        {plan.archivedAt == null && (
+          <EmptyState icon="place" title={copy.itemsEmpty} />
+        )}
         {add}
       </>
     );

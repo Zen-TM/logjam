@@ -429,6 +429,7 @@ export function FriendsScreen({
     ),
     list: () => (
       <HeroFlatList
+        keyboardShouldPersistTaps="handled"
         style={styles.list}
         {...mergeScrollProps(heroCollapse.scrollProps, pull.scrollProps)}
         contentContainerStyle={[styles.listContent, heroCollapse.inset()]}

@@ -276,7 +276,10 @@ export function PlanPreview({
           onRetry={() => setReads((n) => n + 1)}
         />
       ) : preview && sections ? (
-        <ScrollView contentContainerStyle={styles.body}>
+        <ScrollView
+          contentContainerStyle={styles.body}
+          keyboardShouldPersistTaps="handled"
+        >
           {contractSectionKeys(TRIP_PLAN_PREVIEW, "gps").map((key) => (
             <View key={key} style={styles.block}>
               {sections[key]}

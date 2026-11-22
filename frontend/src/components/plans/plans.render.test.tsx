@@ -665,6 +665,16 @@ describe("a plan's page ends its views with their add buttons", () => {
     ).toBeNull();
   });
 
+  // Mutation: drop `!archived` from the empty state's condition, and an
+  // archived plan's empty Map invites an add it won't take.
+  it("leaves an archived plan's empty Map without the invitation to add", () => {
+    renderPanel({
+      view: { ...plan, archivedAt: "2026-10-02T00:00:00.000Z", places: [] },
+    });
+    fireEvent.click(screen.getByRole("radio", { name: /^Map/ }));
+    expect(screen.queryByText(TRIP_PLAN_PAGE.copy.itemsEmpty)).toBeNull();
+  });
+
   // Mutation: drop `disabledReason` from the form entry, and the API refuses
   // the 21st form.
   it("stops offering Add a form at the cap", () => {

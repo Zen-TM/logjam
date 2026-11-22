@@ -756,7 +756,10 @@ export function PlaceDetailScreen({
         {sections.hero()}
       </Hero>
 
-      <ScrollView contentContainerStyle={styles.body}>
+      <ScrollView
+        contentContainerStyle={styles.body}
+        keyboardShouldPersistTaps="handled"
+      >
         {contractSectionsFor(PLACE_PAGE, "gps", isOwner)
           .filter((key) => key !== "hero")
           .map((key) => (

@@ -168,7 +168,7 @@ export default function PlanItems({
   return (
     <div className={classes.list}>
       {/* The dialogs stay mounted when a refetch empties the plan. */}
-      {shown.length === 0 && (
+      {shown.length === 0 && !archived && (
         <EmptyState icon="place" title={copy.itemsEmpty} actions={addCopy} />
       )}
       {shown.map(([heading, items]) => (
