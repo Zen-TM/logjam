@@ -5,6 +5,7 @@ import { DatabaseSync } from "node:sqlite";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   cleanSources,
+  placeEditChanges,
   setFieldValues,
   SOURCES_FIELD_KEY,
   sourceRows,
@@ -48,7 +49,6 @@ vi.mock("expo-crypto", () => ({
 
 const { createPlaceLocal, updatePlaceLocal } = await import("./outbox");
 const { getMirrorPlace, upsertPlace } = await import("./mirrorStore");
-const { sameFieldValues } = await import("../customFields/fieldValueCoercion");
 
 const TYPE = "b0000000-0000-4000-8000-000000000001";
 
@@ -146,15 +146,34 @@ describe("a place's source links", () => {
     await upsertPlace(db as never, row(stored), []);
     const place = await getMirrorPlace("p1");
     // The sheet seeds its rows from the place and merges what the save returns.
-    const result = sourcesPatch(
-      sourceRows(place?.fieldValues),
-      place?.fieldValues,
-    );
+    const seededRows = sourceRows(place?.fieldValues);
+    const result = sourcesPatch(seededRows, seededRows);
     if ("error" in result) throw new Error(result.error);
-    const next = setFieldValues(place?.fieldValues, result.patch);
-    const changes: Record<string, unknown> = { name: "Renamed" };
-    if (!sameFieldValues(next, place?.fieldValues ?? {}))
-      changes.fieldValues = next;
+    const seeded = {
+      name: "n",
+      altNames: "",
+      latitude: "",
+      longitude: "",
+      notes: "",
+      placeTypeId: TYPE,
+      fieldValues: { grade: "3" },
+      sources: seededRows,
+    };
+    const changes = placeEditChanges({
+      seeded,
+      form: { ...seeded, name: "Renamed" },
+      parsed: {
+        name: "Renamed",
+        altNames: [],
+        latitude: null,
+        longitude: null,
+        notes: null,
+      },
+      touched: { latitude: false, longitude: false },
+      current: place as NonNullable<typeof place>,
+      typeFieldDefs: [],
+      sourcesPatch: result.patch,
+    });
     await updatePlaceLocal("p1", changes);
 
     expect(JSON.parse(ops()[0].fields_json)).toEqual({ name: "Renamed" });

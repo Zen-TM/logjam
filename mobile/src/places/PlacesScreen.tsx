@@ -813,10 +813,13 @@ export function PlacesScreen({
         keyboardShouldPersistTaps="handled"
         // A NSW place list runs to several hundred rows. The defaults keep ~21
         // screens mounted, which makes every state change re-render the lot.
+        // Clipped rows are NOT removed from the screen: the native-driven scroll
+        // reports to JS too late for that, and a fast fling flew over a blank
+        // list on a slow phone (`heroLists.test.ts`).
         initialNumToRender={12}
         maxToRenderPerBatch={8}
         windowSize={5}
-        removeClippedSubviews
+        removeClippedSubviews={false}
         refreshControl={
           <pull.Refresh
             progressViewOffset={heroCollapse.refreshOffset}

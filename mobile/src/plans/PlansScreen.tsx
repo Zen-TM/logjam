@@ -732,6 +732,7 @@ export function PlansScreen({
             contentContainerStyle={[styles.listContent, heroCollapse.inset()]}
             data={rows}
             keyExtractor={planKey}
+            removeClippedSubviews={false}
             renderItem={renderItem}
             refreshControl={
               <pull.Refresh

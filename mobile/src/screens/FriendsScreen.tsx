@@ -435,6 +435,7 @@ export function FriendsScreen({
         contentContainerStyle={[styles.listContent, heroCollapse.inset()]}
         data={items}
         keyExtractor={keyExtractor}
+        removeClippedSubviews={false}
         refreshControl={
           <pull.Refresh
             progressViewOffset={heroCollapse.refreshOffset}
