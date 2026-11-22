@@ -341,6 +341,9 @@ function App() {
 
   // Coordinate picking mode for PlaceDialog
   const [pickingCoords, setPickingCoords] = useState(false);
+  // The pick is the Add a place tool's own, so the other tools may take over
+  // from it; a form's pick (false) is not theirs to end.
+  const [toolPick, setToolPick] = useState(false);
   const coordsCallbackRef = useRef<((lat: number, lng: number) => void) | null>(
     null,
   );
@@ -621,11 +624,13 @@ function App() {
     coordsCallbackRef.current?.(lat, lng);
     coordsCallbackRef.current = null;
     setPickingCoords(false);
+    setToolPick(false);
   }, []);
 
   const cancelPickingCoords = useCallback(() => {
     coordsCallbackRef.current = null;
     setPickingCoords(false);
+    setToolPick(false);
   }, []);
 
   /**
@@ -1331,19 +1336,22 @@ function App() {
   const requestCancelRoute = () =>
     draftChanged ? setRouteConfirm("cancel") : cancelDrawingRoute();
 
-  // Escape leaves an armed Measure or Draw tool, as its × does (the route's
-  // goes through the discard confirm). Heard on the document because the user
-  // is on the map, where no panel holds the key; a layer above it (a dialog, a
-  // menu, a field) has already consumed the press.
-  const cancelArmedTool = useEffectEvent(() => {
-    if (drawingRoute) requestCancelRoute();
+  // Escape closes one layer per press. A pick armed over a tool is the top
+  // one, so it ends first; then an armed Measure or Draw tool leaves, as its ×
+  // does (the route's goes through the discard confirm). Heard on the document
+  // because the user is on the map, where no panel holds the key; a layer above
+  // it (a dialog, a menu, a field) has already consumed the press.
+  const escapeTopLayer = useEffectEvent(() => {
+    if (pickingCoords) cancelPickingCoords();
+    else if (drawingRoute) requestCancelRoute();
     else setActivePanel(null);
   });
   const toolArmed = measuring || drawingRoute;
   // The panel is a landmark to skip to only beside the map: a phone has a sheet.
   const isNarrow = useIsMobile();
+  const escapable = toolArmed || pickingCoords;
   useEffect(() => {
-    if (!toolArmed) return;
+    if (!escapable) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape" || event.defaultPrevented) return;
       if (
@@ -1353,11 +1361,11 @@ function App() {
       )
         return;
       event.preventDefault();
-      cancelArmedTool();
+      escapeTopLayer();
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [toolArmed]);
+  }, [escapable]);
 
   // While checking for an existing session, show a branded splash instead of
   // a blank flash before the sign-in form or map appears.
@@ -1706,12 +1714,49 @@ function App() {
   // Verbs that START on the map; `MAP_TOOLS` names them and orders them.
   // Handed to Map as actions, not built here: `startMeasuring` writes a ref, and
   // react-hooks/refs refuses a function that does passed to a call in render.
+  // One tool cancels another, both ways: a tool chosen over the Add a place
+  // pick ends it first. (The tray is shut while a form's pick is armed.)
+  const endToolPick = () => {
+    if (toolPick) cancelPickingCoords();
+  };
   const mapToolActions: MapToolActions = {
-    measure: { onSelect: () => startMeasuring() },
-    route: { onSelect: () => startDrawingRoute() },
-    place: { onSelect: () => setShowAdd(true) },
+    measure: {
+      onSelect: () => {
+        endToolPick();
+        startMeasuring();
+      },
+    },
+    route: {
+      onSelect: () => {
+        endToolPick();
+        startDrawingRoute();
+      },
+    },
+    // Where first: the form opens on the spot picked, and a cancel opens
+    // nothing. It ends an armed Measure or Draw tool first, by that tool's own
+    // way out (a route with points asks before it goes), and closes the page
+    // beside the map, a plan's included, as a filter's area pick does. Chosen
+    // again over its own pick it does nothing.
+    place: {
+      onSelect: () => {
+        if (pickingCoords) return;
+        const pick = () => {
+          setActivePanel(null);
+          setToolPick(true);
+          startPickingCoords((latitude, longitude) => {
+            setAddPlaceAt({ latitude, longitude });
+            setShowAdd(true);
+          });
+        };
+        if (drawingRoute) {
+          afterRouteCancel.current = pick;
+          requestCancelRoute();
+        } else pick();
+      },
+    },
     makeMap: {
       onSelect: () => {
+        endToolPick();
         setBoxPick((pick) => endBox(pick, "export"));
         freshExportDialog();
         setShowGeoPdf(true);
@@ -1719,7 +1764,12 @@ function App() {
     },
     // The dialog draws the area itself ("Draw the area"), as the Layers
     // popover's Sharpen button opens it.
-    sharpen: { onSelect: () => setShowTopo(true) },
+    sharpen: {
+      onSelect: () => {
+        endToolPick();
+        setShowTopo(true);
+      },
+    },
   };
   // Mobile: any map-selection flow needs the bottom sheet out of the way so the
   // map is tappable. Collapses the sheet to peek; restored when the flow ends.
@@ -2230,7 +2280,11 @@ function App() {
             onTopoFlyConsumed={() => setTopoFlyTarget(null)}
             flyToPlace={flyToPlace}
             onFlyToPlaceConsumed={() => setFlyToPlace(null)}
-            panelOpen={activePanel !== null}
+            // The page is out of sight while the UI is dimmed for a pick, so
+            // the map is measured from its own edge then: the pick's pill and
+            // Cancel centre on what shows. (A topo pick leaves it up.)
+            panelOpen={activePanel !== null && !dimUI}
+            toolsLocked={pickingCoords && !toolPick}
             sheetOpen={sidebarSheetOpen}
             placeHighlight={placeHighlight}
             placeTypes={placeTypes}

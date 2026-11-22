@@ -113,6 +113,9 @@ type PointVerbDeclaration = {
    * included.
    */
   hold?: ContractPlatform;
+  /** Left out when the point is the viewer's own position: there is nowhere
+   *  to navigate to from where they stand. */
+  notAtFix?: true;
 } & (
   | { on?: undefined; reason?: undefined }
   // Only one client has it, and `reason` says why.
@@ -129,6 +132,7 @@ export const MAP_POINT_VERBS = [
     label: "Navigate to this point",
     subtitle: "Live distance and bearing — nothing saved",
     hold: "gps",
+    notAtFix: true,
     on: "gps",
     reason:
       "Logjam Web is used at a desk, and a browser on a desk has nowhere to navigate to. Measure from here is its stand-in: the same distance, asked once.",
@@ -205,13 +209,17 @@ const asVerb =
  * The verbs one client's Options view has, in the order it draws them.
  * `savedHereOnly`: what a marker promises is true only once it has synced, so
  * the verb says "Saved on this phone" while that is all that is known.
+ * `atFix`: the point is the viewer's own position, so the verbs that make no
+ * sense from where they stand (Navigate to this point) are left out.
  */
 export function mapPointVerbs(
   platform: ContractPlatform,
   savedHereOnly = false,
+  atFix = false,
 ): MapPointVerb[] {
   return (MAP_POINT_VERBS as readonly PointVerbDeclaration[])
     .filter((verb) => verb.on == null || verb.on === platform)
+    .filter((verb) => !(atFix && verb.notAtFix))
     .map(asVerb(savedHereOnly));
 }
 

@@ -49,6 +49,9 @@ export type ParkedOp = {
    * was deleted server-side under a pending edit (delete-wins). */
   state: "blocked" | "deadRemote";
   fields: Record<string, unknown> | null;
+  /** The server-confirmed values the edit was made over, by dirtied field
+   *  (`base_fields_json`): what an unchanged part of `fields` is told by. */
+  baseFields?: Record<string, unknown> | null;
   error: ParkedError | null;
   attempts: number;
   createdAt: string;
@@ -130,8 +133,8 @@ type ParkedRow = {
 export async function listParkedOps(): Promise<ParkedOp[]> {
   const db = await getSyncDb();
   const rows = await db.getAllAsync<ParkedRow>(
-    `SELECT seq, entity, op, entity_id, state, fields_json, error_json,
-            attempts, created_at
+    `SELECT seq, entity, op, entity_id, state, fields_json, base_fields_json,
+            error_json, attempts, created_at
      FROM outbox WHERE state IN ('blocked', 'deadRemote') ORDER BY seq ASC`,
   );
   const ops: ParkedOp[] = [];
@@ -148,6 +151,9 @@ export async function listParkedOps(): Promise<ParkedOp[]> {
       entityId: row.entity_id,
       state: row.state as "blocked" | "deadRemote",
       fields,
+      baseFields: row.base_fields_json
+        ? (JSON.parse(row.base_fields_json) as Record<string, unknown>)
+        : null,
       error: row.error_json ? parkedError(row.error_json) : null,
       attempts: row.attempts,
       createdAt: row.created_at,

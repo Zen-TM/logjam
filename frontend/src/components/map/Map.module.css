@@ -39,16 +39,13 @@
     var(--map-button-size) +
     var(--space-1)
   );
-  /* And how far from the left edge of the visible map: past the compass and the
-     scale bar at its longest, so the credits clear the instrument edge too. */
+  /* And how far from the left edge of the visible map: past the scale bar at
+     its longest, so the credits clear the instrument edge too. Wide, the
+     compass is in MapChrome's action column; narrow puts it back beside the
+     scale bar (below). */
   --scale-bar-max: 160px; /* intrinsic: ScaleControl's maxWidth in Map.tsx */
   --instrument-gap: 10px; /* intrinsic: the compass to the scale bar */
-  --map-instruments-clear: calc(
-    var(--space-2) +
-    var(--map-button-size) +
-    var(--instrument-gap) +
-    var(--scale-bar-max)
-  );
+  --map-instruments-clear: calc(var(--space-2) + var(--scale-bar-max));
   position: absolute;
   top: 0;
   left: var(--nav-rail-width);
@@ -75,10 +72,11 @@
   display: none;
 }
 
-/* The scale bar sits on the instrument edge, beside MapChrome's compass. */
+/* The scale bar is the instrument edge: alone in the corner on the credits'
+   row while wide, beside MapChrome's compass while narrow. */
 :global(#map .maplibregl-ctrl-bottom-left) {
-  left: calc(var(--map-inset-left) + 16px + var(--map-button-size) + 10px);
-  bottom: 26px;
+  left: calc(var(--map-inset-left) + var(--space-2));
+  bottom: var(--space-1-5);
   transition: left var(--motion-med) ease-out;
 }
 
