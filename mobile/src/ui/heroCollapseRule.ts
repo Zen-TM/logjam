@@ -121,10 +121,21 @@ export function heroReach(input: { collapsed: boolean; moving: boolean }): {
 }
 
 /**
- * The offset that brings the row at `contentY` (in the list's content, header
- * room included) to just under the folded header, `gap` below it, or null
- * until the header has been measured and the list padded for it. A row that
- * would land with the header half-folded goes to the nearer end instead.
+ * Where the list view starts: under the header as folded, so its scroll bar
+ * starts there. At the top of the page the full hero still lies over the
+ * first `distance` of the list view, hiding the thumb until the hero folds.
+ *
+ * Guard: heroCollapse.test.ts.
+ */
+export function listTop(header: number, distance: number): number {
+  return Math.max(0, header - Math.max(0, distance));
+}
+
+/**
+ * The offset that brings the row at `contentY` (in the list's content, whose
+ * top is already under the folded header) `gap` below the folded header, or
+ * null until the header has been measured and the list padded for it. A row
+ * that would land with the header half-folded goes to the nearer end instead.
  *
  * Guard: heroCollapse.test.ts.
  */
@@ -138,7 +149,6 @@ export function rowTarget(input: {
 }): number | null {
   const { contentY, header, distance, paddedFor, gap, range } = input;
   if (!(header > 0) || paddedFor !== header) return null;
-  const folded = header - Math.max(0, distance);
-  const target = Math.min(Math.max(0, contentY - folded - gap), range);
+  const target = Math.min(Math.max(0, contentY - gap), range);
   return snapTarget({ y: target, distance });
 }

@@ -487,7 +487,11 @@ function PlanPage({
                       disabled={!online}
                       disabledReason={OFFLINE}
                       onPress={() =>
-                        setFormSheet({ formId: form.id, mode: "answer" })
+                        setFormSheet({
+                          formId: form.id,
+                          mode: "answer",
+                          direct: true,
+                        })
                       }
                     />
                   ))}
@@ -540,7 +544,9 @@ function PlanPage({
             plan={plan}
             me={myId}
             today={today}
-            onOpen={(formId, mode) => setFormSheet({ formId, mode })}
+            onOpen={(formId, mode) =>
+              setFormSheet({ formId, mode, direct: mode === "verbs" })
+            }
           />
           {adds.has("form") ? (
             <ListEnd>

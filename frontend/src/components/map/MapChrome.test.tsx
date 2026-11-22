@@ -11,6 +11,10 @@ import { ToastProvider } from "../feedback/ToastProvider";
 import { takeDismissingPress } from "../../ui";
 import MapChrome from "./MapChrome";
 
+// Wide web unless a test says otherwise.
+const viewport = vi.hoisted(() => ({ narrow: false }));
+vi.mock("../../useIsMobile", () => ({ useIsMobile: () => viewport.narrow }));
+
 afterEach(cleanup);
 
 // Just enough of a loaded map for MapChrome's own effects.
@@ -128,5 +132,35 @@ describe("3D and the compass during an area selection", () => {
       expect(
         (screen.getByRole("button", { name }) as HTMLButtonElement).disabled,
       ).toBe(true);
+  });
+});
+
+describe("the compass", () => {
+  afterEach(() => {
+    viewport.narrow = false;
+  });
+
+  const column = () =>
+    [
+      ...(
+        screen.getByRole("button", { name: "3D terrain" })
+          .parentElement as HTMLElement
+      ).querySelectorAll(":scope > button"),
+    ].map((button) => button.getAttribute("aria-label"));
+
+  // Mutation: render it in the instrument edge on wide web too, or anywhere
+  // in the column but straight above 3D terrain.
+  it("sits with the map buttons, above 3D terrain, on wide web", () => {
+    chrome(false, stubMap);
+    expect(column()).toEqual(["Reset north", "3D terrain", "Show my location"]);
+  });
+
+  // Mutation: drop the `narrow &&` instrument edge, and narrow web loses the
+  // compass beside its scale bar, where Logjam GPS has its own.
+  it("stays on the instrument edge on narrow web", () => {
+    viewport.narrow = true;
+    chrome(false, stubMap);
+    expect(column()).toEqual(["3D terrain", "Show my location"]);
+    expect(screen.getByRole("button", { name: "Reset north" })).toBeTruthy();
   });
 });

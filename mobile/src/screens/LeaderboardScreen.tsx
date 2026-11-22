@@ -241,7 +241,7 @@ export function LeaderboardScreen({
         {LEADERBOARD_SECTIONS[hero](props)}
       </CollapsingHeader>
       <HeroScrollView
-        style={styles.list}
+        style={[styles.list, heroCollapse.listStyle]}
         contentContainerStyle={[
           styles.listContent,
           heroCollapse.inset(spacing(1.5)),
@@ -249,7 +249,7 @@ export function LeaderboardScreen({
         {...mergeScrollProps(heroCollapse.scrollProps, pull.scrollProps)}
         refreshControl={
           <pull.Refresh
-            progressViewOffset={heroCollapse.headerHeight}
+            progressViewOffset={heroCollapse.refreshOffset}
             refreshing={refreshing}
             onRefresh={() => void onRefresh()}
             tintColor={theme.accent}

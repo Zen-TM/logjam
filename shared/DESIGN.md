@@ -457,7 +457,10 @@ renumber.
 ## 15. The map
 
 - **Two edges, two jobs.** The action edge: layers, tools, locate. The
-  instrument edge: compass and scale, nothing that changes the app.
+  instrument edge: compass and scale, nothing that changes the app. On wide
+  Logjam Web, the compass moves into the action column above 3D so every view
+  control sits together; narrow Logjam Web (≤768px) keeps it beside the scale
+  bar, matching Logjam GPS.
 - **Tools share one button whose tray opens sideways**; arming one closes
   it. Each tool is a pill with its label from `MAP_TOOLS` and no
   description line. The first slides out from under the +, the rest fall out from
