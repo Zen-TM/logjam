@@ -1,3 +1,5 @@
+import type { GridReferencePart } from "@logjam/shared";
+
 import { Icon } from "./Icon";
 import classes from "./Stats.module.css";
 
@@ -84,7 +86,31 @@ export type Stat = {
    *  value so the press can be found. The cell is on the card colour only then:
    *  the fill means "press me" (UX §4), a read-out sits on the page. */
   onCopy?: () => void;
+  /** `value` in runs: a grid reference's 100 km square figures and its 10 m
+   *  and 1 m figures, a size down and dimmed, so the figures a guidebook
+   *  gives stand out. Visual only: the button's label reads the plain value. */
+  parts?: readonly GridReferencePart[];
 };
+
+function StatText({ stat }: { stat: Stat }) {
+  if (!stat.parts) return <>{stat.value}</>;
+  return (
+    <>
+      {stat.parts.map((part, index) =>
+        part.square || part.metres ? (
+          <span
+            key={index}
+            className={part.square ? classes.square : classes.metres}
+          >
+            {part.text}
+          </span>
+        ) : (
+          part.text
+        ),
+      )}
+    </>
+  );
+}
 
 /** Headline numbers in a two-column grid, each a label over its value. A
  *  definition list, so each value is read with the words that name it. */
@@ -106,11 +132,13 @@ export function StatGrid({ stats }: { stats: readonly Stat[] }) {
                 onClick={stat.onCopy}
                 aria-label={`${stat.label}: ${stat.value}. Copy`}
               >
-                <span>{stat.value}</span>
+                <span>
+                  <StatText stat={stat} />
+                </span>
                 <Icon idea="copy" size={14} />
               </button>
             ) : (
-              stat.value
+              <StatText stat={stat} />
             )}
             {stat.note && <span className={classes.statNote}>{stat.note}</span>}
           </dd>

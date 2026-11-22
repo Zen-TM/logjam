@@ -8,7 +8,7 @@ import {
 } from "@testing-library/react";
 import type { ComponentProps } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ADD_WAY, PLACE_PAGE, type MediaItem } from "@logjam/shared";
+import { ADD_WAY, MAP_POINT, PLACE_PAGE, type MediaItem } from "@logjam/shared";
 import type { TPlace, TRoute } from "../../../placeUtils";
 import PlaceDetailPanel from "./PlaceDetailPanel";
 
@@ -141,7 +141,24 @@ describe("the place panel's coordinates", () => {
     await waitFor(() =>
       expect(writeText).toHaveBeenCalledWith("-33.71234, 150.31188"),
     );
-    expect(toast.done).toHaveBeenCalledWith(PLACE_PAGE.copy.copyPosition);
+    expect(toast.done).toHaveBeenCalledWith(MAP_POINT.copy.coordinatesCopied);
+  });
+
+  // Mutation: show `[coordinates]` in place of positionFacts under Position,
+  // and the place page loses the grid reference "What is here?" gives.
+  it("have the grid reference under them, copied the same way", async () => {
+    const writeText = vi.fn(async () => {});
+    vi.stubGlobal("navigator", { ...navigator, clipboard: { writeText } });
+    renderPanel();
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Grid reference: MGA 56 250888 6266493. Copy",
+      }),
+    );
+    await waitFor(() =>
+      expect(writeText).toHaveBeenCalledWith("MGA 56 250888 6266493"),
+    );
+    expect(toast.done).toHaveBeenCalledWith(MAP_POINT.copy.gridReferenceCopied);
   });
 });
 

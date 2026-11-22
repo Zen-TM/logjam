@@ -12,13 +12,12 @@
 // The list rule is unaffected, and nothing here is logged or persisted: the
 // point lives in the map screen's state until the sheet is dismissed.
 import { useEffect, useMemo, useState } from "react";
-import { Clipboard, Text, View } from "react-native";
+import { Text, View } from "react-native";
 import {
   MAP_POINT,
   MAP_POINT_NO_FIX_NOTE,
   WEATHER,
   mapPointFacts,
-  mapPointPosition,
   mapPointStepBack,
   mapPointVerbs,
   type MapPointCoord,
@@ -29,6 +28,7 @@ import {
 import { spacing, makeStyles, muted } from "../theme";
 import { BottomSheet, Row, StatGrid, type Stat } from "../ui";
 import { slopeAt } from "../offline/demLookup";
+import { factStat } from "./factStat";
 import { useElevationProfile } from "./useElevationProfile";
 import { useWeather } from "../weather/useWeather";
 import { showWeatherRow } from "../weather/weatherState";
@@ -193,20 +193,7 @@ function FixDetail({
     elevation,
     from: null,
     fix: { atMs: fix.atMs, accuracyM: fix.accuracyM, nowMs: openedAt },
-  }).map((fact) => ({
-    label: fact.label,
-    value: fact.value,
-    ...(fact.note ? { note: fact.note } : {}),
-    ...(fact.span ? { span: true } : {}),
-    ...(fact.copyable
-      ? {
-          onCopy: () => {
-            Clipboard.setString(mapPointPosition(point));
-            onInfo(MAP_POINT.copy.coordinatesCopied);
-          },
-        }
-      : {}),
-  }));
+  }).map((fact) => factStat(fact, onInfo));
   return (
     <View style={styles.body}>
       <StatGrid stats={stats} />
@@ -285,11 +272,6 @@ function PointDetail({
   );
   const showRow = showWeatherRow(weather);
 
-  const position = mapPointPosition(point);
-  const copyPosition = () => {
-    Clipboard.setString(position);
-    onInfo(MAP_POINT.copy.coordinatesCopied);
-  };
   const stats: Stat[] = mapPointFacts({
     point,
     elevation:
@@ -306,13 +288,7 @@ function PointDetail({
     land,
     fire,
     coverage,
-  }).map((fact) => ({
-    label: fact.label,
-    value: fact.value,
-    ...(fact.note ? { note: fact.note } : {}),
-    ...(fact.span ? { span: true } : {}),
-    ...(fact.copyable ? { onCopy: copyPosition } : {}),
-  }));
+  }).map((fact) => factStat(fact, onInfo));
 
   if (view === "weather") return <WeatherView weather={weather} />;
 

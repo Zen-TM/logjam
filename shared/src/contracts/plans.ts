@@ -454,7 +454,6 @@ export const TRIP_PLAN_PAGE = {
     placeSetAside: "Set aside",
     placeSetAsideHint:
       "The person who added this place had these attributes, and its type here doesn't have them. Save a copy to keep them.",
-    placeCopyFailed: "Couldn't copy the coordinates.",
     tripLogPlaces: "Places on this trip",
     tripLogNext: "Next",
 
@@ -498,8 +497,7 @@ export const TRIP_PLAN_PAGE = {
   },
 } as const satisfies ScreenContract;
 
-/** The place dialog's copy-the-coordinates button, named for its place
- *  (`TRIP_PLAN_PAGE.copy.placeCopyFailed` is its failure). */
+/** The place dialog's copy-the-coordinates button, named for its place. */
 export function tripPlanCopyCoordinatesLabel(name: string): string {
   return `Copy the coordinates of ${name}`;
 }

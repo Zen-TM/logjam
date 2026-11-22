@@ -5,7 +5,6 @@ import {
   MAP_POINT_NO_FIX_NOTE,
   WEATHER,
   mapPointFacts,
-  mapPointPosition,
   mapPointStepBack,
   mapPointVerbs,
   type MapPointView,
@@ -16,7 +15,6 @@ import {
 } from "@logjam/shared";
 import { useElevationPoint } from "../../placeUtils";
 import { useIsMobile } from "../../useIsMobile";
-import { useToast } from "../feedback/ToastProvider";
 import { WeatherView } from "../weather/WeatherView";
 import { useOnline, useWeather } from "../weather/useWeather";
 import {
@@ -29,6 +27,7 @@ import {
 } from "../../ui";
 import { coverageAt, fireAt, landClassAt } from "./layerOrder";
 import { PointAnchor } from "./PointAnchor";
+import { useFactStat } from "./useFactStat";
 import classes from "./MapPointPopover.module.css";
 
 /**
@@ -71,7 +70,6 @@ export default function MapPointPopover({
   onMeasure: (point: MapPointCoord) => void;
   onDrawRoute: (point: MapPointCoord) => void;
 }) {
-  const toast = useToast();
   // On narrow web the tab bar owns the bottom of the screen, and a panel below
   // the point would cover it (and sit too close to its buttons to press): it
   // opens above the point there instead.
@@ -130,12 +128,7 @@ export default function MapPointPopover({
   // for the cell's own DEM, which in canyon country can be far from the spot.
   const checkingHeight = loading;
 
-  const copyPosition = () => {
-    void navigator.clipboard
-      .writeText(mapPointPosition(point))
-      .then(() => toast.done(MAP_POINT.copy.coordinatesCopied))
-      .catch(() => toast.error("Couldn't copy the coordinates."));
-  };
+  const factStat = useFactStat();
   const stats: Stat[] = mapPointFacts({
     point,
     elevation:
@@ -149,13 +142,7 @@ export default function MapPointPopover({
     land,
     fire,
     coverage,
-  }).map((fact) => ({
-    label: fact.label,
-    value: fact.value,
-    ...(fact.note ? { note: fact.note } : {}),
-    ...(fact.span ? { span: true } : {}),
-    ...(fact.copyable ? { onCopy: copyPosition } : {}),
-  }));
+  }).map(factStat);
 
   const close = () => {
     onClose();

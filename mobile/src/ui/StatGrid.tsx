@@ -1,7 +1,10 @@
 import { Pressable, Text, View } from "react-native";
 
 import { radius, spacing, makeStyles, useTheme, muted } from "../theme";
+import type { GridReferencePart } from "@logjam/shared";
+
 import { Icon } from "./Icon";
+import { PartsText } from "./PartsText";
 
 export type Stat = {
   label: string;
@@ -17,6 +20,8 @@ export type Stat = {
    *  value so the tap can be found: a tile that only reveals it is a button
    *  when pressed is one nobody presses. */
   onCopy?: () => void;
+  /** `value` in runs drawn apart (`PartsText`): a grid reference's figures. */
+  parts?: readonly GridReferencePart[];
 };
 
 // Two-column grid of labelled stats — the Place-detail Overview (Grade /
@@ -41,7 +46,11 @@ export function StatGrid({ stats }: { stats: Stat[] }) {
                 underneath it. */}
             <View style={styles.valueRow}>
               <Text style={stat.instrument ? styles.instrument : styles.value}>
-                {stat.value}
+                <PartsText
+                  value={stat.value}
+                  parts={stat.parts}
+                  setApartRole="rowTitle"
+                />
               </Text>
               {stat.onCopy ? (
                 <Icon
