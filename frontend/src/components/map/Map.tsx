@@ -31,6 +31,7 @@ import {
   CONTOURS_MINOR_MIN_ZOOM,
   GAUGES_MIN_ZOOM,
   SLOPE_MIN_ZOOM,
+  hillshadeExaggeration,
   zoomFadeIn,
   PLACE_TYPE_COLORS,
   PLACE_BADGE_OFFSET,
@@ -2978,7 +2979,16 @@ function Map({
                     ) as maplibregl.ExpressionSpecification,
                   },
                 }
-              : { id: layerId, type: "hillshade", source: srcId },
+              : {
+                  id: layerId,
+                  type: "hillshade",
+                  source: srcId,
+                  paint: {
+                    "hillshade-exaggeration": hillshadeExaggeration(
+                      NSW_REGION.terrain.hillshade.minzoom,
+                    ) as maplibregl.ExpressionSpecification,
+                  },
+                },
           );
         }
         return;

@@ -60,6 +60,7 @@ import {
   Hero,
   IconButton,
   IconTile,
+  ListEnd,
   LoadingState,
   Menu,
   Row,
@@ -361,9 +362,31 @@ export default function PlanDetailPanel({
     over,
     ...tripPlanLeaveState(plan),
   });
+  // The empty state's button and the end of the write-up's are the same one.
+  const addSectionButton = canAddSection && (
+    <Button
+      variant="filled"
+      icon="add"
+      onClick={() => setSectionOpen({ id: null })}
+    >
+      {planAddVerbLabel("section")}
+    </Button>
+  );
   const canBuildForms = addVerbs.some((verb) => verb.id === "form");
   const formsFull = plan.forms.length >= TRIP_PLAN_MAX_FORMS;
   const formsFullReason = `${TRIP_PLAN_MAX_FORMS} forms at most`;
+  // The empty state's button and the end of the forms' are the same one.
+  const addFormButton = canBuildForms && (
+    <Button
+      variant="filled"
+      icon="add"
+      disabled={formsFull}
+      disabledReason={formsFullReason}
+      onClick={() => setBuilding({ id: null })}
+    >
+      {planAddVerbLabel("form")}
+    </Button>
+  );
 
   const counts = tripPlanCounts(plan);
 
@@ -527,17 +550,7 @@ export default function PlanDetailPanel({
             icon="notes"
             title={copy.writeUpEmptyTitle}
             body={copy.writeUpEmptyBody}
-            actions={
-              canAddSection && (
-                <Button
-                  variant="filled"
-                  icon="add"
-                  onClick={() => setSectionOpen({ id: null })}
-                >
-                  {planAddVerbLabel("section")}
-                </Button>
-              )
-            }
+            actions={addSectionButton}
           />
         ) : (
           plan.sections.map((section, index) => (
@@ -579,6 +592,9 @@ export default function PlanDetailPanel({
             </section>
           ))
         )}
+        {plan.sections.length > 0 && canAddSection && (
+          <ListEnd>{addSectionButton}</ListEnd>
+        )}
       </div>
     ),
     items: tab === "items" && (
@@ -603,19 +619,7 @@ export default function PlanDetailPanel({
                 ? copy.formsEmptyBodyLeader
                 : copy.formsEmptyBody
             }
-            actions={
-              canBuildForms && (
-                <Button
-                  variant="filled"
-                  icon="add"
-                  disabled={formsFull}
-                  disabledReason={formsFullReason}
-                  onClick={() => setBuilding({ id: null })}
-                >
-                  {planAddVerbLabel("form")}
-                </Button>
-              )
-            }
+            actions={addFormButton}
           />
         ) : (
           plan.forms.map((form) => (
@@ -662,6 +666,9 @@ export default function PlanDetailPanel({
               }
             />
           ))
+        )}
+        {plan.forms.length > 0 && canBuildForms && (
+          <ListEnd>{addFormButton}</ListEnd>
         )}
       </div>
     ),

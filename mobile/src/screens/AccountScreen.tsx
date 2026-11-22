@@ -362,7 +362,7 @@ function LinkedAccountScreen({
         ) : null}
         <Row
           icon="delete"
-          hue={theme.accent}
+          hue={theme.warning}
           title={copy.deleteAccount}
           {...capabilityRowProps("serverPrefs", "linked", online)}
           onPress={() => setSheet("delete")}

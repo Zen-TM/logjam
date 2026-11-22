@@ -11,7 +11,7 @@ import {
   tripPlanTripLogPlacesLine,
   type TripPlanPlace,
 } from "@logjam/shared";
-import { Button, Checkbox, Dialog } from "../../ui";
+import { Button, Checkbox, Dialog, FieldGroup } from "../../ui";
 import type { TPlace } from "../../placeUtils";
 import classes from "./plans.module.css";
 
@@ -70,7 +70,7 @@ export default function PlanTripLogPlacesDialog({
         <p className={classes.note}>
           {tripPlanTripLogPlacesLine(matches.length, places.length)}
         </p>
-        <div className={classes.question}>
+        <FieldGroup named>
           {matches.map(({ place }) => (
             <Checkbox
               key={place.id}
@@ -90,7 +90,7 @@ export default function PlanTripLogPlacesDialog({
               }
             />
           ))}
-        </div>
+        </FieldGroup>
         {picked.length >= MAX_PLACES_PER_TRIP && (
           <p className={classes.note}>{TRIP_PLACES_CAP_SENTENCE}</p>
         )}

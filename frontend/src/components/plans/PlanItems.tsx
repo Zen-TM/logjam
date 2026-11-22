@@ -24,6 +24,7 @@ import {
   EmptyState,
   IconButton,
   IconTile,
+  ListEnd,
   Menu,
   Row,
   SectionHeader,
@@ -131,6 +132,7 @@ export default function PlanItems({
     delete: () => setDeleting(item),
   });
 
+  // The empty state's buttons and the end of the list's are the same ones.
   const addCopy = !archived && (
     <Button variant="filled" icon="add" onClick={onAddCopy}>
       {planAddVerbLabel("copy")}
@@ -207,6 +209,7 @@ export default function PlanItems({
           })}
         </div>
       ))}
+      {shown.length > 0 && !archived && <ListEnd>{addCopy}</ListEnd>}
 
       <ConfirmDialog
         open={saving != null}
