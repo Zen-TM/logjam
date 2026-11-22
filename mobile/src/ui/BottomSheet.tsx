@@ -796,9 +796,11 @@ export function BottomSheet({
                   scrollEventThrottle={1}
                   contentContainerStyle={styles.scrollContent}
                   showsVerticalScrollIndicator={false}
-                  // Without this the FIRST tap on any control while the keyboard is
-                  // up is swallowed dismissing it, and the button only fires on the
-                  // second press — which reads as "Save didn't save".
+                  // Without this the FIRST tap on any control while a field is
+                  // focused only drops the keyboard, and the button fires on the
+                  // second press: "Save didn't save". The screen's list behind the
+                  // sheet needs it too, since the Modal is still its child for
+                  // touches. Guard: screenKeyboardTaps.test.ts.
                   keyboardShouldPersistTaps="handled"
                   // What this cannot scroll goes to the sheet's drag (see the top
                   // of the file).
