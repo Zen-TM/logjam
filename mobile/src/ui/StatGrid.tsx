@@ -46,7 +46,11 @@ export function StatGrid({ stats }: { stats: Stat[] }) {
                 underneath it. */}
             <View style={styles.valueRow}>
               <Text style={stat.instrument ? styles.instrument : styles.value}>
-                <PartsText value={stat.value} parts={stat.parts} />
+                <PartsText
+                  value={stat.value}
+                  parts={stat.parts}
+                  setApartRole="rowTitle"
+                />
               </Text>
               {stat.onCopy ? (
                 <Icon

@@ -413,12 +413,13 @@ describe("the point popover's panel", () => {
       name: "Grid reference: MGA 56 250888 6266493. Copy",
       hidden: true,
     });
-    // The 100 km square's figures are set apart, and the text still reads
-    // whole. Mutation: draw `stat.value` in place of its parts in StatGrid.
+    // The 100 km square's figures and the metres' are set apart, and the text
+    // still reads whole. Mutation: draw `stat.value` in place of its parts in
+    // StatGrid.
     expect(button.textContent).toBe("MGA 56 250888 6266493");
     expect(
       [...button.querySelectorAll("span span")].map((span) => span.textContent),
-    ).toEqual(["2", "62"]);
+    ).toEqual(["2", "88", "62", "93"]);
     fireEvent.click(button);
     await act(async () => {});
     expect(writeText).toHaveBeenCalledWith("MGA 56 250888 6266493");

@@ -287,7 +287,8 @@ export type MapPointFact = {
    * (or `failed`, where the platform's clipboard can refuse).
    */
   copy?: { text: string; copied: string; failed: string };
-  /** `value` in runs a client may set apart: a grid reference's square figures. */
+  /** `value` in runs a client may set apart: a grid reference's square and
+   *  metre figures. */
   parts?: readonly GridReferencePart[];
 };
 
@@ -296,7 +297,7 @@ export type MapPointFact = {
  * coordinates, then the grid reference of the ground's grid (none past UTM's
  * latitudes). Each copies itself. "What is here?" opens with these, and the
  * place and plan place pages show them under their Position heading.
- * Guard: contracts.test.ts ("position facts").
+ * Guard: contracts.test.ts ("opens What is here? with the position facts").
  */
 export function positionFacts(
   point: MapPointCoord,

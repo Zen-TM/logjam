@@ -197,7 +197,7 @@ export function Row({
             style={[styles.title, disabled && styles.disabled]}
             numberOfLines={titleNumberOfLines}
           >
-            <PartsText value={title} parts={titleParts} />
+            <PartsText value={title} parts={titleParts} setApartRole="detail" />
           </Text>
           {subtitle ? (
             <Text style={styles.subtitle} numberOfLines={subtitleNumberOfLines}>

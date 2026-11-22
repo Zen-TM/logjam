@@ -86,9 +86,9 @@ export type Stat = {
    *  value so the press can be found. The cell is on the card colour only then:
    *  the fill means "press me" (UX §4), a read-out sits on the page. */
   onCopy?: () => void;
-  /** `value` in runs: a grid reference's 100 km square figures, a size down
-   *  and dimmed, so the figures a guidebook gives stand out. Visual only: the
-   *  button's label reads the plain value. */
+  /** `value` in runs: a grid reference's 100 km square figures and its 10 m
+   *  and 1 m figures, a size down and dimmed, so the figures a guidebook
+   *  gives stand out. Visual only: the button's label reads the plain value. */
   parts?: readonly GridReferencePart[];
 };
 
@@ -97,8 +97,11 @@ function StatText({ stat }: { stat: Stat }) {
   return (
     <>
       {stat.parts.map((part, index) =>
-        part.square ? (
-          <span key={index} className={classes.square}>
+        part.square || part.metres ? (
+          <span
+            key={index}
+            className={part.square ? classes.square : classes.metres}
+          >
             {part.text}
           </span>
         ) : (

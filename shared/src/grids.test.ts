@@ -489,16 +489,21 @@ describe("full grid references", () => {
     expect(reference(-33.9, 18.4)).toMatch(/^UTM 34H \d{6} \d{7}$/);
   });
 
-  // The figures above the last five name the 100 km square; the parts set
-  // them apart and still spell the text.
-  // Mutation: split at `slice(0, -3)`, and the square reads "250", not "2".
-  it("marks the 100 km square's figures", () => {
-    const { lat, lon } = at(250899, 6266450, 150.31, -33.71);
+  // The figures above the last five name the 100 km square and the last two
+  // are the 10 m and 1 m; the parts set both apart and still spell the text.
+  // Mutation: split at `slice(0, -3)`, and the square reads "250", not "2";
+  // drop `metres: true`, and the metres' figures are not marked.
+  it("marks the 100 km square's figures and the metres'", () => {
+    const { lat, lon } = at(250899.5, 6266450.5, 150.31, -33.71);
     const { text, parts } = gridReferenceAt(lat, lon, MADE_UP)!;
     expect(parts.map((part) => part.text).join("")).toBe(text);
     expect(parts.filter((part) => part.square).map((p) => p.text)).toEqual([
       "2",
       "62",
+    ]);
+    expect(parts.filter((part) => part.metres).map((p) => p.text)).toEqual([
+      "99",
+      "50",
     ]);
     const nz = at(1749046, 5427521, 174.8, -41.3);
     expect(

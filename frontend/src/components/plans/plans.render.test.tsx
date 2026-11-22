@@ -10,6 +10,7 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ComponentProps } from "react";
 import {
+  MAP_POINT,
   planAddVerbLabel,
   TRIP_PLAN_MAX_FORMS,
   MAX_PLACES_PER_TRIP,
@@ -1231,6 +1232,41 @@ describe("a plan place's coordinates", () => {
       expect(writeText).toHaveBeenCalledWith("-33.71234, 150.31188"),
     );
     expect(toast.done).toHaveBeenCalledWith("Coordinates copied.");
+    vi.unstubAllGlobals();
+  });
+
+  // Mutation: draw the coordinates stat alone in place of `positionFacts`,
+  // and the plan place page has no grid reference to press.
+  it("give the grid reference under them, which copies too", async () => {
+    const writeText = vi.fn(async () => {});
+    vi.stubGlobal("navigator", { ...navigator, clipboard: { writeText } });
+    const place = {
+      kind: "place",
+      name: "Claustral",
+      altNames: [],
+      latitude: -33.71234,
+      longitude: 150.31188,
+      elevation: 412,
+      placeTypeId: SYSTEM_PLACE_TYPE_IDS.canyon,
+      typeName: null,
+      typeIconKey: null,
+      notes: null,
+      fieldValues: {},
+      foreignFields: null,
+      media: [],
+    } as unknown as TripPlanPlace;
+    render(<PlanPlacePage place={place} onBack={() => {}} />);
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /^Grid reference: MGA 56 \d{6} \d{7}\. Copy$/,
+      }),
+    );
+    await waitFor(() =>
+      expect(writeText).toHaveBeenCalledWith(
+        expect.stringMatching(/^MGA 56 \d{6} \d{7}$/),
+      ),
+    );
+    expect(toast.done).toHaveBeenCalledWith(MAP_POINT.copy.gridReferenceCopied);
     vi.unstubAllGlobals();
   });
 });

@@ -133,14 +133,23 @@
   color: var(--color-text);
 }
 
-/* A grid reference's 100 km square figures: a size down, dimmed, their tops
-   level with the rest, with a hair of space after, much as a map's margin
-   prints them, so the figures a guidebook gives stand out. */
-.square {
+/* A grid reference's 100 km square figures and its 10 m and 1 m figures: a
+   size down, dimmed, their tops level with the rest, with a hair of space on
+   the side that meets the rest, much as a map's margin prints them, so the
+   figures a guidebook gives stand out. */
+.square,
+.metres {
   composes: rowTitle from "../textRoles.generated.module.css";
   /* Their tops level with the value's: the cap-height difference between
      the two roles, in this role's own em. */
   vertical-align: 0.19em;
-  margin-right: 0.06em;
   color: var(--color-text-muted);
+}
+
+.square {
+  margin-right: 0.06em;
+}
+
+.metres {
+  margin-left: 0.06em;
 }

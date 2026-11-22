@@ -66,7 +66,6 @@ export const PLACE_PAGE = {
     trips: "Your trips",
     sharedWith: "Shared with",
 
-    copyPosition: "Coordinates copied.",
     openInMaps: "Open in a maps app",
     sharedMarker: "visible to friends you share with",
 
@@ -135,13 +134,6 @@ export function placeSectionTitle(
   return view.owned && view.filled && view.shared && section?.shareeSees
     ? `${title} · ${PLACE_PAGE.copy.sharedMarker}`
     : title;
-}
-
-/** Decimals a position is written to: about a metre, on both clients. */
-const POSITION_DECIMALS = 5;
-
-export function formatPlacePosition(latitude: number, longitude: number) {
-  return `${latitude.toFixed(POSITION_DECIMALS)}, ${longitude.toFixed(POSITION_DECIMALS)}`;
 }
 
 /** A value as it is READ: the unit its definition declares ("15 m", or "49.2

@@ -141,7 +141,7 @@ describe("the place panel's coordinates", () => {
     await waitFor(() =>
       expect(writeText).toHaveBeenCalledWith("-33.71234, 150.31188"),
     );
-    expect(toast.done).toHaveBeenCalledWith(PLACE_PAGE.copy.copyPosition);
+    expect(toast.done).toHaveBeenCalledWith(MAP_POINT.copy.coordinatesCopied);
   });
 
   // Mutation: show `[coordinates]` in place of positionFacts under Position,

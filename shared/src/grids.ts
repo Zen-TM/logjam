@@ -207,12 +207,15 @@ export type GridReferencePart = {
   text: string;
   /** The figures that name the 100 km square, which a client sets apart. */
   square?: true;
+  /** The 10 m and 1 m figures, finer than a guidebook gives, which a client
+   *  sets apart the same way. */
+  metres?: true;
 };
 
 export type GridReference = {
   /** "MGA 56 250899 6266450": what `parseGridReference` reads back. */
   text: string;
-  /** The same text in runs, the square's figures marked apart from the rest. */
+  /** The same text in runs, the square's and the metres' figures marked. */
   parts: readonly GridReferencePart[];
 };
 
@@ -226,8 +229,10 @@ export type GridReference = {
  * south-west corner.
  *
  * `parts` marks the figures above the last five, which name the 100 km square
- * ("2" and "62" above). A guidebook leaves them out ("508 664"), so a
- * client sets them apart and the figures a reader matches stand out. Null past UTM's latitudes, where no grid here answers.
+ * ("2" and "62" above), and the last two, the 10 m and the 1 m ("99" and
+ * "50"). A guidebook gives only the three between ("508 664"), so a client
+ * sets the rest apart and the figures a reader matches stand out. Null past
+ * UTM's latitudes, where no grid here answers.
  * Guard: grids.test.ts ("full grid references").
  */
 export function gridReferenceAt(
@@ -246,7 +251,8 @@ export function gridReferenceAt(
   const [e, n] = [figures(easting), figures(northing)];
   const split = (digits: string): GridReferencePart[] => [
     { text: digits.slice(0, -5), square: true },
-    { text: digits.slice(-5) },
+    { text: digits.slice(-5, -2) },
+    { text: digits.slice(-2), metres: true },
   ];
   return {
     text: `${name} ${e} ${n}`,

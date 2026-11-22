@@ -53,6 +53,7 @@ import {
   MAP_SNAP_OPTIONS,
   mapPointFacts,
   positionFacts,
+  mapPointPosition,
   mapHoldVerbs,
   mapPointStepBack,
   mapPointVerbs,
@@ -100,7 +101,6 @@ import {
   PLACE_PAGE,
   PLACE_PAGE_PRIMARY_VERBS,
   placeSectionTitle,
-  formatPlacePosition,
   placeAttributesTitle,
   placeStatusLabel,
   withFieldUnit,
@@ -502,9 +502,9 @@ describe("a place's page", () => {
   });
 
   it("writes a position and a built-in's unit the same on both clients", () => {
-    expect(formatPlacePosition(-33.559541, 150.3995)).toBe(
-      "-33.55954, 150.39950",
-    );
+    expect(
+      mapPointPosition({ latitude: -33.559541, longitude: 150.3995 }),
+    ).toBe("-33.55954, 150.39950");
     expect(withFieldUnit("longest_abseil", "15")).toBe("15 m");
     expect(withFieldUnit("num_abseils", "6")).toBe("6");
     expect(withFieldUnit("my_own_field", "6")).toBe("6");
