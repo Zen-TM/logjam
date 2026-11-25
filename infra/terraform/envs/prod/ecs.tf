@@ -782,7 +782,7 @@ resource "aws_scheduler_schedule" "weather" {
 
       network_configuration {
         subnets          = [data.aws_subnet.worker_a.id, data.aws_subnet.worker_b.id]
-        security_groups  = [aws_security_group.worker.id]
+        security_groups  = [aws_security_group.workers.id]
         assign_public_ip = true
       }
     }
