@@ -105,7 +105,13 @@ export function Notice({
 )) {
   const line = (
     <>
-      {icon && <Icon idea={icon} size={16} className={classes.noticeGlyph} />}
+      {icon && (
+        <Icon
+          idea={icon}
+          size={fixedWidth ? 24 : 16}
+          className={classes.noticeGlyph}
+        />
+      )}
       {onText ? (
         <button
           type="button"
@@ -125,7 +131,7 @@ export function Notice({
           {children}
         </span>
       )}
-      {action}
+      {action && <span className={classes.noticeAction}>{action}</span>}
     </>
   );
   return (

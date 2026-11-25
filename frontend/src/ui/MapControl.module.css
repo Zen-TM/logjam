@@ -129,9 +129,28 @@
   justify-content: center;
 }
 
+/* A card's head: the glyph, larger, on its left edge, the words beside it, the
+   action in its top right corner, wherever the words end. */
+.fixedWidth .noticeLine {
+  justify-content: flex-start;
+  align-items: flex-start;
+}
+
 .fixedWidth .noticeText {
-  flex: 0 1 auto;
+  flex: 1 1 auto;
   min-width: 0;
+  text-align: start;
+}
+
+.fixedWidth .noticeAction {
+  margin-inline-start: auto;
+}
+
+/* As tall as the two lines of words beside it (`lh`, so it follows the text
+   size); the `size` the kit passes stays as the fallback. */
+.fixedWidth .noticeGlyph {
+  width: 2lh;
+  height: 2lh;
 }
 
 .noticeLine {
@@ -164,6 +183,11 @@
 
 .twoLines {
   composes: twoLines from "./TwoLines.module.css";
+}
+
+.noticeAction {
+  display: inline-flex;
+  flex: none;
 }
 
 .noticeGlyph {
