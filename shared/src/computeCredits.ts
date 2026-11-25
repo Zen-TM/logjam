@@ -33,23 +33,27 @@ export const WORKER_KINDS = Object.keys(WORKER_SPECS) as WorkerKind[];
 /**
  * Default monthly allowance, in credits (vCPU-minutes).
  *
- * 1200 = 20 vCPU-hours ≈ USD $1/month of Fargate at ap-southeast-2 on-demand
- * rates. Sized to be invisible to a real user — a heavy trip-planning month
- * that generates a full topo run plus a dozen exports and PDFs lands well
- * under it — while capping a runaway loop at roughly a dollar before it stops.
- * Per-user overridable via User.monthlyComputeCredits.
+ * 800 ≈ 13 vCPU-hours ≈ USD $0.80/month of Fargate at ap-southeast-2 on-demand
+ * rates (a credit is about US$0.001). Sized to be invisible to a real user — a
+ * heavy trip-planning month that generates a full topo run plus a dozen
+ * exports and PDFs lands well under it — while capping a runaway loop at
+ * under a dollar before it stops. Per-user overridable via
+ * User.monthlyComputeCredits. The schema's column default must equal this
+ * (`api/src/lib/limitDefaults.unit.test.ts`).
  */
-export const DEFAULT_MONTHLY_COMPUTE_CREDITS = 1200;
+export const DEFAULT_MONTHLY_COMPUTE_CREDITS = 800;
 
 /**
  * Default monthly egress allowance, in bytes.
  *
- * 50 GiB. An order of magnitude above what syncing a season of trip photos to
- * a phone costs, and ~USD $5.70 of S3 internet egress at the cap — so a user
- * who somehow reaches it has cost real money but not a surprising amount. The
- * point is the ceiling existing at all, not the exact figure.
+ * 10 GiB. Well above what syncing a season of trip photos to a phone costs,
+ * and ~USD $1.20 of S3 internet egress at the cap (about US$0.114/GB) — so a
+ * user who somehow reaches it has cost real money but not a surprising
+ * amount. The point is the ceiling existing at all, not the exact figure. The
+ * schema's column default must equal this
+ * (`api/src/lib/limitDefaults.unit.test.ts`).
  */
-export const DEFAULT_MONTHLY_EGRESS_BYTES = 50n * 1024n * 1024n * 1024n;
+export const DEFAULT_MONTHLY_EGRESS_BYTES = 10n * 1024n * 1024n * 1024n;
 
 /** Fraction of an allowance at which the user gets a heads-up notification. */
 export const QUOTA_WARNING_FRACTION = 0.8;

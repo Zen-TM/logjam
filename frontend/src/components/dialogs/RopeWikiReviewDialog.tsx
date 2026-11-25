@@ -66,12 +66,15 @@ function toApplyDecision(
 
 function RopeWikiReviewDialog({
   open,
+  regionId,
   review,
   autoImported,
   onClose,
   onApplied,
 }: {
   open: boolean;
+  /** The region whose list the review came from; decisions apply to it. */
+  regionId: string;
   review: RopeWikiCandidatePayload[];
   // Counts of what the refresh already imported automatically (confident
   // non-duplicates), surfaced here so the auto-import is transparent.
@@ -124,7 +127,7 @@ function RopeWikiReviewDialog({
       const payload: RopeWikiApplyDecision[] = review.map((row, i) =>
         toApplyDecision(row, items[i]),
       );
-      const result = await applyRopeWikiImport(payload);
+      const result = await applyRopeWikiImport(regionId, payload);
       const parts = [
         result.created > 0 ? `${result.created} created` : null,
         result.linked > 0 ? `${result.linked} linked` : null,

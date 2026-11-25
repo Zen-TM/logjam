@@ -143,17 +143,20 @@ export function drawTarget(
   return editingRouteId ? null : drawPlaceId;
 }
 
-/** Where leaving the Route tool goes: back to the place it was armed from,
- *  to the way being edited, or to the list a new route came from. */
+/** Where leaving the Route tool goes: back to the plan or the place it was
+ *  armed from, to the way being edited, or to the list a new route came from. */
 export function drawExitPanel({
+  drawPlanId,
   drawPlaceId,
   editingRouteId,
   selectedWayId,
 }: {
+  drawPlanId: string | null;
   drawPlaceId: string | null;
   editingRouteId: string | null;
   selectedWayId: string | null;
-}): "place-detail" | "way-detail" | "ways" {
+}): "plan-detail" | "place-detail" | "way-detail" | "ways" {
+  if (drawPlanId) return "plan-detail";
   if (drawPlaceId) return "place-detail";
   return editingRouteId && selectedWayId === editingRouteId
     ? "way-detail"

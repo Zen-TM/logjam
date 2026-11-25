@@ -6,11 +6,19 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { PLACE_FORM, PLACE_PAGE, SYSTEM_PLACE_TYPE_IDS } from "@logjam/shared";
+import {
+  PLACE_FORM,
+  PLACE_PAGE,
+  SOURCES_FIELD_KEY,
+  SYSTEM_PLACE_TYPE_IDS,
+} from "@logjam/shared";
 
-import PlaceDialog from "./PlaceDialog";
+import PlaceDialog, {
+  type RouteSlot,
+  type RouteSlotContext,
+} from "./PlaceDialog";
 import { ToastProvider } from "../feedback/ToastProvider";
-import { deleteMedia } from "../../placeUtils";
+import { deleteMedia, updatePlace } from "../../placeUtils";
 import { ApiError } from "../../errors/ApiError";
 import type { TPlace, TPlaceType } from "../../placeUtils";
 
@@ -18,6 +26,7 @@ vi.mock("../../placeUtils", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../placeUtils")>()),
   getPlaceDetail: vi.fn(async () => ({ media: [] })),
   deleteMedia: vi.fn(async () => {}),
+  updatePlace: vi.fn(async () => ({})),
 }));
 // The real one needs a file chooser: this one "uploads" (m1, m2, ...) on a
 // press, and reports a slow one on another.
@@ -162,16 +171,90 @@ describe("PlaceDialog, a coordinate pair pasted into Latitude", () => {
   });
 });
 
-// The form names its route section and its empty slot with the words the place
-// page uses. Mutation: write either back as a literal ("Track", "No track yet.").
+// The form names its route section with the words the place page uses.
+// Mutation: write it back as a literal ("Track", "No track yet.").
 describe("PlaceDialog, route section", () => {
   it("says route where the place page does", async () => {
-    render(dialog(place("p1", "Claustral")));
+    render(dialog(null));
     expect(
-      (await screen.findByRole("heading", { name: PLACE_PAGE.copy.route }))
+      (await screen.findByRole("heading", { name: PLACE_FORM.copy.route }))
         .textContent,
     ).toBe("Route");
     expect(await screen.findByText(PLACE_PAGE.copy.routeEmpty)).toBeTruthy();
+  });
+
+  // The slot the page would hand over, reduced to what the form tells it.
+  const slot = (ctx: RouteSlotContext): RouteSlot => ({
+    section: (
+      <>
+        <p>{ctx.leaveBlockedReason ?? "nothing blocks a leave"}</p>
+        <button type="button" onClick={() => ctx.setAddingWay(true)}>
+          Add a way here
+        </button>
+      </>
+    ),
+    dialog: ctx.addingWay ? (
+      <button type="button" onClick={() => ctx.setAddingWay(false)}>
+        Close the way dialog
+      </button>
+    ) : null,
+  });
+  const renderEdit = () =>
+    render(
+      <ToastProvider>
+        <PlaceDialog
+          place={place("p1", "Claustral")}
+          open
+          onClose={() => {}}
+          onSaved={() => {}}
+          onPickCoords={() => {}}
+          onCancelPickCoords={() => {}}
+          customFieldDefs={[]}
+          onCustomFieldDefsChange={() => {}}
+          placeTypes={[CANYON]}
+          routeSlot={slot}
+        />
+      </ToastProvider>,
+    );
+
+  // Mutation: render the upload for an existing place too, or ignore
+  // `routeSlot`, and the place page's section is not what shows.
+  it("shows the section it is handed for an existing place, saying why a leave waits once edited", async () => {
+    renderEdit();
+    expect(await screen.findByText("nothing blocks a leave")).toBeTruthy();
+    fireEvent.change(box(/^Name/), { target: { value: "Claustral Canyon" } });
+    expect(await screen.findByText("Save your changes first.")).toBeTruthy();
+    expect(screen.queryByText(PLACE_PAGE.copy.routeEmpty)).toBeNull();
+  });
+
+  // Mutation: drop the `uploading > 0` arm of the reason, and a leave mid-
+  // upload is offered with no word about why it should wait.
+  it("says an upload is landing while one is, not that there are edits", async () => {
+    renderEdit();
+    await screen.findByText("nothing blocks a leave");
+    fireEvent.click(screen.getAllByText("Start slow upload")[0]);
+    // The Cancel button says it too: the section is the one beside the Add a way button.
+    expect(
+      (await screen.findByText("Add a way here")).previousElementSibling
+        ?.textContent,
+    ).toBe("Uploading…");
+    fireEvent.click(screen.getAllByText("Finish slow upload")[0]);
+    expect(await screen.findByText("nothing blocks a leave")).toBeTruthy();
+  });
+
+  // Mutation: leave `open` as the prop alone, and the form stays over the Add a
+  // way dialog; or reset the form when it returns, and the typed name is lost.
+  it("steps aside while the way dialog is open, and is as it was after", async () => {
+    renderEdit();
+    fireEvent.change(box(/^Name/), { target: { value: "Claustral Canyon" } });
+    fireEvent.click(await screen.findByText("Add a way here"));
+    await screen.findByText("Close the way dialog");
+    expect(screen.queryByRole("dialog", { name: "Edit place" })).toBeNull();
+    fireEvent.click(screen.getByText("Close the way dialog"));
+    expect(
+      await screen.findByRole("dialog", { name: "Edit place" }),
+    ).toBeTruthy();
+    expect(box(/^Name/).value).toBe("Claustral Canyon");
   });
 });
 
@@ -267,5 +350,95 @@ describe("PlaceDialog, editing, after an upload", () => {
         .getByRole("button", { name: "Cancel" })
         .getAttribute("aria-disabled"),
     ).toBeNull();
+  });
+});
+
+const save = () =>
+  fireEvent.click(
+    screen.getByRole("button", { name: PLACE_FORM.copy.saveSubmit }),
+  );
+
+// A refetch can land while the dialog is open. A save sends what the user
+// changed, never the text the dialog opened with.
+describe("PlaceDialog, saving an edit", () => {
+  beforeEach(() => vi.mocked(updatePlace).mockClear());
+
+  const stored = (notes: string, link: string, latitude = -33.74): TPlace =>
+    ({
+      ...place("p1", "Alpha Gorge"),
+      latitude,
+      notes,
+      fieldValues: { [SOURCES_FIELD_KEY]: [["Guide", link]] },
+    }) as unknown as TPlace;
+
+  // Mutation: build the save from every form field again, or compare the
+  // sources with the place as it is by then, and the notes and the source list
+  // the refetch brought in are overwritten by the ones the dialog opened with.
+  it("leaves a field alone that a refetch changed while it was open", async () => {
+    const { rerender } = render(
+      dialog(stored("Old note", "https://old.example")),
+    );
+    fireEvent.change(nameBox(), { target: { value: "Alpha Gorge 2" } });
+
+    rerender(dialog(stored("Newer note", "https://new.example", -33.8)));
+    save();
+
+    await waitFor(() => expect(updatePlace).toHaveBeenCalledTimes(1));
+    expect(updatePlace).toHaveBeenCalledWith("p1", { name: "Alpha Gorge 2" });
+  });
+
+  // Mutation: leave the coordinates out of `placeEditChanges`'s result, or pass
+  // `touched` false for them, and a typed position is never sent.
+  it("sends a position the user typed, over the one a pull brought in", async () => {
+    const { rerender } = render(
+      dialog(stored("Old note", "https://old.example")),
+    );
+    fireEvent.change(box(/^Latitude/), { target: { value: "-33.9" } });
+
+    rerender(dialog(stored("Old note", "https://old.example", -33.8)));
+    save();
+
+    await waitFor(() => expect(updatePlace).toHaveBeenCalledTimes(1));
+    expect(updatePlace).toHaveBeenCalledWith("p1", { latitude: -33.9 });
+  });
+
+  // Mutation: send every field once any one changed, and the name, position
+  // and sources travel with the notes.
+  it("builds a changed notes field and nothing else over the place as it is", async () => {
+    const { rerender } = render(
+      dialog(stored("Old note", "https://old.example")),
+    );
+    fireEvent.change(screen.getByLabelText(/^Notes/), {
+      target: { value: "Mine" },
+    });
+
+    rerender(dialog(stored("Newer note", "https://new.example")));
+    save();
+
+    await waitFor(() => expect(updatePlace).toHaveBeenCalledTimes(1));
+    expect(updatePlace).toHaveBeenCalledWith("p1", { notes: "Mine" });
+  });
+
+  // Mutation: run the sources check after the early return for the other
+  // checks again, and the link's error shows only on the second press.
+  it("shows a bad link's error on the first press, with the other errors", async () => {
+    render(dialog(place("p1", "Alpha Gorge")));
+    fireEvent.change(nameBox(), { target: { value: "" } });
+    fireEvent.click(
+      screen.getByRole("button", { name: PLACE_FORM.copy.addSource }),
+    );
+    fireEvent.change(screen.getByLabelText(PLACE_FORM.copy.sourceLabel), {
+      target: { value: "Guide" },
+    });
+    fireEvent.change(screen.getByLabelText(PLACE_FORM.copy.sourceLink), {
+      target: { value: "javascript:alert(1)" },
+    });
+    save();
+
+    expect(
+      await screen.findByText(PLACE_FORM.copy.sourceLinkInvalid),
+    ).toBeTruthy();
+    expect(screen.getByText(PLACE_FORM.copy.nameMissing)).toBeTruthy();
+    expect(updatePlace).not.toHaveBeenCalled();
   });
 });

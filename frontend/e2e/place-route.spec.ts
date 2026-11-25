@@ -1,7 +1,8 @@
 import { test, expect, type Page } from "@playwright/test";
+import { SEED_NAMES } from "../../api/prisma/seedNames";
 
-// A place's route is added from its own page, the way photos are, with no edit
-// dialog: from a way already in the account, or from a GPX/KML file. The seed
+// A place's route is added from its own page, or from the same section in its
+// edit dialog: from a way already in the account, or from a GPX/KML file. The seed
 // gives alice a place with no way (Hidden Slot), a drawn route
 // that is on no place (Du Faur Head approach) and imports and recordings that
 // are on none. Each case puts the account back as it found it.
@@ -19,7 +20,7 @@ async function openHiddenSlot(page: Page) {
   const aside = page.locator("aside");
   await aside
     .locator("[data-place-id]")
-    .filter({ hasText: "Hidden Slot" })
+    .filter({ hasText: SEED_NAMES.hiddenSlot })
     .first()
     .click();
   await expect(aside.getByText("No route yet.")).toBeVisible({
@@ -42,12 +43,12 @@ test("an owner adds a route from a way already in the app", async ({
   // A sub-view is the same dialog, retitled for the step.
   await page
     .getByRole("dialog", { name: "Choose a route you drew" })
-    .getByRole("button", { name: /^Du Faur Head approach/ })
+    .getByRole("button", { name: new RegExp(`^${SEED_NAMES.duFaurApproach}`) })
     .click();
 
   try {
     await expect(page.getByText("Route linked to this place.")).toBeVisible();
-    await expect(aside.getByText("Du Faur Head approach")).toBeVisible();
+    await expect(aside.getByText(SEED_NAMES.duFaurApproach)).toBeVisible();
     await expect(
       aside.getByRole("button", { name: "Replace this place's route" }),
     ).toBeVisible();
@@ -56,6 +57,45 @@ test("an owner adds a route from a way already in the app", async ({
     const unlink = aside.getByRole("button", {
       name: "Unlink from this place",
     });
+    if ((await unlink.count()) > 0) {
+      await unlink.click();
+      await expect(page.getByText("Route unlinked.")).toBeVisible();
+    }
+  }
+});
+
+// Mutation: give the edit dialog its own route uploader again, or drop the
+// Route section from it.
+test("the edit dialog adds a route through the same dialog", async ({
+  page,
+}) => {
+  const aside = await openHiddenSlot(page);
+  await page.getByRole("button", { name: "Back to Places" }).click();
+  await aside
+    .locator("[data-place-id]")
+    .filter({ hasText: SEED_NAMES.hiddenSlot })
+    .getByRole("button", { name: /^Actions for / })
+    .click();
+  await page.getByRole("menuitem", { name: "Edit place" }).click();
+  const edit = page.getByRole("dialog", { name: "Edit place" });
+  await expect(edit.getByText("No route yet.")).toBeVisible();
+  await edit.getByRole("button", { name: "Add a way" }).click();
+  await page
+    .getByRole("dialog", { name: "Add a way" })
+    .getByRole("button", { name: /^Choose a route you drew/ })
+    .click();
+  await page
+    .getByRole("dialog", { name: "Choose a route you drew" })
+    .getByRole("button", { name: new RegExp(`^${SEED_NAMES.duFaurApproach}`) })
+    .click();
+
+  try {
+    await expect(page.getByText("Route linked to this place.")).toBeVisible();
+    await expect(edit.getByText(SEED_NAMES.duFaurApproach)).toBeVisible();
+    // The page under the dialog shows it too, without a Save.
+    await expect(aside.getByText(SEED_NAMES.duFaurApproach)).toBeVisible();
+  } finally {
+    const unlink = edit.getByRole("button", { name: "Unlink from this place" });
     if ((await unlink.count()) > 0) {
       await unlink.click();
       await expect(page.getByText("Route unlinked.")).toBeVisible();

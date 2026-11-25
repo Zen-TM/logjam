@@ -15,7 +15,7 @@ export PATH := $(MISE_PATH):$(PATH)
 endif
 
 LOCAL_TF := infra/terraform/envs/local
-PACKAGES := . shared api frontend mobile infra/lambda/cognito-email-sender
+PACKAGES := . shared api frontend mobile infra/lambda/cognito-email-sender infra/lambda/cognito-pre-signup
 
 
 # ── Primary targets ────────────────────────────────────────────────────────────
@@ -23,7 +23,7 @@ PACKAGES := . shared api frontend mobile infra/lambda/cognito-email-sender
 ## Start full local env (fake auth, seeded fixtures)
 dev: shared build-workers
 	@echo "Starting infra..."
-	docker compose up -d postgres ministack mailpit
+	docker compose up -d --build postgres ministack mailpit
 	@$(MAKE) _wait-healthy
 	@$(MAKE) _ministack-tf
 	@echo "Generating Prisma client..."
@@ -51,7 +51,7 @@ dev-snapshot:
 	fi
 	@echo "Wiping volumes and restoring snapshot..."
 	docker compose down -v
-	docker compose up -d postgres ministack mailpit
+	docker compose up -d --build postgres ministack mailpit
 	@$(MAKE) _wait-healthy
 	@rm -f $(LOCAL_TF)/terraform.tfstate $(LOCAL_TF)/terraform.tfstate.backup
 	@$(MAKE) _ministack-tf
@@ -67,7 +67,7 @@ dev-snapshot:
 ## Reset: wipe DB + MiniStack volumes, restart, re-seed
 reset: shared build-workers
 	docker compose down -v
-	docker compose up -d postgres ministack mailpit
+	docker compose up -d --build postgres ministack mailpit
 	@$(MAKE) _wait-healthy
 	@rm -f $(LOCAL_TF)/terraform.tfstate $(LOCAL_TF)/terraform.tfstate.backup
 	@$(MAKE) _ministack-tf
@@ -106,8 +106,9 @@ announce:
 
 ## Dump + sanitize prod DB into snapshots/latest.sql
 ## Requires DB_HOST_PROD, DB_NAME_PROD, DB_USER_PROD and DB_PASSWORD_PROD env
-## vars pointing at the prod RDS instance (DB_PORT_PROD optional, default 5432).
+## vars pointing at the prod database (DB_PORT_PROD optional, default 5432).
 ## Password lives in Secrets Manager — fetch it manually before running this.
+## Needs a pg_dump at least as new as prod's Postgres (scripts/snapshot.sh).
 snapshot:
 	@if [ -z "$$DB_HOST_PROD" ] || [ -z "$$DB_NAME_PROD" ] || [ -z "$$DB_USER_PROD" ] || [ -z "$$DB_PASSWORD_PROD" ]; then \
 		echo "ERROR: DB_HOST_PROD, DB_NAME_PROD, DB_USER_PROD and DB_PASSWORD_PROD must all be set."; \

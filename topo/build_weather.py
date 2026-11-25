@@ -4,7 +4,7 @@ build_weather.py
 ----------------
 Publishes the Weather overlay's files: ECMWF IFS's forecast for NSW, hour by
 hour, and its rain totals, cut from Open-Meteo's gridded files. Why a job
-publishes them and why its reader is Open-Meteo's own: ADR 0048.
+publishes them and why its reader is Open-Meteo's own: ADR 0049.
 
     python3 build_weather.py run --bucket B   # what the hourly ECS task runs
     python3 build_weather.py build OUT        # one build to a local folder
@@ -446,7 +446,7 @@ class RangeFile:
 
 def read_cut(path: str, variables: Sequence[str], cut: Cut) -> Dict[str, np.ndarray]:
     """Each variable's values on the cut, from one `.om` file. Open-Meteo's
-    reader (GPL-2.0-only) is imported here, in the job's image only: ADR 0048."""
+    reader (GPL-2.0-only) is imported here, in the job's image only: ADR 0049."""
     import omfiles
 
     reader = omfiles.OmFileReader.from_fsspec(RangeFile(), path)

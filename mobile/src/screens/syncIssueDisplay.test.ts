@@ -351,6 +351,59 @@ describe("opChanges", () => {
     ]);
   });
 
+  // Mutation: skip the base comparison and push a Sources line whenever
+  // `_sources` is in the blob, and every edit of an imported place lists its
+  // sources; or skip every `_` key again, and a sources-only edit shows nothing.
+  it("lists sources only when the edit changed them", () => {
+    const sources = [
+      ["RopeWiki", "ropewiki.com/x"],
+      ["Guide", "https://a.example"],
+    ];
+    const base = { fieldValues: { grade: 3, _sources: sources } };
+    // Sources changed, nothing else: the one line, labels only.
+    expect(
+      opChanges(
+        parked({
+          fields: { fieldValues: { grade: 3, _sources: [sources[1]] } },
+          baseFields: base,
+        }),
+      ),
+    ).toEqual([
+      { label: "Grade", value: "3", rejected: false },
+      { label: "Sources", value: "Guide", rejected: false },
+    ]);
+    // Removing the last one says so.
+    expect(
+      opChanges(
+        parked({ fields: { fieldValues: { grade: 3 } }, baseFields: base }),
+      ).at(-1),
+    ).toEqual({ label: "Sources", value: "None", rejected: false });
+    // A rename of a place with sources carries them whole and unchanged.
+    expect(
+      opChanges(
+        parked({
+          fields: { name: "n", fieldValues: { grade: 3, _sources: sources } },
+          baseFields: { name: "o", ...base },
+        }),
+      ).map((change) => change.label),
+    ).not.toContain("Sources");
+    // An update with no base cannot say what changed, so it says nothing.
+    expect(
+      opChanges(parked({ fields: { fieldValues: { _sources: sources } } })),
+    ).toEqual([]);
+    // A new place's sources are part of what it carries.
+    expect(
+      opChanges(
+        parked({
+          op: "create",
+          fields: { fieldValues: { _sources: sources } },
+        }),
+      ),
+    ).toEqual([
+      { label: "Sources", value: "RopeWiki, Guide", rejected: false },
+    ]);
+  });
+
   it("never renders a coordinate, whatever the op carries", () => {
     // A create carries lat/lng, and this screen is the one that ends up in a
     // screenshot (shared/DESIGN.md §13). Hidden entirely rather than "(hidden)": a row

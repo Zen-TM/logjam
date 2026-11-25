@@ -2,8 +2,8 @@
 // GIS (GeoTIFF, GeoPackage) or a styled map for an offline app (MBTiles), made
 // by the export worker (topo/area_export.py, which mirrors these declarations:
 // topo/tests/test_area_export.py).
-import { NSW_5M } from "./demSources.js";
 import { nswContourStyle } from "./nswContours.js";
+import { REGIONS, regionTouchesBox, type Region } from "./regions.js";
 import { normalizeUserUiPreferences } from "./themeSchemes.js";
 import { say } from "./userSentence.js";
 
@@ -49,7 +49,11 @@ export const AREA_EXPORT_MAX_SIDE_KM = 100;
 
 export const AREA_EXPORT_TOO_LARGE = say`A map can be up to ${AREA_EXPORT_MAX_SIDE_KM} km on a side. Choose a smaller area, or split it into smaller maps.`;
 
-export const AREA_EXPORT_OUTSIDE_NSW = say`That area is outside NSW, where the statewide terrain is. Choose an area in NSW.`;
+/**
+ * Names every region with terrain, which `say` cannot take as a hole: a
+ * region's name is not a sentence. Guard: `areaExport.test.ts`.
+ */
+export const AREA_EXPORT_OUTSIDE_TERRAIN = say`That area is outside NSW, where the statewide terrain is. Choose an area in NSW.`;
 
 /** What the worker says when an export fails for no reason the owner can act
  *  on. Logjam Web offers Report a bug beside exactly this sentence; the
@@ -78,18 +82,17 @@ export function areaExportTooLarge(bbox: AreaBbox): boolean {
 }
 
 /**
- * Whether the box touches the statewide terrain's coverage rectangle, a quick
- * check at submit. The rectangle takes in parts of Victoria, South Australia
- * and Queensland, so a box there passes, and the worker, finding no tiles,
- * fails it with the same sentence (topo/area_export.py `AreaOutsideNsw`).
+ * Whether the box touches a region with terrain, by its border, a quick check
+ * at submit. The border runs a little outside the real one, so a box just
+ * over it passes, and the worker, finding no tiles, fails it with the same
+ * sentence (topo/area_export.py `AreaOutsideNsw`).
  */
-export function areaInNsw(bbox: AreaBbox): boolean {
-  const [west, south, east, north] = NSW_5M.coverage;
-  return (
-    bbox.east > west &&
-    bbox.west < east &&
-    bbox.north > south &&
-    bbox.south < north
+export function areaInTerrainRegion(
+  bbox: AreaBbox,
+  regions: readonly Region[] = REGIONS,
+): boolean {
+  return regions.some(
+    (region) => region.terrain !== null && regionTouchesBox(region, bbox),
   );
 }
 

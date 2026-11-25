@@ -13,9 +13,10 @@ import {
   CreateMultipartUploadCommand,
 } from "@aws-sdk/client-s3";
 import { s3, ecs } from "../services/awsClients";
+import { readS3Range } from "../lib/readS3Range";
 import {
   say,
-  parseZipCentralDirectory,
+  readZipEntries,
   classifyElvisEntries,
   ElvisZipError,
   validateRasterTemplateSettings,
@@ -34,6 +35,7 @@ import { assertGlobalCapacity } from "../lib/fargateCapacity";
 import { assertHasStorageQuota } from "../lib/storageQuota";
 import {
   MAX_INPUT_ZIP_COMPRESSED_BYTES,
+  MAX_INPUT_ZIP_UNCOMPRESSED_BYTES,
   TOPO_UPLOAD_MAX_PARTS,
   TOPO_UPLOAD_PART_BYTES,
   joinTopoUpload,
@@ -87,6 +89,35 @@ export const TOPO_JOB_SELECT = {
   updatedAt: true,
 } as const;
 
+/**
+ * The keys of a job as its RECIPIENT sees it: every TOPO_JOB_SELECT column but
+ * the two below, plus the derived syncRole. Stated so topoJobs.unit.test.ts can
+ * prove the view equals it and that every selected column is classified, as
+ * lib/placeVisibility.ts does for places: a column added to the select is a
+ * decision about sharees, not a default.
+ */
+export const SHAREE_VISIBLE_TOPO_JOB_FIELDS: readonly string[] = [
+  "id",
+  "status",
+  // A sharee sees what the owner called the job, where it is and why it failed.
+  "name",
+  "footprint",
+  "tileCount",
+  "estimatedSeconds",
+  "layerOptions",
+  "errorMessage",
+  "createdAt",
+  "updatedAt",
+  "syncRole",
+];
+
+/** Selected or stored, never in a recipient's view, each with its reason. */
+export const OWNER_ONLY_TOPO_JOB_FIELDS: Record<string, string> = {
+  userId:
+    "the owner's internal id; syncRole is the whole answer a recipient needs",
+  s3OutputKeys: "raw bucket keys, and a key can name a place",
+};
+
 /** syncRole mirrors the waypoint/route delta convention: a 'shared' row is
  *  read-only on the client. */
 function syncRoleFor(row: { userId: string }, callerId: string) {
@@ -108,11 +139,6 @@ export function serializeTopoJobFor<
   };
 }
 
-// Uncompressed input-ZIP cap, the zip-bomb / disk-DoS guard for the Fargate
-// worker. A legitimate ELVIS export is ~17 MB compressed LAZ + ~5 MB DEM per
-// tile; this sits well above any realistic one while rejecting pathological
-// archives before the worker is launched.
-const MAX_INPUT_ZIP_UNCOMPRESSED_BYTES = 50 * 1024 * 1024 * 1024; // 50 GB
 const ECS_TASK_DEFINITION = env.ECS_TOPO_TASK_DEF;
 // Non-empty subnet list = launch the worker via RunTask. Local dev sets dummy
 // subnets (.env.local) so MiniStack spawns the worker container; an empty list
@@ -323,25 +349,15 @@ router.post(
       );
     }
 
-    // Re-validate ZIP central directory from S3 (range-GET last 64 KB).
-    // Catches bypassed clients or corrupted uploads before paying ECS spin-up cost.
-    // 64 KB fits ~900 central-directory entries — sufficient for all realistic ELVIS zips.
-    const tailLen = Math.min(65536, objectSize);
-    const rangeStart = objectSize - tailLen;
-    const tail = await s3.send(
-      new GetObjectCommand({
-        Bucket: TOPO_BUCKET,
-        Key: job.s3InputKey!,
-        Range: `bytes=${rangeStart}-${objectSize - 1}`,
-      }),
-    );
-    const tailBytes = await tail.Body!.transformToByteArray();
+    // Re-validate the ZIP's central directory from S3 with ranged GETs: the end
+    // of the file (ZIP_TAIL_BYTES), plus the directory itself when that is
+    // larger (readZipEntries bounds it). Catches bypassed clients or corrupted uploads before paying
+    // ECS spin-up cost.
     let verifiedTileCount: number | null = null;
     let lazCount = 0;
     try {
-      const entries = parseZipCentralDirectory(
-        new Uint8Array(tailBytes),
-        objectSize,
+      const entries = await readZipEntries(objectSize, (start, end) =>
+        readS3Range(TOPO_BUCKET, job.s3InputKey!, start, end, objectSize),
       );
       const zipStats = classifyElvisEntries(entries);
       // Zip-bomb guard: reject if the declared uncompressed payload would

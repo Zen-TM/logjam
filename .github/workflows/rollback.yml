@@ -5,13 +5,17 @@ name: Rollback
 # post-deploy smoke test fails. The same steps as plain AWS CLI, for when
 # GitHub Actions itself is down: docs/operations/rollback.md.
 #
-#   api:      EB back to the version labelled <sha> (every deployed sha is
-#             one) and the task defs that run the API image repinned
-#             (infra/scripts/pin-release.sh). No migration: the schema stays
-#             forward. rollback-compat.yml tests only the release that was live
-#             when a migration merged against it, so going back further than
-#             one release can cross a contract migration: check
-#             api/prisma/migrations/ between <sha> and live first.
+#   api:      The task defs that run the API image repinned
+#             (infra/scripts/pin-release.sh) and the brain's release pointer
+#             rewritten for <sha>; the brain's release agent makes its API
+#             match, and the smoke test waits for it. A <sha> without
+#             infra/brain/api.env, or built before the image carried the
+#             brain's certificate, cannot be rolled back to there. No
+#             migration: the schema stays forward. rollback-compat.yml tests
+#             only the release that was live when a migration merged against
+#             it, so going back further than one release can cross a contract
+#             migration: check api/prisma/migrations/ between <sha> and live
+#             first.
 #   frontend: releases/<sha>/index.html copied over index.html. The deploy
 #             keeps old hashed assets for 30 days, so the old index.html finds
 #             its chunks. Only index.html is restored: unhashed public/ files
@@ -20,7 +24,7 @@ name: Rollback
 #   worker:   the topo task defs repinned to the <sha> image.
 #
 # Each target refuses before changing anything if the release is gone (ECR
-# keeps 15 images per repo; the frontend prunes after 30 days).
+# keeps 15 releases per repo; the frontend prunes after 30 days).
 #
 # No loop: this workflow never calls itself or a deploy. If its own smoke test
 # fails the run goes red and stops.
@@ -61,6 +65,7 @@ jobs:
     name: No ${{ inputs.target }} deploy queued or running
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     permissions:
       actions: read
     steps:
@@ -98,9 +103,14 @@ jobs:
       cancel-in-progress: false
     environment: prod
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     permissions:
       id-token: write
       contents: read
+    outputs:
+      # Whether the brain's API runs, so whether the public URL can show this
+      # rollback (see deploy-api.yml).
+      verify: ${{ steps.serving.outputs.serving }}
     env:
       TARGET: ${{ inputs.target }}
       SHA: ${{ inputs.sha }}
@@ -117,56 +127,61 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      - name: Is the brain serving?
+        id: serving
+        if: inputs.target == 'api'
+        run: |
+          set -euo pipefail
+          serving=$(infra/scripts/brain-setting.sh brain_serving)
+          echo "serving=$serving" >> "$GITHUB_OUTPUT"
+
+      - name: No smoke test can see this rollback
+        if: inputs.target == 'api' && steps.serving.outputs.serving != 'true'
+        run: echo "::notice::brain_serving is off, so the brain's API is stopped. The rollback is written; check the brain through the host."
+
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6
         with:
           role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/logjam-github-actions-role
           aws-region: ${{ secrets.AWS_REGION }}
 
-      - name: Roll back the API
+      # The API task definitions go back to the image (the migrate and script
+      # tasks), and the pointer below does the rest.
+      - name: Roll back the API's task definitions
         if: inputs.target == 'api'
-        env:
-          EB_APPLICATION: ${{ secrets.EB_APPLICATION_NAME }}
-          EB_ENVIRONMENT: ${{ secrets.EB_ENVIRONMENT_NAME }}
         run: |
           set -euo pipefail
-          LABEL=$(aws elasticbeanstalk describe-application-versions \
-            --application-name "$EB_APPLICATION" --version-labels "$SHA" \
-            --query 'ApplicationVersions[0].VersionLabel' --output text)
-          if [ "$LABEL" != "$SHA" ]; then
-            echo "::error::no EB application version labelled $SHA"; exit 1
-          fi
           if ! aws ecr describe-images --repository-name logjam-api --image-ids "imageTag=$SHA" > /dev/null; then
             echo "::error::logjam-api:$SHA is no longer in ECR"; exit 1
           fi
-
           infra/scripts/pin-release.sh "$REGISTRY/logjam-api:$SHA"
 
-          # A deploy that failed mid-swap can leave EB still updating, and EB
-          # refuses an update until it is Ready.
-          aws elasticbeanstalk wait environment-updated --environment-names "$EB_ENVIRONMENT"
-          # Skip the swap when it is already live: each one is a cold restart.
-          CURRENT=$(aws elasticbeanstalk describe-environments --environment-names "$EB_ENVIRONMENT" \
-            --query 'Environments[0].VersionLabel' --output text)
-          if [ "$CURRENT" = "$SHA" ]; then
-            echo "EB already runs $SHA; no swap"
-          else
-            echo "EB: $CURRENT -> $SHA"
-            aws elasticbeanstalk update-environment --environment-name "$EB_ENVIRONMENT" \
-              --version-label "$SHA" > /dev/null
+      # The brain's release pointer for the sha, with the env that sha shipped
+      # (see deploy-api.yml). The pointer is the whole rollback, so a sha from
+      # before the brain, with no infra/brain/api.env, is an error.
+      - name: Point the brain at the rolled-back release
+        if: inputs.target == 'api'
+        env:
+          SIGNALS_BUCKET: logjam-brain-signals-${{ secrets.AWS_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          # The checkout is shallow and may not hold the sha.
+          git fetch --depth=1 origin "$SHA"
+          if ! git cat-file -e "FETCH_HEAD:infra/brain/api.env" 2> /dev/null; then
+            echo "::error::$SHA predates the brain (no infra/brain/api.env): the brain has no release to run for it, so it cannot be rolled back to there"
+            exit 1
           fi
-          aws elasticbeanstalk wait environment-updated --environment-names "$EB_ENVIRONMENT"
-          LIVE=$(aws elasticbeanstalk describe-environments --environment-names "$EB_ENVIRONMENT" \
-            --query 'Environments[0].VersionLabel' --output text)
-          if [ "$LIVE" != "$SHA" ]; then
-            echo "::error::EB finished updating on $LIVE, not $SHA"; exit 1
-          fi
+          git show "FETCH_HEAD:infra/brain/api.env" > "$RUNNER_TEMP/api.env"
+          infra/scripts/brain-release.sh "$SHA" "$RUNNER_TEMP/api.env" > "$RUNNER_TEMP/release.json"
+          aws s3 cp "$RUNNER_TEMP/release.json" "s3://$SIGNALS_BUCKET/release.json" \
+            --content-type application/json
 
       - name: Roll back the frontend
         if: inputs.target == 'frontend'
         env:
           BUCKET: ${{ secrets.FRONTEND_S3_BUCKET }}
           DISTRIBUTION: ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }}
+          API_URL: ${{ vars.PROD_API_URL }}
         run: |
           set -euo pipefail
           # Every file the release shipped must still be there.
@@ -178,6 +193,15 @@ jobs:
           MISSING=$(sort "$RUNNER_TEMP/files.txt" | comm -23 - "$RUNNER_TEMP/present.txt")
           if [ -n "$MISSING" ]; then
             echo "::error::release $SHA is missing files (pruned?):"; echo "$MISSING"; exit 1
+          fi
+
+          # A release built for another API address cannot work, and the smoke
+          # test would not notice: it loads the page and never calls the API.
+          # The page's CSP names the API address first in connect-src, held
+          # to PROD_API_URL by frontend/src/cspAgreement.test.ts.
+          aws s3 cp "s3://$BUCKET/releases/$SHA/index.html" "$RUNNER_TEMP/index.html"
+          if [ -z "$API_URL" ] || ! grep -qF "connect-src 'self' $API_URL " "$RUNNER_TEMP/index.html"; then
+            echo "::error::release $SHA was built for another API address than '$API_URL' (PROD_API_URL): rolling back to it would serve a page that cannot reach the API"; exit 1
           fi
 
           # REPLACE drops the source's headers, so each is restated.
@@ -204,8 +228,10 @@ jobs:
     # !cancelled(), as on rollback: a deploy's automatic rollback skips
     # preflight, and without it the implicit success() skips this smoke
     # test too, leaving the restored release unchecked.
-    if: ${{ !cancelled() && needs.rollback.result == 'success' && inputs.target != 'worker' }}
+    if: ${{ !cancelled() && needs.rollback.result == 'success' && inputs.target != 'worker' && needs.rollback.outputs.verify != 'false' }}
     uses: ./.github/workflows/smoke.yml
     with:
       target: ${{ inputs.target }}
       sha: ${{ inputs.sha }}
+      # The brain's release agent needs longer than a frontend's CDN: 5 minutes, not 3.
+      attempts: ${{ inputs.target == 'api' && 30 || 18 }}

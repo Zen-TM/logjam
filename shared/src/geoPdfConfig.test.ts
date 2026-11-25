@@ -78,14 +78,12 @@ describe("validateGeoPdfConfig", () => {
     expect(validateGeoPdfConfig({ ...validConfig(), scale: -5 })).toBe(
       "Invalid scale",
     );
-    // @ts-expect-error deliberately wrong type
     expect(validateGeoPdfConfig({ ...validConfig(), scale: "big" })).toBe(
       "Invalid scale",
     );
   });
 
   it("rejects non-array overlays", () => {
-    // @ts-expect-error deliberately wrong type
     expect(
       validateGeoPdfConfig({ ...validConfig(), overlays: "hillshade" }),
     ).toBe("Invalid overlays: must be an array");
@@ -114,7 +112,6 @@ describe("validateGeoPdfConfig", () => {
   });
 
   it("rejects non-array placeMarkers", () => {
-    // @ts-expect-error deliberately wrong type
     expect(validateGeoPdfConfig({ ...validConfig(), placeMarkers: {} })).toBe(
       "Invalid placeMarkers: must be an array",
     );

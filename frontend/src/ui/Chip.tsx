@@ -268,6 +268,7 @@ export function ChipRail<T extends string>({
   trailing,
   className,
   hint,
+  describedBy,
   wrap,
 }: {
   /** The group's accessible name — "Place type", "Status". */
@@ -281,6 +282,8 @@ export function ChipRail<T extends string>({
   /** One plain sentence under the rail about the choice made, read with the
    *  group (shared/DESIGN.md §12). */
   hint?: string;
+  /** Another element that describes the group (a `FieldGroup`'s hint and error). */
+  describedBy?: string;
   /** Wrap onto a second line instead of scrolling, for a short rail whose
    *  chips must all be visible at once (a scale beside its label). */
   wrap?: boolean;
@@ -391,7 +394,10 @@ export function ChipRail<T extends string>({
           <div
             role="radiogroup"
             aria-label={label}
-            aria-describedby={hint ? hintId : undefined}
+            aria-describedby={
+              [hint ? hintId : null, describedBy].filter(Boolean).join(" ") ||
+              undefined
+            }
             tabIndex={-1}
             className={classes.group}
             onKeyDown={onKeyDown}

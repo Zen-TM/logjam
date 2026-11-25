@@ -9,7 +9,7 @@
 // as they do, and fades behind itself. Flat ground is the page colour
 // exactly, so only the slopes show.
 import { useEffect, useRef, useState } from "react";
-import { NSW_5M } from "@logjam/shared";
+import { NSW_REGION } from "@logjam/shared";
 import { useIsMobile } from "../useIsMobile";
 import {
   cover,
@@ -375,7 +375,7 @@ function SignInTerrain({ area }: { area: Area | null }) {
       </div>
       {area && (
         <p className={classes.credit}>
-          {area.terrain.name}. {NSW_5M.credit}
+          {area.terrain.name}. {NSW_REGION.terrain.heights.credit}
         </p>
       )}
     </>

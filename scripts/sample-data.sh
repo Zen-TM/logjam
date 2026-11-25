@@ -34,7 +34,7 @@ fetch() {
   }
   mkdir -p "$DIR"
   if ! (cd "$DIR" && sha256 -c --status <<<"$line" >/dev/null 2>&1); then
-    curl -fsSL --retry 3 -o "$DIR/$name.part" "$BASE_URL/$name"
+    curl -fsSL --retry 5 --retry-delay 10 --retry-all-errors -o "$DIR/$name.part" "$BASE_URL/$name"
     mv "$DIR/$name.part" "$DIR/$name"
     (cd "$DIR" && sha256 -c --status <<<"$line") || {
       rm -f "$DIR/$name"; echo "sha256 mismatch for $name" >&2; return 1

@@ -4,6 +4,8 @@
 // Declared elsewhere and read by both, not copied here: the sorts
 // (`PLACE_SORT_OPTIONS`), a row's second line (`placeSummary`).
 import type { IconIdea } from "../icons.js";
+import { canyonRegionsOf, type Region } from "../regions.js";
+import { normalizeUserUiPreferences } from "../themeSchemes.js";
 import { placeSortLabel } from "../placeFilterOptions.js";
 import type { PlaceSortKey } from "../placeFilter.js";
 import type { ClientOnly, ContractPlatform, ScreenContract } from "./types.js";
@@ -92,7 +94,30 @@ export const PLACES_ADD = {
 } as const satisfies ScreenContract;
 
 /**
- * The first-run dialog offering to load the NSW place database or import the
+ * The canyon-list import, one offer per chosen region with a source
+ * (`canyonRegionsOf`): in the first-run dialog and the Add menu. With one
+ * region the menu entry needs no name.
+ */
+export const ROPEWIKI_OFFER = {
+  title: (region: Region) =>
+    `Load the ${region.name} place database (RopeWiki)`,
+  hint: (region: Region) =>
+    `Recommended — hundreds of ${region.name} canyons, so your trips have something to match against`,
+  menu: (region: Region, offers: number) =>
+    offers > 1
+      ? `Import ${region.name} from RopeWiki`
+      : PLACES_ADD.copy.importRopewiki,
+  confirmBody: (region: Region) =>
+    `This fetches the public ${region.name} canyon list from ropewiki.com and adds any canyons you don't already have, updating RopeWiki-sourced ones you haven't edited. Canyons that look like ones you already have are set aside for you to review before they're imported. Nothing you've edited is overwritten.`,
+};
+
+/** The regions an account is offered a canyon import for, from its preferences. */
+export function canyonOffersFor(uiPreferences: unknown): Region[] {
+  return canyonRegionsOf(normalizeUserUiPreferences(uiPreferences).regions);
+}
+
+/**
+ * The first-run dialog offering to load the place database or import the
  * user's own files. Not a menu entry, so not a `PLACES_ADD` section.
  */
 export const PLACES_ONBOARDING = [

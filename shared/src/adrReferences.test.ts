@@ -37,7 +37,7 @@ const NAMED_AS_DELETED: Record<string, string[]> = {
     "scripts/github-settings.sh",
     "github/terraform.tfstate",
   ],
-  // The region-clip endpoint, removed in #510; 0029 is superseded and 0033
+  // The region-clip endpoint, since removed; 0029 is superseded and 0033
   // and 0036 say it is gone.
   "0029-vector-map-with-every-signed-in-region.md": [
     "routes/basemap.ts",
@@ -54,7 +54,7 @@ const NAMED_AS_DELETED: Record<string, string[]> = {
   "0044-river-gauges-are-public-files-from-waternsw-and-bom.md": [
     "master/gauges/v1/",
   ],
-  "0048-the-weather-overlay-is-public-files-cut-from-open-meteos-grids-by-a-job.md":
+  "0049-the-weather-overlay-is-public-files-cut-from-open-meteos-grids-by-a-job.md":
     ["master/weather/v1/"],
 };
 

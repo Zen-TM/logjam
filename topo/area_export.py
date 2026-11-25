@@ -131,10 +131,10 @@ class AreaExportError(Exception):
 
 
 class AreaOutsideNsw(AreaExportError):
-    """No statewide tiles in the box: the API's coverage rectangle is wider
-    than NSW, so a box in Victoria or Queensland gets this far. `SENTENCE` is
-    what the owner reads, the API's AREA_EXPORT_OUTSIDE_NSW
-    (tests/test_area_export.py)."""
+    """No statewide tiles in the box: the API checks the box against NSW's
+    border, drawn a little outside the real one, so a box just over it gets
+    this far. `SENTENCE` is what the owner reads, the API's
+    AREA_EXPORT_OUTSIDE_TERRAIN (tests/test_area_export.py)."""
 
     SENTENCE = (
         "That area is outside NSW, where the statewide terrain is. Choose an "

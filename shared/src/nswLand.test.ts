@@ -5,12 +5,12 @@ import {
   LAND_CLASSES,
   LAND_EDGE_LINES,
   LAND_TILE_MARGIN_PX,
-  NSW_LAND,
   landClass,
   landColor,
   landNameOf,
 } from "./nswLand.js";
 import { MAP_TERRAIN } from "./contracts/mapTerrain.js";
+import { NSW_REGION } from "./regions.js";
 
 describe("landColor", () => {
   // Mutation: leave a class out of the expression, and that land is undrawn
@@ -19,7 +19,7 @@ describe("landColor", () => {
     const expression = landColor();
     expect(expression.slice(0, 2)).toEqual([
       "match",
-      ["get", NSW_LAND.classProperty],
+      ["get", NSW_REGION.terrain.land.classProperty],
     ]);
     for (const { source, colour } of LAND_CLASSES) {
       const at = expression.indexOf(source);
@@ -53,7 +53,7 @@ describe("LAND_EDGE_LINES", () => {
 
 describe("landNameOf", () => {
   const feature = (value: unknown) => ({
-    properties: { [NSW_LAND.classProperty]: value },
+    properties: { [NSW_REGION.terrain.land.classProperty]: value },
   });
 
   // Mutation: show the source's word, and "Indigenous Owned" labels NPWS
@@ -90,6 +90,8 @@ describe("Land's credit", () => {
   // Mutation: drop `land` from TOPO_OVERLAY_SOURCE, and a print shows CC BY
   // data with no credit.
   it("goes on a print", () => {
-    expect(overlayAttributionLines(["land"])).toEqual([NSW_LAND.credit]);
+    expect(overlayAttributionLines(["land"])).toEqual([
+      NSW_REGION.terrain.land.credit,
+    ]);
   });
 });

@@ -44,7 +44,7 @@ import * as FileSystem from "expo-file-system/legacy";
 
 import {
   BASEMAP_CATALOG,
-  NSW_5M,
+  NSW_REGION,
   SHARPENED_SOURCE_PREFIX,
   TOPO_LAYERS,
   formatDistanceM,
@@ -161,6 +161,7 @@ import {
   isRegionArtifact,
   overlayJobId,
   regionGroupKey,
+  savedAreaGroups,
 } from "../offline/artifactGroups";
 import {
   groupRegionJobs,
@@ -238,7 +239,7 @@ function regionMemberName(artifact: MapArtifact): string {
   if (artifact.kind === "fire-region") return MAP_TERRAIN.copy.fire;
   if (artifact.kind === "coverage-region") return MAP_TERRAIN.copy.coverage;
   if (artifact.kind !== "dem-region") return basemapName(artifact.logicalKey);
-  return artifact.logicalKey === NSW_5M.id
+  return artifact.logicalKey === NSW_REGION.terrain.heights.id
     ? "Elevation data, NSW 5 m"
     : "Elevation data";
 }
@@ -998,7 +999,7 @@ export function SavedScreen({
     // (no groupId) group under their own id and stand alone, unchanged.
     // A card sits where it was first saved (the oldest of its files), so an
     // update, which writes newer files, does not move it.
-    const regionCards = groupArtifacts(regionArtifacts, regionGroupKey)
+    const regionCards = savedAreaGroups(artifacts)
       .map((group) => ({ group, dates: cardDates(group.members) }))
       .sort((a, b) => b.dates.savedAt.localeCompare(a.dates.savedAt));
     for (const { group, dates } of regionCards) {
@@ -1044,10 +1045,7 @@ export function SavedScreen({
               busy: isGroupBusy(regionJobs, group.key),
               running: updatingCards.get(group.key),
               run: () =>
-                startRegionUpdate(
-                  group.members,
-                  group.label ?? "Offline map region",
-                ),
+                startRegionUpdate(group.members, group.label ?? "Offline map"),
             }
           : undefined,
         members: group.members.map((artifact) => ({
@@ -1822,6 +1820,7 @@ export function SavedScreen({
       </CollapsingHeader>
 
       <HeroScrollView
+        style={heroCollapse.listStyle}
         {...heroCollapse.scrollProps}
         contentContainerStyle={[styles.body, heroCollapse.inset()]}
         showsVerticalScrollIndicator={false}

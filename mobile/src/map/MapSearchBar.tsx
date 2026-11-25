@@ -597,6 +597,9 @@ export function MapSearchBar({
 const useStyles = makeStyles((theme, textRole) => ({
   root: {
     position: "absolute",
+    // Over the notice stack, which MapScreen draws after this bar: its results
+    // list must not have a warning on top of it (mapBanner.test.ts).
+    zIndex: 1,
     left: CHROME_GAP,
     right: CHROME_GAP,
     gap: spacing(1),

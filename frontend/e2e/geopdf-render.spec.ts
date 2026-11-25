@@ -1,11 +1,5 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
-import {
-  BASEMAP_CATALOG,
-  NSW_CONTOURS,
-  NSW_HILLSHADE,
-  NSW_LAND,
-  NSW_SLOPE,
-} from "@logjam/shared";
+import { BASEMAP_CATALOG, NSW_REGION } from "@logjam/shared";
 // Deliberate subpath imports: the import parser is kept out of the shared
 // barrel so pdf-lib never rides into the web bundle.
 import {
@@ -46,10 +40,10 @@ const PROTOMAPS_ARCHIVE = BASEMAP_CATALOG.find(
   (entry) => entry.id === "protomaps",
 )!.urlTemplate;
 const ARCHIVE_PATHS: Record<string, Buffer> = {
-  [NSW_HILLSHADE.archivePath]: archives.heights,
-  [NSW_SLOPE.archivePath]: archives.slope,
-  [NSW_CONTOURS.archivePath]: archives.contours,
-  [NSW_LAND.archivePath]: archives.land,
+  [NSW_REGION.terrain.hillshade.archivePath]: archives.heights,
+  [NSW_REGION.terrain.slope.archivePath]: archives.slope,
+  [NSW_REGION.terrain.contours.archivePath]: archives.contours,
+  [NSW_REGION.terrain.land.archivePath]: archives.land,
   [PROTOMAPS_ARCHIVE]: archives.basemap,
 };
 
@@ -83,7 +77,7 @@ async function stubNetwork(
   await page.route("**/master/**", async (route: Route) => {
     const path = new URL(route.request().url()).pathname.slice(1);
     const body =
-      broken && path === NSW_HILLSHADE.archivePath
+      broken && path === NSW_REGION.terrain.hillshade.archivePath
         ? broken
         : ARCHIVE_PATHS[path];
     if (!body) return route.fulfill({ status: 404 });

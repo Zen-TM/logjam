@@ -1124,14 +1124,14 @@ export function NotificationsScreen({
       ) : null,
     list: () => (
       <HeroSectionList
-        style={styles.list}
+        style={[styles.list, heroCollapse.listStyle]}
         contentContainerStyle={[styles.listContent, heroCollapse.inset()]}
         sections={sections}
         keyExtractor={keyExtractor}
         initialNumToRender={12}
         maxToRenderPerBatch={8}
         windowSize={5}
-        removeClippedSubviews
+        removeClippedSubviews={false}
         keyboardShouldPersistTaps="handled"
         {...mergeScrollProps(heroCollapse.scrollProps, pull.scrollProps)}
         ListHeaderComponent={
@@ -1143,7 +1143,7 @@ export function NotificationsScreen({
         }
         refreshControl={
           <pull.Refresh
-            progressViewOffset={heroCollapse.headerHeight}
+            progressViewOffset={heroCollapse.refreshOffset}
             refreshing={false}
             onRefresh={query.refetch}
             tintColor={theme.accent}

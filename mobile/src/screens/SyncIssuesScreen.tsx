@@ -586,6 +586,7 @@ export function SyncIssuesScreen({
       ) : null}
 
       <FlatList
+        keyboardShouldPersistTaps="handled"
         style={styles.list}
         contentContainerStyle={styles.listContent}
         data={items}

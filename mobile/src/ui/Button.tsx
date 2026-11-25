@@ -27,6 +27,8 @@ type ButtonProps = {
   loading?: boolean;
   /** Optional leading glyph, tinted with the label. */
   icon?: Glyph;
+  /** A glyph after the label: "expand" for a button that opens a menu. */
+  trailingIcon?: Glyph;
   /** Shrink-wrap for use inside a header/row instead of as a block action. */
   compact?: boolean;
   /**
@@ -51,6 +53,7 @@ export function Button({
   reasonShown,
   loading = false,
   icon,
+  trailingIcon,
   compact = false,
   grow = false,
 }: ButtonProps) {
@@ -114,6 +117,9 @@ export function Button({
           >
             {label}
           </Text>
+          {trailingIcon ? (
+            <Icon idea={trailingIcon} size={compact ? 16 : 18} color={tint} />
+          ) : null}
         </>
       )}
     </Pressable>

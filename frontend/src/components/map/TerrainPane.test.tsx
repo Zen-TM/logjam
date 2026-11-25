@@ -12,8 +12,8 @@ import {
   fireLegendRows,
   NSW_COVERAGE,
   MAP_TERRAIN,
+  NSW_REGION,
   NSW_FIRE,
-  NSW_LAND,
   OVERLAY_LEGENDS,
   RASTER_TEMPLATE_DEFAULTS,
   TERRAIN_LAYER_DEFAULTS,
@@ -258,7 +258,7 @@ describe("the Land tenure row on Logjam Web", () => {
     expect(legend).toContain(copy.landLegend);
     expect(legend).toContain("Private land");
     expect(legend).toContain(copy.landCaveat);
-    expect(legend).toContain(NSW_LAND.credit);
+    expect(legend).toContain(NSW_REGION.terrain.land.credit);
   });
 });
 

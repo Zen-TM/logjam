@@ -30,6 +30,7 @@ jobs:
   rollback:
     if: github.actor == github.repository_owner && github.triggering_actor == github.repository_owner
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     environment: mobile-ota
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -52,7 +53,7 @@ jobs:
       - name: Install
         working-directory: mobile
         run: npm ci
-      - uses: expo/expo-github-action@9da89d3617bb88139671bad31b09c65714c2ee06 # 9.0.1
+      - uses: expo/expo-github-action@5273c2136bd09c2a341fe3340d3e767ce5a13015 # 9.0.2
         with:
           eas-version: 24.8.0
           token: ${{ secrets.EXPO_TOKEN }}

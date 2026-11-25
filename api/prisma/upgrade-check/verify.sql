@@ -5,27 +5,21 @@
 
 \set ON_ERROR_STOP on
 
--- Every subject baseline.sql saw is unchanged, and users has neither the
--- cognito_id column nor its index. Mutation: drop the DROP COLUMN (or the DROP
--- INDEX) and the existence check fails; drop the wrong column and a subject
--- goes missing.
-SELECT to_regclass('upgrade_check.users') IS NOT NULL AS drop_applies \gset
-\if :drop_applies
+-- Every account the base had holds 800 credits and 10 GiB, an override
+-- included, and none was dropped. Mutation: drop the UPDATE from the migration
+-- (fixture x keeps 5000 and 100 GiB), or add a WHERE that spares overrides.
+SELECT to_regclass('upgrade_check.users') IS NOT NULL AS limits_apply \gset
+\if :limits_apply
 DO $$
 DECLARE bad BIGINT;
 BEGIN
   SELECT count(*) INTO bad
     FROM upgrade_check.users b LEFT JOIN users u ON u.id = b.id
-   WHERE u.id IS NULL OR u.subject IS DISTINCT FROM b.subject;
+   WHERE u.id IS NULL
+      OR u.monthly_compute_credits <> 800
+      OR u.monthly_egress_quota_bytes <> 10737418240;
   IF bad > 0 THEN
-    RAISE EXCEPTION 'upgrade-check: % user(s) lost or changed their subject', bad;
-  END IF;
-
-  IF EXISTS (
-    SELECT 1 FROM information_schema.columns
-     WHERE table_name = 'users' AND column_name = 'cognito_id'
-  ) OR to_regclass('users_cognito_id_key') IS NOT NULL THEN
-    RAISE EXCEPTION 'upgrade-check: users.cognito_id or its index is still there';
+    RAISE EXCEPTION 'upgrade-check: % account(s) did not take the launch limits', bad;
   END IF;
 END $$;
 DROP SCHEMA upgrade_check CASCADE;

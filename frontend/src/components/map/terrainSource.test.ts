@@ -7,7 +7,7 @@ import {
   dropStaleTerrainSources,
   terrainSourceFor,
 } from "./terrainSource";
-import { NSW_5M, type SharpenedOverlay } from "@logjam/shared";
+import { NSW_REGION, type SharpenedOverlay } from "@logjam/shared";
 
 function fakeMap(lng: number, lat: number) {
   const sources = new Map<string, unknown>();
@@ -126,7 +126,7 @@ describe("terrainSourceFor", () => {
       });
       expect(spec.url).toBeUndefined();
       expect(spec.attribution).toContain("a made-up survey");
-      expect(spec.attribution).toContain(NSW_5M.creditHtml);
+      expect(spec.attribution).toContain(NSW_REGION.terrain.heights.creditHtml);
     });
 
     // Mutation: one source id for every set, and a revoked share keeps being

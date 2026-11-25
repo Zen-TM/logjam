@@ -134,6 +134,7 @@ function Rail<T extends string>({
       <ScrollView
         ref={scrollRef}
         horizontal
+        keyboardShouldPersistTaps="handled"
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.rail}
         onScroll={trackOverflow}

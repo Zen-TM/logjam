@@ -30,6 +30,7 @@ import {
   keepAccountSlopeBands,
   setSlopeBandsAccount,
 } from "./map/slopeBandsPreference";
+import { keepAccountRegions } from "./regionsPreference";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import {
@@ -84,6 +85,8 @@ import { PickAreaScreen } from "./map/PickAreaScreen";
 import { readAreaPickerStart, setPickedArea } from "./map/pickedArea";
 import { setPickedPoint } from "./map/pickedPoint";
 import { ConsentGate } from "./screens/ConsentGate";
+import { RegionStep } from "./screens/RegionStep";
+import { showsRegionStep } from "./screens/regionChoice";
 import { FriendsScreen } from "./screens/FriendsScreen";
 import { FriendSharesScreen } from "./sharing/FriendSharesScreen";
 import { LeaderboardScreen } from "./screens/LeaderboardScreen";
@@ -102,6 +105,7 @@ import { DisplaySettingsScreen } from "./screens/settings/DisplaySettingsScreen"
 import { MapSettingsScreen } from "./screens/settings/MapSettingsScreen";
 import { NotificationSettingsScreen } from "./screens/settings/NotificationSettingsScreen";
 import { OfflineSettingsScreen } from "./screens/settings/OfflineSettingsScreen";
+import { RegionsSettingsScreen } from "./screens/settings/RegionsSettingsScreen";
 import { PrivacySettingsScreen } from "./screens/settings/PrivacySettingsScreen";
 import { SyncIssuesScreen } from "./screens/SyncIssuesScreen";
 import type { MirrorTrip } from "./sync/mirrorStore";
@@ -163,8 +167,10 @@ type MapStackParams = {
         // from Saved's add sheet the id is null and the route stands alone.
         drawRouteFor?: {
           placeId: string | null;
-          /** From a plan's page: the finished route is added to it. */
+          /** From a plan's page: the finished route is made in it, in a colour
+           *  its other ways lack. */
           planId?: string;
+          planRouteColors?: string[];
           nonce: number;
         };
         // `continueTrack` = "Continue recording" from Saved: pick a finished
@@ -289,10 +295,15 @@ type MoreStackParams = {
   Plan: {
     planId: string;
     name: string;
-    view?: "people";
+    view?: "people" | "items";
     invited?: boolean;
     joined?: boolean;
+    /** Said once as a toast on arrival: a route drawn for the plan was added. */
+    notice?: string;
   };
+  // A new place's point, picked on a map. The answer comes back in memory
+  // through `map/pickedPoint.ts`; nothing travels here.
+  PlanPickPoint: undefined;
   Account: undefined;
   Friends: undefined;
   // The per-friend sharing audit, pushed from a friend's overflow sheet. Params
@@ -305,6 +316,7 @@ type MoreStackParams = {
   // Settings sub-pages. One route each rather than one parameterised route: the
   // back stack reads Settings › Map the way the user got there.
   SettingsDisplay: undefined;
+  SettingsRegions: undefined;
   SettingsMap: undefined;
   SettingsNotifications: undefined;
   SettingsOffline: undefined;
@@ -314,6 +326,7 @@ type MoreStackParams = {
 /** Settings root → the route that page lives at. */
 const SETTINGS_ROUTES: Record<SettingsPage, keyof MoreStackParams> = {
   display: "SettingsDisplay",
+  regions: "SettingsRegions",
   map: "SettingsMap",
   notifications: "SettingsNotifications",
   offline: "SettingsOffline",
@@ -461,7 +474,7 @@ function MapStackNav() {
             planMode={route.params?.planMode ?? null}
             // The whole More stack is named, so Back from the plan lands on
             // Plans, whatever More held when the user left for the map.
-            onOpenPlan={(planId) =>
+            onOpenPlan={(planId, notice) =>
               navigation.getParent()?.navigate("More", {
                 state: {
                   routes: [
@@ -473,6 +486,7 @@ function MapStackNav() {
                         planId,
                         name: TRIP_PLANS_LIST.title,
                         view: "items",
+                        notice,
                       },
                     },
                   ],
@@ -1009,10 +1023,16 @@ Notifications.setNotificationHandler({
 
 export function AppShell({
   accountState,
+  newAccount = false,
+  onNewAccountDone,
   onLinkAccount,
   onSignOut,
 }: {
   accountState: AccountState;
+  /** The sign-up form just made the account: ask for its regions first. */
+  newAccount?: boolean;
+  /** The region step is done, wherever it was asked: never ask it again. */
+  onNewAccountDone?: () => void;
   onLinkAccount: () => void;
   onSignOut: SignOutHandler;
 }) {
@@ -1079,14 +1099,20 @@ export function AppShell({
     keepAccountSlopeBands(slopeBandsFetched, accountId);
   }, [slopeBandsFetched, accountId, isGuest]);
 
+  // The account's regions, kept the same way: they set what the pickers offer.
+  const accountRegions = userQuery.data?.uiPreferences?.regions;
+  const accountLoaded = userQuery.data != null;
   useEffect(() => {
-    // No account, no device row to register the push token against. The tap
-    // listener still mounts — it costs nothing and keeps this effect's shape
-    // identical either way.
+    if (!isGuest && accountLoaded) keepAccountRegions(accountRegions);
+  }, [accountRegions, accountLoaded, isGuest]);
+
+  useEffect(() => {
+    // A guest registers no token (it checks). The tap listener still mounts —
+    // it costs nothing and keeps this effect's shape identical either way.
     //
     // This registers the token only when notification permission is ALREADY
     // granted; it never prompts (Settings → Notifications asks).
-    if (!isGuest) void registerForPushNotifications();
+    void registerForPushNotifications(accountState);
     const subscription =
       Notifications.addNotificationResponseReceivedListener(offerTap);
     // A tap that STARTED the app is not delivered to a listener added after it:
@@ -1124,7 +1150,7 @@ export function AppShell({
       ongoingSubscription.remove();
       received.remove();
     };
-  }, [isGuest, accountState]);
+  }, [accountState]);
 
   useEffect(() => {
     const id = `ongoing-launch-${launchMounts++}`;
@@ -1179,11 +1205,26 @@ export function AppShell({
         consentVersion={currentConsentVersionOf(user)}
         newAccount={user.consentVersion === null}
         currentUsername={user.username}
+        accountState={accountState}
         onConsented={() => {
           setConsented(true);
+          // Its own region step has run for a new account.
+          onNewAccountDone?.();
           userQuery.refetch();
         }}
         onSignOut={onSignOut}
+      />
+    );
+  }
+
+  // Logjam GPS's sign-up form records consent itself, so the gate above never
+  // shows for an account it makes: its region step comes here instead.
+  if (showsRegionStep(newAccount)) {
+    return (
+      <RegionStep
+        accountState={accountState}
+        onDone={() => onNewAccountDone?.()}
+        onSignOut={() => onSignOut()}
       />
     );
   }
@@ -1517,6 +1558,10 @@ export function AppShell({
                           name={route.params.name}
                           initialView={route.params.view}
                           joined={route.params.joined}
+                          arrival={route.params.notice}
+                          onArrivalShown={() =>
+                            navigation.setParams({ notice: undefined })
+                          }
                           onBack={() => navigation.goBack()}
                           backLabel={backLabelOf(
                             navigation.getState(),
@@ -1533,17 +1578,21 @@ export function AppShell({
                               },
                             })
                           }
-                          onDrawRoute={(planId) =>
+                          onDrawRoute={(planId, planRouteColors) =>
                             navigation.getParent()?.navigate("Map", {
                               screen: "MapView",
                               params: {
                                 drawRouteFor: {
                                   placeId: null,
                                   planId,
+                                  planRouteColors,
                                   nonce: Date.now(),
                                 },
                               },
                             })
+                          }
+                          onPickPoint={() =>
+                            navigation.navigate("PlanPickPoint")
                           }
                           onDownloadMap={(bounds) =>
                             navigation.navigate("MoreRegionDownload", {
@@ -1558,6 +1607,22 @@ export function AppShell({
                         />
                       )
                     }
+                  </MoreStack.Screen>
+                  <MoreStack.Screen
+                    name="PlanPickPoint"
+                    options={{ headerShown: false }}
+                  >
+                    {({ navigation }) => (
+                      <PickPointScreen
+                        initialPoint={null}
+                        subject="place"
+                        onCancel={() => navigation.goBack()}
+                        onConfirm={(point) => {
+                          setPickedPoint(point);
+                          navigation.goBack();
+                        }}
+                      />
+                    )}
                   </MoreStack.Screen>
                   <MoreStack.Screen
                     name="Account"
@@ -1684,6 +1749,20 @@ export function AppShell({
                         route={route}
                       >
                         <DisplaySettingsScreen />
+                      </SettingsPageRoute>
+                    )}
+                  </MoreStack.Screen>
+                  <MoreStack.Screen
+                    name="SettingsRegions"
+                    options={{ headerShown: false }}
+                  >
+                    {({ navigation, route }) => (
+                      <SettingsPageRoute
+                        title={SETTINGS.copy.regions}
+                        navigation={navigation}
+                        route={route}
+                      >
+                        <RegionsSettingsScreen />
                       </SettingsPageRoute>
                     )}
                   </MoreStack.Screen>

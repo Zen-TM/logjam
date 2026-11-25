@@ -1,0 +1,17 @@
+# Added by host/lib.sh when BRAIN_LOG_GROUP_API and BRAIN_LOG_GROUP_PG are set:
+# both containers log to CloudWatch through the instance role.
+services:
+  postgres:
+    logging:
+      driver: awslogs
+      options:
+        awslogs-region: ${AWS_REGION:?}
+        awslogs-group: ${BRAIN_LOG_GROUP_PG:?}
+        tag: "{{.Name}}"
+  api:
+    logging:
+      driver: awslogs
+      options:
+        awslogs-region: ${AWS_REGION:?}
+        awslogs-group: ${BRAIN_LOG_GROUP_API:?}
+        tag: "{{.Name}}"

@@ -1,5 +1,18 @@
 import { describe, it, expect } from "vitest";
 import request from "supertest";
+import { HeadObjectCommand } from "@aws-sdk/client-s3";
+
+import prisma from "../services/prisma";
+import { s3 } from "../services/awsClients";
+
+import {
+  ALICE_ID,
+  ALICE_SUB,
+  BOB_SHARED_PLACE_ID,
+  BOB_SUB,
+  SHARED_PLACE_ID,
+} from "./_actors";
+import { deltaCursor, tombstonesSince } from "./_tombstones";
 
 // Requires `make dev` to be running (Postgres + MiniStack + API on :8080) with
 // AUTH_MODE=fake (requests authenticate as the seeded alice user).
@@ -97,6 +110,127 @@ describe("media upload lifecycle (fake auth)", () => {
     ).toBe(false);
   });
 
+  // Place-level media of a shared place is visible to its sharees, so the
+  // delete is told to the owner and to each of them.
+  // Mutation that turns it red: skip the writeTombstones call in DELETE
+  // /media/:id (routes/media.ts).
+  it("tombstones a deleted place photo for the owner and the sharee", async () => {
+    const presign = await request(API_URL)
+      .post("/media/presign")
+      .set(AUTH)
+      .send({
+        linkedType: "place",
+        linkedId: SHARED_PLACE_ID,
+        filename: "tombstone.png",
+        mediaType: "image/png",
+        sizeBytes: PNG_BYTES.length,
+        thumbnailSizeBytes: PNG_BYTES.length,
+      });
+    expect(presign.status).toBe(201);
+    const { mediaId, displayUploadUrl, thumbnailUploadUrl } = presign.body;
+    await putToPresignedUrl(displayUploadUrl, PNG_BYTES, "image/png");
+    await putToPresignedUrl(thumbnailUploadUrl, PNG_BYTES, "image/jpeg");
+    const confirm = await request(API_URL)
+      .post(`/media/${mediaId}/confirm`)
+      .set(AUTH)
+      .send({
+        linkedType: "place",
+        linkedId: SHARED_PLACE_ID,
+        filename: "tombstone.png",
+        mediaType: "image/png",
+      });
+    expect(confirm.status).toBe(201);
+
+    const aliceCursor = await deltaCursor(ALICE_SUB);
+    const bobCursor = await deltaCursor(BOB_SUB);
+    const del = await request(API_URL).delete(`/media/${mediaId}`).set(AUTH);
+    expect(del.status).toBe(204);
+
+    const gone = { type: "media", id: mediaId };
+    expect(await tombstonesSince(ALICE_SUB, aliceCursor)).toContainEqual(gone);
+    expect(await tombstonesSince(BOB_SUB, bobCursor)).toContainEqual(gone);
+  });
+
+  // Several confirms of one upload racing (a client retry, say) with room in
+  // the quota for only one: the losers fail the quota check, and their cleanup
+  // must leave the object the winner's row points at.
+  // Mutation: delete the object in the 507 branch of the confirm's catch
+  // whether or not a row holds it, and the winner's photo is gone from storage.
+  it("keeps the file when racing confirms of one upload fail the quota", async () => {
+    const placesRes = await request(API_URL).get("/places").set(AUTH);
+    const placeId: string = placesRes.body[0].id;
+    const presign = await request(API_URL)
+      .post("/media/presign")
+      .set(AUTH)
+      .send({
+        linkedType: "place",
+        linkedId: placeId,
+        filename: "race.png",
+        mediaType: "image/png",
+        sizeBytes: PNG_BYTES.length,
+        thumbnailSizeBytes: PNG_BYTES.length,
+      });
+    expect(presign.status).toBe(201);
+    const { mediaId, displayUploadUrl, thumbnailUploadUrl } = presign.body;
+    await putToPresignedUrl(displayUploadUrl, PNG_BYTES, "image/png");
+    await putToPresignedUrl(thumbnailUploadUrl, PNG_BYTES, "image/jpeg");
+
+    const user = await prisma.user.findUniqueOrThrow({
+      where: { id: ALICE_ID },
+      select: { storageUsedBytes: true, storageQuotaBytes: true },
+    });
+    // Room for exactly one charge of the file and its thumbnail.
+    await prisma.user.update({
+      where: { id: ALICE_ID },
+      data: {
+        storageQuotaBytes: user.storageUsedBytes + BigInt(2 * PNG_BYTES.length),
+      },
+    });
+    let statuses: number[];
+    try {
+      statuses = (
+        await Promise.all(
+          Array.from({ length: 6 }, () =>
+            request(API_URL)
+              .post(`/media/${mediaId as string}/confirm`)
+              .set(AUTH)
+              .send({
+                linkedType: "place",
+                linkedId: placeId,
+                filename: "race.png",
+                mediaType: "image/png",
+              }),
+          ),
+        )
+      ).map((res) => res.status);
+    } finally {
+      await prisma.user.update({
+        where: { id: ALICE_ID },
+        data: { storageQuotaBytes: user.storageQuotaBytes },
+      });
+    }
+    try {
+      expect(statuses).toContain(201);
+      // The premise: at least one confirm lost on the quota, not on the replay.
+      expect(statuses).toContain(507);
+      const row = await prisma.media.findUniqueOrThrow({
+        where: { id: mediaId },
+      });
+      await expect(
+        s3.send(
+          new HeadObjectCommand({
+            Bucket: process.env.S3_BUCKET_MEDIA ?? "",
+            Key: row.s3KeyDisplay,
+          }),
+        ),
+      ).resolves.toBeTruthy();
+    } finally {
+      await request(API_URL)
+        .delete(`/media/${mediaId as string}`)
+        .set(AUTH);
+    }
+  });
+
   it("rejects an unsupported media type", async () => {
     const placesRes = await request(API_URL).get("/places").set(AUTH);
     const placeId: string = placesRes.body[0].id;
@@ -110,7 +244,7 @@ describe("media upload lifecycle (fake auth)", () => {
     expect(res.status).toBe(400);
   });
 
-  it("rejects a presign without sizeBytes (SEC-003)", async () => {
+  it("rejects a presign without sizeBytes", async () => {
     const placesRes = await request(API_URL).get("/places").set(AUTH);
     const placeId: string = placesRes.body[0].id;
     const res = await request(API_URL).post("/media/presign").set(AUTH).send({
@@ -122,7 +256,7 @@ describe("media upload lifecycle (fake auth)", () => {
     expect(res.status).toBe(400);
   });
 
-  it("rejects a presign whose sizeBytes exceeds the category cap (SEC-003)", async () => {
+  it("rejects a presign whose sizeBytes exceeds the category cap", async () => {
     const placesRes = await request(API_URL).get("/places").set(AUTH);
     const placeId: string = placesRes.body[0].id;
     const res = await request(API_URL)
@@ -139,7 +273,7 @@ describe("media upload lifecycle (fake auth)", () => {
     expect(res.status).toBe(413);
   });
 
-  it("S3 rejects an upload larger than the signed Content-Length (SEC-003)", async () => {
+  it("S3 rejects an upload larger than the signed Content-Length", async () => {
     const placesRes = await request(API_URL).get("/places").set(AUTH);
     const placeId: string = placesRes.body[0].id;
     const presignRes = await request(API_URL)
@@ -192,8 +326,13 @@ describe("media upload lifecycle (fake auth)", () => {
   it("forbids attaching media to a place the user does not own", async () => {
     const sharedRes = await request(API_URL).get("/places/shared").set(AUTH);
     expect(sharedRes.status).toBe(200);
-    if (sharedRes.body.length === 0) return; // no shared places in this seed
-    const sharedPlaceId: string = sharedRes.body[0].id;
+    // The premise, asserted: the seed gives alice bob's place. If it stops
+    // doing so this fails instead of passing without testing the 403.
+    const sharedPlaceId = BOB_SHARED_PLACE_ID;
+    expect(
+      sharedRes.body.map((p: { id: string }) => p.id),
+      "the seed no longer shares a place with alice: this test needs one",
+    ).toContain(sharedPlaceId);
     const res = await request(API_URL).post("/media/presign").set(AUTH).send({
       linkedType: "place",
       linkedId: sharedPlaceId,

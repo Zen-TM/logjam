@@ -12,7 +12,8 @@ import {
   NSW_COVERAGE,
 } from "./nswCoverage.js";
 import { FIRE_RAMP, fireLegendRows, NSW_FIRE } from "./nswFire.js";
-import { LAND_CLASSES, NSW_LAND } from "./nswLand.js";
+import { LAND_CLASSES } from "./nswLand.js";
+import { NSW_REGION } from "./regions.js";
 import type { OverlayTerrainKey } from "./terrain.js";
 
 export type OverlayLegend = {
@@ -59,7 +60,7 @@ export const OVERLAY_LEGENDS: Readonly<
     intro: copy.landLegend,
     rows: LAND_CLASSES.map(({ name, colour }) => ({ label: name, colour })),
     caveat: copy.landCaveat,
-    credit: NSW_LAND.credit,
+    credit: NSW_REGION.terrain.land.credit,
   },
   fire: {
     title: copy.fire,

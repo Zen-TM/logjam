@@ -25,8 +25,8 @@ import {
   PAIRED_STAT_LABELS,
   mapMeasurePointsLabel,
   pairedStatLayout,
+  type SnapMode,
 } from "@logjam/shared";
-import type { SnapMode } from "../map/Map";
 import {
   DraftPeek,
   SnapSelect,

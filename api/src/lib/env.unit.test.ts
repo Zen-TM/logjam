@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, it, expect, vi, beforeEach, afterAll } from "vitest";
 import { validateEnv } from "./env";
 
@@ -72,6 +74,29 @@ describe("validateEnv — valid configurations", () => {
   });
 });
 
+describe("the local template", () => {
+  // Mutation: deleting the DB_NAME line from env.local.tftpl, or adding a
+  // variable with no default to the schema and not to the template.
+  it("sets every variable the schema has no default for", () => {
+    setEnv({});
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    expect(() => validateEnv()).toThrow(/process\.exit/);
+    const report = String(errors.mock.calls[0]?.[0]);
+    errors.mockRestore();
+    const needed = [...report.matchAll(/^ {2}- (\w+):/gm)].map((m) => m[1]);
+    const template = readFileSync(
+      join(
+        import.meta.dirname,
+        "../../../infra/terraform/templates/env.local.tftpl",
+      ),
+      "utf8",
+    );
+    const set = [...template.matchAll(/^(\w+)=/gm)].map((m) => m[1]);
+    expect(needed).toContain("DB_NAME");
+    expect(needed.filter((key) => !set.includes(key))).toEqual([]);
+  });
+});
+
 describe("validateEnv — failure paths exit the process", () => {
   it("exits when DB_HOST is missing", () => {
     delete process.env.DB_HOST;
@@ -140,10 +165,10 @@ describe("validateEnv — origin-verify", () => {
 describe("TLS env vars are in the schema", () => {
   it("accepts DATABASE_SSL=disable and the CA path", () => {
     process.env.DATABASE_SSL = "disable";
-    process.env.DATABASE_SSL_CA = "/app/rds-ca.pem";
+    process.env.DATABASE_SSL_CA = "/app/brain-ca.pem";
     const env = validateEnv();
     expect(env.DATABASE_SSL).toBe("disable");
-    expect(env.DATABASE_SSL_CA).toBe("/app/rds-ca.pem");
+    expect(env.DATABASE_SSL_CA).toBe("/app/brain-ca.pem");
   });
 
   it("rejects a near-miss DATABASE_SSL value instead of silently ignoring it", () => {
@@ -154,7 +179,7 @@ describe("TLS env vars are in the schema", () => {
   });
 
   // Mutation: delete the DATABASE_SSL production check in validateEnv.
-  it("refuses DATABASE_SSL=disable in production, where it would drop RDS TLS", () => {
+  it("refuses DATABASE_SSL=disable in production, where it would drop database TLS", () => {
     setEnv({
       NODE_ENV: "production",
       AUTH_MODE: "oidc",

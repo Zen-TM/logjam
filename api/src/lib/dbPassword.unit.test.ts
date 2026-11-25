@@ -33,7 +33,7 @@ describe("currentDbPassword", () => {
   });
 
   it("fetches the password from Secrets Manager when DB_SECRET_ID is set", async () => {
-    process.env.DB_SECRET_ID = "rds!db-test";
+    process.env.DB_SECRET_ID = "logjam/test-db-password";
     sendMock.mockResolvedValueOnce({
       SecretString: JSON.stringify({ username: "u", password: "rotated-pw" }),
     });
@@ -42,7 +42,7 @@ describe("currentDbPassword", () => {
   });
 
   it("serves from cache within the TTL without re-fetching", async () => {
-    process.env.DB_SECRET_ID = "rds!db-test";
+    process.env.DB_SECRET_ID = "logjam/test-db-password";
     sendMock.mockResolvedValueOnce({
       SecretString: JSON.stringify({ password: "pw1" }),
     });
@@ -52,7 +52,7 @@ describe("currentDbPassword", () => {
   });
 
   it("falls back to the cached password when a refresh fails", async () => {
-    process.env.DB_SECRET_ID = "rds!db-test";
+    process.env.DB_SECRET_ID = "logjam/test-db-password";
     sendMock.mockResolvedValueOnce({
       SecretString: JSON.stringify({ password: "pw1" }),
     });
@@ -70,7 +70,7 @@ describe("currentDbPassword", () => {
   });
 
   it("throws when the secret JSON has no password field", async () => {
-    process.env.DB_SECRET_ID = "rds!db-test";
+    process.env.DB_SECRET_ID = "logjam/test-db-password";
     sendMock.mockResolvedValueOnce({
       SecretString: JSON.stringify({ username: "only" }),
     });

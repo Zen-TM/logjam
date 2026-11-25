@@ -13,7 +13,7 @@ import {
 } from "react-native";
 
 import { spacing } from "../theme";
-import { roomBelow, rowTarget, snapTarget } from "./heroCollapseRule";
+import { listTop, roomBelow, rowTarget, snapTarget } from "./heroCollapseRule";
 import { useReducedMotionRef } from "./useReducedMotion";
 
 /** Slower than this (dp/ms) a released finger leaves no fling behind it:
@@ -69,11 +69,20 @@ type Scrollable = {
  * when the finger lifts and leaves no fling. A half-folded hero goes to the
  * nearer end (`snapTarget`). State changes once per gesture, not per frame.
  *
+ * The list view starts under the header as folded (`listStyle`), not at the
+ * top of the screen, so its scroll bar starts below the folded header (Android
+ * has no scroll indicator inset). At the top of the page the full hero still
+ * lies over the first `distance` of the list view, which `inset()` leaves as
+ * room.
+ *
+ * A page that is shown again (a tab, or a screen the user came back to) keeps
+ * its scroll offset, and the header keeps following it (`setList`).
+ *
  * On the screen: `CollapsingHeader` around the hero (`CollapsingHero`) and
  * the rows pinned under it; the list is a `HeroFlatList` / `HeroSectionList` /
- * `HeroScrollView` with `{...scrollProps}`, `heroCollapse.inset()` in its
- * `contentContainerStyle`, and `progressViewOffset={headerHeight}` on its
- * `RefreshControl`.
+ * `HeroScrollView` with `{...scrollProps}`, `style` including `listStyle`,
+ * `heroCollapse.inset()` in its `contentContainerStyle`, and
+ * `progressViewOffset={refreshOffset}` on its `RefreshControl`.
  */
 export function useHeroCollapse() {
   const scrollY = useMemo(() => new Animated.Value(0), []);
@@ -271,11 +280,16 @@ export function useHeroCollapse() {
   );
 
   // A list that mounts again (Plans swaps its list for a loading state and
-  // back) starts at the top, whatever the old one had reached.
+  // back) starts at the top, whatever the old one had reached. The same list
+  // is handed its ref again whenever a page is shown again (`useMergeRefs`
+  // re-runs it when a prop's identity changes): that one has kept its offset,
+  // and so does the header.
+  const mounted = useRef<ListHandle | null>(null);
   const setList = useCallback(
     (instance: ListHandle | null) => {
       list.current = instance;
-      if (!instance) return;
+      if (!instance || instance === mounted.current) return;
+      mounted.current = instance;
       scrollY.setValue(0);
       Object.assign(scroll.current, {
         y: 0,
@@ -296,6 +310,10 @@ export function useHeroCollapse() {
     () => metrics.current.header,
   );
   const extra = useSyncExternalStore(subscribe, () => metrics.current.extra);
+  /** Where the list starts: under the header as folded. */
+  const top = useSyncExternalStore(subscribe, () =>
+    listTop(metrics.current.header, distanceOf(metrics.current)),
+  );
   useEffect(() => {
     scroll.current.paddedFor = headerHeight;
   }, [headerHeight]);
@@ -325,10 +343,15 @@ export function useHeroCollapse() {
     getMetrics,
     measure,
     headerHeight,
-    /** The list's content padding: room for the header at the top, plus the
-     *  gap the screen wants, and a short list's end room. */
+    /** The list view's own style, beside the screen's: it starts under the
+     *  folded header, so its scroll bar starts there. */
+    listStyle: { marginTop: top },
+    /** Where a pull to refresh draws, from the list's top: under the full header. */
+    refreshOffset: headerHeight - top,
+    /** The list's content padding: room for the full header over the list's
+     *  top, plus the gap the screen wants, and a short list's end room. */
     inset: (gap = 0) => ({
-      paddingTop: headerHeight + gap,
+      paddingTop: headerHeight - top + gap,
       ...(extra > 0 ? { paddingBottom: LIST_END + extra } : {}),
     }),
     scrollToRow,

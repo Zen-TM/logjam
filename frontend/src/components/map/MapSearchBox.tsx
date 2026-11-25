@@ -406,6 +406,8 @@ export default function MapSearchBox({
                       ? COORDINATE_RESULT_KIND
                       : null;
               return (
+                // The combobox input takes the keyboard (arrows and Enter).
+                // eslint-disable-next-line jsx-a11y/click-events-have-key-events
                 <li
                   key={option.id}
                   id={`${listId}-${option.id}`}
@@ -413,12 +415,13 @@ export default function MapSearchBox({
                   aria-label={detail ? `${label}, ${detail}` : undefined}
                   aria-selected={index === activeIndex}
                   className={classes.option}
-                  // pointerdown, not click: the input would blur first and
-                  // close the list before a click could land.
-                  onPointerDown={(event) => {
-                    event.preventDefault();
-                    choose(option);
-                  }}
+                  // Chosen on click, not pointerdown: a tap's click is sent
+                  // where the finger lifts, and with the list already gone it
+                  // would land on the map and open its point panel. Cancelling
+                  // mousedown is what keeps the input from blurring and
+                  // closing the list before that click.
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => choose(option)}
                 >
                   <Icon idea={icon} size={16} className={classes.optionGlyph} />
                   <span className={classes.optionLabel}>{label}</span>

@@ -29,7 +29,7 @@ import {
   ChipRail,
   Dialog,
   ErrorBanner,
-  FieldError,
+  FieldGroup,
   NumberField,
   TextArea,
   TextField,
@@ -62,6 +62,8 @@ function QuestionField({
         <TextField
           label={label}
           hint={help}
+          prominentLabel
+          hintAbove
           required={question.required}
           type={question.kind === "phone" ? "tel" : "text"}
           autoComplete={question.kind === "phone" ? "tel" : "off"}
@@ -76,6 +78,8 @@ function QuestionField({
         <TextArea
           label={label}
           hint={help}
+          prominentLabel
+          hintAbove
           required={question.required}
           maxLength={TRIP_PLAN_LONG_TEXT_ANSWER_MAX_LENGTH}
           error={error}
@@ -85,43 +89,52 @@ function QuestionField({
       );
     case "number":
       return (
-        <div className={classes.question}>
-          <NumberField
-            label={label}
-            hint={help}
-            required={question.required}
-            constraints={{ integer: true, min: 0 }}
-            value={typeof value === "string" ? value : ""}
-            onChange={onChange}
-          />
-          <FieldError message={error} />
-        </div>
+        <NumberField
+          label={label}
+          hint={help}
+          prominentLabel
+          hintAbove
+          required={question.required}
+          constraints={{ integer: true, min: 0 }}
+          value={typeof value === "string" ? value : ""}
+          onChange={onChange}
+          leftError={error}
+        />
       );
     case "choice":
     case "yesNo": {
       const options = tripPlanQuestionChoices(question);
       return (
-        <div className={classes.question}>
-          <span className={classes.questionLabel} aria-hidden>
-            {label}
-          </span>
-          {help && <p className={classes.note}>{help}</p>}
-          <ChipRail
-            label={question.label}
-            options={options}
-            value={typeof value === "string" ? value : ""}
-            onChange={onChange}
-          />
-          <FieldError message={error} />
-        </div>
+        <FieldGroup
+          label={label}
+          hint={help}
+          error={error}
+          prominentLabel
+          hintAbove
+          named
+        >
+          {(describedBy) => (
+            <ChipRail
+              label={question.label}
+              options={options}
+              value={typeof value === "string" ? value : ""}
+              onChange={onChange}
+              describedBy={describedBy}
+            />
+          )}
+        </FieldGroup>
       );
     }
     case "multiChoice": {
       const ticked = Array.isArray(value) ? value : [];
       return (
-        <fieldset className={classes.question}>
-          <legend className={classes.questionLabel}>{label}</legend>
-          {help && <p className={classes.note}>{help}</p>}
+        <FieldGroup
+          label={label}
+          hint={help}
+          error={error}
+          prominentLabel
+          hintAbove
+        >
           {(question.options ?? []).map((option) => (
             <Checkbox
               key={option.id}
@@ -136,21 +149,23 @@ function QuestionField({
               }
             />
           ))}
-          <FieldError message={error} />
-        </fieldset>
+        </FieldGroup>
       );
     }
     case "agree":
       return (
-        <div className={classes.question}>
-          <Checkbox
-            label={label}
-            description={help}
-            checked={value === true}
-            onChange={onChange}
-          />
-          <FieldError message={error} />
-        </div>
+        <FieldGroup named error={error}>
+          {(describedBy) => (
+            <Checkbox
+              label={label}
+              description={help}
+              prominentLabel
+              describedBy={describedBy}
+              checked={value === true}
+              onChange={onChange}
+            />
+          )}
+        </FieldGroup>
       );
   }
 }

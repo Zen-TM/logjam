@@ -9,7 +9,7 @@
 // and Land.
 import { COVERAGE_HATCH_URI } from "./coverageHatchImages.js";
 import { MAP_TERRAIN } from "./contracts/mapTerrain.js";
-import { NSW_5M } from "./demSources.js";
+import { NSW_REGION } from "./regions.js";
 
 export const NSW_COVERAGE = {
   /** A saved clip is filed under this, beside the area it was saved with. */
@@ -27,7 +27,7 @@ export const NSW_COVERAGE = {
    *  spacing (about 190 m at z12). Deeper zooms overzoom. */
   minzoom: 12,
   maxzoom: 12,
-  coverage: NSW_5M.coverage,
+  coverage: NSW_REGION.terrain.heights.coverage,
   credit:
     "Mobile coverage: ACCC Mobile Infrastructure Report data release © Commonwealth of Australia (ACCC), CC BY 2.5 AU; coastline © ABS, CC BY 4.0",
   creditHtml:

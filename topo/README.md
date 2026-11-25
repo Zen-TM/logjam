@@ -20,7 +20,7 @@ Attribution strings are centralised in `shared/src/geoPdfBaseLayers.ts`
 | **ELVIS LiDAR** (Geoscience Australia + NSW Spatial Services) | heights, slope, contours, vegetation | CC BY 4.0 | "Elevation data © Geoscience Australia / NSW Spatial Services (CC BY 4.0)" |
 | **NSW State Vegetation Type Map (SVTM)** | vegetation | CC BY 4.0 *(to confirm via SEED portal — see note)* | "Vegetation data © State of NSW (DCCEEW) — State Vegetation Type Map (CC BY 4.0)" |
 | **NPWS Fire History** (Wildfires and Prescribed Burns) | vegetation (fire-staleness marking, see `apply_fire_history` in `pipeline.py`), and the Fire history overlay | CC BY 4.0 | `NSW_FIRE.credit` in `shared/src/nswFire.ts` |
-| **NSW Land Tenure** (DPIRD, December 2024 v2) | the Land overlay (`build_land_tenure.py`) | CC BY 4.0 | `NSW_LAND.credit` in `shared/src/nswLand.ts` |
+| **NSW Land Tenure** (DPIRD, December 2024 v2) | the Land overlay (`build_land_tenure.py`) | CC BY 4.0 | `NSW_REGION.terrain.land.credit` in `shared/src/regions.ts` |
 | **ACCC Mobile Infrastructure Report data release** (data.gov.au) | the Coverage overlay (`build_coverage.py`) | CC BY 2.5 AU | `NSW_COVERAGE.credit` in `shared/src/nswCoverage.ts` |
 | **ABS ASGS Edition 3, Australia outline** | the Coverage overlay's coastline | CC BY 4.0 | `NSW_COVERAGE.credit` |
 | **Open-Meteo** (ECMWF IFS, `s3://openmeteo/data_spatial/`) | the Weather overlay (`build_weather.py`) | CC BY 4.0 | `WEATHER_MAP.credit` in `shared/src/weatherMap.ts`, the manifest's `attribution` |
@@ -67,7 +67,7 @@ python3 pipeline.py /path/to/elvis.zip --output ./output --workers 4
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--output DIR` | `./output` | Where to write `vegetation.mbtiles` |
-| `--workers N` | CPU count − 1 | Parallel tile-render workers |
+| `--workers N` | CPU count − 1 | How many things run at once: tiles gridded (fewer if memory is short), rasters warped, filter threads, tiles rendered |
 | `--work-dir DIR` | auto temp dir | Where to keep intermediate rasters |
 | `--keep-work` | off | Don't delete intermediate files |
 | `--benchmark` | off | Print a per-step timing report at the end |
@@ -76,6 +76,20 @@ python3 pipeline.py /path/to/elvis.zip --output ./output --workers 4
 | `--progress-file PATH` | none | Write `{done,total,ts}` progress to `PATH` |
 
 A ZIP with no point clouds writes nothing.
+
+### Memory
+
+The density and fire steps work a strip of rows at a time (`STRIP_CELLS` and
+`FIRE_BLOCK_CELLS` in `pipeline.py`), so their arrays follow the width of the
+area and not its extent: tiles that do not form a rectangle cost them no more
+memory than a block of them. What else the pass holds (GDAL's block cache,
+which GDAL caps at a share of the machine's memory) is not sized by the
+strips. If the pass still runs out of memory it exits with a declared code
+(`worker_common.py`). `worker.py` reads that code, or a kill (-9), as "leave
+the layer out": the job still completes with its height, slope and contour
+archives, records `vegetationLeftOut` in its `sharpen` result, and its
+completion notification and email say the area was too large. Any other
+failure of the pass fails the job.
 
 ---
 
@@ -99,19 +113,19 @@ version; the source last changed in October 2025.
    A new release can rename its layer: pass it with `--layer`
    (`ogrinfo -ro -q <gdb>` lists it). The build stops on a class that
    `LAND_CLASSES` in `shared/src/nswLand.ts` doesn't have, because a client draws
-   nothing for one. A new version also changes `NSW_LAND.credit`.
+   nothing for one. A new version also changes `NSW_REGION.terrain.land.credit`.
 
 The December 2024 v2 file takes 20 minutes on 4 cores and 9 GB, and makes
 178 MB. At z13, 3,200 random points in four boxes had the same class as the
 source.
 
 Publishing is a prod change and the maintainer's to make. The archive goes to
-the topo bucket at the path `NSW_LAND.archivePath` names, and needs no deploy:
+the topo bucket at the path `NSW_REGION.terrain.land.archivePath` names, and needs no deploy:
 
 ```bash
 aws s3 cp output/nsw-tenure.pmtiles s3://logjam-topo-jobs/master/land/nsw-tenure.pmtiles \
   --content-type application/vnd.pmtiles
-curl -s -o /dev/null -w '%{http_code}\n' -r 0-6 https://logjamnsw.com/master/land/nsw-tenure.pmtiles   # 206
+curl -s -o /dev/null -w '%{http_code}\n' -r 0-6 https://logjam.earth/master/land/nsw-tenure.pmtiles   # 206
 ```
 
 ---
@@ -184,18 +198,18 @@ Run `tile` only after `fetch` has finished: a block is built from every sheet
 that touches it, and a finished block is not rebuilt when a neighbour arrives.
 
 Publishing is a prod change and the maintainer's to make. The archive goes to
-the topo bucket at the path `NSW_5M.archivePath` names in
-`shared/src/demSources.ts`:
+the topo bucket at the path `NSW_REGION.terrain.heights.archivePath` names in
+`shared/src/regions.ts`:
 
 ```bash
 aws s3 cp dem/nsw-5m.pmtiles s3://logjam-topo-jobs/master/dem/nsw-5m.pmtiles \
   --content-type application/vnd.pmtiles
-curl -s -o /dev/null -w '%{http_code}\n' -r 0-6 https://logjamnsw.com/master/dem/nsw-5m.pmtiles   # 206
+curl -s -o /dev/null -w '%{http_code}\n' -r 0-6 https://logjam.earth/master/dem/nsw-5m.pmtiles   # 206
 ```
 
 No deploy is needed. The API looks for the archive every five minutes and
 starts reading it when it appears; the clients read it on their next lookup.
-If `--extracted` was not the month in `NSW_5M.credit`, change the credit in
+If `--extracted` was not the month in `NSW_REGION.terrain.heights.credit`, change the credit in
 the same week. A new height archive leaves the slope archive (below) on the old
 heights and month: rebuild it, deleting `dem/nsw-5m-slope.work/` first if an
 earlier local run left one.
@@ -246,11 +260,12 @@ The task runs `python3 /app/build_nsw_dem.py slope-s3 logjam-topo-jobs`, which
 downloads `master/dem/nsw-5m.pmtiles`, builds the slope archive and uploads
 `master/dem/nsw-5m-slope.pmtiles`, and exits non-zero at the first step that
 fails (nothing is uploaded from a build that did not finish). Its default disk
-is 20 GiB, so the run asks for 120: about 17 GB of input, 13 GB of block files,
-and a further 13 GB each for the MBTiles the packer builds, its spool and the
-result. Run it once *Deploy topo worker* has pushed an image that has `slope-s3`.
-Run the blocks below in order, from `topo/` of a fresh clone, and stop at the
-first one that prints an error.
+(set in `ecs.tf`, sized for an input ZIP) is smaller than that, so the run asks
+for 120: about 17 GB of input, 13 GB of block files, and a further 13 GB each for
+the MBTiles the packer builds, its spool and the result. Run it once *Deploy
+topo worker* has pushed an image that has `slope-s3`. Run the blocks below in
+order, from `topo/` of a fresh clone, and stop at the first one that prints an
+error.
 
 The task holds 8 of the account's 30 Fargate vCPU for two to three hours, and the
 API's cap on user jobs (`MAX_CONCURRENT_WORKER_VCPUS`, 24 by default, in
@@ -341,7 +356,7 @@ there is no resuming across tasks. Check the result as for the height archive;
 it should print `206`:
 
 ```bash
-curl -s -o /dev/null -w '%{http_code}\n' -r 0-6 https://logjamnsw.com/master/dem/nsw-5m-slope.pmtiles
+curl -s -o /dev/null -w '%{http_code}\n' -r 0-6 https://logjam.earth/master/dem/nsw-5m-slope.pmtiles
 ```
 
 ---
@@ -400,7 +415,7 @@ the one it replaces. Publishing is a prod change and the maintainer's to make:
 
 ```bash
 python3 build_place_registry.py publish --bucket logjam-topo-jobs
-curl -s https://logjamnsw.com/master/places/v1/latest.json
+curl -s https://logjam.earth/master/places/v1/latest.json
 ```
 
 After changing the file's shape, regenerate the fixture both sides test
@@ -512,7 +527,7 @@ the Weather overlay's files (`WeatherMapFile` in `shared/src/weatherMap.ts`):
 per step of the forecast, rain, temperature, wind and gusts as terrarium
 PMTiles at z5, five rain totals either side of the build hour, and the wind
 arrows. Why a job, and why Open-Meteo's own GPL-2.0-only reader is allowed in
-this image and nowhere else: [ADR 0048](../docs/decisions/0048-the-weather-overlay-is-public-files-cut-from-open-meteos-grids-by-a-job.md).
+this image and nowhere else: [ADR 0049](../docs/decisions/0049-the-weather-overlay-is-public-files-cut-from-open-meteos-grids-by-a-job.md).
 A scheduled ECS task runs `run` hourly; to try a change by hand, from `topo/`,
 in the worker image:
 
@@ -538,11 +553,10 @@ archive's recipe above does.
 **`pdal: command not found`**
 Install PDAL: `sudo apt-get install pdal`
 
-**Empty or patchy output tiles**
-This usually means the LiDAR tiles have nodata holes. The `fill_nodata` step
-fills gaps up to 50 m across. For larger holes, increase `max_distance` in
-`fill_nodata()`.
-
 **Out of memory during PDAL**
 Reduce the number of LAZ files processed at once, or increase the Docker memory
 limit in `docker-compose.yml`.
+
+**`pipeline.py` exits with its left-out code (`worker_common.py`)**
+The pass ran out of memory, so the vegetation layer was left out
+([Memory](#memory)). Give the container more memory, or use a narrower area.

@@ -8,8 +8,8 @@ checks that on every migration PR, for the release live at the time.
 **When:** after any change to a `deploy-*.yml`, `deploy-guard.yml`,
 `smoke.yml` or `rollback.yml` (a changed mechanism is an untested one),
 quarterly, and at the first tagged mobile release for the OTA rollback. Pick
-a quiet hour: each API step is a cold Elastic Beanstalk restart, a minute or
-two of downtime.
+a quiet hour: an API step is the brain's release pointer and a few seconds of
+failed requests ([brain.md](brain.md)).
 
 Copy the checklist into a new record at the bottom, tick it as you go, and
 note times and surprises. [rollback.md](rollback.md) has the commands.
@@ -22,10 +22,11 @@ note times and surprises. [rollback.md](rollback.md) has the commands.
       under test. A release deployed before `/meta` reported a sha, or before
       the frontend kept `releases/<sha>/`, cannot be a rollback target: its
       smoke test would fail on a healthy release.
-- [ ] Note the live sha of each: API `curl -s https://api.logjamnsw.com/meta | jq -r .sha`;
+- [ ] Note the live sha of each: API `curl -s https://api.logjam.earth/meta | jq -r .sha`;
       frontend `release-sha` on `index.html`; worker image tag on
       `logjam-topo-worker`. Note the release before each.
 - [ ] Any Terraform the change needs has been applied.
+- [ ] Whether the brain serves: `grep -E '^brain_serving' infra/terraform/envs/prod/brain.auto.tfvars`. While it is `false` no smoke test can see a release, so skip the API boxes below.
 
 ### Deploy guards
 
@@ -44,17 +45,26 @@ note times and surprises. [rollback.md](rollback.md) has the commands.
 
 ### Rollback workflow, each target back one release and forward
 
-- [ ] **API back:** `rollback.yml` target `api`, the previous sha. EB swaps,
-      both task definitions carry the old image, the smoke test passes.
-      Time from dispatch to green: ____
-- [ ] **API forward:** the same with the newest sha. Time: ____
+- [ ] **API back and forward:** `rollback.yml` target `api`, the previous sha,
+      then the same with the newest. The task definitions carry the sha, the
+      workflow rewrote `release.json` (it prints the sha), the status file's
+      `api_sha` follows within about a minute (`aws s3 cp s3://logjam-brain-signals-620853681701/status.json -`),
+      and the smoke test of the public `/meta` passes within its 5 minutes.
+      Times: ____ / ____
+- [ ] **A sha with no `infra/brain/api.env` changes nothing:** the workflow
+      fails before the pointer changes. (It does not look inside the image: one
+      without `/app/brain-ca.pem` is rolled back to like any other and fails
+      when its container starts, with "DATABASE_SSL_CA points to a missing
+      file"; [rollback.md](rollback.md).)
 - [ ] **Frontend back and forward.** Times: ____ / ____
 - [ ] **Worker back and forward.** `logjam-topo-worker`,
       `logjam-topo-export-worker`, `logjam-place-registry`, `logjam-gauges`,
       `logjam-fire-history`, `logjam-coverage` and `logjam-weather` carry the
       chosen tag. Times: ____ / ____
 - [ ] **Refusals change nothing:** a short sha fails the sha check; a sha
-      with no ECR image (or no `releases/<sha>/`) fails before any swap.
+      with no ECR image (or no `releases/<sha>/`) fails before any swap; a
+      frontend sha from before the move to `logjam.earth` fails as built for
+      another API address.
 - [ ] **Refused while a deploy is busy:** a rollback dispatched while a
       deploy of the same target is queued or running fails its preflight job
       and changes nothing. A deploy that starts while a rollback runs waits
@@ -137,6 +147,52 @@ Time: ____ Surprises: ____
 ## Records
 
 <!-- Newest first. Date, who, the change under test, times, surprises. -->
+
+### 2026-11-12: maintainer and Claude, the apply refusal after the value check changed
+
+**Change under test:** #930, which leaves three values AWS moves by itself
+out of the value check (`movesAlone` in `infra/scripts/plan-summary.mjs`,
+[0026](../decisions/0026-plan-fingerprint-covers-planned-values.md)).
+`PLAN_VALUE_CHECK` is `enforce`.
+
+- **Drift on a resource the PR does not touch: refused.** #939 added `drill =
+  "apply-refusal"` to `aws_sns_topic.alerts`. After its plan posted, a `hand =
+  "drill"` tag was added by hand to `aws_sns_topic.budget_alerts`, then the PR
+  merged. The apply refused 77 s after the merge: "The plan at merge … is not
+  the plan on the PR … Nothing applied", and it listed both topics as the plan
+  it would have applied. The alerts topic had no tag.
+- **Undo and re-run:** the hand tag was removed and the refused run re-run; it
+  applied #939's tag 98 s later.
+- **Drift on the resource the PR updates: refused.** #940 removed the drill's
+  tag. After its plan posted, a `hand = "drill"` tag was added by hand to
+  `aws_sns_topic.alerts`, then the PR merged. The apply refused 79 s after the
+  merge: "different values on 1 resource(s) … `aws_sns_topic.alerts` … The
+  values are not shown. Nothing applied." The topic kept both tags.
+- **Undo and re-run:** the hand tag was removed and the refused run re-run; it
+  applied the removal 97 s later. Neither topic has a tag now, and a plan of
+  `main` shows no changes.
+- Both plan comments carried a `plan-values` line of `address → 16 hex` and
+  nothing else about values. The two PRs had the same plan fingerprint (one
+  update of the same address) and different value hashes.
+- **Not re-run:** the no-key case (deleting the key destroys its value; the
+  unit test in `plan-summary.test.mjs` covers the refusal).
+- **Not exercised, and accepted:** an apply that goes ahead although one of
+  #930's three values moved between the plans. Two plans of a tag change to
+  the web distribution, taken by hand afterwards, showed the values where
+  #930 expects them: `status` and `in_progress_validation_batches` are in both
+  `before` and `after` of the update. But the count did not move. It read 0
+  while an invalidation was in progress, and a one-path invalidation ends in
+  about 15 s, so an invalidation cannot exercise the check. `status` moves
+  only while a changed configuration rolls out. The maintainer accepted the
+  gap: a value that moves in a way the list misses gets a good apply refused,
+  never a wrong one applied. The unit test "a value AWS moves by itself
+  leaves the value fingerprint alone" covers the comparison.
+
+Time: 77 s / 98 s / 79 s / 97 s. **Surprise:** none in the drill. Beside it,
+on the same day: a PR that was brought up to date while the previous merge's
+apply was still running was planned with that apply's changes still pending,
+so its own apply was refused as "not the plan on the PR". Wait for an apply to
+finish before updating the next PR.
 
 ### 2026-10-17: maintainer and Claude, the apply refusal under enforce
 

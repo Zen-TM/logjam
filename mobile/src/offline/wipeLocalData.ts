@@ -10,7 +10,8 @@
 // entry point prevents account transition paths from drifting apart.
 //
 // **Deliberately not wiped:** device preferences (`logjam-prefs.db`), bar the
-// recent map searches, which are place names. Theme,
+// recent map searches, which are place names, and the chosen regions, which
+// are the account's. Theme,
 // app-lock and crash-report choices are statements about this handset, not
 // about the account, and clearing them would silently disarm a lock the owner
 // turned on. The guest-mode preference is cleared by the caller that knows the
@@ -35,6 +36,7 @@ import { stopGeoPdfImportRun } from "../geopdf/importRunner";
 import { forgetSlopeBandsEdit } from "../map/slopeBandsPreference";
 import { clearRecentSearches } from "../map/recentSearches";
 import { stopSharpenedAreasForWipe } from "../map/sharpenedArchives";
+import { forgetRegions } from "../regionsPreference";
 import { stopPlansForWipe } from "../plans/plansCache";
 import { wipeAllSyncData, withSyncTransaction } from "../sync/syncDb";
 import { stopGaugesForWipe } from "../gauges/gaugeStorage";
@@ -113,6 +115,10 @@ export async function wipeAllLocalData(): Promise<WipeResult> {
 
   // A slope-band edit not yet sent belongs to the account that made it.
   forgetSlopeBandsEdit();
+
+  // The chosen regions are the departing account's: the next one is offered
+  // the default until its own arrive.
+  forgetRegions();
 
   // Recent map searches are place names in the device prefs store, which the
   // wipe otherwise leaves alone.

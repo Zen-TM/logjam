@@ -11,8 +11,8 @@ layers, it writes the statewide terrain formats at the survey's own cell.
 That means a heights archive ([0030](0030-dem-tiles-are-terrarium-png-in-pmtiles.md)),
 a slope archive ([0039](0039-the-statewide-slope-archive-is-rounded-to-1-degree.md))
 and a contour archive, from z15 to z16 for 2 m ground or z17 for 1 m. The
-statewide versions are public archives on the CDN (`shared/src/terrain.ts`,
-`shared/src/nswContours.ts`), and every client draws them as the Terrain
+statewide versions are public archives on the CDN (`NSW_REGION.terrain` in
+`shared/src/regions.ts`), and every client draws them as the Terrain
 group. A job's archives are not public: a job is its owner's, and it reaches
 another user only by a direct share (`directlySharedIds` in
 `api/src/lib/shareAccess.ts`).

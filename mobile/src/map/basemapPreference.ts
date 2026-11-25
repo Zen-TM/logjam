@@ -14,7 +14,8 @@ import {
 } from "@logjam/shared";
 
 import { readPref, writePref } from "../prefsDb";
-import { DEFAULT_BASEMAP, MOBILE_BASEMAPS } from "./basemapMeta";
+import { readRegions } from "../regionsPreference";
+import { defaultBasemap, mobileBasemaps } from "./basemapMeta";
 import type { BasemapId } from "./sourceResolver";
 
 const BASEMAP_PREF_KEY = "mapBasemapId";
@@ -24,7 +25,11 @@ export function readBasemapPreference(): BasemapId {
   const stored = readPref(BASEMAP_PREF_KEY);
   // An id we no longer offer (a removed source, an older build's pick) reads as
   // "nothing recorded" rather than throwing out of the resolver later.
-  return MOBILE_BASEMAPS.find((id) => id === stored) ?? DEFAULT_BASEMAP;
+  const regions = readRegions();
+  return (
+    mobileBasemaps(regions).find((id) => id === stored) ??
+    defaultBasemap(regions)
+  );
 }
 
 const TERRAIN_LAYERS_PREF_KEY = "mapTerrainLayers";

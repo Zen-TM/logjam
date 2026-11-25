@@ -29,7 +29,7 @@ import {
   FRIENDS,
   isValidPassword,
   isValidUsername,
-  NSW_5M,
+  NSW_REGION,
   PASSWORD_HINT,
   resendCodeWaiting,
   SIGN_IN_COPY,
@@ -69,7 +69,7 @@ function Frame({ children }: { children: ReactNode }) {
               move when the name arrives. */}
           <p className={classes.credit}>
             <span className={classes.creditPlace}>{area?.terrain.name}</span>
-            {NSW_5M.credit}
+            {NSW_REGION.terrain.heights.credit}
           </p>
         </div>
       </main>
@@ -78,11 +78,7 @@ function Frame({ children }: { children: ReactNode }) {
 }
 
 function Intro() {
-  return (
-    <p className={classes.intro}>
-      Your private map and trips for canyoning in New South Wales.
-    </p>
-  );
+  return <p className={classes.intro}>{SIGN_IN_COPY.intro}</p>;
 }
 
 function InviteNote() {

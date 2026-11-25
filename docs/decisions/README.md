@@ -83,11 +83,19 @@ An accepted ADR changes in three ways only:
   on a path the change deletes; the ADR then describes what it held in words.
 - **A stale fact or figure** is corrected in place and marked
   "(updated YYYY-MM-DD)".
-- **A narrow exception, or a reason that no longer holds,** is a bullet under
+- **A narrow exception, an addition to a rule, or a reason that no longer
+  holds,** is a bullet under
   Decision, `**Update YYYY-MM-DD: <what changes>.**`, that says what still
   holds the decision up and ends "Everything else above stands". For an
   exception, list the option you rejected under Alternatives. When no reason
-  is left holding the decision up, supersede it.
+  is left holding the decision up, supersede it. An addition is anything a
+  Decision rule gains: a stage in its workflow, a member of its list, a case
+  it now covers. It leaves the rule's own text in force, which is why it is a
+  bullet and not a new ADR. It is a bullet even when another ADR carries the
+  reason; the bullet then links that ADR. An addition already marked in place
+  stays as it is. Whatever the bullet is for, each earlier line it makes
+  false also takes the stale-fact mark, so a reader who lands there first is
+  not misled.
 
 Leave the title, status and index row alone. If the change would alter what
 the decision chooses, or a reader would need both texts to know the rule,
@@ -97,7 +105,7 @@ supersede instead.
 
 | # | Decision | Date | Status |
 |---|---|---|---|
-| [0001](0001-rds-tls-via-bundled-ca.md) | The API image connects to RDS over verified TLS using a bundled CA | 2026-06-11 | Accepted |
+| [0001](0001-rds-tls-via-bundled-ca.md) | The API image connects to RDS over verified TLS using a bundled CA | 2026-06-11 | Superseded by [0048](0048-database-connections-verify-the-brains-certificate-and-never-fall-back-to-plain.md) |
 | [0002](0002-place-share-visibility.md) | Place share visibility | 2026-07-04 | Accepted |
 | [0003](0003-pre-deploy-migrations-expand-contract.md) | Prod migrations run in a gated pre-deploy task; migrations are expand/contract | 2026-07-17 | Accepted |
 | [0004](0004-mobile-sentry-and-scrubber.md) | Mobile crash reporting: Sentry behind a scrubber and a consent gate | 2026-07-23 | Accepted |
@@ -143,4 +151,6 @@ supersede instead.
 | [0044](0044-river-gauges-are-public-files-from-waternsw-and-bom.md) | River gauges are public files, with readings from WaterNSW and history from the Bureau of Meteorology | 2026-10-30 | Accepted |
 | [0045](0045-clients-speak-oidc-draw-their-own-forms-under-cognito.md) | Clients speak OIDC, draw their own forms under Cognito, and a deployment has one issuer | 2026-11-02 | Accepted |
 | [0046](0046-ota-hotfixes-publish-from-ci-on-a-labelled-merge.md) | OTA hotfixes publish from CI when a labelled PR merges, signed by a key only main's workflows can read | 2026-11-07 | Accepted |
-| [0048](0048-the-weather-overlay-is-public-files-cut-from-open-meteos-grids-by-a-job.md) | The Weather overlay is public files cut from Open-Meteo's grids by a scheduled job, which alone runs Open-Meteo's GPL reader | 2026-11-07 | Accepted |
+| [0047](0047-prod-runs-on-one-self-managed-instance-with-object-lock-backups.md) | Prod's API and Postgres run on one self-managed instance, backed up to an Object Lock bucket, with no control plane | 2026-11-10 | Accepted |
+| [0048](0048-database-connections-verify-the-brains-certificate-and-never-fall-back-to-plain.md) | Database connections verify the brain's certificate and never fall back to plain | 2026-11-11 | Accepted |
+| [0049](0049-the-weather-overlay-is-public-files-cut-from-open-meteos-grids-by-a-job.md) | The Weather overlay is public files cut from Open-Meteo's grids by a scheduled job, which alone runs Open-Meteo's GPL reader | 2026-11-07 | Accepted |

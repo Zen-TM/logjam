@@ -7,9 +7,9 @@ import { pushAvailable } from "./pushAvailable";
 // does.
 describe("pushAvailable", () => {
   it("is false only for the Android dev variant", () => {
-    expect(pushAvailable("android", "com.logjamnsw.mobile.dev")).toBe(false);
-    expect(pushAvailable("android", "com.logjamnsw.mobile")).toBe(true);
-    expect(pushAvailable("ios", "com.logjamnsw.mobile.dev")).toBe(true);
+    expect(pushAvailable("android", "earth.logjam.gps.dev")).toBe(false);
+    expect(pushAvailable("android", "earth.logjam.gps")).toBe(true);
+    expect(pushAvailable("ios", "earth.logjam.gps.dev")).toBe(true);
     expect(pushAvailable("android", undefined)).toBe(true);
   });
 });

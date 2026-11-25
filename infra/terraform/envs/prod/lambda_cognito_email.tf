@@ -128,7 +128,7 @@ resource "aws_lambda_function" "cognito_email_sender" {
   environment {
     variables = {
       KMS_KEY_ARN       = aws_kms_key.cognito_email.arn
-      EMAIL_FROM        = "noreply@notifications.logjamnsw.com"
+      EMAIL_FROM        = "noreply@notifications.logjam.earth"
       RESEND_SECRET_ARN = "arn:aws:secretsmanager:ap-southeast-2:620853681701:secret:logjam/resend-api-key-59egrs"
     }
   }

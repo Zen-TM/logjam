@@ -20,7 +20,7 @@
       }
     },
     "ios": {
-      "bundleIdentifier": "com.logjamnsw.mobile",
+      "bundleIdentifier": "earth.logjam.gps",
       "supportsTablet": false,
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
@@ -28,11 +28,12 @@
       }
     },
     "android": {
-      "package": "com.logjamnsw.mobile",
+      "package": "earth.logjam.gps",
       "allowBackup": false,
       "blockedPermissions": [
         "android.permission.SYSTEM_ALERT_WINDOW",
-        "android.permission.VIBRATE"
+        "android.permission.VIBRATE",
+        "com.google.android.finsky.permission.BIND_GET_INSTALL_REFERRER_SERVICE"
       ],
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
@@ -94,7 +95,14 @@
         }
       ],
       "expo-secure-store",
-      "@sentry/react-native",
+      [
+        "@sentry/react-native",
+        {
+          "organization": "logjam-qb",
+          "project": "react-native",
+          "experimental_android": { "enableAndroidGradlePlugin": true }
+        }
+      ],
       "expo-sqlite",
       [
         "expo-location",
@@ -114,7 +122,7 @@
       [
         "expo-media-library",
         {
-          "savePhotosPermission": "Logjam saves photos and videos you take in the app to your device's gallery.",
+          "savePhotosPermission": "Logjam saves photos and videos you take in Logjam GPS to your device's gallery.",
           "isAccessMediaLocationEnabled": false
         }
       ],

@@ -87,6 +87,27 @@ export function setFieldValues(
   return next;
 }
 
+/**
+ * The entries of a form's field texts that differ from what the form was
+ * seeded with; a key missing on either side reads as "". A save sends only
+ * these, so a field the user never touched keeps what a sync pulled in while
+ * the form was open, instead of being overwritten by the text it opened with.
+ */
+export function changedSince(
+  seeded: Record<string, string>,
+  current: Record<string, string>,
+): Record<string, string> {
+  const changed: Record<string, string> = {};
+  for (const key of new Set([
+    ...Object.keys(seeded),
+    ...Object.keys(current),
+  ])) {
+    const text = current[key] ?? "";
+    if (text !== (seeded[key] ?? "")) changed[key] = text;
+  }
+  return changed;
+}
+
 /** The user-visible keys — internal `_`-prefixed entries excluded. */
 export function userFieldKeys(values: unknown): string[] {
   return Object.keys(asFieldValues(values)).filter(

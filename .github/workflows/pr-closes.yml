@@ -20,6 +20,7 @@ jobs:
     # A dependency bump has no issue to close.
     if: github.event.pull_request.user.login != 'dependabot[bot]'
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Self-test the check
@@ -32,3 +33,13 @@ jobs:
         run: |
           CLOSING=$(gh pr view "$PR" --repo "$GITHUB_REPOSITORY" --json closingIssuesReferences --jq '.closingIssuesReferences | length') \
             scripts/pr-closes-check.sh
+      # "An issue, only while open" (root AGENTS.md, Comments): the pull request
+      # that closes an issue is the one change that can remove the comments
+      # citing it, so it is the one that fails. `edited` reruns this too.
+      - name: No comment still cites an issue this pull request closes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          # shellcheck disable=SC2046 # one argument per issue number
+          infra/scripts/check-repo-hygiene.py --closes $(gh pr view "$PR" --repo "$GITHUB_REPOSITORY" --json closingIssuesReferences --jq '[.closingIssuesReferences[].number] | join(" ")')

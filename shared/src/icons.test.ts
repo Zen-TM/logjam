@@ -23,7 +23,7 @@ describe("ICONS", () => {
   });
 
   it("keeps a trip type's glyph out of the UI vocabulary", () => {
-    const drawn = new Set(
+    const drawn = new Set<string>(
       entries.flatMap(([, glyphs]) => [glyphs.web, glyphs.gps]),
     );
     for (const key of TRIP_TYPE_ICON_KEYS) {

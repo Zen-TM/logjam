@@ -260,15 +260,23 @@ describe("an older poll and a newer fetch", () => {
   // Mutation: drop `fetched_at <= ?` from the poll's DELETE. A poll answered
   // before the caller was let in would delete the plan they just opened.
   it("keeps a plan fetched after the poll began", async () => {
-    const get = held<{ plans: ReturnType<typeof summary>[] }>();
-    api.getPlans.mockReturnValueOnce(get.promise);
-    const poll = pollPlans();
-    await new Promise((resolve) => setTimeout(resolve, 2));
-    api.getPlan.mockResolvedValueOnce(view("p"));
-    await fetchPlan("p");
-    get.land({ plans: [summary("p", "requested")] });
-    await poll;
-    expect(await readCachedPlan("p")).not.toBeNull();
+    // A frozen clock, moved on by hand: the fetch has to land in a later
+    // millisecond than the poll began in, and a real sleep may not get there.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      vi.setSystemTime(new Date("2026-10-22T08:00:00.000Z"));
+      const get = held<{ plans: ReturnType<typeof summary>[] }>();
+      api.getPlans.mockReturnValueOnce(get.promise);
+      const poll = pollPlans();
+      vi.setSystemTime(new Date("2026-10-22T08:00:00.010Z"));
+      api.getPlan.mockResolvedValueOnce(view("p"));
+      await fetchPlan("p");
+      get.land({ plans: [summary("p", "requested")] });
+      await poll;
+      expect(await readCachedPlan("p")).not.toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

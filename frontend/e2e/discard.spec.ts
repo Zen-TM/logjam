@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import { SEED_NAMES } from "../../api/prisma/seedNames";
 
 // A form with typing in it asks before any way out loses it: Escape, the close
 // button, Cancel and a press on the backdrop (`Dialog`'s `discard`). Red when
@@ -101,7 +102,7 @@ test("editing a trip asks about the changes, and Cancel is Cancel", async ({
 // An upload is saved the moment it lands, so it counts as a change and Discard
 // takes it back out. Red when Cancel closes without asking, or the file is
 // still on the place after Discard.
-test("a track attached in the edit form goes again on Discard", async ({
+test("a photo attached in the edit form goes again on Discard", async ({
   page,
 }) => {
   await page.goto("/");
@@ -110,30 +111,34 @@ test("a track attached in the edit form goes again on Discard", async ({
   });
   await page.getByRole("button", { name: "Places", exact: true }).click();
   const aside = page.locator("aside");
-  await aside
-    .getByRole("button", { name: /^Actions for / })
-    .first()
-    .click();
+  // The seed's one place with no route (place-route.spec.ts uses it too, and its route is not touched here), by
+  // name: the first row is not a place the spec can rely on to be empty.
+  const openActions = () =>
+    aside
+      .locator("[data-place-id]")
+      .filter({ hasText: SEED_NAMES.hiddenSlot })
+      .getByRole("button", { name: /^Actions for / })
+      .click();
+  await openActions();
   const editPlace = async () => {
     await page.getByRole("menuitem", { name: "Edit place" }).click();
     return page.getByRole("dialog", { name: "Edit place" });
   };
 
   let form = await editPlace();
-  await expect(form.getByText("No route yet.")).toBeVisible();
+  await expect(form.getByText("No photos or videos yet.")).toBeVisible();
   await form
     .locator('input[type="file"]')
-    .last()
+    .first()
     .setInputFiles({
-      name: "attached.gpx",
-      mimeType: "application/gpx+xml",
+      name: "attached.png",
+      mimeType: "image/png",
       buffer: Buffer.from(
-        '<?xml version="1.0"?><gpx version="1.1" creator="t"><trk><trkseg>' +
-          '<trkpt lat="-33.7" lon="150.3"/><trkpt lat="-33.71" lon="150.31"/>' +
-          "</trkseg></trk></gpx>",
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/q842iQAAAABJRU5ErkJggg==",
+        "base64",
       ),
     });
-  await expect(form.getByText("No route yet.")).toBeHidden();
+  await expect(form.getByText("No photos or videos yet.")).toBeHidden();
 
   await form.getByRole("button", { name: "Cancel" }).click();
   await page
@@ -142,10 +147,9 @@ test("a track attached in the edit form goes again on Discard", async ({
     .click();
   await expect(form).toBeHidden();
 
-  await aside
-    .getByRole("button", { name: /^Actions for / })
-    .first()
-    .click();
+  // Edit from a row opens the place's page underneath the form.
+  await aside.getByRole("button", { name: "Back to Places" }).click();
+  await openActions();
   form = await editPlace();
-  await expect(form.getByText("No route yet.")).toBeVisible();
+  await expect(form.getByText("No photos or videos yet.")).toBeVisible();
 });

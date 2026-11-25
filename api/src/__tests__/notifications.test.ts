@@ -18,7 +18,7 @@ const API_URL = process.env.API_URL ?? "http://localhost:8080";
 const AUTH = { Authorization: "Bearer fake-token" } as const;
 
 describe("GET /notifications (fake auth = alice)", () => {
-  it("drops a place_shared notification whose referenced place no longer exists (PRIV-001)", async () => {
+  it("drops a place_shared notification whose referenced place no longer exists", async () => {
     const notification = await prisma.notification.create({
       data: {
         userId: ALICE_ID,
@@ -38,7 +38,7 @@ describe("GET /notifications (fake auth = alice)", () => {
     }
   });
 
-  it("drops a friend_request notification whose referenced friendship no longer exists (PRIV-001)", async () => {
+  it("drops a friend_request notification whose referenced friendship no longer exists", async () => {
     const notification = await prisma.notification.create({
       data: {
         userId: ALICE_ID,
@@ -103,6 +103,30 @@ describe("GET /notifications (fake auth = alice)", () => {
       await prisma.notification.deleteMany({ where: { id: notification.id } });
       await prisma.placeShare.deleteMany({ where: { placeId: place.id } });
       await prisma.place.delete({ where: { id: place.id } });
+    }
+  });
+
+  // Mutation: have the route rebuild a topo_complete row without the flag,
+  // and the owner is never told the vegetation layer was left out (the label
+  // is shared/src/notificationLabel.ts).
+  it("passes a completed map's vegetationLeftOut flag through", async () => {
+    const notification = await prisma.notification.create({
+      data: {
+        userId: ALICE_ID,
+        type: "topo_complete",
+        payload: { jobId: "job-left-out", vegetationLeftOut: true },
+        read: false,
+      },
+    });
+    try {
+      const res = await request(API_URL).get("/notifications").set(AUTH);
+      expect(res.status).toBe(200);
+      const row = res.body.find(
+        (n: { id: string }) => n.id === notification.id,
+      );
+      expect(row.payload.vegetationLeftOut).toBe(true);
+    } finally {
+      await prisma.notification.deleteMany({ where: { id: notification.id } });
     }
   });
 

@@ -11,7 +11,7 @@ import {
   sampleElevations as sampleDemElevations,
   sampleSlope,
 } from "./elevation";
-import { NSW_5M, TERRARIUM, type SamplePosition } from "@logjam/shared";
+import { NSW_REGION, TERRARIUM, type SamplePosition } from "@logjam/shared";
 
 // The archive source is read from the CDN base, which the unit env leaves
 // unset: these tests then see the worldwide source alone. The
@@ -205,7 +205,7 @@ describe("sampleElevations", () => {
     );
     envOverride.TOPO_CDN_BASE_URL = "https://cdn.test";
     fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
-      if (url !== `https://cdn.test/${NSW_5M.archivePath}`)
+      if (url !== `https://cdn.test/${NSW_REGION.terrain.heights.archivePath}`)
         return pngResponse(worldwide);
       const range = new Headers(init?.headers).get("range")!;
       const [from, to] = range.replace("bytes=", "").split("-").map(Number);
@@ -278,7 +278,9 @@ describe("sampleElevations", () => {
     const { positions, heights, sourceIds } = parity();
     const dem = await sampleDemElevations(positions, [AREA]);
     sourceIds.forEach((id, i) => {
-      expect(dem.sourceIds[i]).toBe(id === NSW_5M.id ? "lidar-job-1" : id);
+      expect(dem.sourceIds[i]).toBe(
+        id === NSW_REGION.terrain.heights.id ? "lidar-job-1" : id,
+      );
       expect(dem.heights[i]).toBeCloseTo(heights[i]!, 1);
     });
     expect(s3Send).toHaveBeenCalled();

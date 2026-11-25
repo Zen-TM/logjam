@@ -8,15 +8,15 @@ const theme = THEME_SCHEMES[DEFAULT_THEME_SCHEME_ID].tokens;
 describe("buildShellStyle", () => {
   it("uses bundled file:// URLs when the local assets base is available", () => {
     const style = buildShellStyle(
-      "file:///data/user/0/com.logjamnsw.mobile/files/basemap-assets/",
+      "file:///data/user/0/earth.logjam.gps/files/basemap-assets/",
       "light",
       theme,
     );
     expect(style.glyphs).toBe(
-      "file:///data/user/0/com.logjamnsw.mobile/files/basemap-assets/fonts/{fontstack}/{range}.pbf",
+      "file:///data/user/0/earth.logjam.gps/files/basemap-assets/fonts/{fontstack}/{range}.pbf",
     );
     expect(style.sprite).toBe(
-      "file:///data/user/0/com.logjamnsw.mobile/files/basemap-assets/sprites/v4/light",
+      "file:///data/user/0/earth.logjam.gps/files/basemap-assets/sprites/v4/light",
     );
   });
 

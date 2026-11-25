@@ -19,7 +19,7 @@ set -euo pipefail
 APK=$(realpath "${1:?apk}")
 OUT=$(realpath -m "${2:?screenshot dir}")
 LOGS=$(realpath -m "${3:?log dir}")
-PKG=com.logjamnsw.mobile.dev
+PKG=earth.logjam.gps.dev
 cd "$(dirname "$0")/.."
 mkdir -p "$OUT" "$LOGS"
 # Whatever the outcome, so a failure arrives with the device's own account of it.
@@ -40,6 +40,13 @@ adb shell pm grant "$PKG" android.permission.ACCESS_FINE_LOCATION
 # Gboard adds suggestion, GIF and clipboard work to every field: no keyboard UI
 # is a lighter one, and `input text` needs none.
 for ime in $(adb shell ime list -s | tr -d '\r'); do adb shell ime disable "$ime" > /dev/null || true; done
+
+# The software GPU can starve the system launcher until Android raises "Pixel
+# Launcher isn't responding" over the app. That dialog is the system's, so it
+# hides "Not now" from Maestro, outlives the app's force-stop and fails the
+# retry the same way. This hides the ones raised from here on; one raised while
+# the emulator booted is already up, and the flow's first step closes it.
+adb shell settings put global hide_error_dialogs 1
 
 # A 320x640 screen at 160 dpi cannot show the add-place form, and a sheet that
 # scrolls under Maestro's swipes is a flake to chase. Pack more dp into the same

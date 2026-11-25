@@ -5,6 +5,10 @@ const baseSchema = z.object({
     .enum(["development", "production", "test"])
     .default("development"),
   PORT: z.coerce.number().int().positive().default(8080),
+  // Proxies in front of the API that append to X-Forwarded-For (index.ts).
+  // 1 is prod's chain, CloudFront straight to the container. A count above
+  // the real chain lets a client forge its own address.
+  TRUST_PROXY_HOPS: z.coerce.number().int().nonnegative().default(1),
   LOG_LEVEL: z
     .enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"])
     .default("info"),
@@ -12,7 +16,7 @@ const baseSchema = z.object({
   // Postgres connection is composed at runtime from these discrete parts
   // (see lib/databaseUrl.ts) — never DATABASE_URL. DB_USER/DB_PASSWORD are
   // ECS-secrets-injected in Fargate workers, or resolved from DB_SECRET_ID
-  // by src/boot.ts before this schema is parsed in the EB API container.
+  // by src/boot.ts before this schema is parsed in the brain's API container.
   DB_HOST: z.string(),
   DB_PORT: z.coerce.number().int().positive().default(5432),
   DB_NAME: z.string(),
@@ -24,6 +28,10 @@ const baseSchema = z.object({
   DB_SECRET_ID: z.string().optional(),
 
   AUTH_MODE: z.enum(["fake", "oidc"]),
+  // Set to "prod" by a host that has no AWS-injected variables for
+  // middleware/auth.ts to key on; there it forces real auth. Read from
+  // process.env at module load, declared here so it is validated at boot.
+  LOGJAM_RUNTIME: z.enum(["prod"]).optional(),
   FAKE_USER_SUB: z.string().optional(),
   // Token verification (middleware/auth.ts), required unless AUTH_MODE=fake.
   // OIDC_AUDIENCE is a comma-separated list of the client ids whose ID tokens
@@ -47,7 +55,7 @@ const baseSchema = z.object({
 
   // CloudFront origin-verify (WAF-bypass guard). CloudFront injects a
   // secret X-Origin-Verify header on every origin fetch; a request lacking the
-  // matching value reached Elastic Beanstalk directly, bypassing the edge WAF.
+  // matching value reached the origin directly, bypassing the edge WAF.
   // The app compares that header to ORIGIN_VERIFY_SECRET, which is resolved at
   // boot from Secrets Manager (ORIGIN_VERIFY_SECRET_ID) like the DB creds. Both
   // optional: a deployment with neither configured disables the check (no-op).
@@ -156,6 +164,16 @@ const baseSchema = z.object({
     .int()
     .nonnegative()
     .default(24),
+  // The month's compute credits (vCPU-minutes) all accounts share, checked
+  // before a launch beside the per-user allowance (lib/computeCredits.ts). A
+  // credit is about US$0.001 of Fargate at ap-southeast-2 on-demand prices
+  // (about US$0.062 per vCPU-hour with the workers' 2 GiB per vCPU), so 32000
+  // credits, about 533 vCPU-hours, is about US$33 a month. 0 = no site-wide cap.
+  SITE_MONTHLY_COMPUTE_CREDITS: z.coerce
+    .number()
+    .int()
+    .nonnegative()
+    .default(32000),
   // Egress meter (lib/egressMeter.ts). The sweep rides the topo reaper's
   // existing interval rather than owning a timer — it is incremental and does
   // nothing when no new log objects have been delivered.
@@ -169,7 +187,8 @@ const baseSchema = z.object({
   // workers' same-region reads and CloudFront's basemap reads share the same
   // buckets and must not be charged to anyone. An empty value matches nothing
   // (fail closed — under-count rather than bill users for worker traffic). Guard: s3AccessLog.unit.test.ts ("charges nothing when the requester pattern is empty").
-  EGRESS_API_REQUESTER_PATTERN: z.string().default("logjam-eb-role"),
+  // No default names a role: a host sets its own (infra/brain/api.env).
+  EGRESS_API_REQUESTER_PATTERN: z.string().default(""),
   // Ceiling on access-log objects consumed per sweep, so a backlog is worked
   // through over several passes instead of one unbounded run.
   EGRESS_MAX_LOG_OBJECTS_PER_SWEEP: z.coerce
@@ -177,6 +196,22 @@ const baseSchema = z.object({
     .int()
     .positive()
     .default(500),
+  // Site-wide caps beside the per-user quotas: bytes stored by every account
+  // together (lib/storageQuota.ts, 500 GiB) and bytes downloaded this month by
+  // every account together (lib/egressQuota.ts, 300 GiB). S3 is about
+  // US$0.025 per GiB-month stored and the internet egress about US$0.114 per
+  // GiB at ap-southeast-2 prices, so the defaults are roughly US$12.50 and
+  // US$34 a month at the cap. 0 = no cap, like SITE_MONTHLY_COMPUTE_CREDITS.
+  SITE_STORAGE_BYTES: z.coerce
+    .number()
+    .int()
+    .nonnegative()
+    .default(500 * 1024 ** 3),
+  SITE_MONTHLY_EGRESS_BYTES: z.coerce
+    .number()
+    .int()
+    .nonnegative()
+    .default(300 * 1024 ** 3),
   // TopoExportJob sweeps: queued rows older than the QUEUED timeout
   // (task never placed/started) and running rows older than the RUNNING
   // timeout (worker SIGKILLed before its except path ran) are force-failed.
@@ -299,7 +334,7 @@ export function validateEnv(): Env {
   }
 
   // services/prisma.ts reads DATABASE_SSL at module load, before this runs;
-  // refusing here still stops a prod process that would talk plain to RDS.
+  // refusing here still stops a prod process that would talk plain to Postgres.
   if (env.DATABASE_SSL === "disable" && env.NODE_ENV === "production") {
     console.error("DATABASE_SSL=disable is forbidden in production.");
     process.exit(1);

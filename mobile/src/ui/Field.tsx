@@ -18,6 +18,8 @@ import { fieldLabel } from "./fieldLabel";
 export function Field({
   label,
   hint,
+  prominentLabel,
+  hintAbove,
   error,
   aside,
   requiredMark,
@@ -28,6 +30,12 @@ export function Field({
   label: string;
   /** One plain sentence under the control saying what it means or takes. */
   hint?: string;
+  /** A question someone answers: the label is set above its hint, in the text
+   *  colour, instead of looking like it. */
+  prominentLabel?: boolean;
+  /** Draws the hint between the label and the control, not under it: a
+   *  question the hint belongs to before it is answered. */
+  hintAbove?: boolean;
   /** This control's validation message, drawn by `FieldError`. */
   error?: string | null;
   aside?: React.ReactNode;
@@ -40,6 +48,8 @@ export function Field({
   children: React.ReactNode;
 }) {
   const styles = useStyles();
+  const labelStyle = prominentLabel ? styles.labelProminent : styles.label;
+  const hintLine = hint ? <Text style={styles.hint}>{hint}</Text> : null;
   const end =
     aside ??
     (requiredMark ? (
@@ -50,14 +60,15 @@ export function Field({
     <View style={[styles.field, disabled && styles.disabled]}>
       {end != null ? (
         <View style={styles.head}>
-          <Text style={styles.label}>{label}</Text>
+          <Text style={labelStyle}>{label}</Text>
           {end}
         </View>
       ) : (
-        <Text style={styles.label}>{label}</Text>
+        <Text style={labelStyle}>{label}</Text>
       )}
+      {hintAbove ? hintLine : null}
       {children}
-      {hint ? <Text style={styles.hint}>{hint}</Text> : null}
+      {hintAbove ? null : hintLine}
       <FieldError message={error} reserve={reserveError} />
     </View>
   );
@@ -72,6 +83,7 @@ export function FormStack({ children }: { children: React.ReactNode }) {
 
 const useStyles = makeStyles((theme, textRole) => ({
   label: fieldLabel(theme, textRole),
+  labelProminent: { ...textRole.rowTitle, color: theme.text },
   field: { gap: formRhythm.label },
   stack: { gap: formRhythm.field },
   disabled: { opacity: opacity.disabled },
