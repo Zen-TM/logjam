@@ -86,8 +86,13 @@ export const MAP_TERRAIN = {
     weatherCaveat:
       "Cells are about 9 km across, so this shows the big systems, not a storm over one catchment.",
     // The bar over the map while Weather is on.
+    weatherPlay: "Play",
+    weatherPause: "Pause",
     weatherEarlier: "Earlier",
     weatherLater: "Later",
+    // The X on the bar, and the layer's name on it (a press opens Layers).
+    weatherHide: "Hide the weather map",
+    weatherChoose: "Choose what the weather map shows",
     weatherLoading: "Getting the weather map…",
     weatherFailed: "Couldn't get the weather map.",
     weatherOutOfDate: WEATHER.copy.outOfDate,

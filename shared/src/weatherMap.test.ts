@@ -22,6 +22,7 @@ import {
   weatherReliefColor,
   weatherShown,
   weatherShownLabel,
+  weatherNextStep,
   weatherStepAt,
   weatherTimeLabel,
   weatherWindUrl,
@@ -100,6 +101,17 @@ describe("the slider", () => {
   it("starts at the step now falls in", () => {
     expect(weatherStepAt(file, anchor + 30 * 60_000)).toBe(1);
     expect(weatherStepAt(file, anchor - 3 * 3_600_000)).toBe(0);
+  });
+
+  // Mutation: return `step + 1` without the wrap (Play runs off the end and
+  // asks for an archive that is not there), or wrap to 0 instead of `first`
+  // (it plays hours already past).
+  it("plays on by one and loops from the last step to the first allowed", () => {
+    expect(weatherNextStep(3, 2, 9)).toBe(4);
+    expect(weatherNextStep(8, 2, 9)).toBe(9);
+    expect(weatherNextStep(9, 2, 9)).toBe(2);
+    expect(weatherNextStep(0, 2, 9)).toBe(2);
+    expect(weatherNextStep(0, 0, 0)).toBe(0);
   });
 
   // Mutation: fall back to the last step and a run a week old draws as now.

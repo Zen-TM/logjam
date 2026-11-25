@@ -1,6 +1,13 @@
-import { Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 
-import { radius, spacing, makeStyles, useTheme, controlSize } from "../theme";
+import {
+  radius,
+  spacing,
+  makeStyles,
+  useTheme,
+  controlSize,
+  hitSlop,
+} from "../theme";
 import { Icon, type Glyph } from "./Icon";
 
 /**
@@ -26,6 +33,9 @@ export function Notice({
   action,
   controls,
   numberOfLines,
+  compact = false,
+  onText,
+  textHint,
   tone = "info",
 }: {
   children: string;
@@ -35,6 +45,13 @@ export function Notice({
   controls?: React.ReactNode;
   /** A user's own title in the words stops at two lines (shared/DESIGN.md §9). */
   numberOfLines?: number;
+  /** Less air round the words and between them and the controls, for a notice
+   *  that is mostly controls (the weather bar). */
+  compact?: boolean;
+  /** Makes the words pressable (the weather bar's layer name opens Layers);
+   *  `textHint` is what a press does, as its accessibility hint. */
+  onText?: () => void;
+  textHint?: string;
 } & (
   | { tone?: "info" | "warning"; icon?: Glyph }
   | { tone: "critical"; icon: Glyph }
@@ -55,12 +72,24 @@ export function Notice({
           }
         />
       ) : null}
-      <Text
-        style={[styles.text, critical && styles.criticalText]}
-        numberOfLines={numberOfLines}
-      >
-        {children}
-      </Text>
+      {onText ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityHint={textHint}
+          onPress={onText}
+          hitSlop={hitSlop}
+          style={styles.textPress}
+        >
+          <Text style={[styles.text, styles.pressable]}>{children}</Text>
+        </Pressable>
+      ) : (
+        <Text
+          style={[styles.text, critical && styles.criticalText]}
+          numberOfLines={numberOfLines}
+        >
+          {children}
+        </Text>
+      )}
       {action}
     </>
   );
@@ -69,6 +98,7 @@ export function Notice({
       style={[
         styles.notice,
         controls != null && styles.stacked,
+        compact && styles.compact,
         warning && styles.warning,
         critical && styles.critical,
       ]}
@@ -105,6 +135,7 @@ const useStyles = makeStyles((theme, textRole) => ({
   critical: { backgroundColor: theme.warning },
   criticalText: { color: theme.onFill },
   stacked: { flexDirection: "column", paddingVertical: spacing(1) },
+  compact: { paddingVertical: spacing(0.5), gap: spacing(0.25) },
   line: { flexDirection: "row", alignItems: "center", gap: spacing(1) },
   controls: {
     flexDirection: "row",
@@ -112,6 +143,8 @@ const useStyles = makeStyles((theme, textRole) => ({
     justifyContent: "center",
     gap: spacing(1),
   },
+  textPress: { flexShrink: 1 },
+  pressable: { textDecorationLine: "underline" },
   // `flexShrink`, not `flex: 1`: the notice hugs its words until they wrap.
   text: {
     flexShrink: 1,

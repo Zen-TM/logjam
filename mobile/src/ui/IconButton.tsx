@@ -35,6 +35,7 @@ export function IconButton({
   reasonShown,
   filled = false,
   size = 20,
+  compact = false,
 }: {
   icon: Glyph;
   onPress: () => void;
@@ -42,6 +43,9 @@ export function IconButton({
   color?: string;
   filled?: boolean;
   size?: number;
+  /** Drawn at `controlSize.sm` (the hit area is still 48 with `hitSlop`), for
+   *  a row where 40 would make the bar tall (the weather bar). */
+  compact?: boolean;
 } & Disablable) {
   const theme = useTheme();
   const INTENTS = useIntents();
@@ -68,6 +72,7 @@ export function IconButton({
       hitSlop={hitSlop}
       style={({ pressed }) => [
         styles.base,
+        compact && styles.compact,
         filled && { backgroundColor: withAlpha(color, wash.strong) },
         pressed && !disabled && styles.pressed,
         disabled && styles.disabled,
@@ -96,6 +101,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  compact: { width: controlSize.sm, height: controlSize.sm },
   pressed: { opacity: opacity.pressed },
   disabled: { opacity: opacity.disabled },
 });

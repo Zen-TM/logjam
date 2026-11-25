@@ -6084,6 +6084,8 @@ export function MapScreen({
               weather.file && setWeatherPick({ path: weather.file.path, step })
             }
             onRetry={weather.retry}
+            onDismiss={() => chooseTerrainLayer("weather", false)}
+            onChooseLayer={() => layersOpen.set(true)}
           />
         ) : null}
       </ScrollView>

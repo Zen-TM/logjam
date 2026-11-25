@@ -16,6 +16,8 @@ export type WeatherBarModel =
   | { kind: "outOfDate"; text: string }
   | {
       kind: "ready";
+      /** What Play is tied to: a new layer opens paused. */
+      layer: WeatherLayerKey;
       title: string;
       /** The step or window on the map, and the run's age. */
       detail: string;
@@ -61,6 +63,7 @@ export function weatherBarModel(input: {
   const { layer, step, first, last } = shown;
   return {
     kind: "ready",
+    layer: layer.key,
     title: `${layer.label} (${layer.unit})`,
     detail: `${shown.shown} · ${shown.age}`,
     scale: weatherScale(layer.key),

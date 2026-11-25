@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { PanResponder, View } from "react-native";
 
-import { makeStyles, radius } from "../theme";
+import { controlSize, makeStyles, radius, slopTo } from "../theme";
 import { stepAtX, xAtStep } from "./scrubberMath";
 
 const THUMB = 24;
@@ -24,6 +24,7 @@ export function Scrubber({
   label,
   valueText,
   width = SCRUBBER_WIDTH,
+  compact = false,
 }: {
   first: number;
   last: number;
@@ -34,6 +35,8 @@ export function Scrubber({
   valueText: string;
   /** Logjam GPS only: the track is drawn at a size, not stretched. */
   width?: number;
+  /** Logjam GPS only: a 32 dp row, not 48, with `hitSlop` to the target. */
+  compact?: boolean;
 }) {
   const styles = useStyles();
   const latest = useRef({ first, last, width, onChange });
@@ -74,7 +77,8 @@ export function Scrubber({
         const by = event.nativeEvent.actionName === "increment" ? 1 : -1;
         onChange(Math.min(last, Math.max(first, value + by)));
       }}
-      style={[styles.hit, { width }]}
+      hitSlop={compact ? slopTo(controlSize.sm) : undefined}
+      style={[styles.hit, { width }, compact && styles.hitCompact]}
       {...pan.panHandlers}
     >
       {/* The children take no touches, so a touch's position is the track's. */}
@@ -90,6 +94,7 @@ export function Scrubber({
 
 const useStyles = makeStyles((theme) => ({
   hit: { height: HEIGHT, justifyContent: "center" },
+  hitCompact: { height: controlSize.sm },
   track: {
     position: "absolute",
     left: 0,

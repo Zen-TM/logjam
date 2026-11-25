@@ -5,13 +5,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useGauges } from "./gauges/useGauges";
 import { useNow } from "./ui/useNow";
+import { useWeatherPlay } from "./weatherMap/useWeatherPlay";
 
 // Guards for mobile/AGENTS.md "Nothing automatic wakes the radio or the CPU
 // behind a dark screen: a timer arms only in the foreground, and a sensor runs
 // only while the screen that shows it is focused" (ADR 0013, ADR 0010).
 //
 // Three layers:
-//  1. `useNow` and `useGauges` run as plain functions with React stubbed
+//  1. `useNow`, `useGauges` and `useWeatherPlay` run as plain functions with React stubbed
 //     (mobile's vitest has no renderer), and their interval must not tick while
 //     AppState is `background`.
 //  2. MapScreen cannot be rendered here, so a syntax-tree check says each
@@ -52,6 +53,7 @@ const { appState, effects, setters } = vi.hoisted(() => ({
 }));
 
 vi.mock("react", () => ({
+  useRef: (current: unknown) => ({ current }),
   useState: (init: unknown) => {
     const set = vi.fn();
     setters.push(set);
@@ -154,6 +156,52 @@ describe("the hooks that tick", () => {
       setNow.mock.calls.length,
       "useGauges kept ticking after AppState went to background: the change listener must clear the interval (ADR 0013).",
     ).toBe(stopped);
+  });
+});
+
+describe("Weather's Play", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    appState.currentState = "active";
+  });
+  const SECOND = 1000;
+
+  // Mutation: arm the interval without the `AppState.currentState ===
+  // "active"` check, and Play runs behind a dark screen.
+  it("starts no timer behind a dark screen, and pauses instead", async () => {
+    appState.currentState = "background";
+    const advance = vi.fn();
+    const pause = vi.fn();
+    mount(() => useWeatherPlay(true, advance, pause), 0);
+    await vi.advanceTimersByTimeAsync(10 * SECOND);
+    expect(advance).not.toHaveBeenCalled();
+    expect(pause).toHaveBeenCalledOnce();
+  });
+
+  // Mutation: drop the change listener, or arm the interval while not
+  // playing, and Play ticks on after the app leaves the front or a pause.
+  it("ticks once a playMs in front, and stops on background", async () => {
+    const advance = vi.fn();
+    const pause = vi.fn();
+    mount(() => useWeatherPlay(true, advance, pause), 0);
+    await vi.advanceTimersByTimeAsync(3 * SECOND);
+    expect(advance).toHaveBeenCalledTimes(3);
+
+    appState.listeners.forEach((l) => l("background"));
+    expect(pause).toHaveBeenCalledOnce();
+    await vi.advanceTimersByTimeAsync(10 * SECOND);
+    expect(
+      advance,
+      "Play kept ticking after AppState went to background: the change listener must clear the interval (ADR 0013).",
+    ).toHaveBeenCalledTimes(3);
+  });
+
+  it("arms nothing while paused", async () => {
+    const advance = vi.fn();
+    mount(() => useWeatherPlay(false, advance, vi.fn()), 0);
+    await vi.advanceTimersByTimeAsync(10 * SECOND);
+    expect(advance).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
   });
 });
 
@@ -342,6 +390,11 @@ const INTERVALS: Declared[] = [
     file: "weatherMap/useWeatherMap.ts",
     count: 1,
     why: "the overlay's age clock: the effect arms it only while AppState is active, clears it on every change and re-arms it on return to the foreground",
+  },
+  {
+    file: "weatherMap/useWeatherPlay.ts",
+    count: 1,
+    why: "Play's beat: armed only while the user has pressed Play and AppState is active, cleared on pause, on leaving the foreground and on unmount; held by the hook tests above",
   },
   {
     file: "tracks/RecordingSheet.tsx",

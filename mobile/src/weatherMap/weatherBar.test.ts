@@ -26,6 +26,9 @@ describe("weatherBarModel", () => {
     if (model.kind !== "ready") return;
     expect(model.scrub).toMatchObject({ first: 1, last: 3, step: 1 });
     expect(model.title).toBe("Rain (mm/h)");
+    // Mutation: drop `layer`, and the bar cannot tell that Play was started
+    // on another layer, so a new layer plays on.
+    expect(model.layer).toBe("rain");
     expect(model.detail).toContain("Updated");
     expect(weatherDrawnStep(model)).toBe(1);
   });

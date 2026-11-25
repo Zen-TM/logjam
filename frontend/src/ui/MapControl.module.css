@@ -116,6 +116,24 @@
   border-radius: var(--radius-lg);
 }
 
+/* One width for every layer, step and total: the words wrap inside it, the
+   controls span it, and a phone narrower than it holds the card to its own
+   width (the notice's max-width). */
+.fixedWidth {
+  width: var(--notice-card-width);
+}
+
+.fixedWidth .noticeLine,
+.fixedWidth .noticeControls {
+  align-self: stretch;
+  justify-content: center;
+}
+
+.fixedWidth .noticeText {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
 .noticeLine {
   display: inline-flex;
   align-items: center;
@@ -129,6 +147,19 @@
   max-width: 100%;
   justify-content: center;
   gap: var(--space-1);
+}
+
+/* The words as a button: no button look, the dotted underline says it is
+   pressable. */
+.textButton {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-decoration: underline dotted;
+  text-underline-offset: var(--space-0-5);
+  cursor: pointer;
 }
 
 .twoLines {

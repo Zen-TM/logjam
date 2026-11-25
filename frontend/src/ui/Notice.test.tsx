@@ -25,6 +25,35 @@ describe("Notice", () => {
     expect(screen.queryByRole("alert")).toBeNull();
   });
 
+  // Mutation: set `.fixedWidth` to `min-width`, or drop `--notice-card-width`
+  // from index.css, and the weather card breathes with its words again.
+  it("pins a fixed-width notice to one width the page defines", () => {
+    const dir = dirname(fileURLToPath(import.meta.url));
+    const css = readFileSync(join(dir, "MapControl.module.css"), "utf8");
+    expect(css.match(/\.fixedWidth \{([^}]*)\}/)?.[1]).toContain(
+      "width: var(--notice-card-width)",
+    );
+    expect(readFileSync(join(dir, "../index.css"), "utf8")).toMatch(
+      /--notice-card-width: [\d.]+rem;/,
+    );
+    render(<Notice fixedWidth>Words</Notice>);
+    expect(document.querySelector("[data-tone]")!.className).toMatch(
+      /fixedWidth/,
+    );
+  });
+
+  // Mutation: make the words a `span` whatever `onText` says.
+  it("makes the words a button when it has somewhere to go", () => {
+    let pressed = 0;
+    render(
+      <Notice onText={() => pressed++} textHint="Choose">
+        Rain
+      </Notice>,
+    );
+    screen.getByRole("button", { name: "Rain" }).click();
+    expect(pressed).toBe(1);
+  });
+
   // Mutation: change the critical `background` to `var(--color-page)`, and the
   // loudest notice looks like the quietest.
   it("fills a critical notice with the warning fill and onFill words", () => {
