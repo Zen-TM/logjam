@@ -18,7 +18,7 @@ import {
   RASTER_TEMPLATE_DEFAULTS,
   TERRAIN_LAYER_DEFAULTS,
 } from "@logjam/shared";
-import { OverlayLegendRow, TerrainPane } from "./LayersPopover";
+import { OverlayLegendRow, TerrainPane, WeatherPane } from "./LayersPopover";
 
 // jsdom has no ResizeObserver, which the Coverage legend's ChipRail uses.
 vi.stubGlobal(
@@ -424,58 +424,60 @@ describe("the Coverage row on Logjam Web", () => {
   });
 });
 
-describe("the Weather row on Logjam Web", () => {
-  const row = (props: {
+describe("the Weather tab on Logjam Web", () => {
+  const pane = (props: {
     onToggle?: (on: boolean) => void;
     onChange?: (value: string) => void;
     value?: string;
   }) =>
     render(
-      <OverlayLegendRow
-        legend={OVERLAY_LEGENDS.weather}
+      <WeatherPane
         checked={TERRAIN_LAYER_DEFAULTS.weather}
         onToggle={props.onToggle ?? vi.fn()}
-        choice={{
-          value: props.value ?? "temperature",
-          onChange: props.onChange ?? vi.fn(),
-        }}
+        layer={props.value ?? "temperature"}
+        onLayerChange={props.onChange ?? vi.fn()}
       />,
     );
 
-  // Mutation: start it on, or drop the subtitle, and every map opens under a
-  // forecast nobody asked for, or for a layer nobody can see.
-  it("is off by default, switches the weather key, and names its layer", () => {
+  // Mutation: start it on, and every map opens under a forecast nobody asked
+  // for.
+  it("is off by default and switches the weather key", () => {
     const onToggle = vi.fn();
-    row({ onToggle });
+    pane({ onToggle });
     const weather = screen.getByRole("switch", { name: "Show weather" });
     expect(weather.getAttribute("aria-checked")).toBe("false");
     fireEvent.click(weather);
     expect(onToggle).toHaveBeenCalledWith(true);
-    expect(screen.getByText("Temperature")).toBeTruthy();
   });
 
   // Mutation: render `legend.rows` as the key (the default layer's), and
-  // Temperature's legend lists rain's mm/h.
-  it("picks the layer in its legend, over the chosen layer's own key", () => {
+  // Temperature's key lists rain's mm/h; drop the picker, the caveat or the
+  // credit, and the tab loses what its dialog held.
+  it("picks the layer inline, over the chosen layer's own key", () => {
     const onChange = vi.fn();
     const onToggle = vi.fn();
-    row({ onChange, onToggle });
-    fireEvent.click(screen.getByRole("button", { name: copy.weatherAbout }));
-    const legend = screen.getByRole("dialog", { name: copy.weather });
+    const { container } = pane({ onChange, onToggle });
+    expect(screen.queryByRole("dialog")).toBeNull();
     for (const { label } of OVERLAY_LEGENDS.weather.choice!.options)
       expect(screen.getByRole("radio", { name: label })).toBeTruthy();
-    expect(legend.textContent).toContain("22 °C");
-    expect(legend.textContent).not.toContain("mm/h");
+    expect(
+      screen
+        .getByRole("radio", { name: "Temperature" })
+        .getAttribute("aria-checked"),
+    ).toBe("true");
+    const text = container.textContent;
+    expect(text).toContain("22 °C");
+    expect(text).not.toContain("mm/h");
     fireEvent.click(screen.getByRole("radio", { name: "Rain, past 72 h" }));
     expect(onChange).toHaveBeenCalledWith("rainPast72");
     expect(onToggle).not.toHaveBeenCalled();
-    expect(legend.textContent).toContain(copy.weatherLegend);
-    expect(legend.textContent).toContain(copy.weatherCaveat);
-    expect(legend.textContent).toContain(OVERLAY_LEGENDS.weather.credit);
+    expect(text).toContain(copy.weatherLegend);
+    expect(text).toContain(copy.weatherCaveat);
+    expect(text).toContain(OVERLAY_LEGENDS.weather.credit);
   });
 
   // Mutation: list it among the Terrain rows, and it shows twice.
-  it("is an overlay row, not a Terrain one", () => {
+  it("is a tab, not a Terrain row", () => {
     draw();
     expect(screen.queryByRole("switch", { name: "Show weather" })).toBeNull();
   });

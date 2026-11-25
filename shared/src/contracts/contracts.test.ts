@@ -835,16 +835,19 @@ describe("the account", () => {
 });
 
 describe("the map's layers", () => {
+  // Mutation: move "weather" below "offline" in `MAP_LAYERS`.
   it("draws Offline on Logjam GPS only, and says why", () => {
     expect(contractSectionKeys(MAP_LAYERS, "web")).toEqual([
       "basemap",
       "terrain",
       "overlays",
+      "weather",
     ]);
     expect(contractSectionKeys(MAP_LAYERS, "gps")).toEqual([
       "basemap",
       "terrain",
       "overlays",
+      "weather",
       "offline",
     ]);
   });
@@ -984,7 +987,8 @@ describe("the logbook's stats", () => {
 
 describe("the map's overlays list", () => {
   // Red when Logjam GPS's list drifts from Logjam Web's: the web's rows are the
-  // list, and each client differs only by what a row declares (`on`).
+  // list, and each client differs only by what a row declares (`on`). Also red
+  // when the Weather row comes back: it is the Weather tab's (`MAP_LAYERS`).
   it("is Logjam Web's rows plus the phone's GeoPDF row", () => {
     expect(contractSectionKeys(MAP_OVERLAYS, "web")).toEqual([
       "places",
@@ -992,7 +996,6 @@ describe("the map's overlays list", () => {
       "land",
       "fire",
       "coverage",
-      "weather",
       "gauges",
       "mgaGrid",
       "importFile",
@@ -1004,7 +1007,6 @@ describe("the map's overlays list", () => {
       "land",
       "fire",
       "coverage",
-      "weather",
       "gauges",
       "mgaGrid",
       "importFile",

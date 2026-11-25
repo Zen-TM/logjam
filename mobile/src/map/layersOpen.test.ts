@@ -31,6 +31,37 @@ describe("the Layers sheet's open flag", () => {
     expect(listener).not.toHaveBeenCalled();
   });
 
+  // Mutation: have `set` ignore its tab, or keep it after the sheet closes:
+  // the Weather bar's title opens the sheet on the wrong tab, or the next
+  // plain open lands on Weather.
+  it("opens at the tab it is asked for, once per request", () => {
+    const open = createLayersOpen();
+    const listener = vi.fn();
+    open.subscribe(listener);
+    expect(open.tab()).toBeNull();
+
+    open.set(true, "weather");
+    expect(open.get()).toBe(true);
+    expect(open.tab()).toBe("weather");
+
+    open.set(false);
+    expect(open.tab()).toBeNull();
+    open.set(true);
+    expect(open.tab()).toBeNull();
+  });
+
+  // Mutation: drop `startTab={startTab}` from the host in MapLayersSheet.tsx,
+  // or the sheet's `setTab(startTab)`: the request never reaches the tab.
+  it("hands the request from the host to the sheet's tab", () => {
+    const sheet = readFileSync(
+      new URL("./MapLayersSheet.tsx", import.meta.url),
+      "utf8",
+    );
+    expect(sheet).toContain("useSyncExternalStore(open.subscribe, open.tab)");
+    expect(sheet).toContain("startTab={startTab}");
+    expect(sheet).toContain("if (startTab) setTab(startTab)");
+  });
+
   // Red when the flag goes back into MapScreen state, where opening the sheet
   // re-renders the whole map. To see it: add `const [pickerOpen, setPickerOpen]
   // = useState(false);` to MapScreen.tsx.

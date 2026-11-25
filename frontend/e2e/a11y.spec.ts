@@ -190,14 +190,13 @@ async function stubWeatherManifest(page: Page) {
   );
 }
 
-// Weather on from the Overlays list, its legend open.
+// Weather on from its Layers tab, the legend inline beneath the switch.
 async function showWeather(page: Page) {
   await openApp(page);
   await page.getByRole("button", { name: "Layers", exact: true }).click();
   const layers = page.getByRole("dialog", { name: "Map layers" });
-  await layers.getByRole("radio", { name: /^Overlays/ }).click();
+  await layers.getByRole("radio", { name: /^Weather/ }).click();
   await layers.getByRole("switch", { name: "Show weather" }).click();
-  await layers.getByRole("button", { name: "About the weather map" }).click();
 }
 
 test.describe("desktop", () => {
@@ -1339,13 +1338,13 @@ test.describe("desktop", () => {
     ).toBeFocused();
   });
 
-  test("the Weather bar and its legend", async ({ page }) => {
+  test("the Weather tab and bar", async ({ page }) => {
     await stubWeatherManifest(page);
     await showWeather(page);
-    const legend = page.getByRole("dialog", { name: "Weather" });
-    await expect(legend).toBeVisible();
+    await expect(
+      page.getByRole("dialog", { name: "Map layers" }),
+    ).toBeVisible();
     await expectNoViolations(page, "dialog");
-    await legend.getByLabel("Close").click();
     await page.keyboard.press("Escape");
     await expect(page.getByRole("slider")).toBeVisible();
     await expectNoViolations(page, "[data-tone='info']");
@@ -2080,17 +2079,13 @@ test.describe("narrow web", () => {
     expect((await dialog.boundingBox())!.width).toBe(390);
   });
 
-  test("the Weather legend and bar at phone width", async ({ page }) => {
+  test("the Weather tab and bar at phone width", async ({ page }) => {
     await stubWeatherManifest(page);
     await showWeather(page);
     await expectNoViolations(page, "dialog");
     expect(
       (await page.getByRole("dialog").last().boundingBox())!.width,
     ).toBeLessThanOrEqual(390);
-    await page
-      .getByRole("dialog", { name: "Weather" })
-      .getByLabel("Close")
-      .click();
     await page.keyboard.press("Escape");
     const slider = page.getByRole("slider");
     await expect(slider).toBeVisible();

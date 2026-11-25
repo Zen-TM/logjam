@@ -73,7 +73,7 @@ import {
   type SlotIncumbent,
 } from "./dialogs/addWayModel";
 import { useConfirm } from "./sidebar/panels/useConfirm";
-import LayersPopover from "./map/LayersPopover";
+import LayersPopover, { type LayersStart } from "./map/LayersPopover";
 import WeatherBar from "./map/WeatherBar";
 import { useWeatherMap } from "./map/useWeatherMap";
 import { useOnline } from "./weather/useWeather";
@@ -227,10 +227,15 @@ function App() {
   );
   // What is on the map is a popover over the map, not a page.
   const [layersOpen, setLayersOpen] = useState(false);
-  // The Inbox's "Show" opens the popover on the sharpened areas.
-  const [layersStartView, setLayersStartView] = useState<{
-    view: "sharpened";
-  } | null>(null);
+  // A request to open it on a view (the Inbox's "Show" asks for the sharpened
+  // areas; the Weather bar asks for the Weather tab).
+  const [layersStartView, setLayersStartView] = useState<LayersStart | null>(
+    null,
+  );
+  const openLayers = (view: LayersStart["view"]) => {
+    setLayersStartView({ view });
+    setLayersOpen(true);
+  };
   const layersButtonRef = useRef<HTMLButtonElement>(null);
   // Vector by default: same OSM cartography as the old raster default, drawn
   // locally rather than fetched as pictures, and it carries the labels at every
@@ -1922,10 +1927,7 @@ function App() {
             activePanel={activePanel}
             onClose={handlePanelClose}
             onTopoFlyTarget={setTopoFlyTarget}
-            onShowSharpened={() => {
-              setLayersStartView({ view: "sharpened" });
-              setLayersOpen(true);
-            }}
+            onShowSharpened={() => openLayers("sharpened")}
             logsView={logsView}
             onLogsViewChange={setLogsView}
             onStartDrawingRoute={() => startDrawingRoute()}

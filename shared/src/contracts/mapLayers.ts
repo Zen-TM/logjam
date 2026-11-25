@@ -16,6 +16,9 @@ export const MAP_LAYERS = {
     { key: "basemap" },
     { key: "terrain" },
     { key: "overlays" },
+    // Its own tab, not a row of Overlays: the layer choice, the key and the
+    // credit are the content, so the tab holds them inline.
+    { key: "weather" },
     {
       key: "offline",
       on: "gps",
@@ -27,6 +30,9 @@ export const MAP_LAYERS = {
     tabBasemap: "Map",
     tabTerrain: MAP_TERRAIN.title,
     tabOverlays: "Overlays",
+    tabWeather: MAP_TERRAIN.copy.weather,
+    // The Weather tab's switch, the same words on both clients.
+    showWeather: "Show weather",
     tabOffline: "Offline",
     places: "Places",
     ways: "Ways",

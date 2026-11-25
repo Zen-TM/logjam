@@ -51,7 +51,7 @@ test("a pruned run's archive: the manifest is asked for again and the new run is
   });
   await page.getByRole("button", { name: "Layers", exact: true }).click();
   const layers = page.getByRole("dialog", { name: "Map layers" });
-  await layers.getByRole("radio", { name: /^Overlays/ }).click();
+  await layers.getByRole("radio", { name: /^Weather/ }).click();
   await layers.getByRole("switch", { name: "Show weather" }).click();
   await page.keyboard.press("Escape");
   await asked;
