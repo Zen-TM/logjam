@@ -12,19 +12,22 @@ import { makeStyles, muted, radius, spacing } from "../theme";
  */
 export function ColourScale({
   stops,
+  compact = false,
 }: {
   stops: readonly { label: string; colour: string }[];
+  /** A thinner strip, with its numbers close under it. */
+  compact?: boolean;
 }) {
   const styles = useStyles();
   const colors = stops.map((s) => s.colour);
   return (
     <View
-      style={styles.scale}
+      style={[styles.scale, compact && styles.scaleCompact]}
       accessibilityElementsHidden
       importantForAccessibility="no-hide-descendants"
     >
       <LinearGradient
-        style={styles.strip}
+        style={[styles.strip, compact && styles.stripCompact]}
         colors={colors as [string, string, ...string[]]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 0 }}
@@ -42,12 +45,14 @@ export function ColourScale({
 
 const useStyles = makeStyles((theme, textRole) => ({
   scale: { alignSelf: "stretch", gap: spacing(0.25) },
+  scaleCompact: { gap: 0 },
   strip: {
     height: 8,
     borderRadius: radius.pill,
     borderWidth: 1,
     borderColor: theme.line,
   },
+  stripCompact: { height: 4 },
   ticks: { flexDirection: "row", justifyContent: "space-between" },
   tick: { ...muted(theme, textRole.meta), fontVariant: ["tabular-nums"] },
 }));

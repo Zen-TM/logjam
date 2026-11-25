@@ -2,20 +2,14 @@
   color: var(--color-text-muted);
 }
 
-/* The scrubber's row over the colour scale, one width whether or not a
-   scrubber shows (a total has none), and never wider than the notice. */
+/* The buttons and scrubber over the colour scale, across the card (its width
+   is the Notice's `fixedWidth`, so a total's scale spaces its numbers as a
+   stepped layer's does). */
 .controls {
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
-  width: calc(
-    var(--scrubber-width) +
-    2 *
-    var(--control-md) +
-    2 *
-    var(--space-1)
-  );
-  max-width: 100%;
+  width: 100%;
 }
 
 .scrub {

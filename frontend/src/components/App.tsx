@@ -1728,6 +1728,8 @@ function App() {
         onSettle={weatherMap.settle}
         online={online}
         onRetry={weatherMap.retry}
+        onDismiss={() => setTerrainLayer("weather", false)}
+        onChooseLayer={() => setLayersOpen(true)}
       />
     </>
   ) : (

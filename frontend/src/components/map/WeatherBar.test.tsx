@@ -39,7 +39,7 @@ const file = parseWeatherMap({
     time: new Date(T0 + i * hour).toISOString(),
     hours: 1,
   })),
-  totals: ["rainPast24"],
+  totals: ["rainPast24", "rainPast168"],
   attribution: WEATHER_MAP.credit,
 })!;
 const ready: WeatherMapState = { status: "ready", file };
@@ -55,18 +55,32 @@ const bar = (
 ) => {
   const onSettle = vi.fn();
   const onRetry = vi.fn();
-  render(
+  const onDismiss = vi.fn();
+  const onChooseLayer = vi.fn();
+  const props = {
+    onSettle,
+    online: over.online ?? true,
+    onRetry,
+    onDismiss,
+    onChooseLayer,
+  };
+  const view = (layerKey: WeatherLayerKey) => (
     <WeatherBar
       state={over.state ?? ready}
-      layerKey={over.layerKey ?? "rain"}
+      layerKey={layerKey}
       now={over.now ?? T0 + 1.5 * hour}
       settled={over.settled ?? null}
-      onSettle={onSettle}
-      online={over.online ?? true}
-      onRetry={onRetry}
-    />,
+      {...props}
+    />
   );
-  return { onSettle, onRetry };
+  const { rerender } = render(view(over.layerKey ?? "rain"));
+  return {
+    onSettle,
+    onRetry,
+    onDismiss,
+    onChooseLayer,
+    changeLayer: (key: WeatherLayerKey) => rerender(view(key)),
+  };
 };
 const slider = () =>
   screen.getByRole("slider", { name: "Rain" }) as HTMLInputElement;
@@ -164,7 +178,9 @@ describe("the Weather bar", () => {
     expect(onRetry).toHaveBeenCalledOnce();
     cleanup();
     bar({ state: { status: "failed" }, online: false });
-    expect(screen.queryByRole("button")).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: WEATHER.copy.tryAgain }),
+    ).toBeNull();
   });
 
   it("says a run that has run out has", () => {
@@ -177,7 +193,9 @@ describe("the Weather bar", () => {
   it("offers nothing to try again for a total the run left out", () => {
     bar({ layerKey: "rainNext72" });
     expect(document.body.textContent).toBe(copy.weatherFailed);
-    expect(screen.queryByRole("button")).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: WEATHER.copy.tryAgain }),
+    ).toBeNull();
   });
 
   // Mutation: drop `quiet`, and a screen reader re-reads the bar on every
@@ -208,5 +226,160 @@ describe("the Weather bar's colour scale", () => {
       );
       cleanup();
     }
+  });
+});
+
+describe("the Weather bar's Play", () => {
+  const play = () =>
+    fireEvent.click(screen.getByRole("button", { name: copy.weatherPlay }));
+  const tick = (n = 1) =>
+    act(() => vi.advanceTimersByTime(n * WEATHER_MAP.playMs));
+
+  // Mutation: advance by `settleMs`, never arm the timer, or never loop, and
+  // Play stands still, runs too fast, or stops at the end of the week.
+  it("steps on every playMs and loops from the last step to the first allowed", () => {
+    bar({ settled: { path: file.path, step: 8 } });
+    play();
+    expect(slider().value).toBe("8");
+    tick();
+    expect(slider().value).toBe("9");
+    tick();
+    expect(slider().value).toBe("2");
+    tick();
+    expect(slider().value).toBe("3");
+  });
+
+  it("offers Pause while it plays, and Play again after", () => {
+    bar();
+    play();
+    fireEvent.click(screen.getByRole("button", { name: copy.weatherPause }));
+    expect(screen.getByRole("button", { name: copy.weatherPlay })).toBeTruthy();
+  });
+
+  // Mutation: leave the interval armed after Pause: a timer ticks while paused.
+  it("arms nothing while paused", () => {
+    bar();
+    play();
+    fireEvent.click(screen.getByRole("button", { name: copy.weatherPause }));
+    act(() => vi.advanceTimersByTime(WEATHER_MAP.settleMs));
+    expect(vi.getTimerCount()).toBe(0);
+    tick(3);
+    expect(slider().value).toBe("2");
+  });
+
+  // Mutation: drop `pause()` from `onStep`, and the user's own drag or press
+  // fights Play for the scrubber.
+  it("stops when the user drags the scrubber or presses Earlier or Later", () => {
+    bar();
+    play();
+    fireEvent.change(slider(), { target: { value: "5" } });
+    tick(2);
+    expect(slider().value).toBe("5");
+    play();
+    fireEvent.click(screen.getByRole("button", { name: copy.weatherEarlier }));
+    tick(2);
+    expect(slider().value).toBe("4");
+    play();
+    fireEvent.click(screen.getByRole("button", { name: copy.weatherLater }));
+    tick(2);
+    expect(slider().value).toBe("5");
+  });
+
+  // Mutation: hold `playing` as a boolean, and a new layer plays on.
+  it("stops when the layer changes", () => {
+    const { changeLayer } = bar();
+    play();
+    changeLayer("temperature");
+    expect(screen.getByRole("button", { name: copy.weatherPlay })).toBeTruthy();
+    tick(2);
+    expect(
+      (
+        screen.getByRole("slider", {
+          name: "Temperature",
+        }) as HTMLInputElement
+      ).value,
+    ).toBe("2");
+  });
+
+  // Mutation: drop the `visibilitychange` listener, and a hidden tab keeps
+  // fetching archives.
+  it("stops when the page is hidden", () => {
+    bar();
+    play();
+    vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden");
+    act(() => {
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    tick(2);
+    expect(slider().value).toBe("2");
+    vi.restoreAllMocks();
+  });
+
+  // Mutation: clear no interval on cleanup, and Weather off keeps a timer.
+  it("leaves no timer when the bar goes away", () => {
+    bar();
+    play();
+    cleanup();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("has no Play for a total", () => {
+    bar({ layerKey: "rainPast24" });
+    expect(screen.queryByRole("button", { name: copy.weatherPlay })).toBeNull();
+  });
+});
+
+describe("the Weather bar's X and title", () => {
+  // Mutation: leave the X out of one state, and a user whose weather map is
+  // stuck loading, failed or out of date has to find the switch in Layers.
+  it("hides the weather map from every state", () => {
+    const cases: Parameters<typeof bar>[0][] = [
+      {},
+      { layerKey: "rainPast24" },
+      { state: { status: "loading" } },
+      { state: { status: "failed" } },
+      { state: { status: "failed" }, online: false },
+      { now: T0 + 20 * hour },
+    ];
+    for (const over of cases) {
+      const { onDismiss } = bar(over);
+      fireEvent.click(screen.getByRole("button", { name: copy.weatherHide }));
+      expect(onDismiss, JSON.stringify(over)).toHaveBeenCalledOnce();
+      cleanup();
+    }
+  });
+
+  it("keeps Try again beside the X", () => {
+    bar({ state: { status: "failed" } });
+    expect(
+      screen.getByRole("button", { name: WEATHER.copy.tryAgain }),
+    ).toBeTruthy();
+    expect(screen.getByRole("button", { name: copy.weatherHide })).toBeTruthy();
+  });
+
+  // Mutation: wire the title to nothing, and the layer's name is a dead label.
+  it("opens the layer choice from the title", () => {
+    const { onChooseLayer } = bar();
+    const title = screen.getByTitle(copy.weatherChoose);
+    expect(title.textContent).toContain("Rain");
+    fireEvent.click(title);
+    expect(onChooseLayer).toHaveBeenCalledOnce();
+  });
+});
+
+describe("the Weather bar's width", () => {
+  // jsdom has no layout, so the guard is what sets the width: the ready card
+  // is a fixed-width Notice whatever it says (Notice.test.tsx holds the rule).
+  // Mutation: drop `fixedWidth` from the ready card, and "Today, 9 pm" and
+  // "Sat 28, 11 am" size it differently again.
+  it("is one fixed-width card for a short title, a long one and a total", () => {
+    const cards = (["rain", "rainPast168", "wind"] as const).map((layerKey) => {
+      bar({ layerKey });
+      const card = document.querySelector("[data-tone]")!.className;
+      cleanup();
+      return card;
+    });
+    expect([...new Set(cards)]).toHaveLength(1);
+    expect(cards[0]).toMatch(/fixedWidth/);
   });
 });

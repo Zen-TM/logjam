@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   MAP_TERRAIN,
   WEATHER,
   WEATHER_MAP,
   type WeatherLayerKey,
+  weatherNextStep,
   weatherScale,
 } from "@logjam/shared";
 import { ColourScale, IconButton, Notice, Scrubber } from "../../ui";
@@ -12,6 +13,7 @@ import {
   type WeatherMapState,
   type WeatherPick,
 } from "./weatherView";
+import { useWeatherPlay } from "./useWeatherPlay";
 import classes from "./WeatherBar.module.css";
 
 const copy = MAP_TERRAIN.copy;
@@ -24,6 +26,10 @@ const copy = MAP_TERRAIN.copy;
  * It holds the step while the scrubber moves and tells the app (`onSettle`)
  * only once it rests, so a drag re-renders the bar and not the app, and the
  * map is asked for the archive of the step it rests on, not each notch.
+ *
+ * Play steps on by itself, once a `WEATHER_MAP.playMs`, and loops; it stops
+ * when the user moves the scrubber or steps, the layer changes, the page is
+ * hidden, or the bar unmounts. The X in every state is Weather's switch.
  */
 export default function WeatherBar({
   state,
@@ -33,6 +39,8 @@ export default function WeatherBar({
   onSettle,
   online,
   onRetry,
+  onDismiss,
+  onChooseLayer,
 }: {
   state: WeatherMapState;
   layerKey: WeatherLayerKey;
@@ -41,6 +49,10 @@ export default function WeatherBar({
   onSettle: (pick: WeatherPick) => void;
   online: boolean;
   onRetry: () => void;
+  /** Turns Weather off, as its switch does. */
+  onDismiss: () => void;
+  /** Opens Layers, to pick what the map shows. */
+  onChooseLayer: () => void;
 }) {
   const [pick, setPick] = useState(settled);
   useEffect(() => {
@@ -50,23 +62,63 @@ export default function WeatherBar({
   }, [pick, onSettle]);
   const view = weatherView({ on: true, state, layerKey, pick, now });
   const path = state.status === "ready" ? state.file.path : null;
-  const onStep = (step: number) => path && setPick({ path, step });
+  // Tied to the layer it was started on: a new layer opens paused.
+  const [playingLayer, setPlayingLayer] = useState<WeatherLayerKey | null>(
+    null,
+  );
+  const pause = useCallback(() => setPlayingLayer(null), []);
+  const stepped = view.kind === "ready" && view.step !== null ? view : null;
+  const playing = stepped !== null && playingLayer === layerKey;
+  useWeatherPlay(
+    playing,
+    () => {
+      if (path && stepped)
+        setPick({
+          path,
+          step: weatherNextStep(stepped.step!, stepped.first, stepped.last),
+        });
+    },
+    pause,
+  );
+  // The user's own moves: they stop Play.
+  const onStep = (step: number) => {
+    pause();
+    if (path) setPick({ path, step });
+  };
+  const dismiss = (
+    <IconButton
+      icon="close"
+      label={copy.weatherHide}
+      size={14}
+      round
+      onClick={onDismiss}
+    />
+  );
   if (view.kind === "off") return null;
   if (view.kind === "loading")
-    return <Notice icon="weatherMap">{copy.weatherLoading}</Notice>;
+    return (
+      <Notice icon="weatherMap" action={dismiss}>
+        {copy.weatherLoading}
+      </Notice>
+    );
   if (view.kind !== "ready")
     return (
       <Notice
         icon="warning"
         tone="warning"
         action={
-          view.kind === "failed" && online ? (
-            <IconButton
-              icon="retry"
-              label={WEATHER.copy.tryAgain}
-              onClick={onRetry}
-            />
-          ) : undefined
+          <>
+            {view.kind === "failed" && online && (
+              <IconButton
+                icon="retry"
+                label={WEATHER.copy.tryAgain}
+                size={14}
+                round
+                onClick={onRetry}
+              />
+            )}
+            {dismiss}
+          </>
         }
       >
         {view.kind === "outOfDate" ? copy.weatherOutOfDate : copy.weatherFailed}
@@ -77,10 +129,19 @@ export default function WeatherBar({
     <Notice
       icon="weatherMap"
       quiet
+      fixedWidth
+      action={dismiss}
+      onText={onChooseLayer}
+      textHint={copy.weatherChoose}
       controls={
         <span className={classes.controls}>
           {step !== null && (
             <span className={classes.scrub}>
+              <IconButton
+                icon={playing ? "pause" : "play"}
+                label={playing ? copy.weatherPause : copy.weatherPlay}
+                onClick={() => setPlayingLayer(playing ? null : layerKey)}
+              />
               <IconButton
                 icon="earlier"
                 label={copy.weatherEarlier}

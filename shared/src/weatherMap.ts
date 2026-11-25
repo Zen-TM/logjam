@@ -51,6 +51,8 @@ export const WEATHER_MAP = {
   clockMs: 300_000,
   /** How long the scrubber rests before the map asks for that step. */
   settleMs: 150,
+  /** How long Play rests on a step before it moves to the next. */
+  playMs: 1000,
 } as const;
 
 export type WeatherFieldKey = "rain" | "temperature" | "wind" | "gusts";
@@ -374,6 +376,16 @@ export function weatherStepAt(
 ): number | null {
   const i = file.steps.findIndex((s) => Date.parse(s.time) >= now);
   return i < 0 ? null : i;
+}
+
+/** The step Play moves to: the next, and from the last back to the first the
+ *  scrubber allows, so it loops. Guard: weatherMap.test.ts. */
+export function weatherNextStep(
+  step: number,
+  first: number,
+  last: number,
+): number {
+  return step >= last || step < first ? first : step + 1;
 }
 
 /** "Today, 5 pm" or "Sat 8, 2 pm", on this device's clock. */

@@ -1,5 +1,11 @@
+import { useCallback, useState } from "react";
 import { useWindowDimensions, View } from "react-native";
-import { MAP_TERRAIN, WEATHER } from "@logjam/shared";
+import {
+  MAP_TERRAIN,
+  WEATHER,
+  type WeatherLayerKey,
+  weatherNextStep,
+} from "@logjam/shared";
 
 import {
   ColourScale,
@@ -10,41 +16,92 @@ import {
 } from "../ui";
 import { controlSize, makeStyles, spacing, useTheme } from "../theme";
 import { type WeatherBarModel } from "../weatherMap/weatherBar";
+import { useWeatherPlay } from "../weatherMap/useWeatherPlay";
 
 const copy = MAP_TERRAIN.copy;
 
 /**
  * The bar over the map while Weather is on, in the top notice stack
  * (DESIGN.md §3): what is shown and how old it is, and for a stepped layer
- * Earlier and Later around a scrubber. The same words as Logjam Web's bar, from the same `weatherShown`.
+ * Play, then Earlier and Later around a scrubber. The same words as Logjam
+ * Web's bar, from the same `weatherShown`. Compact: the stack is the map's
+ * top, and a card a fifth of the screen high hides the map it is about.
+ *
+ * Play steps on by itself once a `WEATHER_MAP.playMs` and loops; the user's
+ * own drag or press, a new layer, the app leaving the front, and the bar
+ * unmounting (Weather off) all stop it. The X in every state is Weather's
+ * switch.
  */
 export function WeatherBar({
   model,
   onStep,
   onRetry,
+  onDismiss,
+  onChooseLayer,
 }: {
   model: WeatherBarModel;
   onStep: (step: number) => void;
   onRetry: () => void;
+  /** Turns Weather off, as its switch does. */
+  onDismiss: () => void;
+  /** Opens Layers, to pick what the map shows. */
+  onChooseLayer: () => void;
 }) {
   const theme = useTheme();
   const styles = useStyles();
   const { width: screen } = useWindowDimensions();
-  // The screen less the stack's margins, the notice's padding, its two buttons
-  // and the gaps between the three.
+  // Tied to the layer it was started on: a new layer opens paused.
+  const [playingLayer, setPlayingLayer] = useState<WeatherLayerKey | null>(
+    null,
+  );
+  const pause = useCallback(() => setPlayingLayer(null), []);
+  const stepped =
+    model.kind === "ready" && model.scrub
+      ? { layer: model.layer, ...model.scrub }
+      : null;
+  const playing = stepped !== null && playingLayer === stepped.layer;
+  useWeatherPlay(
+    playing,
+    () => {
+      if (stepped)
+        onStep(weatherNextStep(stepped.step, stepped.first, stepped.last));
+    },
+    pause,
+  );
+  // The user's own moves: they stop Play.
+  const userStep = (step: number) => {
+    pause();
+    onStep(step);
+  };
+  // The screen less the stack's margins, the notice's padding, its three
+  // buttons and the gaps between the four.
   const width = Math.min(
     SCRUBBER_WIDTH,
     screen -
       spacing(2) * 2 -
       spacing(1.5) * 2 -
-      controlSize.md * 2 -
-      spacing(0.5) * 2,
+      controlSize.sm * 3 -
+      spacing(0.5) * 3,
+  );
+  const dismiss = (
+    <IconButton
+      icon="close"
+      accessibilityLabel={copy.weatherHide}
+      color={theme.text}
+      size={16}
+      compact
+      onPress={onDismiss}
+    />
   );
   if (model.kind === "loading")
-    return <Notice icon="weatherMap">{model.text}</Notice>;
+    return (
+      <Notice icon="weatherMap" action={dismiss}>
+        {model.text}
+      </Notice>
+    );
   if (model.kind === "outOfDate")
     return (
-      <Notice icon="warning" tone="warning">
+      <Notice icon="warning" tone="warning" action={dismiss}>
         {model.text}
       </Notice>
     );
@@ -54,14 +111,19 @@ export function WeatherBar({
         icon="warning"
         tone="warning"
         action={
-          model.canRetry ? (
-            <IconButton
-              icon="retry"
-              accessibilityLabel={WEATHER.copy.tryAgain}
-              color={theme.text}
-              onPress={onRetry}
-            />
-          ) : undefined
+          <>
+            {model.canRetry ? (
+              <IconButton
+                icon="retry"
+                accessibilityLabel={WEATHER.copy.tryAgain}
+                color={theme.text}
+                size={16}
+                compact
+                onPress={onRetry}
+              />
+            ) : null}
+            {dismiss}
+          </>
         }
       >
         {model.text}
@@ -71,50 +133,69 @@ export function WeatherBar({
   return (
     <Notice
       icon="weatherMap"
+      compact
+      action={dismiss}
+      onText={onChooseLayer}
+      textHint={copy.weatherChoose}
       controls={
         // As wide as the scrubber's row, so a total's scale (no scrubber)
         // still spaces its numbers.
         <View
           style={[
             styles.controls,
-            { width: width + controlSize.md * 2 + spacing(0.5) * 2 },
+            { width: width + controlSize.sm * 3 + spacing(0.5) * 3 },
           ]}
         >
           {scrub ? (
             <View style={styles.scrub}>
               <IconButton
+                icon={playing ? "pause" : "play"}
+                accessibilityLabel={
+                  playing ? copy.weatherPause : copy.weatherPlay
+                }
+                color={theme.text}
+                size={16}
+                compact
+                onPress={() => setPlayingLayer(playing ? null : model.layer)}
+              />
+              <IconButton
                 icon="earlier"
                 accessibilityLabel={copy.weatherEarlier}
                 color={theme.text}
-                onPress={() => onStep(scrub.step - 1)}
+                size={16}
+                compact
+                onPress={() => userStep(scrub.step - 1)}
               />
               <Scrubber
                 first={scrub.first}
                 last={scrub.last}
                 value={scrub.step}
-                onChange={onStep}
+                onChange={userStep}
                 label={copy.weather}
                 valueText={scrub.value}
                 width={width}
+                compact
               />
               <IconButton
                 icon="later"
                 accessibilityLabel={copy.weatherLater}
                 color={theme.text}
-                onPress={() => onStep(scrub.step + 1)}
+                size={16}
+                compact
+                onPress={() => userStep(scrub.step + 1)}
               />
             </View>
           ) : null}
-          <ColourScale stops={model.scale} />
+          <ColourScale stops={model.scale} compact />
         </View>
       }
     >
-      {`${model.title}\n${model.detail}`}
+      {`${model.title} · ${model.detail}`}
     </Notice>
   );
 }
 
 const useStyles = makeStyles(() => ({
-  controls: { gap: spacing(0.5) },
+  controls: { gap: spacing(0.25) },
   scrub: { flexDirection: "row", alignItems: "center", gap: spacing(0.5) },
 }));

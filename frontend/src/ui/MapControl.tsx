@@ -75,6 +75,9 @@ export function Notice({
   controls,
   twoLines = false,
   quiet = false,
+  fixedWidth = false,
+  onText,
+  textHint,
 }: {
   children: ReactNode;
   /** Words that change as the user moves a control in it (the weather bar's
@@ -88,6 +91,14 @@ export function Notice({
   /** Words with a user's own title in them stop at two lines
    *  (shared/DESIGN.md §9). */
   twoLines?: boolean;
+  /** One width, whatever the words (capped at the room there is): the words
+   *  wrap inside it. For a notice whose words change as a control moves, so
+   *  the card does not breathe. Guard: Notice.test.tsx. */
+  fixedWidth?: boolean;
+  /** Makes the words a button (the weather bar's layer name opens Layers);
+   *  `textHint` is what it does, as its tooltip and description. */
+  onText?: () => void;
+  textHint?: string;
 } & (
   | { tone?: "info" | "warning"; icon?: Glyph }
   | { tone: "critical"; icon: Glyph }
@@ -95,13 +106,25 @@ export function Notice({
   const line = (
     <>
       {icon && <Icon idea={icon} size={16} className={classes.noticeGlyph} />}
-      <span
-        className={[classes.noticeText, twoLines ? classes.twoLines : ""].join(
-          " ",
-        )}
-      >
-        {children}
-      </span>
+      {onText ? (
+        <button
+          type="button"
+          className={[classes.noticeText, classes.textButton].join(" ")}
+          title={textHint}
+          onClick={onText}
+        >
+          {children}
+        </button>
+      ) : (
+        <span
+          className={[
+            classes.noticeText,
+            twoLines ? classes.twoLines : "",
+          ].join(" ")}
+        >
+          {children}
+        </span>
+      )}
       {action}
     </>
   );
@@ -111,6 +134,7 @@ export function Notice({
         classes.notice,
         action ? classes.withAction : "",
         controls ? classes.stacked : "",
+        fixedWidth ? classes.fixedWidth : "",
       ].join(" ")}
       data-tone={tone}
       role={tone === "info" ? undefined : "alert"}
