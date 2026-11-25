@@ -5,7 +5,6 @@ import {
   parseWeatherWind,
   weatherLayerUrl,
   weatherWindUrl,
-  windArrows,
   type WeatherLayerKey,
   type WeatherWindFile,
 } from "@logjam/shared";
@@ -125,10 +124,11 @@ export function useWeatherMap(on: boolean, layerKey: WeatherLayerKey) {
     return () => abort.abort();
   }, [wantsWind, file, wind?.path]);
 
+  // The map places the arrows (`windArrowsIn`) for the view it has.
   const arrows = useMemo(
     () =>
       wantsWind && drawnStep !== null && wind && wind.path === path && wind.data
-        ? windArrows(wind.data, drawnStep)
+        ? { data: wind.data, step: drawnStep }
         : null,
     [wantsWind, drawnStep, wind, path],
   );

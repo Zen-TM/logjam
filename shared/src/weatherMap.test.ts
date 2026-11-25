@@ -18,7 +18,6 @@ import {
   weatherLayerUrl,
   weatherLegendRows,
   weatherScale,
-  WIND_ARROW_FILTER,
   weatherReliefColor,
   weatherShown,
   weatherShownLabel,
@@ -26,7 +25,7 @@ import {
   weatherTimeLabel,
   weatherWindUrl,
   type WeatherWindFile,
-  windArrows,
+  windArrowsIn,
 } from "./weatherMap.js";
 
 // Written by topo/tests/test_weather.py from the builder itself: this reads
@@ -210,11 +209,27 @@ describe("the colours", () => {
 });
 
 describe("the wind arrows", () => {
+  // A 3 × 3 grid of 0.5°, from 149°E 33°S, blowing from the west at 18 km/h.
+  const grid = (
+    speed: (number | null)[],
+    from: (number | null)[],
+  ): WeatherWindFile => ({
+    west: 149,
+    north: -33,
+    step: 0.5,
+    columns: 3,
+    rows: 3,
+    steps: [{ speed, from }],
+  });
+  const uniform = grid(Array(9).fill(18), Array(9).fill(270));
+  const all = { west: 148, south: -35, east: 151, north: -32 };
+  const at = (f: { geometry: { coordinates: number[] } }) =>
+    f.geometry.coordinates;
+
   // Mutation: count rows from the south, or turn the arrow to `from`
   // instead of downwind, and every arrow points the wrong way.
   it("places each point from the north-west and turns it downwind", () => {
-    const { features } = windArrows(wind, 0);
-    expect(features).toHaveLength(wind.rows * wind.columns);
+    const { features } = windArrowsIn(wind, 0, all, 7);
     expect(features[0]!.geometry.coordinates).toEqual([wind.west, wind.north]);
     expect(features[wind.columns]!.geometry.coordinates).toEqual([
       wind.west,
@@ -222,46 +237,140 @@ describe("the wind arrows", () => {
     ]);
     // The fixture's wind is from the west (270°): the arrowhead, drawn
     // pointing east, keeps pointing east.
-    expect(features[0]!.properties).toEqual({ speed: 18, rotate: 0, thin: 0 });
+    expect(features[0]!.properties).toEqual({ speed: 18, rotate: 0 });
+    // From the north blows south: the arrowhead turns a quarter clockwise.
+    const north = grid(Array(9).fill(5), Array(9).fill(0));
+    expect(windArrowsIn(north, 0, all, 7).features[0]!.properties.rotate).toBe(
+      90,
+    );
   });
 
-  // Mutation: thin by row alone, or swap the zoom bands, and a state-wide view
-  // keeps a solid mat of arrows or a close one loses most of them.
-  it("thins the grid to every fourth, then every second point as the map zooms out", () => {
-    const thin = (row: number, column: number) =>
-      windArrows(wind, 0).features[row * wind.columns + column]!.properties
-        .thin;
-    expect([
-      thin(0, 0),
-      thin(4, 4),
-      thin(4, 0),
-      thin(0, 2),
-      thin(2, 4),
-      thin(0, 1),
-      thin(1, 1),
-    ]).toEqual([0, 0, 0, 1, 1, 2, 2]);
-    expect(WIND_ARROW_FILTER).toEqual([
-      "<=",
-      ["get", "thin"],
-      ["step", ["zoom"], 0, 5.5, 1, 6.5, 2],
+  // Mutation: draw each grid cell once whatever the zoom (the old thinning),
+  // and a close view is as sparse as z7's grid, or a wide one a mat of arrows.
+  it("keeps about 90 px between arrows at any zoom", () => {
+    const gap = (zoom: number, bounds = all) => {
+      const xs = windArrowsIn(uniform, 0, bounds, zoom).features.map(
+        (f) => at(f)[0]!,
+      );
+      return Math.min(...xs.filter((x) => x > xs[0]!).map((x) => x - xs[0]!));
+    };
+    // 512 px tiles: a degree is 512 · 2^z / 360 px.
+    for (const zoom of [7, 8, 9, 10]) {
+      const px = (gap(zoom) * 512 * 2 ** zoom) / 360;
+      expect(px).toBeGreaterThan(60);
+      expect(px).toBeLessThan(130);
+    }
+    // Zoomed out it is the grid thinned, every second then every fourth point.
+    expect(gap(6, { ...all, east: 152 })).toBe(1);
+    expect(windArrowsIn(wind, 0, all, 5).features.map(at)).toEqual([
+      [149, -33],
+      [151, -33],
+      [149, -35],
+      [151, -35],
     ]);
+  });
+
+  // Mutation: anchor the lattice at the viewport's edge, and a pan of less
+  // than a spacing moves every arrow.
+  it("keeps the same points when the map pans by less than a spacing", () => {
+    const view = { west: 149.1, south: -33.9, east: 149.9, north: -33.1 };
+    const pan = (d: number) => ({
+      west: view.west + d,
+      east: view.east + d,
+      south: view.south - d / 2,
+      north: view.north - d / 2,
+    });
+    const points = (b: typeof view) =>
+      windArrowsIn(uniform, 0, b, 11).features.map(at);
+    const a = points(view);
+    const b = points(pan(0.0011));
+    expect(a.length).toBeGreaterThan(10);
+    // The pan brings arrows in at the margin, so the ones that were there stay.
+    for (const p of a.filter(
+      ([x, y]) => x! > 149.2 && x! < 149.8 && y! < -33.2,
+    ))
+      expect(b).toContainEqual(p);
+    for (const [x] of a) {
+      const n = (x! - 149) / 0.5 ** 5;
+      expect(Math.abs(n - Math.round(n))).toBeLessThan(1e-6);
+    }
+  });
+
+  // Mutation: blend speed or direction instead of u and v, or weigh a corner
+  // by the wrong side, and midway is not the mean wind.
+  it("blends the four cells around a point by their u and v", () => {
+    // West 10 km/h at 149°E, south 10 km/h at 149.5°E (a 90° turn).
+    const g = grid(
+      [10, 10, 10, 10, 10, 10, 10, 10, 10],
+      [270, 180, 180, 270, 180, 180, 270, 180, 180],
+    );
+    const mid = windArrowsIn(g, 0, all, 9).features.find(
+      (f) => Math.abs(at(f)[0]! - 149.25) < 1e-9 && at(f)[1] === -33,
+    )!;
+    // u = +5 (east), v = +5 (north): the wind blows north-east, 45° from north.
+    expect(mid.properties.speed).toBe(7.1);
+    expect(mid.properties.rotate).toBe(315);
+    expect(
+      windArrowsIn(g, 0, all, 9).features.find((f) => at(f)[0] === 149.5)!
+        .properties,
+    ).toEqual({ speed: 10, rotate: 270 });
+  });
+
+  // Mutation: average the angles 350° and 10° (180°), and the arrow between
+  // two northerlies points the other way.
+  it("goes round the 0°/360° wrap through the short way", () => {
+    const g = grid(Array(9).fill(10), [350, 10, 10, 350, 10, 10, 350, 10, 10]);
+    const mid = windArrowsIn(g, 0, all, 9).features.find(
+      (f) => Math.abs(at(f)[0]! - 149.25) < 1e-9 && at(f)[1] === -33,
+    )!;
+    // Blowing from the north, south-bound: a quarter turn clockwise of east.
+    expect(mid.properties.rotate).toBe(90);
+    expect(mid.properties.speed).toBeCloseTo(9.8, 1);
+  });
+
+  // Mutation: lift the cap, and a state-wide view at a close zoom draws
+  // thousands of arrows.
+  it("never draws more than 600 arrows, and none outside the grid", () => {
+    const big: WeatherWindFile = {
+      west: 140,
+      north: -28,
+      step: 0.5,
+      columns: 40,
+      rows: 40,
+      steps: [{ speed: Array(1600).fill(9), from: Array(1600).fill(200) }],
+    };
+    const world = { west: -180, south: -85, east: 180, north: 85 };
+    for (const zoom of [4, 7, 9, 12]) {
+      const { features } = windArrowsIn(big, 0, world, zoom);
+      expect(features.length).toBeGreaterThan(0);
+      expect(features.length).toBeLessThanOrEqual(600);
+      for (const f of features) {
+        const [x, y] = at(f);
+        expect(x).toBeGreaterThanOrEqual(140);
+        expect(x).toBeLessThanOrEqual(159.5 + 1e-9);
+        expect(y).toBeLessThanOrEqual(-28);
+        expect(y).toBeGreaterThanOrEqual(-47.5 - 1e-9);
+      }
+    }
+    expect(
+      windArrowsIn(big, 0, { west: 10, south: 10, east: 12, north: 12 }, 9)
+        .features,
+    ).toEqual([]);
   });
 
   // Mutation: draw a null as 0, and a point with no forecast shows calm.
   it("leaves out a point with no value, and a step that isn't there", () => {
-    const gappy: WeatherWindFile = {
-      ...wind,
-      steps: [
-        {
-          speed: wind.steps[0]!.speed.map((s, i) => (i === 0 ? null : s)),
-          from: wind.steps[0]!.from,
-        },
-      ],
-    };
-    expect(windArrows(gappy, 0).features).toHaveLength(
-      wind.rows * wind.columns - 1,
+    const gappy = grid(
+      Array(9)
+        .fill(18)
+        .map((s, i) => (i === 0 ? null : s)),
+      Array(9).fill(270),
     );
-    expect(windArrows(wind, 99).features).toEqual([]);
+    // Close in, every point touching the missing corner goes; the far ones stay.
+    const some = windArrowsIn(gappy, 0, all, 7).features;
+    expect(some).toHaveLength(8);
+    expect(some.map(at)).not.toContainEqual([149, -33]);
+    expect(windArrowsIn(wind, 99, all, 7).features).toEqual([]);
   });
 });
 
@@ -383,7 +492,7 @@ describe("what the overlay shows", () => {
 
 describe("the wind file", () => {
   // Mutation: return the parsed JSON unchecked, and a bad file throws inside
-  // `windArrows` instead of drawing no arrows.
+  // `windArrowsIn` instead of drawing no arrows.
   it("reads the builder's file and refuses a broken one", () => {
     expect(parseWeatherWind(wind)).toBe(wind);
     expect(parseWeatherWind({ ...wind, columns: "35" })).toBeNull();

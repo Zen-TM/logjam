@@ -1,14 +1,8 @@
-import {
-  MAP_INK,
-  WEATHER_MAP,
-  WIND_ARROW_FILTER,
-  WIND_ARROW_IMAGE,
-} from "@logjam/shared";
+import { MAP_INK, WEATHER_MAP, WIND_ARROW_IMAGE } from "@logjam/shared";
 import { describe, expect, it } from "vitest";
 
 import { weatherFixture as file } from "../weatherMap/weatherMapFixture";
 import {
-  WEATHER_ARROW_FILTER,
   WEATHER_ARROW_STYLE,
   weatherArrowData,
   weatherFieldLayerId,
@@ -82,10 +76,9 @@ describe("the field and its arrows", () => {
     expect(paint["color-relief-color"][0]).toBe("interpolate");
   });
 
-  // Mutation: align the icon to the viewport, drop the filter, or let the
-  // arrows collide or block placement, and they turn with the map, pile up when zoomed
-  // out, or knock out a town's name.
-  it("turns each arrow to where the wind blows, thinned on the shared grid", () => {
+  // Mutation: align the icon to the viewport, or let the arrows collide or
+  // block placement, and they turn with the map or knock out a town's name.
+  it("turns each arrow to where the wind blows, and hides no label", () => {
     expect(WEATHER_ARROW_STYLE).toMatchObject({
       iconImage: WIND_ARROW_IMAGE,
       iconRotate: ["get", "rotate"],
@@ -94,19 +87,29 @@ describe("the field and its arrows", () => {
       iconIgnorePlacement: true,
       iconColor: MAP_INK.casing,
     });
-    expect(WEATHER_ARROW_FILTER).toEqual(WIND_ARROW_FILTER);
   });
 
-  it("has no arrows until the wind file is in", () => {
-    expect(weatherArrowData(null, 0).features).toEqual([]);
-    const wind = {
-      west: 139,
-      north: -26,
-      step: 0.5,
-      columns: 1,
-      rows: 1,
-      steps: [{ speed: [20], from: [270] }],
-    };
-    expect(weatherArrowData(wind, 0).features).toHaveLength(1);
+  const wind = {
+    west: 139,
+    north: -26,
+    step: 0.5,
+    columns: 3,
+    rows: 3,
+    steps: [{ speed: Array(9).fill(20), from: Array(9).fill(270) }],
+  };
+  const bounds = { west: 138, south: -28, east: 141, north: -25 };
+
+  // Mutation: ignore the view, and the arrows stay the grid's own however
+  // far the map zooms; draw before the first settle, and the arrows land
+  // where no view says they should.
+  it("has no arrows until the wind file and a settled view are in", () => {
+    expect(weatherArrowData(null, 0, { bounds, zoom: 7 }).features).toEqual([]);
+    expect(weatherArrowData(wind, 0, null).features).toEqual([]);
+    expect(
+      weatherArrowData(wind, 0, { bounds, zoom: 7 }).features,
+    ).toHaveLength(9);
+    expect(
+      weatherArrowData(wind, 0, { bounds, zoom: 9 }).features.length,
+    ).toBeGreaterThan(9);
   });
 });

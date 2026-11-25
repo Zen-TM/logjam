@@ -138,7 +138,7 @@ describe("useWeatherMap", () => {
     rerender({ layer: "gusts" });
     await flush();
     expect(asked.filter((u) => u.endsWith("wind.json"))).toHaveLength(1);
-    expect(result.current.arrows?.features).toHaveLength(2);
+    expect(result.current.arrows?.data.steps[0]!.speed).toHaveLength(2);
   });
 
   // Mutation: draw the step the bar is on, not the one it rested on, and a

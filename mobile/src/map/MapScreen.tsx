@@ -1734,6 +1734,15 @@ export function MapScreen({
     weatherNowStep === null ? null : `${weatherLayerKey}|${weatherNowStep}`,
     WEATHER_MAP.settleMs,
   );
+  // The arrows follow the settled region, never a frame of a move; no view
+  // while they are not drawn, so a pan does not re-render the layer for nothing.
+  const weatherView = useMemo(
+    () =>
+      weatherOn && weatherArrows && viewportBbox
+        ? { bounds: viewportBbox, zoom: camera.zoom }
+        : null,
+    [weatherOn, weatherArrows, viewportBbox, camera.zoom],
+  );
   const weatherDrawn = useMemo(() => {
     if (!weatherOn || !weather.file || weatherSettled === null) return null;
     const [key, at] = weatherSettled.split("|");
@@ -5502,6 +5511,7 @@ export function MapScreen({
             step={weatherDrawn.step}
             wind={weather.wind}
             arrows={weatherArrows}
+            view={weatherView}
             beforeIds={groundBefore}
           />
         ) : null}

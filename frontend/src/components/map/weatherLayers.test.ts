@@ -1,6 +1,5 @@
 import {
   MAP_INK,
-  WIND_ARROW_FILTER,
   WIND_ARROW_IMAGE,
   WEATHER_CREDIT_URL,
   WEATHER_MAP,
@@ -11,6 +10,7 @@ import { WEATHER_ARROWS_LAYER, WEATHER_FIELD_LAYER } from "./layerOrder";
 import {
   WEATHER_CREDIT_HTML,
   WEATHER_WIND_SOURCE,
+  placeWindArrows,
   syncWindArrows,
   weatherFieldLayerSpec,
   windArrowsLayerSpec,
@@ -48,10 +48,10 @@ describe("the wind arrows' layer", () => {
       "icon-rotation-alignment": "map",
     });
   });
-  // Mutation: drop the filter, and a state-wide view is a solid mat of
-  // arrows; let them block placement, and a town's name goes missing.
-  it("thins arrows on the shared grid and hides no label", () => {
-    expect(spec.filter).toEqual(WIND_ARROW_FILTER);
+  // Mutation: let them block placement, and a town's name goes missing; put
+  // a zoom filter back, and a close view loses the arrows between grid points.
+  it("hides no label and leaves the spacing to the lattice", () => {
+    expect(spec.filter).toBeUndefined();
     expect(spec.layout).toMatchObject({
       "icon-allow-overlap": true,
       "icon-ignore-placement": true,
@@ -67,12 +67,21 @@ describe("the wind arrows' layer", () => {
 
 function fakeMap(ids: string[]) {
   const layers = [...ids];
-  const sources = new Map<string, { setData: ReturnType<typeof vi.fn> }>();
+  const sources = new Map<
+    string,
+    { setData: ReturnType<typeof vi.fn>; data: unknown }
+  >();
   return {
     layers,
     sources,
     getSource: (id: string) => sources.get(id),
-    addSource: (id: string) => sources.set(id, { setData: vi.fn() }),
+    addSource: (id: string, spec: { data: unknown }) => {
+      const source = {
+        data: spec.data,
+        setData: vi.fn((data: unknown) => (source.data = data)),
+      };
+      sources.set(id, source);
+    },
     removeSource: (id: string) => sources.delete(id),
     getLayer: (id: string) => (layers.includes(id) ? {} : undefined),
     addLayer: (spec: { id: string }, before?: string) => {
@@ -153,6 +162,40 @@ describe("syncWindArrows", () => {
     syncWindArrows(map, data);
     expect(map.layers).toEqual(["a"]);
     expect(map.sources.size).toBe(0);
+  });
+});
+
+describe("placeWindArrows", () => {
+  const wind = {
+    west: 149,
+    north: -33,
+    step: 0.5,
+    columns: 3,
+    rows: 3,
+    steps: [{ speed: Array(9).fill(10), from: Array(9).fill(270) }],
+  };
+  const view = (zoom: number) => ({
+    getZoom: () => zoom,
+    getBounds: () => ({
+      getWest: () => 148,
+      getSouth: () => -35,
+      getEast: () => 151,
+      getNorth: () => -32,
+    }),
+  });
+  const placed = (zoom: number) => {
+    const map = { ...fakeMap([WEATHER_FIELD_LAYER]), ...view(zoom) };
+    placeWindArrows(map, { data: wind, step: 0 });
+    return (
+      map.sources.get(WEATHER_WIND_SOURCE)!.data as { features: unknown[] }
+    ).features.length;
+  };
+
+  // Mutation: read the zoom once and not at each call, or pass the grid whole,
+  // and zooming in on moveend leaves the same nine arrows.
+  it("places more arrows for the same ground as the map zooms in", () => {
+    expect(placed(7)).toBe(9);
+    expect(placed(9)).toBeGreaterThan(9);
   });
 });
 

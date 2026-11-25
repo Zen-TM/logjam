@@ -7,17 +7,14 @@ import {
   WEATHER_MAP,
   weatherLayerUrl,
   weatherReliefColor,
-  windArrows,
+  windArrowsIn,
+  type WindBounds,
   type WeatherLayerKey,
   type WeatherMapFile,
   type WeatherWindFile,
-  WIND_ARROW_FILTER,
   WIND_ARROW_IMAGE,
 } from "@logjam/shared";
-import type {
-  FilterSpecification,
-  SymbolLayerStyle,
-} from "@maplibre/maplibre-react-native";
+import type { SymbolLayerStyle } from "@maplibre/maplibre-react-native";
 
 import { hashKey, type ResolvedTileSource } from "./sourceResolver";
 
@@ -68,8 +65,9 @@ export function weatherFieldPaint(layer: WeatherLayerKey) {
 /**
  * The wind arrow (an SDF the screen registers) turned to where the
  * wind blows by each feature's `rotate`. They sit on the grid
- * `WIND_ARROW_FILTER` thins by zoom (`WEATHER_ARROW_FILTER`), overlapping
- * anything and blocking nothing; the arrow grows with the speed. Dark with a light halo so they read over every field colour.
+ * `windArrowsIn` spaces them by zoom, overlapping anything and blocking
+ * nothing; the arrow grows with the speed. Dark with a light halo so they read
+ * over every field colour.
  * Guard: weatherLayers.test.ts.
  */
 export const WEATHER_ARROW_STYLE: SymbolLayerStyle = {
@@ -85,15 +83,16 @@ export const WEATHER_ARROW_STYLE: SymbolLayerStyle = {
   iconHaloWidth: 1.5,
 };
 
-export const WEATHER_ARROW_FILTER =
-  WIND_ARROW_FILTER as unknown as FilterSpecification;
-
-/** The arrows of one step, or an empty collection when there is no wind file. */
+/**
+ * The arrows of one step for the view the map settled on, or an empty
+ * collection when there is no wind file or no settled view yet.
+ */
 export function weatherArrowData(
   wind: WeatherWindFile | null,
   step: number,
-): ReturnType<typeof windArrows> {
-  return wind
-    ? windArrows(wind, step)
+  view: { bounds: WindBounds; zoom: number } | null,
+): ReturnType<typeof windArrowsIn> {
+  return wind && view
+    ? windArrowsIn(wind, step, view.bounds, view.zoom)
     : { type: "FeatureCollection", features: [] };
 }

@@ -4,12 +4,12 @@ import {
   WEATHER_MAP,
   weatherReliefColor,
   type WeatherLayerKey,
-  WIND_ARROW_FILTER,
+  type WeatherWindFile,
   WIND_ARROW_IMAGE,
+  windArrowsIn,
 } from "@logjam/shared";
 import type {
   ExpressionSpecification,
-  FilterSpecification,
   GeoJSONSourceSpecification,
   LayerSpecification,
 } from "maplibre-gl";
@@ -41,8 +41,8 @@ export function weatherFieldLayerSpec(
 }
 
 /** The wind arrow, longer the harder the wind blows, on the grid
- *  `WIND_ARROW_FILTER` thins by zoom. They overlap anything and block nothing:
- *  the grid spaces them, and a label stays where it was. */
+ *  `windArrowsIn` spaces by zoom. They overlap anything and block nothing: the
+ *  lattice spaces them, and a label stays where it was. */
 export function windArrowsLayerSpec(
   source: string,
 ): Extract<LayerSpecification, { type: "symbol" }> {
@@ -50,7 +50,6 @@ export function windArrowsLayerSpec(
     id: WEATHER_ARROWS_LAYER,
     type: "symbol",
     source,
-    filter: WIND_ARROW_FILTER as unknown as FilterSpecification,
     layout: {
       "icon-image": WIND_ARROW_IMAGE,
       "icon-rotate": ["get", "rotate"],
@@ -116,4 +115,39 @@ export function syncWindArrows(
   if (!placed) map.addLayer(windArrowsLayerSpec(WEATHER_WIND_SOURCE), above);
   else if (ids[ids.indexOf(WEATHER_FIELD_LAYER) + 1] !== WEATHER_ARROWS_LAYER)
     map.moveLayer(WEATHER_ARROWS_LAYER, above);
+}
+
+/**
+ * `syncWindArrows` with the arrows `wind` has for the view the map is in now:
+ * placed on its lattice at this zoom, so the map calls it when a move ends.
+ */
+export function placeWindArrows(
+  map: ArrowsMap & {
+    getBounds(): {
+      getWest(): number;
+      getSouth(): number;
+      getEast(): number;
+      getNorth(): number;
+    };
+    getZoom(): number;
+  },
+  wind: { data: WeatherWindFile; step: number } | null,
+): void {
+  const b = map.getBounds();
+  syncWindArrows(
+    map,
+    wind
+      ? windArrowsIn(
+          wind.data,
+          wind.step,
+          {
+            west: b.getWest(),
+            south: b.getSouth(),
+            east: b.getEast(),
+            north: b.getNorth(),
+          },
+          map.getZoom(),
+        )
+      : null,
+  );
 }

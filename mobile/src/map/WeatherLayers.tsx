@@ -5,12 +5,12 @@ import {
   WIND_ARROW_SDF_URI,
   type WeatherLayerKey,
   type WeatherWindFile,
+  type WindBounds,
 } from "@logjam/shared";
 
 import { ResolvedSource } from "./ResolvedSource";
 import type { ResolvedTileSource } from "./sourceResolver";
 import {
-  WEATHER_ARROW_FILTER,
   WEATHER_ARROW_STYLE,
   WEATHER_ARROWS_ID,
   WEATHER_WIND_SOURCE_ID,
@@ -35,6 +35,7 @@ export const WeatherLayers = memo(function WeatherLayers({
   step,
   wind,
   arrows,
+  view,
   beforeIds,
 }: {
   source: Extract<ResolvedTileSource, { status: "ok" }>;
@@ -43,11 +44,16 @@ export const WeatherLayers = memo(function WeatherLayers({
   wind: WeatherWindFile | null;
   /** The layer draws arrows (wind and gusts). */
   arrows: boolean;
+  /** The ground the map settled on, which the arrows are placed for. */
+  view: { bounds: WindBounds; zoom: number } | null;
   beforeIds: Readonly<Record<string, string>>;
 }) {
   const id = weatherFieldLayerId(source.key);
   const paint = useMemo(() => weatherFieldPaint(layer), [layer]);
-  const data = useMemo(() => weatherArrowData(wind, step), [wind, step]);
+  const data = useMemo(
+    () => weatherArrowData(wind, step, view),
+    [wind, step, view],
+  );
   return (
     <>
       <ResolvedSource resolved={source}>
@@ -67,7 +73,6 @@ export const WeatherLayers = memo(function WeatherLayers({
             type="symbol"
             id={WEATHER_ARROWS_ID}
             beforeId={beforeIds[WEATHER_ARROWS_ID]}
-            filter={WEATHER_ARROW_FILTER}
             style={WEATHER_ARROW_STYLE}
           />
         </GeoJSONSource>

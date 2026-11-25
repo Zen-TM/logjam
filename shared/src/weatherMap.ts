@@ -25,7 +25,7 @@ import {
 export { WIND_ARROW_SDF_URI } from "./windArrowSdf.js";
 
 /** Style-image name for the wind arrow, registered by each client's map. It
- *  points east, as the route arrowhead does, so `windArrows`' `rotate` turns
+ *  points east, as the route arrowhead does, so `windArrowsIn`' `rotate` turns
  *  it downwind. */
 export const WIND_ARROW_IMAGE = "wind-arrow";
 
@@ -468,7 +468,7 @@ export function weatherShown(input: {
   return { kind: "ready", layer, step, first, last, shown, age };
 }
 
-/** `wind.json` if it has the shape `windArrows` reads, else null: a bad file
+/** `wind.json` if it has the shape `windArrowsIn` reads, else null: a bad file
  *  draws no arrows rather than throwing. */
 export function parseWeatherWind(raw: unknown): WeatherWindFile | null {
   const w = raw as Partial<WeatherWindFile> | null;
@@ -481,66 +481,129 @@ export function parseWeatherWind(raw: unknown): WeatherWindFile | null {
     : null;
 }
 
-/** 0 for every fourth point each way, 1 for every second, else 2: the
- *  coarsest zoom band (`WIND_ARROW_FILTER`) that shows the point. */
-const thinOf = (row: number, column: number): number =>
-  row % 4 === 0 && column % 4 === 0
-    ? 0
-    : row % 2 === 0 && column % 2 === 0
-      ? 1
-      : 2;
+/** Where the arrows go: the map's visible box, in degrees. */
+export type WindBounds = {
+  west: number;
+  south: number;
+  east: number;
+  north: number;
+};
+
+/** Screen pixels between arrows, and the most arrows a viewport gets. A fixed
+ *  lattice and not collision: collision let the basemap's town names knock out
+ *  arrows over land, where they matter, and left the sea full. */
+const ARROW_GAP_PX = 90;
+const MAX_ARROWS = 600;
+/** Pixels in a degree of longitude at zoom 0: the 512 px tiles MapLibre draws. */
+const WORLD_PX = 512;
+
+const rad = Math.PI / 180;
 
 /**
- * Which arrows a zoom shows: the grid thinned to every fourth point, then
- * every second, so they stay about 90 px apart (the grid is 0.5°, 90 px at
- * z7). A fixed grid and not collision: collision let the basemap's town
- * names knock out arrows over land, where they matter, and left the sea full.
- * Guard: weatherMap.test.ts and each client's weatherLayers.test.ts.
+ * The wind arrows of one step for the map as it is, as points a symbol layer
+ * rotates: `rotate` turns the route arrowhead (which points east) to where the
+ * wind blows.
+ *
+ * The points sit on a lattice that is the file's grid times a power of two
+ * (every fourth point at a state-wide zoom, every cell close in, a fraction of
+ * one closer), from the grid's north-west corner, so they stay about
+ * `ARROW_GAP_PX` apart at any zoom and do not swim as the map pans. Between
+ * grid points the wind is interpolated bilinearly as u/v, never as speed and
+ * direction, which wrap. A lattice with more than `MAX_ARROWS` points in the
+ * box doubles its spacing. None outside the grid. Guard: weatherMap.test.ts.
  */
-export const WIND_ARROW_FILTER = [
-  "<=",
-  ["get", "thin"],
-  ["step", ["zoom"], 0, 5.5, 1, 6.5, 2],
-] as const;
-
-/** The wind arrows of one step, as points a symbol layer rotates: `rotate`
- *  turns the route arrowhead (which points east) to where the wind blows. */
-export function windArrows(
+export function windArrowsIn(
   wind: WeatherWindFile,
   step: number,
+  bounds: WindBounds,
+  zoom: number,
 ): {
   type: "FeatureCollection";
   features: {
     type: "Feature";
     geometry: { type: "Point"; coordinates: [number, number] };
-    properties: { speed: number; rotate: number; thin: number };
+    properties: { speed: number; rotate: number };
   }[];
 } {
   const at = wind.steps[step];
   const features = [];
-  if (at)
-    for (let i = 0; i < wind.rows * wind.columns; i++) {
-      const speed = at.speed[i];
-      const from = at.from[i];
-      if (speed == null || from == null) continue;
-      const row = Math.floor(i / wind.columns);
-      const column = i % wind.columns;
+  const { west, north, columns, rows } = wind;
+  if (!at || columns < 1 || rows < 1 || !(wind.step > 0))
+    return { type: "FeatureCollection", features: [] };
+  const lonSpan = (columns - 1) * wind.step;
+  const latSpan = (rows - 1) * wind.step;
+  const ideal = (ARROW_GAP_PX * 360) / (WORLD_PX * 2 ** zoom);
+  let spacing = wind.step * 2 ** Math.round(Math.log2(ideal / wind.step));
+  // One spacing of margin, so a pan does not show an empty edge before it ends.
+  const range = (from: number, to: number, span: number, origin: number) => {
+    const lo = Math.max(0, Math.ceil((from - origin) / spacing - 1e-9));
+    const hi = Math.min(
+      Math.floor(span / spacing + 1e-9),
+      Math.floor((to - origin) / spacing + 1),
+    );
+    return [lo, hi] as const;
+  };
+  let across: readonly [number, number];
+  let down: readonly [number, number];
+  for (;;) {
+    across = range(bounds.west - spacing, bounds.east, lonSpan, west);
+    // Rows count down from the north edge.
+    down = range(-bounds.north - spacing, -bounds.south, latSpan, -north);
+    if (
+      (across[1] - across[0] + 1) * (down[1] - down[0] + 1) <= MAX_ARROWS ||
+      spacing > Math.max(lonSpan, latSpan)
+    )
+      break;
+    spacing *= 2;
+  }
+  const speedAt = (r: number, c: number) => at.speed[r * columns + c];
+  const fromAt = (r: number, c: number) => at.from[r * columns + c];
+  for (let j = down[0]; j <= down[1]; j++) {
+    for (let i = across[0]; i <= across[1]; i++) {
+      const fx = (i * spacing) / wind.step;
+      const fy = (j * spacing) / wind.step;
+      const c0 = Math.min(Math.floor(fx + 1e-9), Math.max(columns - 2, 0));
+      const r0 = Math.min(Math.floor(fy + 1e-9), Math.max(rows - 2, 0));
+      const tx = fx - c0;
+      const ty = fy - r0;
+      let u = 0;
+      let v = 0;
+      let missing = false;
+      for (const [r, c, w] of [
+        [r0, c0, (1 - tx) * (1 - ty)],
+        [r0, c0 + 1, tx * (1 - ty)],
+        [r0 + 1, c0, (1 - tx) * ty],
+        [r0 + 1, c0 + 1, tx * ty],
+      ] as const) {
+        if (w < 1e-9) continue;
+        const s = speedAt(r, c);
+        const f = fromAt(r, c);
+        if (s == null || f == null) {
+          missing = true;
+          break;
+        }
+        // Meteorological: `f` is where it blows from, so it goes the other way.
+        u -= w * s * Math.sin(f * rad);
+        v -= w * s * Math.cos(f * rad);
+      }
+      if (missing) continue;
+      // Towards is a bearing from north; the arrowhead at 0° points east (90°).
+      const towards = Math.atan2(u, v) / rad;
       features.push({
         type: "Feature" as const,
         geometry: {
           type: "Point" as const,
-          coordinates: [
-            wind.west + column * wind.step,
-            wind.north - row * wind.step,
-          ] as [number, number],
+          coordinates: [west + i * spacing, north - j * spacing] as [
+            number,
+            number,
+          ],
         },
-        // Towards is `from` + 180°; the arrowhead at 0° points east (90°).
         properties: {
-          speed,
-          rotate: (from + 90) % 360,
-          thin: thinOf(row, column),
+          speed: Math.round(Math.hypot(u, v) * 10) / 10,
+          rotate: (((Math.round(towards) - 90) % 360) + 360) % 360,
         },
       });
     }
+  }
   return { type: "FeatureCollection", features };
 }

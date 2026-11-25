@@ -58,6 +58,7 @@ import {
   WEATHER_LAYER_DEFAULT,
   weatherReliefColor,
   type WeatherLayerKey,
+  type WeatherWindFile,
   TERRAIN_LAYER_KEYS,
   type SharpenedOverlay,
   type TerrainLayerKey,
@@ -184,7 +185,7 @@ import { fetchTrackGeoJSON, trackGeoCacheKey } from "../media/trackGeo";
 import { useToast } from "../feedback/ToastProvider";
 import { moveTerrainIntoBasemap, stackTopoLayers } from "./layerOrder";
 import { coverageLayerSpec } from "./coverageLayers";
-import { syncWindArrows, weatherFieldLayerSpec } from "./weatherLayers";
+import { placeWindArrows, weatherFieldLayerSpec } from "./weatherLayers";
 import { fireLayerSpecs } from "./fireLayers";
 import { TERRAIN_ENTRIES, type RoutedTiles } from "./terrainEntries";
 import {
@@ -740,10 +741,11 @@ function Map({
   slopeBands?: SlopeBand[];
   /** The carrier a `coverage` entry draws. */
   coverageCarrier?: CarrierId | null;
-  /** What the `weather` entry draws: its colours, and the wind arrows if any. */
+  /** What the `weather` entry draws: its colours, and the wind to place
+   *  arrows from, if any. */
   weather?: {
     layer: WeatherLayerKey;
-    arrows: GeoJSON.FeatureCollection | null;
+    arrows: { data: WeatherWindFile; step: number } | null;
   };
   activeLayerId: string;
   selectingGeoPdfExtent?: boolean;
@@ -3280,7 +3282,16 @@ function Map({
           weather?.layer ?? WEATHER_LAYER_DEFAULT,
         ) as maplibregl.ExpressionSpecification,
       );
-    syncWindArrows(map, weather?.arrows ?? null);
+    const wind = weather?.arrows ?? null;
+    // On `moveend` and not every frame: the arrows are placed for the view the
+    // map settles on, and a pan moves them with the map until then.
+    const place = () => placeWindArrows(map, wind);
+    place();
+    if (!wind) return;
+    map.on("moveend", place);
+    return () => {
+      map.off("moveend", place);
+    };
   }, [topoLayers, weather, mapLoaded]);
 
   // Fly to a topo job's bbox when requested from App.tsx
