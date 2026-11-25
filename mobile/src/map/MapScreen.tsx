@@ -6111,7 +6111,7 @@ export function MapScreen({
             }
             onRetry={weather.retry}
             onDismiss={() => chooseTerrainLayer("weather", false)}
-            onChooseLayer={() => layersOpen.set(true)}
+            onChooseLayer={() => layersOpen.set(true, "weather")}
           />
         ) : null}
       </ScrollView>
