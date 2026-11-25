@@ -142,6 +142,24 @@ describe("copy on Logjam GPS", () => {
     expect(offenders).toEqual([]);
   }, 30_000);
 
+  // A toast's sentence is passed as the first argument, not a prop. Mutation:
+  // drop `COPY_CALLS` from `userFacingStrings` in shared/src/copyRules.ts, and
+  // `notify("…the app…")` or `emitToast("…")` anywhere in src/ goes unread.
+  it("reads the sentence passed to a toast or an alert", () => {
+    const found = userFacingStrings(
+      ts,
+      "x.ts",
+      'notify("Restart the app.", "error"); emitToast(`Saved ${n}`, "done"); toast("Try later"); Alert.alert("Oops", "Sorry about that."); notify(messageFromError(e, "No."));',
+    ).map(({ text }) => text);
+    expect(found).toEqual([
+      "Restart the app.",
+      "Saved ",
+      "Try later",
+      "Oops",
+      "Sorry about that.",
+    ]);
+  });
+
   it("breaks no copy rule", () => {
     const offenders = hits()
       .filter(({ file, rule, text }) => !baselined(file, rule, text))

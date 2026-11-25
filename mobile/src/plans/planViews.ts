@@ -63,3 +63,18 @@ export function formWidenLocked(
     form != null && form.visibleTo === "leaders" && form.answers.length > 0
   );
 }
+
+/**
+ * Where Back goes from a form sheet's answer or ⋯ layer: the form it was
+ * opened from, or nowhere when it was opened straight from the Forms list's ⋯
+ * or the "to answer" card, which have no form behind them (the sheet's close
+ * then returns to where it opened).
+ */
+export function formSheetBack(state: {
+  formId: string;
+  mode: "read" | "answer" | "verbs";
+  direct?: boolean;
+}): { formId: string; mode: "read" } | null {
+  if (state.mode === "read" || state.direct) return null;
+  return { formId: state.formId, mode: "read" };
+}

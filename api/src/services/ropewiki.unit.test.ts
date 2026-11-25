@@ -1,9 +1,11 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { isReservedFieldKey } from "@logjam/shared";
+import { isReservedFieldKey, NSW_REGION } from "@logjam/shared";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import {
   fetchAndParseRopeWiki,
+  ropeWikiCsvUrl,
+  withExtraLinks,
   ROPE_WIKI_FIELD_KEYS,
   ROPE_WIKI_OWNABLE_FIELDS,
   snapshotFromCreate,
@@ -43,7 +45,7 @@ const VALID_CSV = [
 describe("fetchAndParseRopeWiki", () => {
   it("parses a valid row across every derived field", async () => {
     mockFetchCsv(VALID_CSV);
-    const { places } = await fetchAndParseRopeWiki();
+    const { places } = await fetchAndParseRopeWiki(NSW_REGION.canyons);
     expect(places).toHaveLength(1);
     const c = places[0];
     expect(c.ropeWikiId).toBe(12345);
@@ -63,7 +65,7 @@ describe("fetchAndParseRopeWiki", () => {
 
   it("accumulates a per-row error for an invalid pageid and missing coords", async () => {
     mockFetchCsv(VALID_CSV);
-    const { errors } = await fetchAndParseRopeWiki();
+    const { errors } = await fetchAndParseRopeWiki(NSW_REGION.canyons);
     expect(errors).toHaveLength(2);
     expect(errors.some((e) => /invalid PAGEID/.test(e))).toBe(true);
     expect(errors.some((e) => /could not parse coordinates/.test(e))).toBe(
@@ -76,7 +78,9 @@ describe("fetchAndParseRopeWiki", () => {
   // 403 reached users with nothing to act on.
   it("throws a 502 AppError on a non-OK HTTP response", async () => {
     mockFetchCsv("", false, 503);
-    await expect(fetchAndParseRopeWiki()).rejects.toMatchObject({
+    await expect(
+      fetchAndParseRopeWiki(NSW_REGION.canyons),
+    ).rejects.toMatchObject({
       statusCode: 502,
       devDetail: expect.stringMatching(/HTTP 503/),
     });
@@ -87,7 +91,9 @@ describe("fetchAndParseRopeWiki", () => {
   // a devDetail, because `message` is the sentence the user reads.
   it("throws a 503 AppError when a required column is missing", async () => {
     mockFetchCsv("location,coords\nFoo,bar"); // no pageid column
-    await expect(fetchAndParseRopeWiki()).rejects.toMatchObject({
+    await expect(
+      fetchAndParseRopeWiki(NSW_REGION.canyons),
+    ).rejects.toMatchObject({
       statusCode: 503,
       devDetail: expect.stringMatching(/missing required column: pageid/i),
     });
@@ -115,7 +121,7 @@ describe("fetchAndParseRopeWiki — field parser branches", () => {
         `3,Bare,"${COORD}",,,100,,`,
       ),
     );
-    const { places } = await fetchAndParseRopeWiki();
+    const { places } = await fetchAndParseRopeWiki(NSW_REGION.canyons);
     expect(places.map((c) => c.longestAbseil)).toEqual([9.1, 18, null]);
   });
 
@@ -126,13 +132,13 @@ describe("fetchAndParseRopeWiki — field parser branches", () => {
         `2,Range,"${COORD}",,,,3-5 hours,`,
       ),
     );
-    const { places } = await fetchAndParseRopeWiki();
+    const { places } = await fetchAndParseRopeWiki(NSW_REGION.canyons);
     expect(places.map((c) => c.hours)).toEqual([2, 4]);
   });
 
   it("takes the first number of a rappel-count range", async () => {
     mockFetchCsv(rows(`1,Rappels,"${COORD}",,,,,4-8`));
-    const { places } = await fetchAndParseRopeWiki();
+    const { places } = await fetchAndParseRopeWiki(NSW_REGION.canyons);
     expect(places[0].numAbseils).toBe(4);
   });
 
@@ -144,7 +150,7 @@ describe("fetchAndParseRopeWiki — field parser branches", () => {
         `3,NoParens,"${COORD}",,no grade here,,,`,
       ),
     );
-    const { places } = await fetchAndParseRopeWiki();
+    const { places } = await fetchAndParseRopeWiki(NSW_REGION.canyons);
     expect({
       v: places[0].vGrade,
       a: places[0].aGrade,
@@ -164,13 +170,13 @@ describe("fetchAndParseRopeWiki — field parser branches", () => {
 
   it("rejects out-of-range quality as null", async () => {
     mockFetchCsv(rows(`1,Good,"${COORD}",4,,,,`, `2,Bad,"${COORD}",6,,,,`));
-    const { places } = await fetchAndParseRopeWiki();
+    const { places } = await fetchAndParseRopeWiki(NSW_REGION.canyons);
     expect(places.map((c) => c.quality)).toEqual([4, null]);
   });
 
   it("preserves a decimal quality instead of rounding", async () => {
     mockFetchCsv(rows(`1,Half,"${COORD}",3.5,,,,`));
-    const { places } = await fetchAndParseRopeWiki();
+    const { places } = await fetchAndParseRopeWiki(NSW_REGION.canyons);
     expect(places[0].quality).toBe(3.5);
   });
 
@@ -178,7 +184,7 @@ describe("fetchAndParseRopeWiki — field parser branches", () => {
     const H =
       "pageid,location,coords,quality,rating,longest,min time,number of rappels,max time";
     mockFetchCsv([H, `1,Both,"${COORD}",,,,4 hours,,7 hours`].join("\n"));
-    const { places } = await fetchAndParseRopeWiki();
+    const { places } = await fetchAndParseRopeWiki(NSW_REGION.canyons);
     expect(places[0].hours).toBe(7);
   });
 
@@ -186,7 +192,7 @@ describe("fetchAndParseRopeWiki — field parser branches", () => {
     const H =
       "pageid,location,coords,quality,rating,longest,min time,number of rappels,max time";
     mockFetchCsv([H, `1,MinOnly,"${COORD}",,,,3 hours,,`].join("\n"));
-    const { places } = await fetchAndParseRopeWiki();
+    const { places } = await fetchAndParseRopeWiki(NSW_REGION.canyons);
     expect(places[0].hours).toBe(3);
   });
 
@@ -194,7 +200,7 @@ describe("fetchAndParseRopeWiki — field parser branches", () => {
     const H =
       "pageid,location,coords,quality,rating,longest,min time,number of rappels,max time";
     mockFetchCsv([H, `1,Nbsp,"${COORD}",,,,,,5 hr`].join("\n"));
-    const { places } = await fetchAndParseRopeWiki();
+    const { places } = await fetchAndParseRopeWiki(NSW_REGION.canyons);
     expect(places[0].hours).toBe(5);
   });
 });
@@ -314,10 +320,6 @@ describe("the RopeWiki query URL", () => {
     ).toContain("Category%3ACanyons");
   });
 
-  it("still asks for New South Wales", () => {
-    expect(source).toContain("New-20South-20Wales");
-  });
-
   it("still asks for CSV", () => {
     expect(source).toContain("format=csv");
   });
@@ -343,5 +345,60 @@ describe("ROPE_WIKI_FIELD_KEYS", () => {
     expect(Object.keys(ROPE_WIKI_FIELD_KEYS).sort()).toEqual(
       [...ROPE_WIKI_OWNABLE_FIELDS].sort(),
     );
+  });
+});
+
+describe("a region's canyon source", () => {
+  // Mutation: escape the region name any other way (encodeURIComponent, or
+  // none), and the export asks RopeWiki for a region it has no canyons in.
+  it("asks RopeWiki for NSW exactly as it always has", () => {
+    expect(ropeWikiCsvUrl(NSW_REGION.canyons)).toBe(
+      "https://ropewiki.com/index.php?title=Special:Ask" +
+        "&x=-5B-5BCategory%3ACanyons-5D-5D-20-5B-5BLocated-20in-20region" +
+        ".Located-20in-20regions%3A%3AX-7C-7CNew-20South-20Wales-5D-5D" +
+        "%2F-3FHas-20pageid%3DPAGEID%2F-3FHas-20name%3DLocation%2F-3FHas-20" +
+        "coordinates%3DCoords%2F-3FLocated-20in-20region%3DRegion%2F-3FHas-20user" +
+        "-20rating%3DQuality%2F-3FHas-20rating%3DRating%2F-3FHas-20fastest-20typical" +
+        "-20time%3DMin-20Time%2F-3FHas-20slowest-20typical-20time%3DMax-20Time%2F-3F" +
+        "Has-20length-20of-20hike%3DHike%2F-3FHas-20info-20rappels%3DRappels%2F-3F" +
+        "Has-20longest-20rappel%3DLongest%2F-3FHas-20best-20season%3DBest-20Season%2F-3F" +
+        "Has-20shuttle-20length%3DShuttle%2F-3FHas-20vehicle-20type%3DVehicle&mainlabel" +
+        "=-&limit=2000&order=descending%2C%20ascending&sort=Has_rank_rating%2C%20" +
+        "Has_name&offset=0&format=csv",
+    );
+  });
+
+  it("escapes a name the way Special:Ask does", () => {
+    expect(
+      ropeWikiCsvUrl({
+        ...NSW_REGION.canyons,
+        ropewikiRegion: "Île-de-France",
+      }),
+    ).toContain("X-7C-7C-C3-8Ele-2Dde-2DFrance-5D-5D");
+  });
+
+  // Mutation: drop the extra link, or add it twice on a second refresh.
+  it("adds the source's extra link once, by name", () => {
+    const rw = {
+      ropeWikiId: 1,
+      name: "Newnes (Starlight) Canyon",
+      latitude: -33,
+      longitude: 150,
+      numAbseils: null,
+      longestAbseil: null,
+      vGrade: null,
+      aGrade: null,
+      commitment: null,
+      quality: null,
+      hours: null,
+      attributes: {},
+    };
+    const once = withExtraLinks(NSW_REGION.canyons, rw);
+    expect(once.attributes.sources).toEqual([
+      ["OzUltimate", "https://ozultimate.com/canyoning/track_notes/newnes.htm"],
+    ]);
+    expect(withExtraLinks(NSW_REGION.canyons, once)).toEqual(once);
+    const { extraLinks: _none, ...plain } = NSW_REGION.canyons;
+    expect(withExtraLinks(plain, rw)).toBe(rw);
   });
 });

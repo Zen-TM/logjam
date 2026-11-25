@@ -14,7 +14,7 @@ name: terraform-apply
 #
 # envs/prod runs as the AWS apply role, which trusts only jobs in the `prod`
 # Environment (deployable from main only) and whose permission boundary denies
-# user-data reads, rds-db:connect, secret values and edits to itself
+# user-data reads, secret values and edits to itself
 # (infra/terraform/envs/prod/iam_apply.tf). envs/github runs as the GitHub
 # apply App, whose key is a secret of the same Environment
 # (docs/decisions/0025-github-settings-in-terraform.md).
@@ -32,6 +32,10 @@ on:
       - "infra/terraform/templates/**"
       - "infra/terraform/envs/github/**"
       - "infra/lambda/**"
+      - "infra/brain/**"
+      - "!infra/brain/postgres/**"
+      - "!infra/brain/tests/**"
+      - "!infra/brain/api.env"
       - "infra/scripts/plan-summary*"
       - ".github/workflows/terraform-plan.yml"
       - ".github/workflows/terraform-plan-sign.yml"
@@ -52,6 +56,7 @@ concurrency:
 jobs:
   merged-pr:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     env:
       GH_TOKEN: ${{ github.token }}
     outputs:
@@ -95,6 +100,7 @@ jobs:
     needs: merged-pr
     if: needs.merged-pr.outputs.prod == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     environment: prod
     env:
       GH_TOKEN: ${{ github.token }}
@@ -131,6 +137,9 @@ jobs:
           node-version: 26
       - name: Build cognito-email-sender Lambda
         working-directory: infra/lambda/cognito-email-sender
+        run: npm ci && npm run build
+      - name: Build cognito-pre-signup Lambda
+        working-directory: infra/lambda/cognito-pre-signup
         run: npm ci && npm run build
 
       - name: terraform init
@@ -191,6 +200,7 @@ jobs:
     needs: merged-pr
     if: needs.merged-pr.outputs.github == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     environment: prod
     env:
       GH_TOKEN: ${{ github.token }}

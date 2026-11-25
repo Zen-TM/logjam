@@ -11,29 +11,17 @@ import sys
 import tempfile
 import unittest
 
+sys.path.insert(0, os.path.dirname(__file__))
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+import _native_stub  # noqa: F401,E402
 
-# This test only exercises pure-Python settings code, but pipeline.py
-# imports GDAL/PDAL/shapely at module top. When those aren't installed
-# (running pytest on the host instead of inside the worker Docker image),
-# skip the suite cleanly rather than erroring at import time.
-try:
-    from pipeline import (
-        _default_render_settings,
-        _parse_rgba_hex,
-        load_render_settings,
-    )
-
-    _IMPORT_OK = True
-except Exception as _exc:  # noqa: BLE001
-    _IMPORT_OK = False
-    _IMPORT_ERR = _exc
-
-
-@unittest.skipUnless(
-    _IMPORT_OK,
-    f"pipeline import failed (missing native deps): {globals().get('_IMPORT_ERR', '?')}",
+from pipeline import (  # noqa: E402
+    _default_render_settings,
+    _parse_rgba_hex,
+    load_render_settings,
 )
+
+
 class TestRenderSettings(unittest.TestCase):
     def setUp(self):
         self.default = _default_render_settings

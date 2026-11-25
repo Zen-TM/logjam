@@ -17,6 +17,11 @@ import { importWayFile } from "./wayImport";
 import { useWayImport } from "./useWayImport";
 
 const api = vi.hoisted(() => ({ uploadMedia: vi.fn(async () => ({})) }));
+const plans = vi.hoisted(() => ({ uploadPlanFile: vi.fn(async () => ({})) }));
+vi.mock("../../../plansApi", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../../plansApi")>()),
+  ...plans,
+}));
 vi.mock("../../../placeUtils", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../../placeUtils")>()),
   ...api,
@@ -57,6 +62,23 @@ describe("importWayFile", () => {
       file,
       mediaType: "application/gpx+xml",
       thumbnail: null,
+    });
+  });
+
+  // Mutation: ignore planId, and an import for a plan lands in the account.
+  it("stores it in the plan instead of the account when it is for one", async () => {
+    const file = gpxFile();
+    expect(await importWayFile(file, "p1")).toBe("Made-up ridge");
+    expect(api.uploadMedia).not.toHaveBeenCalled();
+    expect(plans.uploadPlanFile).toHaveBeenCalledWith("p1", {
+      file,
+      mediaType: "application/gpx+xml",
+      displayName: "Made-up ridge",
+      metadata: {
+        bbox: [150.1, -33.2, 150.3, -33.1],
+        featureCount: 1,
+        positionCount: 2,
+      },
     });
   });
 

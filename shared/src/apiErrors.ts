@@ -48,8 +48,24 @@ export const AUTH_ERROR_CODES: Record<string, string> = {
   NetworkError: "Couldn't connect. Check your internet connection.",
 };
 
+// Cognito wraps a pre sign-up Lambda's error as "PreSignUp failed with error
+// <text>" under UserLambdaValidationException, a name other triggers share, so
+// the cap is recognised by the sentence the Lambda throws, which must match
+// CAP_MESSAGE in infra/lambda/cognito-pre-signup/src/index.ts. Guard:
+// apiErrors.test.ts.
+export const SIGNUP_CAP_SENTENCE =
+  "Logjam is not taking new accounts this month";
+export const SIGNUP_CAP_MESSAGE =
+  "Logjam isn't taking new accounts right now. Try again next month.";
+
 export function mapAuthError(err: unknown): string | null {
   if (err instanceof Error) {
+    if (
+      err.name === "UserLambdaValidationException" &&
+      err.message.includes(SIGNUP_CAP_SENTENCE)
+    ) {
+      return SIGNUP_CAP_MESSAGE;
+    }
     const code = (err as { code?: string }).code ?? err.name;
     if (code && AUTH_ERROR_CODES[code]) return AUTH_ERROR_CODES[code];
   }

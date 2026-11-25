@@ -610,11 +610,11 @@ def build_slope(heights: Path, out: Path, work: Path, jobs: int) -> None:
     pack(work, out, extracted, SLOPE)
 
 
-# NSW_5M.archivePath in shared/src/demSources.ts, and the slope archive's twin
+# `NSW_REGION.terrain.heights.archivePath` in shared/src/regions.ts, and the slope archive's twin
 # beside it: test_nsw_dem.py `TestSlopeS3` holds the first.
 HEIGHT_KEY = "master/dem/nsw-5m.pmtiles"
 SLOPE_KEY = "master/dem/nsw-5m-slope.pmtiles"
-# NSW_CONTOURS.archivePath in shared/src/nswContours.ts (test_nsw_dem.py).
+# `NSW_REGION.terrain.contours.archivePath` in shared/src/regions.ts (test_nsw_dem.py).
 CONTOUR_KEY = "master/contours/nsw-10m.pmtiles"
 
 

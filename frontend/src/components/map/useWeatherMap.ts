@@ -15,7 +15,7 @@ import {
   type WeatherPick,
 } from "./weatherView";
 
-/** Every user reads the same files from our own origin (ADR 0048). */
+/** Every user reads the same files from our own origin (ADR 0049). */
 const BASE = window.location.origin;
 
 /**

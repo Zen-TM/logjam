@@ -1,5 +1,5 @@
 // Keeping the latest weather run with a saved area, so the overlay draws
-// offline and says how old it is (ADR 0048). It rides the area's download:
+// offline and says how old it is (ADR 0049). It rides the area's download:
 // started by the same press (a save, an update or its Retry), over the same
 // connection rule (mobile data only if the user allowed it for this download),
 // asked again every CHECK_EVERY files, and not by a timer (ADR 0013). About 420

@@ -1,0 +1,6 @@
+[Unit]
+Description=Write the canary and status.json
+
+[Service]
+Type=oneshot
+ExecStart=/opt/brain/host/status.sh

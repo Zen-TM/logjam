@@ -14,7 +14,7 @@
 # account also meets the welcome screen only if sign-up could not record its
 # consent, which this flow does not drive: use a test user that has already
 # consented.
-appId: com.logjamnsw.mobile
+appId: earth.logjam.gps
 env:
   TEST_EMAIL: ${MAESTRO_TEST_EMAIL}
   TEST_PASSWORD: ${MAESTRO_TEST_PASSWORD}

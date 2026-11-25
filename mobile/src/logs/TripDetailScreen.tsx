@@ -251,7 +251,10 @@ export function TripDetailScreen({
         {sections.hero()}
       </Hero>
 
-      <ScrollView contentContainerStyle={styles.body}>
+      <ScrollView
+        contentContainerStyle={styles.body}
+        keyboardShouldPersistTaps="handled"
+      >
         {contractSectionKeys(TRIP_PAGE, "gps")
           .filter((key) => key !== "hero")
           .map((key) => (

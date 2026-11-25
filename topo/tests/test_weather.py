@@ -438,7 +438,7 @@ class TestPublish(unittest.TestCase):
 
 class TestLicenceBoundary(unittest.TestCase):
     def test_open_meteos_reader_is_in_the_worker_image_only(self):
-        # ADR 0048: the reader is GPL-2.0-only and Logjam is AGPL-3.0-only, so
+        # ADR 0049: the reader is GPL-2.0-only and Logjam is AGPL-3.0-only, so
         # it is never shipped to a user. Mutation: add `@openmeteo/file-reader`
         # to a client's package.json, `OMFiles` to another requirements file,
         # or `RUN pip install omfiles` to another Dockerfile or a

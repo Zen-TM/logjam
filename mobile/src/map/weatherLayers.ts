@@ -1,5 +1,5 @@
 // The Weather overlay as MapScreen mounts it: one `color-relief` field read
-// from a terrarium archive (ADR 0048, drawn as the slope is), and for wind and
+// from a terrarium archive (ADR 0049, drawn as the slope is), and for wind and
 // gusts arrows over it. Shared weatherMap.ts holds the colours, the files and
 // the arrows' rotation.
 import {

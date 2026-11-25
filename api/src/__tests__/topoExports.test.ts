@@ -3,7 +3,7 @@ import request from "supertest";
 import { randomUUID } from "node:crypto";
 import {
   AREA_EXPORT_MAX_SIDE_KM,
-  AREA_EXPORT_OUTSIDE_NSW,
+  AREA_EXPORT_OUTSIDE_TERRAIN,
   AREA_EXPORT_TOO_LARGE,
 } from "@logjam/shared";
 import { API_URL } from "./_actors";
@@ -90,7 +90,7 @@ describe("topo-exports route (fake auth)", () => {
         format: "geotiff",
       });
       expect(res.status).toBe(400);
-      expect(res.body.error).toBe(AREA_EXPORT_OUTSIDE_NSW);
+      expect(res.body.error).toBe(AREA_EXPORT_OUTSIDE_TERRAIN);
     });
 
     it("refuses contours in a GeoTIFF, and an unknown layer", async () => {

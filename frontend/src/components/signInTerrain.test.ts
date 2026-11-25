@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { NSW_5M } from "@logjam/shared";
+import { NSW_REGION } from "@logjam/shared";
 import { describe, expect, it } from "vitest";
 import {
   areaKeys,
@@ -113,14 +113,16 @@ describe("the area files", () => {
   });
 
   // ADR 0031: the credit names the month the sheets were downloaded. The
-  // credit shown is NSW_5M.credit, so every area must come from that month.
+  // credit shown is NSW_REGION.terrain.heights.credit, so every area must come from that month.
   // Mutation that turns it red: regenerate an area with another month.
   it("are from the month the credit names", () => {
     for (const file of json) {
       const { extracted } = JSON.parse(
         readFileSync(join(ASSETS, file), "utf8"),
       ) as { extracted: string };
-      expect(NSW_5M.credit, file).toContain(`extracted ${extracted}.`);
+      expect(NSW_REGION.terrain.heights.credit, file).toContain(
+        `extracted ${extracted}.`,
+      );
     }
   });
 });

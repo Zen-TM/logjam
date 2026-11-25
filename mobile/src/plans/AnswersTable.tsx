@@ -47,6 +47,7 @@ export function AnswersTable({
       </View>
       <ScrollView
         horizontal
+        keyboardShouldPersistTaps="handled"
         showsHorizontalScrollIndicator
         style={styles.scroll}
       >

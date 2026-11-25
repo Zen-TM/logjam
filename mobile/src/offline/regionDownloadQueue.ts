@@ -288,7 +288,7 @@ function installAutoResumeWatchers(): void {
 
 /**
  * The latest weather run goes with the area, so the overlay draws offline
- * (ADR 0048): on a save, an update and a Retry alike. Nothing waits on it and
+ * (ADR 0049): on a save, an update and a Retry alike. Nothing waits on it and
  * nothing fails for want of it. Every spec's box counts, and the wipe epoch
  * is read here, before the import awaits.
  */

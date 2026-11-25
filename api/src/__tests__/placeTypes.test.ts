@@ -22,7 +22,9 @@ import {
   SYSTEM_PLACE_TYPES,
 } from "@logjam/shared";
 
+import prisma from "../services/prisma";
 import { API_URL, ALICE_SUB, BOB_SUB, as } from "./_actors";
+import { deltaCursor, tombstonesSince } from "./_tombstones";
 
 // Place types and the field definitions scoped to them.
 //
@@ -628,6 +630,79 @@ describe("place type lifecycle", () => {
     await request(API_URL)
       .delete(`/places/${place.body.id}`)
       .set(as(ALICE_SUB));
+  });
+
+  // A type and the definitions scoped only to it are hard-deleted together, so
+  // a phone that synced both must be told to drop both.
+  // Mutation that turns it red: in deletePlaceType (lib/placeTypes.ts), drop
+  // the customFieldDef tombstones or the placeType one from the
+  // writeTombstones call; for the push twin, the same via the push op.
+  async function typeWithScopedDef(): Promise<{
+    typeId: string;
+    defId: string;
+  }> {
+    const typeId = await makeType(ALICE_SUB, `Doomed ${Date.now()}`);
+    const key = `doomed_${Date.now()}`;
+    const def = await write(() =>
+      request(API_URL)
+        .post("/custom-fields/place")
+        .set(as(ALICE_SUB))
+        .send({
+          field: { key, label: "Doomed field", type: "integer", min: 1 },
+          placeTypeIds: [typeId],
+        }),
+    );
+    expect(def.status, JSON.stringify(def.body)).toBe(201);
+    const row = await prisma.customFieldDef.findFirstOrThrow({
+      where: { key, entity: "place" },
+      select: { id: true },
+    });
+    return { typeId, defId: row.id };
+  }
+
+  it("tombstones the type and the definitions it takes with it", async () => {
+    const { typeId, defId } = await typeWithScopedDef();
+    const cursor = await deltaCursor(ALICE_SUB);
+
+    const gone = await write(() =>
+      request(API_URL).delete(`/place-types/${typeId}`).set(as(ALICE_SUB)),
+    );
+    expect(gone.status).toBe(200);
+    expect(gone.body.removedFieldCount).toBe(1);
+
+    const tombstones = await tombstonesSince(ALICE_SUB, cursor);
+    expect(tombstones).toContainEqual({ type: "placeType", id: typeId });
+    expect(tombstones).toContainEqual({ type: "customFieldDef", id: defId });
+  });
+
+  it("tombstones them when the delete arrives as a push op", async () => {
+    const { typeId, defId } = await typeWithScopedDef();
+    const cursor = await deltaCursor(ALICE_SUB);
+
+    const pushed = await write(() =>
+      request(API_URL)
+        .post("/sync/push")
+        .set(as(ALICE_SUB))
+        .set({ "x-logjam-client": "mobile/0.1.0-test" })
+        .send({
+          protocol: 1,
+          ops: [
+            {
+              opId: `type-del-${typeId}`,
+              entity: "placeType",
+              op: "delete",
+              id: typeId,
+            },
+          ],
+        }),
+    );
+    expect(pushed.body.results[0].status, JSON.stringify(pushed.body)).toBe(
+      "applied",
+    );
+
+    const tombstones = await tombstonesSince(ALICE_SUB, cursor);
+    expect(tombstones).toContainEqual({ type: "placeType", id: typeId });
+    expect(tombstones).toContainEqual({ type: "customFieldDef", id: defId });
   });
 
   // 404, not 403: an id the caller does not own must not be confirmed to exist.

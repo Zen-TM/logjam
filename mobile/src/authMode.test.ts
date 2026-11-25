@@ -6,10 +6,8 @@ import { resolveAuthMode } from "./authMode";
 // (fake auth would then resolve for the prod API URL).
 describe("resolveAuthMode", () => {
   it("defaults to oidc, whatever the API", () => {
-    expect(resolveAuthMode(undefined, "https://api.logjamnsw.com")).toBe(
-      "oidc",
-    );
-    expect(resolveAuthMode("oidc", "https://api.logjamnsw.com")).toBe("oidc");
+    expect(resolveAuthMode(undefined, "https://api.logjam.earth")).toBe("oidc");
+    expect(resolveAuthMode("oidc", "https://api.logjam.earth")).toBe("oidc");
   });
 
   it.each([
@@ -23,7 +21,7 @@ describe("resolveAuthMode", () => {
   });
 
   it.each([
-    "https://api.logjamnsw.com",
+    "https://api.logjam.earth",
     "http://10.example.com",
     "http://172.32.0.1",
     "http://127.0.0.1.evil.com",

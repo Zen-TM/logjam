@@ -34,8 +34,9 @@ import {
 } from "../sync/mediaUpload";
 import { getMediaById, listStandaloneMedia } from "../sync/mirrorStore";
 import { ensureDisplayCached } from "../sync/mediaCache";
-import { IMPORTS_DIR } from "../offline/localStores";
-import { stageIncomingFile } from "./stagedFile";
+import { IMPORTS_DIR, scratchFileUri } from "../offline/localStores";
+import { uploadPlanFile } from "../plans/planFileUpload";
+import { fileSizeBytes, stageIncomingFile } from "./stagedFile";
 
 // The API's own cap on a track file, so a file the account would refuse at
 // sync is refused here, up front. The parser's MAX_IMPORT_POSITIONS is the
@@ -154,21 +155,51 @@ export async function importVectorSource(
   }
 }
 
+type ParsedVector = ReturnType<typeof parseVectorImport>;
+
+/** The name an import goes by: the file's own, else its filename. */
+function vectorImportName(
+  parsed: ParsedVector,
+  filename: string,
+  sentBy: string | null,
+): string {
+  return importDisplayName({
+    contentName: parsed.name ?? null,
+    filename,
+    sentBy,
+  });
+}
+
+/** What the API takes with a track file (the account's upload and a plan's). */
+function vectorImportMetadata(parsed: ParsedVector) {
+  return {
+    bbox: parsed.bbox,
+    featureCount: parsed.features.length,
+    positionCount: parsed.stats.positions,
+  };
+}
+
+/** A staged file's text, as the parser reads it: a KMZ as the KML inside. */
+async function readVectorText(
+  sourceUri: string,
+  displayName: string,
+): Promise<{ sourceName: string; text: string }> {
+  if (displayName.toLowerCase().endsWith(".kmz")) {
+    const { fileName, text } = kmlFromKmz(new File(sourceUri).bytesSync());
+    return { sourceName: fileName, text };
+  }
+  return {
+    sourceName: displayName,
+    text: await FileSystem.readAsStringAsync(sourceUri),
+  };
+}
+
 async function parseAndStore(
   sourceUri: string,
   displayName: string,
   sentBy: string | null,
 ): Promise<VectorImport> {
-  let sourceName = displayName;
-  let text: string;
-  if (sourceName.toLowerCase().endsWith(".kmz")) {
-    ({ fileName: sourceName, text } = kmlFromKmz(
-      new File(sourceUri).bytesSync(),
-    ));
-  } else {
-    text = await FileSystem.readAsStringAsync(sourceUri);
-  }
-
+  const { sourceName, text } = await readVectorText(sourceUri, displayName);
   const parsed = parseVectorImport(sourceName, text);
 
   const dir = IMPORTS_DIR;
@@ -200,11 +231,7 @@ async function parseAndStore(
     // derivation is lossy (only `name` and `coordTimes` survive), so a second
     // device rebuilding from it would hold strictly less than this one does.
     // The GeoJSON stays a local convenience, re-derivable from the bytes.
-    const name = importDisplayName({
-      contentName: parsed.name ?? null,
-      filename: displayName,
-      sentBy,
-    });
+    const name = vectorImportName(parsed, displayName, sentBy);
     const mediaId = await createStandaloneMediaLocal({
       filePath: sourceUriStored,
       filename: `${name}.${format}`,
@@ -219,11 +246,7 @@ async function parseAndStore(
           ...(await listStandaloneMedia("track")),
         ].map((m) => m.color),
       ),
-      metadata: {
-        bbox: parsed.bbox,
-        featureCount: parsed.features.length,
-        positionCount: parsed.stats.positions,
-      },
+      metadata: vectorImportMetadata(parsed),
     });
     await upsertImportViewState({
       mediaId,
@@ -273,6 +296,13 @@ function sourceExtension(sourceName: string): "gpx" | "kml" | "geojson" {
  * picker.
  */
 export async function importVectorFileFromPicker(): Promise<ImportOutcome> {
+  const asset = await pickVectorFile();
+  if (!asset) return { status: "cancelled" };
+  const record = await importVectorSource(asset.uri, asset.name);
+  return { status: "imported", record };
+}
+
+async function pickVectorFile(): Promise<DocumentPicker.DocumentPickerAsset | null> {
   const picked = await DocumentPicker.getDocumentAsync({
     // GPX/KML MIME types are inconsistent across Android file providers —
     // accept everything and let the extension-dispatching parser decide.
@@ -280,12 +310,51 @@ export async function importVectorFileFromPicker(): Promise<ImportOutcome> {
     copyToCacheDirectory: true,
     multiple: false,
   });
-  if (picked.canceled || picked.assets.length === 0) {
-    return { status: "cancelled" };
+  return picked.canceled || picked.assets.length === 0
+    ? null
+    : picked.assets[0];
+}
+
+/**
+ * Pick → parse → upload straight into a plan: the file is the plan's and
+ * nothing of it stays on the phone or in the account. Online only. A KMZ goes
+ * up as the KML inside it, as the account's import keeps it.
+ */
+export async function importVectorFileIntoPlan(
+  planId: string,
+): Promise<{ status: "added"; name: string } | { status: "cancelled" }> {
+  const asset = await pickVectorFile();
+  if (!asset) return { status: "cancelled" };
+  // The size check is `importVectorSource`'s, for the same reason.
+  const staged = await stageIncomingFile({
+    uri: asset.uri,
+    maxBytes: MAX_IMPORT_FILE_BYTES,
+    tooLargeMessage: IMPORT_ERRORS.tooLarge,
+    scratchName: `vector-incoming-${randomId()}`,
+  });
+  const upload = await scratchFileUri(`plan-import-${randomId()}`);
+  try {
+    const { sourceName, text } = await readVectorText(staged.uri, asset.name);
+    const parsed = parseVectorImport(sourceName, text);
+    const format = sourceExtension(sourceName);
+    const name = vectorImportName(parsed, asset.name, null);
+    await FileSystem.writeAsStringAsync(upload, text);
+    await uploadPlanFile(planId, {
+      uri: upload,
+      sizeBytes: await fileSizeBytes(upload),
+      filename: `${name}.${format}`,
+      mediaType: MIME_BY_FORMAT[format],
+      displayName: name,
+      metadata: vectorImportMetadata(parsed),
+    });
+    return { status: "added", name };
+  } finally {
+    for (const path of [staged.scratch, upload])
+      if (path)
+        await FileSystem.deleteAsync(path, { idempotent: true }).catch(
+          () => {},
+        );
   }
-  const asset = picked.assets[0];
-  const record = await importVectorSource(asset.uri, asset.name);
-  return { status: "imported", record };
 }
 
 /**

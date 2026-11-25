@@ -69,6 +69,7 @@ export function ForecastRail({
       <ScrollView
         horizontal
         nestedScrollEnabled
+        keyboardShouldPersistTaps="handled"
         showsHorizontalScrollIndicator={false}
         snapToInterval={width + GAP}
         snapToAlignment="start"

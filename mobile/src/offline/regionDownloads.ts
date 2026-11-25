@@ -21,12 +21,10 @@ import { AppState } from "react-native";
 import {
   BASEMAP_CATALOG,
   DEM_SOURCES,
-  NSW_CONTOURS,
+  landClip,
+  NSW_REGION,
   NSW_COVERAGE,
   NSW_FIRE,
-  NSW_LAND,
-  NSW_LAND_CLIP,
-  NSW_SLOPE,
   SHARPENED_SOURCE_PREFIX,
   TERRAIN_ROUTED_FROM,
   demClipMinZoom,
@@ -132,9 +130,9 @@ function clipArchiveFor(spec: RegionClipSpec): {
       maxzoom: dem.sampleZoom,
     });
   }
-  if (spec.contours) return cdn(NSW_CONTOURS);
-  if (spec.slope) return cdn(NSW_SLOPE);
-  if (spec.land) return cdn(NSW_LAND_CLIP);
+  if (spec.contours) return cdn(NSW_REGION.terrain.contours);
+  if (spec.slope) return cdn(NSW_REGION.terrain.slope);
+  if (spec.land) return cdn(landClip(NSW_REGION.terrain.land));
   if (spec.fire) return cdn(NSW_FIRE);
   if (spec.coverage) return cdn(NSW_COVERAGE);
   const entry = BASEMAP_CATALOG.find((e) => e.id === "protomaps");
@@ -494,11 +492,11 @@ export async function runRegionClip(
         ? `${SHARPENED_SOURCE_PREFIX}${spec.area.id}`
         : (spec.demSourceId ??
           (spec.contours
-            ? NSW_CONTOURS.id
+            ? NSW_REGION.terrain.contours.id
             : spec.slope
-              ? NSW_SLOPE.id
+              ? NSW_REGION.terrain.slope.id
               : spec.land
-                ? NSW_LAND.id
+                ? NSW_REGION.terrain.land.id
                 : spec.fire
                   ? NSW_FIRE.id
                   : spec.coverage

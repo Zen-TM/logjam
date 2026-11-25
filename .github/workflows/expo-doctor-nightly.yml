@@ -1,0 +1,65 @@
+name: expo-doctor nightly
+
+# expo-doctor on main every night. The required check (expo-doctor.yml) only
+# runs for a release PR, so without this, drift from the versions Expo
+# publishes would be found on release day. A red run opens one issue (or
+# rewrites the open one), and a green run closes it. Its own workflow, on a
+# schedule only: a job that can never run on a pull request should not show
+# on every one as a skipped check (infra/scripts/check-required-checks.py
+# fails on a job a pull request starts that is neither required nor named).
+on:
+  schedule:
+    - cron: "47 16 * * *" # 02:47 AEST, after the nightly CI run
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  expo-doctor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - name: Install
+        working-directory: mobile
+        run: npm ci
+      - name: Expo doctor
+        working-directory: mobile
+        run: npx expo-doctor
+
+  nightly-issue:
+    needs: expo-doctor
+    # A run started by hand reports in its own log, not in the issue.
+    if: ${{ !cancelled() && github.event_name == 'schedule' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      TITLE: "expo-doctor is red on main"
+      RESULT: ${{ needs.expo-doctor.result }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - name: Open, update or close the issue
+        run: |
+          set -euo pipefail
+          n=$(gh issue list --state open --search "\"$TITLE\" in:title" \
+            --json number,title --jq ".[] | select(.title == \"$TITLE\") | .number" | head -n1)
+          if [ "$RESULT" = success ]; then
+            [ -z "$n" ] || gh issue close "$n" --comment "Green again in $RUN_URL"
+            exit 0
+          fi
+          body="The nightly \`expo-doctor\` run on \`main\` failed: [run]($RUN_URL). Usually Expo published a patch release or a package was deprecated. In \`mobile/\`, run \`npx expo install --fix\` and \`npx expo-doctor\`. Logjam GPS release PRs are gated on this check."
+          if [ -n "$n" ]; then
+            gh issue edit "$n" --body "$body"
+          else
+            gh issue create --title "$TITLE" --label task --label triage --body "$body"
+          fi

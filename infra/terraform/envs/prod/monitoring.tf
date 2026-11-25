@@ -18,56 +18,6 @@ resource "aws_sns_topic" "alerts" {
   name = "logjam-alerts"
 }
 
-# RDS is a db.t3.micro on 20 GB gp2. Storage autoscaling IS enabled
-# (max_allocated_storage = 100 in rds.tf, cap 100 GB) but only grows on
-# demand — it doesn't warn you it's happening. Warn early — 4 GiB free ≈ 80%
-# used — to leave time to notice before disk actually runs out.
-# FreeStorageSpace is reported in bytes.
-resource "aws_cloudwatch_metric_alarm" "rds_free_storage_low" {
-  alarm_name        = "logjam-rds-free-storage-low"
-  alarm_description = "RDS ${aws_db_instance.main.identifier} free storage below 4 GiB — extend storage or enable autoscaling before it hits zero."
-
-  namespace   = "AWS/RDS"
-  metric_name = "FreeStorageSpace"
-  dimensions = {
-    DBInstanceIdentifier = aws_db_instance.main.identifier
-  }
-
-  statistic           = "Minimum"
-  period              = 300
-  evaluation_periods  = 1
-  comparison_operator = "LessThanThreshold"
-  threshold           = 4 * 1024 * 1024 * 1024 # 4 GiB
-  treat_missing_data  = "missing"
-
-  alarm_actions = [aws_sns_topic.alerts.arn]
-  ok_actions    = [aws_sns_topic.alerts.arn]
-}
-
-# db.t3.micro is CPU-burstable; sustained saturation means the DB is the
-# bottleneck and API latency will climb. High threshold + 15 min sustained keeps
-# normal query bursts from firing it.
-resource "aws_cloudwatch_metric_alarm" "rds_cpu_high" {
-  alarm_name        = "logjam-rds-cpu-high"
-  alarm_description = "RDS ${aws_db_instance.main.identifier} CPU above 90% for 15 min — database-bound; investigate slow queries or resize."
-
-  namespace   = "AWS/RDS"
-  metric_name = "CPUUtilization"
-  dimensions = {
-    DBInstanceIdentifier = aws_db_instance.main.identifier
-  }
-
-  statistic           = "Average"
-  period              = 300
-  evaluation_periods  = 3
-  comparison_operator = "GreaterThanThreshold"
-  threshold           = 90
-  treat_missing_data  = "missing"
-
-  alarm_actions = [aws_sns_topic.alerts.arn]
-  ok_actions    = [aws_sns_topic.alerts.arn]
-}
-
 # The pgaudit -> WORM pipeline's only health signal. If the log group or
 # subscription filter breaks, the Firehose stream sits ACTIVE and idle while
 # CloudTrail continues writing to the bucket — an idle stream can appear healthy
@@ -80,7 +30,7 @@ resource "aws_cloudwatch_metric_alarm" "rds_cpu_high" {
 # overnight.
 resource "aws_cloudwatch_metric_alarm" "pgaudit_delivery_stalled" {
   alarm_name        = "logjam-pgaudit-delivery-stalled"
-  alarm_description = "No pgaudit records reached the WORM audit stream in 24h — the CloudWatch subscription filter or the RDS log export is broken (see audit.tf)."
+  alarm_description = "No pgaudit records reached the WORM audit stream in 24h — the CloudWatch subscription filter or the brain's Postgres log is broken (see audit.tf and brain_logs.tf)."
 
   namespace   = "AWS/Firehose"
   metric_name = "IncomingBytes"
@@ -100,9 +50,12 @@ resource "aws_cloudwatch_metric_alarm" "pgaudit_delivery_stalled" {
 }
 
 locals {
-  # The API's stdout (pino JSON). EB names and creates this group, so it is
-  # referenced by name, never managed (logging.tf's header).
-  eb_api_stdout_log_group = "/aws/elasticbeanstalk/${aws_elastic_beanstalk_environment.api.name}/var/log/eb-docker/containers/eb-current-app/stdouterr.log"
+  # The group of the API's request log, for the filters that read it. The
+  # brain's container logs through Docker's awslogs driver, which ships each
+  # stdout line as one event: the pino JSON line the filter patterns match. A
+  # filter's group is fixed at creation: moving it replaces the filter, a few
+  # seconds without a datapoint.
+  api_log_group = aws_cloudwatch_log_group.brain_api.name
 
   alarms_doc = "https://github.com/Zen-TM/logjam/blob/main/docs/operations/alarms.md"
 }
@@ -113,10 +66,11 @@ locals {
 # CloudFront's 5xxErrorRate: CloudFront publishes only in us-east-1, where this
 # topic cannot be an alarm action, and a rate over a handful of requests is
 # 100% after one failure. A dead container writes no log line, so it cannot
-# raise this count; api_environment_degraded below covers that case.
+# raise this count; the watchdog (brain_watchdog.tf) and the instance's
+# status-check alarms (brain_alarms.tf) cover that case.
 resource "aws_cloudwatch_log_metric_filter" "api_5xx" {
   name           = "logjam-api-5xx"
-  log_group_name = local.eb_api_stdout_log_group
+  log_group_name = local.api_log_group
   pattern        = "{ $.res.statusCode >= 500 }"
 
   metric_transformation {
@@ -152,33 +106,6 @@ resource "aws_cloudwatch_metric_alarm" "api_5xx" {
   comparison_operator = "GreaterThanOrEqualToThreshold"
   threshold           = 10
   treat_missing_data  = "notBreaching"
-
-  alarm_actions = [aws_sns_topic.alerts.arn]
-  ok_actions    = [aws_sns_topic.alerts.arn]
-}
-
-# The crash-loop and dead-instance case the 5xx count cannot see. Enhanced
-# health publishes EnvironmentHealth free: 0 Ok, 1 Info, 5 Unknown, 10 No data,
-# 15 Warning, 20 Degraded, 25 Severe. Degraded or worse in every minute of ten:
-# a deploy's cold restart is Severe for a minute or two, so a shorter window
-# would page on every release. Maximum, not Minimum, so a container that
-# restarts and dies again inside each minute still counts.
-resource "aws_cloudwatch_metric_alarm" "api_environment_degraded" {
-  alarm_name        = "logjam-api-environment-degraded"
-  alarm_description = "Elastic Beanstalk ${aws_elastic_beanstalk_environment.api.name} has been Degraded or Severe for 10 minutes. First: read the environment's health causes (console or `aws elasticbeanstalk describe-environment-health --environment-name ${aws_elastic_beanstalk_environment.api.name} --attribute-names All`); if a deploy just ran, roll it back (docs/operations/rollback.md). ${local.alarms_doc}"
-
-  namespace   = "AWS/ElasticBeanstalk"
-  metric_name = "EnvironmentHealth"
-  dimensions = {
-    EnvironmentName = aws_elastic_beanstalk_environment.api.name
-  }
-
-  statistic           = "Maximum"
-  period              = 60
-  evaluation_periods  = 10
-  comparison_operator = "GreaterThanOrEqualToThreshold"
-  threshold           = 20
-  treat_missing_data  = "missing"
 
   alarm_actions = [aws_sns_topic.alerts.arn]
   ok_actions    = [aws_sns_topic.alerts.arn]

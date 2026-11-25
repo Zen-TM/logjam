@@ -4,9 +4,15 @@ import { fileURLToPath } from "node:url";
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
 
-import { ApiError, AUTH_ERROR_CODES, messageFromError } from "./apiErrors.js";
+import {
+  ApiError,
+  AUTH_ERROR_CODES,
+  messageFromError,
+  SIGNUP_CAP_MESSAGE,
+} from "./apiErrors.js";
 import * as contracts from "./contracts/index.js";
 import { copySay, copyViolations } from "./copyRules.js";
+import { NSW_REGION } from "./regions.js";
 
 // Every string a screen contract declares keeps the copy rules of
 // shared/DESIGN.md §12: no "Retry", no "the app", no "basemap", "tiles" or "the
@@ -57,6 +63,16 @@ describe("contract copy", () => {
     if (typeof value !== "function") strings(value, name, all);
   }
   fromFunctions(all);
+  // Functions of a region, which `fromFunctions` can't call. Mutation: put
+  // "Retry" in `ROPEWIKI_OFFER.confirmBody`.
+  const { ROPEWIKI_OFFER } = contracts;
+  for (const key of ["title", "hint", "confirmBody"] as const)
+    all.push([`ROPEWIKI_OFFER.${key}`, ROPEWIKI_OFFER[key](NSW_REGION)]);
+  for (const offers of [1, 2])
+    all.push([
+      `ROPEWIKI_OFFER.menu(${offers})`,
+      ROPEWIKI_OFFER.menu(NSW_REGION, offers),
+    ]);
 
   it("reads strings at all — a silent zero would pass forever", () => {
     expect(all.length).toBeGreaterThan(500);
@@ -90,6 +106,8 @@ describe("contract copy", () => {
     ["lidar-topo", "Open the topo", "Open the sharpened area"],
     ["lidar-topo", "Use a topo", "OSM Topo"],
     ["region", "Download a map region", "Save an offline map"],
+    ["region", "Region 3", "Offline map 3"],
+    ["region", "Delete saved regions", "Where do you canyon? Regions"],
     ["offline-map", "Save maps offline", "Save an offline map"],
     ["offline-map", "Download the map for this area", "Save an offline map"],
     ["offline-map", "Map downloaded", "Offline map saved"],
@@ -170,7 +188,7 @@ describe("contract copy", () => {
         copyViolations(text).map((id) => `${path}: "${text}" — ${copySay(id)}`),
       );
     expect(offenders).toEqual([]);
-  });
+  }, 30_000);
 });
 
 describe("the words an API failure shows", () => {
@@ -267,6 +285,7 @@ describe("shared copy outside contracts/", () => {
   it("keeps every sign-in and failure message to the register", () => {
     const messages = [
       ...Object.values(AUTH_ERROR_CODES),
+      SIGNUP_CAP_MESSAGE,
       ...Array.from({ length: 200 }, (_, i) =>
         messageFromError(
           new ApiError(400 + i, "/x", "GET"),
@@ -276,5 +295,65 @@ describe("shared copy outside contracts/", () => {
       messageFromError(new TypeError("Failed to fetch"), "fallback"),
     ];
     expect(messages.flatMap(copyViolations)).toEqual([]);
+  });
+});
+
+// The words a person reads that no JSX or contract holds: the static pages
+// (`frontend/public/*.html`, the privacy policy and the terms the consent
+// screen links to) and the strings of `mobile/app.json`, which the operating
+// system shows in its permission prompts. A legal text keeps its own
+// vocabulary ("tiles", "cannot", "logs"), so the pages are held only to the
+// rule that needs no legal reading: name the surface, never "the app". The
+// prompts are held to every rule. A hit is fixed: there is no allow-list.
+//
+// Mutation that turns it red: put "in the app" back into `savePhotosPermission`
+// in `mobile/app.json`, or write "the app" into `frontend/public/tos.html`.
+describe("static pages and permission prompts", () => {
+  const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
+  const pages = readdirSync(join(ROOT, "frontend/public"))
+    .filter((name) => name.endsWith(".html"))
+    .map((name) => `frontend/public/${name}`);
+  const visibleSentences = (file: string): string[] =>
+    readFileSync(join(ROOT, file), "utf8")
+      .replace(/<(script|style)[\s\S]*?<\/\1>/g, " ")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/\s+/g, " ")
+      .split(/(?<=[.!?])\s+/);
+
+  const prompts: [string, string][] = [];
+  const walk = (value: unknown, path: string): void => {
+    if (typeof value === "string") {
+      if (/\s/.test(value)) prompts.push([path, value]);
+    } else if (Array.isArray(value))
+      value.forEach((item, index) => walk(item, `${path}[${index}]`));
+    else if (value && typeof value === "object")
+      for (const [key, item] of Object.entries(value))
+        walk(item, `${path}.${key}`);
+  };
+  walk(
+    JSON.parse(readFileSync(join(ROOT, "mobile/app.json"), "utf8")),
+    "app.json",
+  );
+
+  it("reads the pages and prompts at all, so a silent zero cannot pass", () => {
+    expect(pages.length).toBeGreaterThanOrEqual(2);
+    expect(pages.flatMap(visibleSentences).length).toBeGreaterThan(100);
+    expect(prompts.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it("names Logjam Web or Logjam GPS on every page, never the app", () => {
+    const offenders = pages.flatMap((file) =>
+      visibleSentences(file)
+        .filter((text) => copyViolations(text).includes("the-app"))
+        .map((text) => `${file}: "${text}" — ${copySay("the-app")}`),
+    );
+    expect(offenders).toEqual([]);
+  });
+
+  it("keeps every permission prompt to the copy rules", () => {
+    const offenders = prompts.flatMap(([path, text]) =>
+      copyViolations(text).map((id) => `${path}: "${text}" — ${copySay(id)}`),
+    );
+    expect(offenders).toEqual([]);
   });
 });

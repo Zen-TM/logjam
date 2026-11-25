@@ -120,6 +120,7 @@ export const KIT_COMPONENTS = {
   FieldBeside: web(
     "Logjam GPS stacks a button under the field instead of beside it",
   ),
+  FieldGroup: web("Logjam GPS's Field wraps several controls under one label"),
   SearchField: both,
   Select: web("a native select; touch uses ChipRail or a sheet"),
   Checkbox: web("a native checkbox; Logjam GPS uses Toggle or a chip"),

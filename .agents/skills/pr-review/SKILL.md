@@ -12,7 +12,7 @@ what it does.
 ## Who does what
 
 The session that runs this skill **orchestrates**: it gathers the inputs,
-launches every pass and every validation as its own fresh subagent, and
+launches every pass and every validation in a fresh subagent, and
 assembles the output. It judges nothing itself, so it may be the session that
 wrote the change. A subagent does its job directly and launches none of its
 own. Write each
@@ -34,15 +34,19 @@ validation in turn.
 - **The rule files:** the paths of root `AGENTS.md` and of the `AGENTS.md` in
   every directory holding a changed file, and in its parents.
 
-You may check the branch out locally to read and grep. Do not run the PR's
-code without asking.
+Check the change out in a fresh worktree at its head, never a shared checkout
+another session may use; replicate any uncommitted work there (staged,
+unstaged and untracked), and do not edit files or switch branches. Remove any
+worktree you created for the review when it ends. Do not run the PR's code
+without asking.
 
 ## 2. Review in independent passes
 
 Launch four subagents in parallel, however small the change: passes that
-share a context are not independent. Give each the change, the intent and the
-rule files; each reads what it needs fresh and returns findings, each with a
-severity from Output and the reason (the rule, or the bug).
+share a context are not independent. Give each the change, the intent, the
+rule files and the review worktree's path, and tell it not to edit files or
+switch branches; each reads what it needs fresh and returns findings, each
+with a severity from Output and the reason (the rule, or the bug).
 
 1. **Rules.** Every rule that applies to the changed files, from the rule
    files, from any committed skill in `.agents/skills/` (not a `*.local/` one) whose description covers the
@@ -60,17 +64,24 @@ severity from Output and the reason (the rule, or the bug).
    breaks, lost data on an error path, a race.
 4. **Intent.** The change does what its PR and issue say, all of it, and
    nothing unrelated. Tests are present where root `AGENTS.md` → Testing
-   requires them. A change that root `AGENTS.md` → How we work says needs an
-   issue or the maintainer's sign-off, arriving with neither named, is a
-   `question`.
+   requires them: for a bug fix, check the PR brings the failing test that
+   shows the bug, and that "no behaviour changes" is not standing in for it; a
+   guard whose scope is the maintainer's call is a `question`. A change that
+   root `AGENTS.md` → How we work says needs an issue or the maintainer's
+   sign-off, arriving with neither named, is a `question`.
 
 ## 3. Validate every finding
 
 First merge findings that share a `path:line` and a cause; that is
-bookkeeping, not judgement. Then launch one fresh subagent per finding,
-however small, with the finding, the change and the intent. It re-reads the
-code and confirms the issue is real; for a rule finding, it quotes the rule
-and confirms it is scoped to that file. It may lower a finding's severity,
+bookkeeping, not judgement. Then launch a fresh subagent for each finding
+that takes judgement to confirm (a bug, a boundary, how a rule reads), with
+the finding, the change, the intent, the review worktree's path and the
+no-edit, no-branch-switch rule. Findings that one look at one place
+settles (a missing note, a wrong path, a pattern that plainly matches too
+much) may share a subagent, four at most, each answered separately: a
+context apiece buys nothing there. A validator re-reads the code and confirms
+the issue is real; for a rule finding, it quotes the rule and confirms it is
+scoped to that file. It may lower a finding's severity,
 never raise it. Drop what does not survive; a finding that is plausible but
 unconfirmed is a `question` at most. False positives cost the author more
 than a miss costs the review.

@@ -50,7 +50,12 @@ export function useGauges(enabled: boolean): {
       startTick();
       void load();
     });
-    const unsubscribe = subscribeReconnect(() => void load());
+    // Not behind a dark screen (ADR 0013): the return to the front loads again.
+    // Guard: src/batteryRules.test.ts (the reconnect callbacks).
+    const unsubscribe = subscribeReconnect(() => {
+      if (AppState.currentState === "background") return;
+      void load();
+    });
     return () => {
       live = false;
       // A later switch-on starts unsettled, so no failure line shows while it loads.

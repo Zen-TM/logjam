@@ -10,7 +10,7 @@ A saved region ([0005](0005-offline-region-downloads.md)) holds the rasters the
 user picked, the worldwide DEM tiles, and three clips of archives Logjam builds:
 the vector basemap, each DEM archive the area touches (`planDemDownload` in
 `shared/src/mapRegionEstimate.ts`, [0031](0031-nsw-heights-come-from-the-spatial-services-5m-dem.md))
-and the statewide contours (`shared/src/nswContours.ts`). Under
+and the statewide contours (`NSW_REGION.terrain.contours` in `shared/src/regions.ts`). Under
 [0029](0029-vector-map-with-every-signed-in-region.md) the API cut all three:
 `POST /basemap/region-clip` (`api/src/routes/basemap.ts`) ran `pmtiles extract`
 for the bbox and the phone fetched the file through a short-lived token. The
@@ -162,7 +162,7 @@ Nothing new calls it.
   stays in `shared/`, for the phone. The paragraph above and the guards it names
   no longer apply. Everything else above stands.
 - **Update 2026-10-23: every saved area also clips the statewide slope**
-  (`NSW_SLOPE` in `shared/src/terrain.ts`), so Logjam GPS draws the Terrain
+  (`NSW_REGION.terrain.slope` in `shared/src/regions.ts`), so Logjam GPS draws the Terrain
   group's Slope offline. It is a fourth entry in `regionClipSpecs`, cut the
   same way, at the archive's own zooms (z8 to z15), and filed as
   `slope-region`. A slope archive the CDN lacks is left out like a DEM or

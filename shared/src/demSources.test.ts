@@ -7,7 +7,6 @@ import {
   CLIMB_SOURCES,
   DEM_SOURCES,
   GPS_CLIMB_SOURCE,
-  NSW_5M,
   SHARPENED_CLIMB_SOURCE,
   clearDemArchives,
   demArchive,
@@ -23,6 +22,7 @@ import {
 import { DEM_TILE_SIZE } from "./demTiles.js";
 import { buildElevationProfile, densifyLineSegments } from "./elevation.js";
 import { sharpenedDemSource } from "./sharpen.js";
+import { NSW_REGION } from "./regions.js";
 
 describe("demTileUrl", () => {
   // The decode fixture is a REAL terrarium tile named for its address: z13,
@@ -73,7 +73,7 @@ describe("the declaration", () => {
   });
 
   // Mutation: paste a source's host into a reader instead of importing the
-  // declaration, and this names the file.
+  // declaration, and this names the file. A region declares its own sources.
   it("is the only place a DEM host is written", () => {
     const prefixes = DEM_SOURCES.map(
       (s) => s.archivePath ?? s.urlTemplate!.split("{")[0]!,
@@ -83,7 +83,11 @@ describe("the declaration", () => {
       const root = join(import.meta.dirname, "../..", pkg, "src");
       for (const file of readdirSync(root, { recursive: true }) as string[]) {
         if (!/\.tsx?$/.test(file) || /\.test\.tsx?$/.test(file)) continue;
-        if (file.endsWith("demSources.ts")) continue;
+        if (
+          pkg === "shared" &&
+          (file === "demSources.ts" || file === "regions.ts")
+        )
+          continue;
         const text = readFileSync(join(root, file), "utf8");
         if (prefixes.some((prefix) => text.includes(prefix)))
           offenders.push(`${pkg}/src/${file}`);
@@ -327,7 +331,9 @@ describe("an open archive", () => {
     };
     const first = demArchive(source);
     await expect(
-      readDemArchive(first, NSW_5M, [{ tileX: 1, tileY: 1 }]),
+      readDemArchive(first, NSW_REGION.terrain.heights, [
+        { tileX: 1, tileY: 1 },
+      ]),
     ).rejects.toThrow("no connection");
     const second = demArchive(source);
     expect(second).not.toBe(first);
@@ -335,9 +341,9 @@ describe("an open archive", () => {
     const before = asked;
     // The bytes are not an archive, so the read still fails: what matters is
     // that the source was asked again.
-    await readDemArchive(second, NSW_5M, [{ tileX: 1, tileY: 1 }]).catch(
-      () => {},
-    );
+    await readDemArchive(second, NSW_REGION.terrain.heights, [
+      { tileX: 1, tileY: 1 },
+    ]).catch(() => {});
     expect(asked).toBeGreaterThan(before);
     clearDemArchives();
   });

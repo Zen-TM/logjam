@@ -109,11 +109,23 @@ test("the apply-role guard is envs/prod's alone", () => {
 // [path, in envs/prod's plan, in envs/github's plan]
 const SCOPE_CASES = [
   ["infra/terraform/envs/prod/s3.tf", true, false],
+  // The brain's switches: a change to this file alone is a prod plan and an
+  // apply (and the deploy workflows read it too).
+  ["infra/terraform/envs/prod/brain.auto.tfvars", true, false],
   ["infra/terraform/modules/storage/main.tf", true, false],
   ["infra/terraform/templates/env.local.tftpl", true, false],
   ["infra/terraform/bootstrap/main.tf", false, false],
   ["infra/terraform/envs/local/main.tf", false, false],
   ["infra/lambda/cognito-email-sender/src/index.ts", true, false],
+  // What the brain's user data embeds (envs/prod/brain_instance.tf): everything
+  // under infra/brain/ but postgres/, tests/ and api.env.
+  ["infra/brain/host/boot.sh", true, false],
+  ["infra/brain/host/systemd/brain-boot.service", true, false],
+  ["infra/brain/compose.yaml", true, false],
+  ["infra/brain/compose.aws.yaml", true, false],
+  ["infra/brain/postgres/Dockerfile", false, false],
+  ["infra/brain/tests/e2e.sh", false, false],
+  ["infra/brain/api.env", false, false],
   ["infra/terraform/envs/github/rulesets.tf", false, true],
   ["infra/scripts/plan-summary.mjs", true, true],
   ["infra/scripts/plan-summary.test.mjs", true, true],
@@ -126,7 +138,10 @@ const SCOPE_CASES = [
 test("each root plans and applies exactly its own changes", () => {
   // The plan and apply workflows both ask inScope(): a root applied without
   // having been planned refuses, so the two must agree. Mutation: widening
-  // prod's scope to all of infra/terraform/ turns this red.
+  // prod's scope to all of infra/terraform/, dropping infra/brain/ from it,
+  // widening it to postgres/, tests/ or api.env (which the user data does not
+  // embed), or narrowing envs/prod to *.tf (the settings file is
+  // brain.auto.tfvars) turns this red.
   for (const [path, prod, github] of SCOPE_CASES) {
     assert.equal(inScope("prod", [path]), prod, `prod: ${path}`);
     assert.equal(inScope("github", [path]), github, `github: ${path}`);
@@ -136,20 +151,26 @@ test("each root plans and applies exactly its own changes", () => {
 test("terraform-apply.yml starts for every change a root plans", () => {
   // inScope() only runs once the workflow has started, and its `paths:`
   // filter decides that: pipeline-only changes must still trigger an apply.
-  // Mutation: dropping any path from that filter (or adding bootstrap/) turns this red.
+  // Mutation: dropping any path from that filter (or adding bootstrap/, or dropping a `!` line for infra/brain/) turns this red.
   const yml = readFileSync(new URL("../../.github/workflows/terraform-apply.yml", import.meta.url), "utf8");
   const block = /\n {4}paths:\n((?: {6}- .+\n)+)/.exec(yml);
   assert.ok(block, "terraform-apply.yml's push trigger has a paths: list");
-  const globs = [...block[1].matchAll(/- "([^"]+)"/g)].map(([, g]) => {
+  // GitHub reads `paths:` in order and a later `!` pattern removes what an
+  // earlier one matched.
+  const toRe = (g) => {
     const re = g
       .replace(/[.+^${}()|[\]\\]/g, "\\$&")
       .replace(/\*\*/g, "\u0000")
       .replace(/\*/g, "[^/]*")
       .replace(/\u0000/g, ".*");
     return new RegExp(`^${re}$`);
-  });
+  };
+  const patterns = [...block[1].matchAll(/- "([^"]+)"/g)].map(([, g]) =>
+    g.startsWith("!") ? { not: true, re: toRe(g.slice(1)) } : { not: false, re: toRe(g) },
+  );
+  const starts = (path) => patterns.reduce((on, { not, re }) => (re.test(path) ? !not : on), false);
   for (const [path, prod, github] of SCOPE_CASES) {
-    const triggers = globs.some((g) => g.test(path));
+    const triggers = starts(path);
     assert.equal(triggers, prod || github, `terraform-apply.yml ${triggers ? "starts" : "does not start"} for ${path}`);
   }
 });
@@ -182,6 +203,18 @@ test("bypass_actors the plan App cannot read do not split the plan from the appl
   assert.match(header(asPlanApp(), "github"), /Counted as no change \(1\)[^]*`bypass_actors`[^]*github_repository_ruleset\.tags/);
 });
 
+test("a bypass list reads the same in GitHub's order and with the provider's zero for an unset id", () => {
+  // Mutation: hashing the list as each plan holds it (in order, null apart
+  // from 0): red. That refused every envs/github apply once one ruleset had
+  // two bypass actors, since GitHub returns the DeployKey first with id 0.
+  const key = { actor_type: "DeployKey", bypass_mode: "always" };
+  const coded = { ...live, bypass_actors: [...ADMIN, { ...key, actor_id: null }] };
+  const stored = { ...live, bypass_actors: [{ ...key, actor_id: 0 }, ...ADMIN] };
+  assert.equal(fingerprint(asPlanApp(coded), "github"), fingerprint(asApplyApp(stored), "github"));
+  const read = comment({ root: "github", planText: "plan", status: "success", plan: asPlanApp(coded), sha: SHA }).body;
+  assert.equal(check("github", asApplyApp(stored), read, SHA).ok, true);
+});
+
 test("a configured bypass_actors change still changes the fingerprint", () => {
   // Mutation: leaving the configured values out of the fingerprint lets an
   // apply add a bypass actor the PR's plan never had: red.
@@ -202,7 +235,7 @@ test("a real rule change beside the hidden bypass stays an update", () => {
 test("a ruleset the PR updates has the same value fingerprint read by either App", () => {
   // GitHub's ETag hashes the response, which differs by viewer, and only the
   // apply App sees bypass_actors. Mutation: dropping github's `perViewer`, or
-  // hashing unreadable attributes, refuses every ruleset update (#453): red.
+  // hashing unreadable attributes, refuses every ruleset update: red.
   const rules = [{ creation: false }];
   const pr = {
     resource_changes: [
@@ -274,6 +307,37 @@ test("a hand change to a resource the PR updates changes its value fingerprint",
     valueFingerprints(pr, "prod", KEY)["aws_sns_topic.alerts"],
     valueFingerprints(atMerge, "prod", KEY)["aws_sns_topic.alerts"],
   );
+});
+
+test("a value AWS moves by itself leaves the value fingerprint alone", () => {
+  // A sign-up between the PR's plan and the apply's moves the pool's user
+  // count; a deploy's invalidation, or a rollout still in progress, moves the
+  // distribution's. Mutation: dropping either type from prod's `movesAlone`
+  // refuses a good apply whenever one moves; naming the attribute for every
+  // type hides a real `status` elsewhere. Either turns this red.
+  const updated = (type, before, after) => ({
+    resource_changes: [
+      { address: `${type}.x`, type, change: { actions: ["update"], before, after, after_unknown: {}, after_sensitive: {} } },
+    ],
+  });
+  const cases = [
+    ["aws_cognito_user_pool", { estimated_number_of_users: 41 }, { estimated_number_of_users: 42 }],
+    [
+      "aws_cloudfront_distribution",
+      { status: "InProgress", in_progress_validation_batches: 1 },
+      { status: "Deployed", in_progress_validation_batches: 0 },
+    ],
+  ];
+  for (const [type, atPlan, atMerge] of cases) {
+    const plan = (moved, hand = {}) =>
+      updated(type, { name: "x", comment: "old", ...moved, ...hand }, { name: "x", comment: "new", ...moved });
+    const read = comment({ root: "prod", planText: "plan", status: "success", plan: plan(atPlan), sha: SHA, key: KEY }).body;
+    assert.equal(check("prod", plan(atMerge), read, SHA, { key: KEY, mode: "enforce" }).ok, true, type);
+    // A hand edit to the same resource is still seen.
+    assert.equal(check("prod", plan(atMerge, { name: "by-hand" }), read, SHA, { key: KEY, mode: "enforce" }).ok, false, type);
+  }
+  const elsewhere = (status) => updated("aws_budgets_budget_action", { status }, { status, name: "new" });
+  assert.notDeepEqual(valueFingerprints(elsewhere("STANDBY"), "prod", KEY), valueFingerprints(elsewhere("EXECUTION_SUCCESS"), "prod", KEY));
 });
 
 test("a sensitive value is neither in the comment nor in the fingerprint", () => {

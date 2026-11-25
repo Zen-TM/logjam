@@ -1,7 +1,10 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, it, expect } from "vitest";
 import {
   NOTIFICATION_DESTINATIONS,
   NOTIFICATION_TYPES,
+  VEGETATION_LEFT_OUT_NOTE,
   notificationPlaceId,
   notificationAnnouncement,
   notificationHaystack,
@@ -121,6 +124,38 @@ describe("notificationLabel", () => {
     ).toEqual({
       text: "Kanangra map ready",
     });
+  });
+
+  // Mutation: ignore the flag, and an owner whose vegetation layer was left
+  // out is told nothing; or show the line for every map.
+  it("says when the vegetation layer was left out", () => {
+    expect(
+      notificationLabel(
+        notification("topo_complete", {
+          jobName: "Kanangra",
+          vegetationLeftOut: true,
+        }),
+      ),
+    ).toEqual({
+      text: "Kanangra map ready",
+      detail:
+        "The area is too large for the vegetation layer, so it was left out.",
+    });
+    expect(
+      notificationLabel(
+        notification("topo_complete", { vegetationLeftOut: false }),
+      ).detail,
+    ).toBeUndefined();
+  });
+
+  // Mutation: reword one copy, and the row and the email say it differently.
+  it("words it as the worker's email does", () => {
+    const python = readFileSync(
+      join(import.meta.dirname, "../../topo/worker_common.py"),
+      "utf8",
+    );
+    const declared = /^VEGETATION_LEFT_OUT = \(?\s*"(.*)"/m.exec(python)![1];
+    expect(VEGETATION_LEFT_OUT_NOTE).toBe(declared);
   });
 
   // Mutation: uppercase the format again, and it reads "GPKG map ready".

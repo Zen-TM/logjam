@@ -1,13 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  NSW_5M,
-  NSW_CONTOURS,
-  NSW_COVERAGE,
-  NSW_FIRE,
-  NSW_LAND,
-  NSW_SLOPE,
-} from "@logjam/shared";
+import { NSW_COVERAGE, NSW_FIRE, NSW_REGION } from "@logjam/shared";
 
 import {
   offlineCoverageMask,
@@ -129,12 +122,12 @@ describe("offlineMaskBoxes", () => {
   // Mutation: drop the artifacts line and the mask covers a save whose basemap
   // clip failed, Terrain group included.
   it.each([
-    ["contours", clip("contours-region", NSW_CONTOURS.id)],
-    ["slope", clip("slope-region", NSW_SLOPE.id)],
-    ["land", clip("land-region", NSW_LAND.id)],
+    ["contours", clip("contours-region", NSW_REGION.terrain.contours.id)],
+    ["slope", clip("slope-region", NSW_REGION.terrain.slope.id)],
+    ["land", clip("land-region", NSW_REGION.terrain.land.id)],
     ["fire", clip("fire-region", NSW_FIRE.id)],
     ["coverage", clip("coverage-region", NSW_COVERAGE.id)],
-    ["hillshade", clip("dem-region", NSW_5M.id)],
+    ["hillshade", clip("dem-region", NSW_REGION.terrain.heights.id)],
   ])("leaves a save's %s clear when its basemap clip failed", (_, terrain) => {
     const boxes = offlineMaskBoxes([savedBasemap], [terrain])!;
     expect(boxes).toEqual([AREA_A, AREA_B]);
@@ -148,7 +141,7 @@ describe("offlineMaskBoxes", () => {
         [
           clip("dem-region", "terrarium"),
           // Saved before the shallow zooms: the hillshade can't draw it.
-          clip("dem-region", NSW_5M.id, 15),
+          clip("dem-region", NSW_REGION.terrain.heights.id, 15),
           clip("basemap-region", "six-topo"),
         ],
       ),
@@ -156,7 +149,7 @@ describe("offlineMaskBoxes", () => {
   });
 
   it("is nothing while the basemap isn't drawn from saved tiles", () => {
-    const terrain = clip("contours-region", NSW_CONTOURS.id);
+    const terrain = clip("contours-region", NSW_REGION.terrain.contours.id);
     expect(
       offlineMaskBoxes([{ ...savedBasemap, origin: "remote" }], [terrain]),
     ).toBeNull();

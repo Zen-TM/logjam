@@ -14,7 +14,7 @@ import {
   type Viewport,
 } from "./sourceResolver";
 
-const CDN = "https://logjamnsw.com";
+const CDN = "https://logjam.earth";
 
 function ctx(overrides: Partial<ResolveContext> = {}): ResolveContext {
   return {

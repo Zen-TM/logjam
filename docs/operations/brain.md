@@ -1,0 +1,699 @@
+# The brain: running it
+
+The brain is Logjam's API and its Postgres on one EC2 instance.
+Why it is built this way, and the rules that hold it up:
+[ADR 0047](../decisions/0047-prod-runs-on-one-self-managed-instance-with-object-lock-backups.md).
+
+- **One instance** (`logjam-brain`, a `t4g.micro`) under Docker Compose: a
+  Postgres container and an API container. The data is on its own encrypted
+  disk, mounted at `/data`; the root disk can be thrown away.
+- **Backups** are pgBackRest, into a bucket nobody can empty for 7 days: WAL
+  every minute, a full backup at 03:00 Sydney time, eight kept. A scheduled
+  task restores the newest one every day at 04:30 and says whether it worked.
+- **Releases** are a file: CI writes `release.json` to a bucket, a timer on the
+  host makes the running API match it. CI never has a shell on the host, and
+  neither does anyone but the maintainer, through Session Manager (no SSH).
+- **Its settings** are in `infra/terraform/envs/prod/brain.auto.tfvars`,
+  changed one line at a time by a merge: the image tag, the data volumes, the
+  instance size, `brain_serving` (whether its API runs) and the one-time
+  `brain_bootstrap`.
+- **An outside check** (a Lambda every 5 minutes) and a few CloudWatch alarms
+  email the maintainer; [alarms.md](alarms.md) says what each one means.
+
+Every command below is complete and says what to look for, and runs from the
+repository root. Each is marked **run on a scratch copy** (a rehearsal on a
+throwaway copy of the brain on real AWS: 2026-11-10, and again on the finished
+stack on 2026-11-11; timings are quoted as measured there, with made-up rows),
+**run on prod** (the bring-up of 2026-11-11) or **not yet run anywhere**.
+Prod's numbers will differ with the size of the database. Use the maintainer's AWS credentials and
+`export AWS_REGION=ap-southeast-2`.
+
+**Never read user data to diagnose anything.** Look at counts, names, logs and
+sizes. A session or command is recorded with who started it, and a read through
+the database is recorded by pgaudit
+([the policy](../DATA-ACCESS-POLICY.md)).
+
+## Where to look
+
+| What | Where | Tells you |
+|---|---|---|
+| The host's own report | `s3://logjam-brain-signals-620853681701/status.json`, written every minute | Postgres up, disk, free memory, newest WAL and full backup, the running API's sha, whether it serves, how the last boot went |
+| The restore drill's verdict | `drill.json`, same bucket, written daily | Whether the newest backup restores, and how long it took |
+| The outside check | log group `/aws/lambda/logjam-brain-watchdog` | One line per run: `{"failed": [...]}` with codes only |
+| The API's log | `/logjam/brain/api` | One line per request (the same fields as the old log, see [queries.md](queries.md)) |
+| Postgres's log, with pgaudit | `/logjam/brain/postgres` | Statements without values; this is also what reaches the audit bucket |
+| The drill's log | `/logjam/brain/drill` | Table names only |
+| Alarms | email, and [alarms.md](alarms.md#the-brain) | What each code means and what to do first |
+
+Read the status file (run on a scratch copy; only the maintainer's own
+credentials can, because CI and the brain's own role cannot):
+
+```sh
+aws s3 cp s3://logjam-brain-signals-620853681701/status.json - | python3 -m json.tool
+```
+
+Look for `"postgres_up": true`, a `time` within the last two minutes, a
+`last_archive_time` within the last minute or two, a `last_full_time` within
+26 hours, `mem_available_mb` well above 100, and `"boot_mode"`:
+`existing` after an ordinary boot, `restore` after a restore, `bootstrap` after
+the first boot, `upgraded` after a boot that upgraded Postgres to a new major
+(`upgrading` while it runs), `failed` or `refused` when something is wrong (then read
+`journalctl -b -u brain-boot` on the host). The thirteen keys are all there is;
+none holds user data. During a boot the first status report can say
+`"boot_mode": "failed"` for about a minute: the boot script writes `failed`
+first and overwrites it once it knows the mode (seen 2026-11-11). Do not chase
+it unless the next report still says it; the watchdog's alarm needs two failing
+runs out of three.
+
+Run the outside check now, rather than waiting for its 5 minutes (run on a
+scratch copy; decode the log with `base64 -d`):
+
+```sh
+aws lambda invoke --function-name logjam-brain-watchdog --payload '{}' \
+  --cli-binary-format raw-in-base64-out --log-type Tail --query LogResult --output text /dev/null | base64 -d
+```
+
+Green is `{"failed": []}`. A failure prints codes ([alarms.md](alarms.md#logjam-brain-checks-failing)
+says what each means). On the scratch copy `status_stale`, `wal_stale` and
+`api_unready` each fired alone, and the 5-minute schedule fired by itself.
+
+## Getting a shell
+
+The instance id changes every time the host is replaced (a host-file change, a
+resize, a disk recovery), so find it by its name every time, never from a note
+or an old terminal:
+
+```sh
+IID=$(aws ec2 describe-instances \
+  --filters Name=tag:Name,Values=logjam-brain Name=instance-state-name,Values=running \
+  --query 'Reservations[].Instances[].InstanceId' --output text)
+echo "$IID"
+```
+
+It must print exactly one id starting `i-`. (Run on a scratch copy.) Nothing
+printed means the host is stopped or being replaced; two ids means a
+replacement is in flight, so wait.
+
+For one command and its output (run on a scratch copy; this is how every command
+below that says "on the host" can be run):
+
+```sh
+brain() {  # brain '<command>': run it on the host as root and print the output
+  local id
+  id=$(aws ssm send-command --instance-ids "$IID" --document-name AWS-RunShellScript \
+    --parameters "$(python3 -c 'import json,sys; print(json.dumps({"commands": [sys.argv[1]]}))' "$1")" \
+    --query Command.CommandId --output text) || return
+  aws ssm wait command-executed --command-id "$id" --instance-id "$IID" 2> /dev/null
+  aws ssm get-command-invocation --command-id "$id" --instance-id "$IID" \
+    --query '[Status, StandardOutputContent, StandardErrorContent]' --output text
+}
+brain 'docker ps --format "{{.Names}} {{.Status}}"'
+```
+
+Look for `brain-postgres-1 Up ... (healthy)` and, once serving, `brain-api-1 Up
+... (healthy)`. For an interactive shell (needs the Session Manager plugin for
+the AWS CLI; **not yet run anywhere**):
+
+```sh
+aws ssm start-session --target "$IID"
+sudo -i
+```
+
+Limits, all met on the scratch copy:
+
+- Each call is 4 to 12 seconds, so anything you need to sample over time needs
+  a loop on the host, not a loop of calls.
+- Output is cut at 24,000 characters. Pipe through `tail` or `grep`.
+- The shell has no state between calls: `cd` does not carry. Write each command
+  to stand alone, and use full paths.
+- A new instance shows as `Online` about 30 seconds after it launches, before
+  its first-boot script has finished: a command sent then sees a half-installed
+  host. Wait for `brain 'cloud-init status'` to say `done`.
+- If the host fails before the Session Manager agent starts there is no shell:
+  read the console with `aws ec2 get-console-output --instance-id "$IID" --latest --output text`.
+- AWS keeps a command's text and output for 30 days, and records only that a
+  command was sent and by whom, not what it said.
+
+## Rebuilding it when there is none
+
+When the instance and its data disk are both gone, the data comes back from
+the backups bucket, never from a copy: nothing else holds it. The bucket is
+versioned and Object Lock keeps every version for 7 days, so a deleted host
+does not take it with it. Restoring into a blank disk ran on a scratch copy
+([Losing the disk or the zone](#losing-the-disk-or-the-zone) has the timings);
+this whole sequence is **not yet run anywhere**. Do these in this order; each
+step says why.
+
+1. **Check the foundations are still there.** Terraform made the buckets,
+   roles, log groups and the audit trail (`terraform-apply.yml`), and the
+   apply role's boundary was applied by hand once (`DenySnapshotBlocks`,
+   `DenyShells` and `DenyCommandOutput`, kept out of CI's reach because
+   `terraform-apply.yml` refuses a plan that edits that boundary;
+   [infra/AGENTS.md](../../infra/AGENTS.md)). A plan of `main` must show the
+   brain and nothing else to create: stop if it shows the bucket, the roles or
+   the boundary. Read it, from a checkout of `main`, from the repository root,
+   with the maintainer's credentials (the commands ran on a scratch copy; that
+   the plan shows the brain and nothing else is not yet run anywhere):
+
+   ```sh
+   for l in cognito-email-sender cognito-pre-signup; do
+     npm --prefix infra/lambda/$l ci && npm --prefix infra/lambda/$l run build
+   done
+   terraform -chdir=infra/terraform/envs/prod init
+   terraform -chdir=infra/terraform/envs/prod plan -out=/tmp/rebuild.plan
+   ```
+2. **Pick the Postgres image tag.** `brain_pg_image_tag` in `brain.auto.tfvars`
+   already names one; tags cannot be overwritten, so it still exists unless
+   someone deleted it. To publish what is on `main` now:
+   `gh workflow run publish-brain-postgres.yml --ref main`. The newest tag
+   (not yet run anywhere):
+
+   ```sh
+   aws ecr describe-images --repository-name logjam-brain-postgres \
+     --query 'sort_by(imageDetails,&imagePushedAt)[-1].[imageTags[0],imagePushedAt]' --output text
+   ```
+
+   It must be a commit that contains every change to `infra/brain/postgres/`
+   the brain needs: a rewind, for one, needs an image from after the
+   point-in-time change.
+3. **Create the host: one pull request.** A deleted instance comes back with
+   any apply while the tag is set; a deleted data volume needs the next key in
+   `brain_data_volumes`, made current, as in [Losing the disk or the
+   zone](#losing-the-disk-or-the-zone). **Leave `brain_bootstrap` false.** It is
+   permission to make an empty database where no backup exists, which a rebuild
+   is not: with a backup in the repository a blank disk restores whatever it
+   says, and without one the boot refuses, which is the right answer to a
+   repository that cannot be read. Merge it; the plan comment shows the
+   instance, the volume and the alarms being added, and the apply takes about
+   a minute. Then watch (all run on a scratch copy, 2026-11-11):
+   - about 75 seconds for the host's first-boot script, then the restore
+     (about 30 seconds for a 1.7 GB database, then a new full backup of about a
+     minute before the API starts);
+   - `brain 'cat /run/brain/boot-mode'` ends `restore`;
+   - `brain 'docker ps --format "{{.Names}} {{.Status}}"'` shows
+     `brain-postgres-1` healthy;
+   - the status file (above) appears within a minute and names `restore`, with
+     `last_restore_lag_seconds`, the outage plus the loss;
+   - a new object lands in the backup bucket about every 60 seconds:
+     `aws s3 ls s3://logjam-brain-backups-620853681701/logjam/archive/logjam/ --recursive | tail -3`.
+
+   If the boot ends `failed` or `refused`, read `brain 'journalctl -b -u brain-boot --no-pager | tail -40'`
+   and fix the cause. A failed restore leaves the new volume half made: add a
+   further key and make that current rather than retry on it.
+4. **Start the restore drill once by hand**, so a verdict exists without
+   waiting for 04:30 and the watchdog's `drill_missing` clears (run on a
+   scratch copy, with scratch names):
+
+   ```sh
+   SG=$(aws ec2 describe-security-groups --filters Name=group-name,Values=logjam-brain-drill-sg \
+     --query 'SecurityGroups[0].GroupId' --output text)
+   TASK=$(aws ecs run-task --cluster logjam-cluster --launch-type FARGATE --count 1 \
+     --task-definition logjam-brain-drill \
+     --network-configuration "awsvpcConfiguration={subnets=[subnet-0f59b0845905891be,subnet-0c10e1438a8fd0231],securityGroups=[$SG],assignPublicIp=ENABLED}" \
+     --query 'tasks[0].taskArn' --output text)
+   aws ecs wait tasks-stopped --cluster logjam-cluster --tasks "$TASK"
+   aws ecs describe-tasks --cluster logjam-cluster --tasks "$TASK" \
+     --query 'tasks[0].containers[0].[exitCode,reason]' --output text
+   aws s3 cp s3://logjam-brain-signals-620853681701/drill.json -
+   ```
+
+   Look for exit code `0` and `"ok": true`, a `backup_label`, `restore_seconds`
+   (33 for 1.7 GB; the whole task about 30 seconds, 21 of them pulling the
+   image), `tables_read` (the number of tables) and no `error`. Anything else
+   is a backup that does not restore: stop and read `/logjam/brain/drill`.
+5. **Check the certificate is the one the images carry.** The restore brings
+   the same certificate back inside the backup, so the committed public half
+   (`brain-ca.pem` in `infra/brain/` and `topo/`) still fits. It does not fit
+   if the Elastic IP changed (its DNS name is in the certificate): then the
+   API and the workers fail at start, never silently unverified. Compare the
+   host's with the committed one (the host's file was fetched on a scratch copy;
+   the comparison is not yet run anywhere):
+
+   ```sh
+   CID=$(aws ssm send-command --instance-ids "$IID" --document-name AWS-RunShellScript \
+     --parameters 'commands=["cat /data/postgres/server.crt"]' --query Command.CommandId --output text)
+   aws ssm wait command-executed --command-id "$CID" --instance-id "$IID"
+   aws ssm get-command-invocation --command-id "$CID" --instance-id "$IID" \
+     --query StandardOutputContent --output text | cmp - infra/brain/brain-ca.pem && echo same
+   openssl x509 -in infra/brain/brain-ca.pem -noout -subject -enddate -ext subjectAltName
+   ```
+
+   `same`, and a `DNS:` name equal to `terraform -chdir=infra/terraform/envs/prod output brain_public_dns`.
+   If it differs, commit the host's file as both copies and merge, which
+   deploys the API image and the topo worker image
+   ([0048](../decisions/0048-database-connections-verify-the-brains-certificate-and-never-fall-back-to-plain.md)).
+   The file is not part of the host files, so committing it does not replace
+   the instance.
+6. **Check `release.json` names the live release.** The release agent refuses
+   to start the API when serving is on and it cannot read the file, and it runs
+   whatever commit the file names. CI cannot read the bucket, so only you can
+   look (**run on prod**, 2026-11-11: the same commit):
+
+   ```sh
+   aws s3 cp s3://logjam-brain-signals-620853681701/release.json - | python3 -c 'import json,sys; print(json.load(sys.stdin)["sha"])'
+   curl -s https://api.logjam.earth/meta | python3 -c 'import json,sys; print(json.load(sys.stdin)["sha"])'
+   ```
+
+   The two lines must be the same commit (the second answers once the API is
+   up). They differ after a deploy that was rolled back: a rollback to a
+   release from before the brain cannot rewrite the file, which then still
+   names the release that failed. Deploy once more (merge anything, or run
+   `deploy-api.yml` on `main`) and look again.
+7. **Turn serving on only once the data is checked.** `brain_serving` stays
+   `false` until the restore's `last_restore_lag_seconds` and the drill say the
+   data is the data you expect: the API's background sweeps delete media that
+   has no row in *their own* database, and a photo it deletes can be brought
+   back only within about 10 days ([below](#bringing-back-deleted-media)). Then set `brain_serving = true` in a pull request.
+8. **Check the watchdog is green.** Its log group's latest line is
+   `{"failed": []}`. The first minutes can show `status_missing`, `full_stale`
+   and `wal_stale`, and `logjam-brain-watchdog-not-running` may email once in
+   its first fifteen minutes, before the check's first run has been counted,
+   and clear by itself.
+
+## Upgrading Postgres to a new major
+
+A server refuses another major's data directory, so a new major is an upgrade
+of the data, not an image bump. The upgrade is
+`infra/brain/postgres/major-upgrade.sh`, which `host/boot.sh` runs when
+`/data/postgres/PG_VERSION` is older than the pinned image's major. The only
+change to the host is the usual one: `brain_pg_image_tag` in `brain.auto.tfvars`.
+CI runs the path with 16 as the old major (`infra/brain/tests/e2e.sh` scenarios 14
+to 14c, and the image's own tests).
+
+**What the change that adopts the new major holds** (Dependabot's bump of the
+`FROM` line alone fails `infra/scripts/rollback-compat-mirrors-ci.py`, which
+sends you here):
+
+- `infra/brain/postgres/Dockerfile`: the new `FROM`, the new major's
+  `postgresql-<new>-pgaudit`, and `ARG OLD_MAJOR=` set to the old major for the
+  transition, which installs `postgresql-<old>` and `postgresql-<old>-pgaudit`
+  for `major-upgrade.sh` to read the old data with. Put the default back to
+  empty once prod has run on the new major for a while (see "Afterwards"): the
+  image carries one major in between upgrades. A transition Dockerfile whose
+  default was forgotten passes the tests (they pass the argument themselves) and
+  fails safely at prod's boot, with `no PostgreSQL <old> binaries` and the old
+  cluster untouched.
+- The workflows' Postgres service pins, which the same script keeps equal to the
+  `FROM`.
+- The tests' layer: `postgres/tests/test.sh` (`UPIMG`, `IMG16`) and `tests/e2e.sh`
+  (`UP_IMAGE`, `PG16_IMAGE`) build the Dockerfile with `--build-arg OLD_MAJOR=16`
+  and use that image where old binaries are needed (to make old data and to
+  run the upgrade). Their `16` becomes the old major, and so does everything in
+  `test.sh` named for the majors: the new major in "upgraded 16 -> 18" and "the 18
+  server starts", the made-up older and newer versions (15 and 19) and the
+  "this image runs 18" grep.
+- `docs/dev-setup.md`: a developer's old volume meets the entrypoint's refusal
+  and runs `make reset`.
+
+**What the boot does**, before Postgres starts: stops the Postgres container,
+runs the upgrade in a container of its own with all of `/data` mounted, starts
+the new server on the result, moves pgBackRest's stanza to the new major
+(`stanza-upgrade`) and takes a full backup before the API starts, because until
+then the newest backup is an old-major one that the new image cannot restore.
+The status file says `upgraded`. The upgrade itself:
+
+- starts the old server once on its own, with archiving off and no listener, to
+  recover it if its last shutdown was not clean and to read its settings
+  (encoding, locale, checksums, WAL segment size, the superuser);
+- makes `/data/postgres.new` with the same settings, checks with
+  `pg_upgrade --check`, and upgrades in **copy** mode, so the old cluster is
+  never touched by the new server;
+- carries over what is in the data directory but not in the cluster: the
+  certificate and key (the API pins that certificate) and any `ALTER SYSTEM`
+  settings, but not the recovery settings a restore left behind;
+- swaps the two directories with one atomic rename and renames the old one
+  `/data/postgres-<old>`. It deletes nothing except an unfinished
+  `/data/postgres.new` of its own, and it refuses when the data is newer than
+  the image, when the image has no binaries for the data's major,
+  when `/data/postgres-<old>` already exists, or when `/data` has less free
+  space than the cluster's size plus 1 GiB (copy mode doubles it).
+
+**Before the cutover**, look at the status file's `disk_used_percent`: under
+35, because the old cluster stays beside the new one and the doubled disk must
+stay under the watchdog's `disk_high` at 80. (The upgrade itself refuses with
+less free space than the cluster's size plus 1 GiB.) Delete `/data/postgres-<old>`
+to get the space back afterwards, or grow the volume first if the disk is
+fuller than that. Have a recent green drill, and keep the cutover away from
+the drill's 04:30 Sydney run (`brain_drill.tf`): see the last paragraph. Merge
+the tag change like any host change: the plan replaces the instance, so allow
+the 3 minutes of "Changing a host file" plus the upgrade and a full backup
+(seconds to minutes for a small database; not measured on prod).
+
+**Afterwards:** `brain 'cat /run/brain/boot-mode'` says `upgraded`;
+`brain 'ls /data'` shows `postgres` and `postgres-<old>`;
+`brain 'docker exec -u postgres brain-postgres-1 pgbackrest --stanza=logjam info'`
+lists both majors, a new WAL archive id (the new major with the next history
+number), and a new full backup of the new major; `last_full_time` is now. The stats the planner keeps are
+carried over except extended statistics: if a query plan looks wrong, run
+`vacuumdb --all --analyze-in-stages --missing-stats-only` in the container. When
+the new database has run well for a while, delete `/data/postgres-<old>` by hand
+(it is the one deletion no script makes), and in a later change set the Dockerfile's
+`OLD_MAJOR` default back to empty.
+
+**If the upgrade fails,** the boot fails and starts nothing; `/data/postgres`
+is as it was, so pin the old tag in `brain.auto.tfvars` again and the instance
+boots the old image on it. A `/data/postgres.new` left behind is removed by the
+next attempt. If the boot dies *after* the upgrade (the repository unreachable,
+say), the API stays down: `boot.sh` keeps a marker, `/data/brain/backup-pending`,
+from before the upgrade until a full backup of the new major has succeeded, and
+`release-agent.sh` (whose timer runs whatever the boot did) starts no API while
+it exists and logs why. The marker is on the data volume, not in `/run`, so a
+reboot in that window keeps it; a boot that dies before it could write one again
+would otherwise lose it. The `boot_failed` alarm fires; once the cause is gone,
+`systemctl restart brain-boot` (or a reboot) finishes the stanza and the backup,
+removes the marker and starts the API.
+
+**Refusals.** A boot that finds data *newer* than the pinned image fails with
+`pin the image of <data's major> again`: the fix is the tag of the data's major.
+A server start on another major's directory, such as a restored old-major
+backup, stops with `holds a PostgreSQL <old> database and this image runs
+PostgreSQL <new>`; the Postgres service is `restart: unless-stopped`, so Docker
+keeps restarting it and the message repeats while `boot.sh` fails the boot
+(`boot_failed`, API down). A failed upgrade leaves the old cluster intact, as
+above.
+
+**The drill and the watchdog after an upgrade.** The daily drill restores the
+newest backup, so for the minutes between the cutover's apply and the first full
+backup of the new major it restores an old-major backup, which succeeds, and then
+cannot start the new server on it (`database files are incompatible with
+server`: `postgres -C archive_mode` still prints `off`, so `drill.sh`'s guard
+passes and `pg_ctl start` is what fails), so it reports `start_failed`. The full
+backup is the first thing the boot takes, so that only matters if the drill's
+04:30 Sydney run (`brain_drill.tf`) lands in the window: keep the cutover away
+from it. The watchdog lists the WAL archive under `logjam/archive/logjam/` and
+takes the highest history number among the archive ids, so it follows the move
+(`infra/lambda/brain-watchdog/test_handler.py`).
+
+## A release and a rollback
+
+Merging to `main` deploys. The deploy pins the task definitions, migrates the
+brain's database, writes `release.json`, and (with `brain_serving` on) waits up
+to 5 minutes for the public `/meta` to name the new sha; the brain's timer
+(every 30 seconds) then pulls the image and recreates the API container. Measured
+on the finished stack at 40 requests a second (2026-11-11): the host pulls first,
+so the pull is not in the gap; with the API as it was, 462 requests failed over
+13.1 seconds, because the old API kept waiting for open connections until Docker
+killed it after its 10-second stop timeout; with the shutdown fix (#875) the same
+swap failed 151 requests over 3.8 seconds, and idle it takes under a second.
+Expect about 4 seconds under load once #875 is merged. A rollback rewrites the pointer
+to the older sha. Both are [rollback.md](rollback.md)'s workflow and by-hand
+steps, including what to check on the host when the brain does not follow
+(`journalctl -u brain-release` and the status file's `api_sha`). A rollback only
+works to a release built after the certificate was bundled.
+
+## Changing a host file, and resizing
+
+The host's scripts, Compose file and units travel inside the instance's user
+data. Any change under `infra/brain/` (apart from `postgres/`, `tests/`,
+`api.env` and the committed certificate), or to the settings written into
+`/etc/brain/brain.env`, **replaces the instance**: about 3 minutes with the API
+and database down, the data disk kept and reattached. The plan comment shows it
+as a changed `brain_user_data_sha256`. Measured on a scratch copy (2026-11-11),
+one apply with no help: 81 s of Terraform (31 s of it stopping and detaching),
+then the new host's boot; 165 s down in all, `/ready` 90 s after the apply
+finished, same certificate, every marker row present. Do it in a quiet hour,
+announce it if users could notice, and do not merge anything else to `main`
+while it runs.
+
+The user data is 14,769 bytes gzipped of EC2's 16,384-byte limit, and a guard
+(`brain_user_data_stays_within_the_ec2_limit`) fails at 15,000. When a change
+would cross it, move the host files into the brain's Postgres image instead,
+which already carries the Compose plugin: the host would then fetch them from
+the image it already pulls, and the limit stops mattering.
+
+Resizing is one line, `brain_instance_type` in `brain.auto.tfvars` (`t4g.micro`,
+`t4g.small`, `t4g.medium`, `t4g.large`: each sets Postgres's and the API's memory
+limits from a table in `brain_instance.tf`). It also replaces the instance:
+`/ready` came back 91 seconds after the apply for micro to small and 107 for
+small to micro (about two minutes down; run on a scratch copy). The data disk is
+untouched. The small costs US$7.74 a month more than the micro.
+
+## A Postgres container someone stopped by hand
+
+`docker stop` and `docker kill` count as "the operator meant it", so Docker does
+not restart the container and nothing else starts Postgres until the next boot.
+The API stays unhealthy and every request fails. On the host (run on a scratch
+copy; 5.8 seconds to a healthy Postgres):
+
+```sh
+brain 'systemctl restart brain-boot && docker ps --format "{{.Names}} {{.Status}}"'
+```
+
+Look for `brain-postgres-1 Up ... (healthy)`; the API recovers by itself. A real
+crash is different: Docker restarts it in about a second.
+
+## Losing the disk or the zone
+
+The data disk is a separate volume that Terraform will not destroy. Losing it
+(or its zone) is one pull request, applied like any other, that adds the next
+volume and makes it current; the new host finds a blank disk, restores the
+newest backup into it, and starts. In `brain.auto.tfvars` (not yet run on prod;
+the same change ran on a scratch copy):
+
+```hcl
+brain_data_volumes = {
+  "1" = { az = "ap-southeast-2a", size_gb = 20 }
+  "2" = { az = "ap-southeast-2a", size_gb = 20 } # "ap-southeast-2b" if the zone is lost
+}
+brain_data_volume_current = "2"
+```
+
+Use the next unused key, never edit a volume that has booted, and leave the old
+entry. Merge it and watch the plan: it must replace `aws_instance.brain` and
+create `aws_ebs_volume.brain_data["2"]`. Measured on a scratch copy, one apply
+(2026-11-11): the plan named the replacement, the apply took 105 seconds, and
+`/ready` answered 196 seconds after the apply began (97 after it ended) for a
+27 MB database; on the first rehearsal 109 seconds after the apply for 28 MB and
+183 for a 1.7 GB one (the restore itself about 30 seconds, then a new full backup
+of 66 seconds before the API starts). Nothing is lost beyond about a minute of
+writes: no acknowledged row was lost in four of five runs; the fifth, where the
+backup bucket was unreachable as the old host shut down, lost 42 seconds.
+
+Check afterwards: `brain 'cat /run/brain/boot-mode'` says `restore`; the status
+file's `last_restore_at` is now and `postgres_up` is true; the watchdog goes
+green once a new WAL object and the post-restore full backup exist. **Read
+`last_restore_lag_seconds` after any restore.** It is the age of the newest
+restored data when recovery ended, so it is the outage plus the loss: subtract
+how long the host was down to get the loss. 242 seconds after a four-minute
+outage was a loss of well under a minute. Nothing alarms on it, because every
+real recovery is over any threshold you could pick.
+
+A failed restore (boot mode `failed`) leaves the new volume half made. Do not
+retry on it: add a further key, `"3"`, and make that current.
+
+## Rewinding to a point in time, and undoing it
+
+For bad data (a migration that mangled rows, a mass delete) that backups already
+contain, rewind to just before it: the same change as losing the disk, with one
+field on the new entry. Postgres restores to that time instead of the latest
+state. It needs the image from the point-in-time change (step 3 of bring-up). In
+`brain.auto.tfvars` (the same change ran on a scratch copy on 2026-11-11, one apply
+and about 3 minutes to `/ready` each time; not yet run on prod):
+
+```hcl
+brain_data_volumes = {
+  "1" = { az = "ap-southeast-2a", size_gb = 20 }
+  "2" = { az = "ap-southeast-2a", size_gb = 20, restore_to = "2026-11-20T03:15:00+11:00" }
+}
+brain_data_volume_current = "2"
+```
+
+The time is a real time with a UTC offset (`Z` for UTC is fine); one without an
+offset is refused. Leave `restore_to` on its entry afterwards: removing it only
+replaces the host for nothing, and it can never apply to a later volume because
+a boot restores into a blank disk only.
+
+**Picking the time.** Choose a moment just before the first bad statement.
+On the host (run on a scratch copy):
+
+- The backups and the window you can reach:
+  `brain 'docker exec -u postgres brain-postgres-1 pgbackrest --stanza=logjam info'`
+  lists each backup with its start and stop times and the archive's WAL range.
+  The target must be after the oldest backup's stop and not after the newest
+  WAL. Fulls are nightly at 03:00 Sydney time and eight are kept. The image
+  restores backups of its own major only, and `info` lists the old major's
+  backups until they expire: pick a target after the last major upgrade.
+- When it happened: the Postgres log group (`/logjam/brain/postgres`) has pgaudit
+  lines in UTC for every write and DDL statement, with no values; a `DELETE` or a
+  migration's statements show the time. The API log (`/logjam/brain/api`) shows
+  request times and the deploy. Convert UTC to the offset you write.
+
+**Confirming it worked.** `brain 'cat /run/brain/boot-mode'` says `restore`;
+`brain 'cat /data/brain/last-restore'` shows when, how stale the data was at the
+target (seconds, if archiving was healthy), and the target; `brain 'journalctl -u brain-boot --no-pager | grep "restoring to"'`
+shows the time; `brain 'docker exec brain-postgres-1 psql -U postgres -d logjam -c "select pg_is_in_recovery()"'`
+says `f`; the Postgres log has `starting point-in-time recovery to <time>`,
+`selected new timeline ID`, `archive recovery complete`. For a rewind
+`last_restore_lag_seconds` is measured from the target, not from now: it is how
+stale the data was at T, not the days since. A look at the damaged table's row
+count is your call. A target the archive cannot reach (after the newest WAL, or
+before the oldest backup) ends boot mode `failed` with nothing serving, never a
+database promoted somewhere else; add a new key with a corrected time.
+
+**What happens to what was written between T and the rewind.** It stays on the
+old volume, detached and untouched, and in the archive's old timeline. It is
+not in the new database.
+
+**Media deleted since T.** The database goes back to T, so its rows come back,
+but the photos and files users deleted after T are gone from the media bucket.
+Bring them back as described in
+[Bringing back deleted media](#bringing-back-deleted-media), within about 10 days of
+each deletion.
+
+**Undoing it, or rewinding again.** A restore follows the newest backup, and the
+newest backup is always of the live database. So a second rewind, earlier or
+later, is the same change with the next key. And putting the old volume back is
+safe: set `brain_data_volume_current` to the old key. It boots as it was, notices
+the newest backup is on another timeline, takes a full backup of itself (the API
+waits for it, a minute or so on a small database), and later restores follow it.
+Either way the data written on the volume you leave is not on the one you take.
+The rewind, a second rewind to a later time, putting a volume back, and then a
+disk loss were all exercised on a scratch copy in one run (2026-11-11), every step
+one apply, with the rows exactly as this says: a rewind keeps every row at or
+before the target and none after it, and a later disk loss restores the volume
+that was live.
+
+## Bringing back deleted media
+
+The media bucket (`logjam-media`) keeps every version of every object. Deleting
+a photo or file does not remove its bytes: S3 puts a *delete marker* on top, and
+the bytes stay underneath as a noncurrent version for about 10 days (S3 removes
+it at the next midnight UTC after the tenth), then are removed for good
+(`end-the-undo-window` in `infra/terraform/envs/prod/s3.tf`). This is an undo,
+not a backup; the database has its own, longer history (above). A user's deleted
+file therefore stays in the bucket, readable by the operator, for about those 10
+days. A sent file (`file-sends/`) is the exception: its bytes go a day after they
+are deleted (the reaper's day 7, or the day-8 rule if the reaper missed it), and
+it is not meant to be brought back.
+
+Keys are `media/<ownerId>/<mediaId>/<filename>`. Not yet run anywhere:
+
+1. **Find the key and its versions.** From a database restore or a user's report
+   you have the media's id; `--prefix` takes the part you know:
+
+   ```sh
+   aws s3api list-object-versions --bucket logjam-media \
+     --prefix media/<ownerId>/<mediaId>/ \
+     --query '{Markers: DeleteMarkers[].[Key,VersionId,IsLatest,LastModified], Versions: Versions[].[Key,VersionId,IsLatest,LastModified]}'
+   ```
+
+   A deleted object has a marker with `IsLatest` true and the bytes under it
+   with `IsLatest` false.
+2. **Remove the marker, not the bytes.** Delete the marker by its own version
+   id; the version beneath it becomes current again:
+
+   ```sh
+   aws s3api delete-object --bucket logjam-media --key '<key>' --version-id '<marker VersionId>'
+   ```
+
+   Never pass the version id of the bytes: that deletes them for good.
+3. **Check it.** `aws s3api head-object --bucket logjam-media --key '<key>'`
+   answers instead of `404`.
+
+This returns the file, not its database row. A row a user deleted comes back
+only by restoring the database; one that is already in the database needs
+nothing more.
+
+**After a database restore to an earlier time T,** every file deleted since T is
+a marker you can list, and the same two steps bring each back. List the latest
+markers under `media/` with their times, keep the ones at or after T, and remove
+each (do this within about 10 days of the first deletion, or the oldest are gone):
+
+```sh
+aws s3api list-object-versions --bucket logjam-media --prefix media/ \
+  --query 'DeleteMarkers[?IsLatest].[LastModified,Key,VersionId]' --output text \
+  | awk '$1 ~ /^20/ && $1 >= "2026-11-20T03:15"' > /tmp/markers.txt
+cat /tmp/markers.txt   # read it, then:
+while IFS=$'\t' read -r _ key vid; do
+  aws s3api delete-object --bucket logjam-media --key "$key" --version-id "$vid"
+done < /tmp/markers.txt
+```
+
+The times are UTC, so write T in UTC. The loop also brings back uploads that were
+never confirmed and that the orphan sweeper removed, and files both uploaded and
+deleted after T; they have no row, and the sweeper removes them again. Sent files
+(`file-sends/`) are not under `media/`.
+
+## Deleting an old volume
+
+A volume left by a recovery or a rewind holds a full copy of the database until
+it is deleted ([the policy](../DATA-ACCESS-POLICY.md), limit 6), and costs a
+little. Delete it only when it is no longer the undo: after you are sure of the
+new database, and not before the next nightly full has run on it. Deleting it is
+final: its data cannot be recovered (the backups are what remain).
+
+Terraform will not do it from a pull request alone: the volume has
+`prevent_destroy` (removing its entry is refused), and a `removed` block cannot
+name one instance of a resource. So it is done by hand, from the maintainer's
+own machine, in this order. The volume must be detached: it is not the current
+one (`brain_data_volume_current`). Run on a scratch copy (2026-11-11), where
+`prevent_destroy` is off; the refusal itself was checked with a stand-in
+resource. `<key>` is the entry's key, such as `1`:
+
+```sh
+terraform -chdir=infra/terraform/envs/prod state show 'aws_ebs_volume.brain_data["<key>"]' | grep -E '^ +id '
+terraform -chdir=infra/terraform/envs/prod state rm 'aws_ebs_volume.brain_data["<key>"]'
+aws ec2 delete-volume --volume-id <the id state show printed>
+```
+
+Read the id **before** `state rm` (it is also in the volume's `Name` tag,
+`logjam-brain-data-<key>`). Check `aws ec2 describe-volumes --volume-ids <id>`
+says `available` first, never `in-use`. Then merge a pull request that removes
+the entry from `brain_data_volumes` in `brain.auto.tfvars`. Until it merges the
+entry is still wanted, and a plan would create a new, empty volume for it; once
+it is gone the plan says "No changes": the instance is not replaced and the user
+data does not change.
+
+## The cost ceiling and the sign-up cap
+
+- **Cost ceiling:** at US$100 of spend in a month AWS Budgets attaches a deny to
+  the API's roles (new worker jobs and uploads fail); read what it does and how
+  to undo it in [alarms.md](alarms.md#cost-ceiling).
+- **Sign-up cap:** new accounts stop for the month when sign-ups reach the
+  monthly cap; read how to see the count or raise it in
+  [alarms.md](alarms.md#sign-up-cap).
+
+## When it outgrows the box
+
+Two signals tell you, and neither is automatic: the brain does not resize or
+scale itself.
+
+- **CPU: `logjam-brain-cpu-high`**, one hour averaging 20 % or more of the
+  instance. That is about the load of 20 requests a second; above the free
+  allowance it costs cents, and it needs no action by itself. **50 % is about
+  60 requests a second, three quarters of the way to the limit.** On a scratch
+  copy 20, 40, 60 and 80 requests a second used 21, 36, 50 and 64 % of the
+  instance.
+- **Memory: the `memory_low` check** (under 100 MB free). On a `t4g.micro` the
+  lowest seen idle was 324 MiB (2026-11-11, with the timers as they are now; the
+  whole host used 0.066 of two vCPUs) and 164 MiB under a release swap with a
+  1.7 GB database (2026-11-10).
+
+**What the limit is.** The API is one Node process, which uses one core. On both
+sizes tested 80 requests a second passed (p95 269 ms on the micro, 313 ms on the
+small) and 100 failed, on CPU. So a bigger `t4g` adds memory, not speed. Prod
+averages about 0.004 a second; the limit is where growth would end, not a
+number to approach soon.
+
+**The ladder**, in order; stop at the first step that helps:
+
+1. **Memory alarm: one size up.** One line, `brain_instance_type`, about two
+   minutes down (see above).
+2. **CPU alarm: find out whether it is growth or one client misbehaving.** Look
+   at the API log by client and path. The per-user rate limits
+   (`api/src/middleware/rateLimit.ts`) and the web firewall's per-address rule
+   (`infra/terraform/envs/prod/waf.tf`) are the first tools; use them before
+   adding capacity.
+3. **Real growth past one core: run the API as more than one process on a type
+   with more cores.** Not built. Of the two changes it needs first, one is done:
+   the background sweeps run in one process per database, held by a Postgres
+   advisory lock. The other is not: the rate limiter keeps its counters in each
+   process's memory (`api/src/middleware/rateLimit.ts`), so several processes
+   would each allow the full rate and the per-user limits would stop meaning
+   anything; they must be shared first.
+4. **Past one host: the API moves to its own instances behind a load balancer**
+   and keeps talking to the brain's Postgres by name, as the workers already do
+   (the brain's security group would need a rule for them). Not built.
+
+Steps 3 and 4 are not built; the first two are the whole plan until the alarms
+say otherwise.

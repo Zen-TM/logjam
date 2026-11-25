@@ -3,15 +3,15 @@ import dotenv from "dotenv";
 import path from "path";
 // Local dev (run from api/ via `npm run dev`) loads the Terraform-generated root
 // .env.local — the single source of dev env (infra/terraform/envs/local). In
-// production NODE_ENV is already set by the EB/ECS container, so env comes from
-// there and we skip the file (dotenv.config() is a harmless no-op if absent).
+// production NODE_ENV is already set by the container's environment, so env comes
+// from there and we skip the file (dotenv.config() is a harmless no-op if absent).
 if (process.env.NODE_ENV === "production") {
   dotenv.config();
 } else {
   dotenv.config({ path: path.resolve(__dirname, "../../.env.local") });
 }
 
-import express from "express";
+import express, { type RequestHandler } from "express";
 import cors from "cors";
 import helmet from "helmet";
 import pinoHttp from "pino-http";
@@ -24,20 +24,34 @@ import { globalLimiter } from "./middleware/rateLimit";
 import { startTopoJobReaper } from "./lib/topoJobReaper";
 import { startPlaceRegistry } from "./services/placeRegistry";
 import { ROUTER_MOUNTS } from "./routes/mounts";
+import { createShutdown } from "./lib/shutdown";
 
 const env = getEnv();
 
 const app = express();
 
-// Behind CloudFront -> EB nginx (2 hops). Trust exactly those so `req.ip` is the
+// Trust exactly TRUST_PROXY_HOPS proxies (1 in prod: CloudFront straight to
+// the brain's container) so `req.ip` is the
 // real client for the IP-fallback rate-limit key (middleware/rateLimit.ts) and
 // request logs — NOT `true`, which would let clients spoof X-Forwarded-For and
-// forge their rate-limit bucket. Hop count must match the live proxy chain; if
-// the topology changes (e.g. an ALB is added), bump this. express-rate-limit's
-// validator fails loud on a wrong count.
-app.set("trust proxy", 2);
+// forge their rate-limit bucket. The count must match the live proxy chain; if
+// the topology changes (e.g. an ALB is added), change it. express-rate-limit's
+// validator fails loud on a wrong count. Guard: src/trustProxy.unit.test.ts.
+app.set("trust proxy", env.TRUST_PROXY_HOPS);
 
-let shuttingDown = false;
+const SHUTDOWN_TIMEOUT_MS = 25_000;
+
+// Declared first so its header covers every route, errors and /ready included.
+const lifecycle = createShutdown({
+  timeoutMs: SHUTDOWN_TIMEOUT_MS,
+  stop: () => {
+    stopTopoJobReaper();
+    stopPlaceRegistry();
+  },
+  finish: () => prisma.$disconnect(),
+  exit: (code) => process.exit(code),
+});
+app.use(lifecycle.closeConnections);
 
 app.use(
   pinoHttp({
@@ -111,7 +125,7 @@ app.get("/health", (_req, res) => {
 
 // Readiness — checks DB; 503 during shutdown or DB outage
 app.get("/ready", async (_req, res) => {
-  if (shuttingDown) {
+  if (lifecycle.isShuttingDown()) {
     res.status(503).json({ status: "shutting_down" });
     return;
   }
@@ -129,19 +143,22 @@ app.get("/ready", async (_req, res) => {
   }
 });
 
-// CloudFront origin-verify (WAF-bypass guard). The EB environment CNAME is
-// reachable on the public internet, so a client that knows it can hit the API
-// while skipping the CloudFront edge WAF. CloudFront injects a secret
-// X-Origin-Verify header on every origin fetch (infra/.../origin_verify.tf); a
-// request whose header doesn't match reached EB directly. /health + /ready are
-// exempt — EB health checks hit the instance directly and carry no header.
+// CloudFront origin-verify (WAF-bypass guard). The brain's security group
+// admits CloudFront's origin-facing addresses, which every CloudFront
+// customer's distribution shares, so one that is not ours and points at the
+// brain would reach the API while skipping our edge WAF. CloudFront injects a
+// secret X-Origin-Verify header on every origin fetch
+// (infra/.../origin_verify.tf); a request whose header doesn't match did not
+// come through our distribution. /health + /ready are exempt — Compose's
+// healthcheck calls the container directly and carries no header.
 // Inert unless a secret is configured. ORIGIN_VERIFY_ENFORCE=false (default)
 // LOGS the anomaly without blocking so the CloudFront header rollout is
 // confirmable before enforcement; =true returns 403. Mounted before the rate
-// limiter so direct-to-EB floods are rejected without consuming a limiter slot.
+// limiter so floods that skip our distribution are rejected without consuming a
+// limiter slot.
 if (env.ORIGIN_VERIFY_SECRET) {
   const originVerifySecret = Buffer.from(env.ORIGIN_VERIFY_SECRET);
-  app.use((req, _res, next) => {
+  const originVerify: RequestHandler = (req, _res, next) => {
     if (req.path === "/health" || req.path === "/ready") return next();
     const header = req.get("X-Origin-Verify");
     // Constant-time compare; length-mismatch short-circuits (timingSafeEqual
@@ -160,7 +177,8 @@ if (env.ORIGIN_VERIFY_SECRET) {
       "origin_verify_mismatch",
     );
     next();
-  });
+  };
+  app.use(originVerify);
 }
 
 // Global rate limit applied to API routes (not /health, /ready). Keyed by
@@ -183,37 +201,7 @@ const stopTopoJobReaper = startTopoJobReaper();
 // In the background: search answers 503 until the registry has loaded.
 const stopPlaceRegistry = startPlaceRegistry();
 
-const SHUTDOWN_TIMEOUT_MS = 25_000;
-
-function shutdown(signal: string) {
-  if (shuttingDown) return;
-  shuttingDown = true;
-  logger.info({ signal }, "shutdown_initiated");
-
-  stopTopoJobReaper();
-  stopPlaceRegistry();
-
-  const force = setTimeout(() => {
-    logger.error("shutdown_timeout_force_exit");
-    process.exit(1);
-  }, SHUTDOWN_TIMEOUT_MS);
-  force.unref();
-
-  server.close(async (err) => {
-    if (err) logger.error({ err: safeErrorForLog(err) }, "server_close_error");
-    try {
-      await prisma.$disconnect();
-      logger.info("shutdown_complete");
-      process.exit(0);
-    } catch (disconnectErr) {
-      logger.error(
-        { err: safeErrorForLog(disconnectErr) },
-        "prisma_disconnect_error",
-      );
-      process.exit(1);
-    }
-  });
-}
+const shutdown = (signal: string) => lifecycle.begin(server, signal);
 
 process.on("SIGTERM", () => shutdown("SIGTERM"));
 process.on("SIGINT", () => shutdown("SIGINT"));

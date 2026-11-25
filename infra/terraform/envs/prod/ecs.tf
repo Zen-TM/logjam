@@ -22,13 +22,40 @@
 # after any apply that touches a task definition.
 #
 # The cluster (aws_ecs_cluster) lives in ecs_cluster.tf.
+#
+# WHICH DATABASE. The four definitions with a DB_HOST (api-script, topo-worker,
+# topo-export-worker, api-migrate) take it from local.db_environment: the
+# brain's Elastic IP name with DATABASE_SSL_CA, the path the images carry the
+# brain's certificate at (infra/brain/brain-ca.pem; the API image and the topo
+# worker image both keep it at /app/brain-ca.pem). A task whose image lacks the
+# certificate fails at start (the API: "DATABASE_SSL_CA points to a missing
+# file"; the migrate task: Prisma's "cert file not found"; the workers: libpq's
+# "root certificate file ... does not exist"), never on an unverified
+# connection. A new definition with a DB_HOST takes local.db_environment too.
+# Guard: tests/guards.tftest.hcl (prod_runs_on_the_brain).
+#
+# The deploy's image pin and an apply here do not undo each other: the pin
+# copies the latest revision whole and swaps the image, and an apply after a
+# pin registers a revision with the :latest floor. The next API deploy re-pins
+# the two API families (every merge to main deploys the API), but the two topo
+# families stay on :latest until deploy-topo-worker next runs, which it does
+# only for a change under topo/ or when the family's tag is not a sha
+# (deploy-guard.yml treats that as "live unknown" and deploys): re-pin them by
+# hand after an apply that changes one (rollback.yml, target worker, the sha
+# they carried before: the deploy workflow has no manual trigger).
+locals {
+  db_environment = [
+    { name = "DATABASE_SSL_CA", value = "/app/brain-ca.pem" },
+    { name = "DB_HOST", value = aws_eip.brain[0].public_dns },
+  ]
+}
 
 resource "aws_ecs_task_definition" "api_script" {
   container_definitions = jsonencode([{
     # Always overridden by the RunTask caller; this refuses a bare start rather
     # than booting the API server with the production database credentials.
     command = ["node", "-e", "console.error('api-script needs a command override'); process.exit(1)"]
-    environment = [{
+    environment = concat([{
       name  = "AUTH_MODE"
       value = "oidc"
       }, {
@@ -36,11 +63,8 @@ resource "aws_ecs_task_definition" "api_script" {
       value = "ap-southeast-2"
       }, {
       name  = "CORS_ORIGIN"
-      value = "https://logjamnsw.com,https://www.logjamnsw.com"
-      }, {
-      name  = "DB_HOST"
-      value = "logjam-db-enc.chwko8w4iz9p.ap-southeast-2.rds.amazonaws.com"
-      }, {
+      value = "https://logjam.earth,https://www.logjam.earth"
+      }], local.db_environment, [{
       name  = "DB_NAME"
       value = "logjam"
       }, {
@@ -48,20 +72,20 @@ resource "aws_ecs_task_definition" "api_script" {
       value = "5432"
       }, {
       name  = "EMAIL_FROM"
-      value = "noreply@notifications.logjamnsw.com"
+      value = "noreply@notifications.logjam.earth"
       }, {
       name = "ECS_SECURITY_GROUPS"
       # Dedicated worker SG. Vestigial here (a maintainer script never calls
       # RunTask) but kept in sync so no stale default-SG id lingers in a
-      # committed task def. The operative value is the EB env property of the
-      # same name (operator-owned).
-      value = aws_security_group.worker.id
+      # committed task def. The operative value is the API's own environment
+      # (infra/brain/api.env, release.json's env).
+      value = aws_security_group.workers.id
       }, {
       name  = "ECS_SUBNETS"
       value = "subnet-0f59b0845905891be,subnet-0c10e1438a8fd0231"
       }, {
       name  = "FRONTEND_URL"
-      value = "https://logjamnsw.com/"
+      value = "https://logjam.earth/"
       }, {
       name  = "NODE_ENV"
       value = "production"
@@ -88,8 +112,8 @@ resource "aws_ecs_task_definition" "api_script" {
       value = "logjam-topo-jobs"
       }, {
       name  = "TOPO_CDN_BASE_URL"
-      value = "https://logjamnsw.com"
-    }]
+      value = "https://logjam.earth"
+    }])
     essential = true
     # Floor only — CI re-registers this def pinned to a sha (see header).
     image = "620853681701.dkr.ecr.ap-southeast-2.amazonaws.com/logjam-api:latest"
@@ -130,13 +154,10 @@ resource "aws_ecs_task_definition" "api_script" {
 
 resource "aws_ecs_task_definition" "topo_worker" {
   container_definitions = jsonencode([{
-    environment = [{
+    environment = concat([{
       name  = "AWS_REGION"
       value = "ap-southeast-2"
-      }, {
-      name  = "DB_HOST"
-      value = "logjam-db-enc.chwko8w4iz9p.ap-southeast-2.rds.amazonaws.com"
-      }, {
+      }], local.db_environment, [{
       name  = "DB_NAME"
       value = "logjam"
       }, {
@@ -144,13 +165,13 @@ resource "aws_ecs_task_definition" "topo_worker" {
       value = "5432"
       }, {
       name  = "FRONTEND_URL"
-      value = "https://logjamnsw.com/"
+      value = "https://logjam.earth/"
       }, {
       name  = "GDAL_DISABLE_READDIR_ON_OPEN"
       value = "EMPTY_DIR"
       }, {
       name  = "EMAIL_FROM"
-      value = "noreply@notifications.logjamnsw.com"
+      value = "noreply@notifications.logjam.earth"
       }, {
       name  = "SMTP_HOST"
       value = "smtp.resend.com"
@@ -166,7 +187,7 @@ resource "aws_ecs_task_definition" "topo_worker" {
       }, {
       name  = "SVTM_FORMATION_S3_PATH"
       value = "s3://logjam-topo-jobs/svtm/svtm_formation.tif"
-    }]
+    }])
     essential = true
     # Floor only — CI re-registers this def pinned to a sha (see header).
     image = "620853681701.dkr.ecr.ap-southeast-2.amazonaws.com/logjam-topo-worker:latest"
@@ -208,26 +229,35 @@ resource "aws_ecs_task_definition" "topo_worker" {
     cpu_architecture        = "X86_64"
     operating_system_family = "LINUX"
   }
+
+  # Sized for a survey at the upload caps (api/src/lib/topoUpload.ts): the
+  # ZIP, its extraction, the ground files of a forested, classified survey and
+  # a fixed overhead, as topoUpload.unit.test.ts spells out and holds. That
+  # models the sharpen step's disk; the vegetation pass after it is limited by
+  # memory, not disk, at the caps. Open
+  # country or an unclassified survey can need more, and then fails with the
+  # "too big" sentence. Fargate's default of 20 GiB is overrun by a full ZIP.
+  ephemeral_storage {
+    size_in_gib = 60
+  }
 }
 
-# One-shot task that runs `prisma migrate deploy` against RDS as the least-priv
-# logjam_app role (same logjam/app-db-password secret + logjam-api image the EB
-# container uses at boot). The deploy workflow (.github/workflows/deploy-api.yml)
-# RunTasks this BEFORE the EB version swap and gates the deploy on its exit code:
-# a failing migration aborts the deploy and the old version keeps serving,
-# instead of crash-looping the new container at boot. No task role — migrate
-# makes no AWS API calls; secret injection is the execution role's job. Runs on
-# the dedicated worker SG so RDS ingress admits it.
+# One-shot task that runs `prisma migrate deploy` against the brain as the
+# least-priv logjam_app role (same logjam/app-db-password secret + logjam-api
+# image the brain's API uses at boot). The deploy workflow
+# (.github/workflows/deploy-api.yml) RunTasks this BEFORE writing the release
+# pointer and gates the deploy on its exit code: a failing migration aborts the
+# deploy and the old release keeps serving, instead of crash-looping the new
+# container at boot. No task role — migrate makes no AWS API calls; secret
+# injection is the execution role's job. Runs on the dedicated worker SG so the
+# brain's Postgres port admits it.
 resource "aws_ecs_task_definition" "api_migrate" {
   container_definitions = jsonencode([{
     command = ["npx", "prisma", "migrate", "deploy"]
-    environment = [{
+    environment = concat([{
       name  = "AWS_REGION"
       value = "ap-southeast-2"
-      }, {
-      name  = "DB_HOST"
-      value = "logjam-db-enc.chwko8w4iz9p.ap-southeast-2.rds.amazonaws.com"
-      }, {
+      }], local.db_environment, [{
       name  = "DB_NAME"
       value = "logjam"
       }, {
@@ -236,7 +266,7 @@ resource "aws_ecs_task_definition" "api_migrate" {
       }, {
       name  = "NODE_ENV"
       value = "production"
-    }]
+    }])
     essential = true
     # Floor only — CI re-registers this def pinned to a sha (see header).
     image = "620853681701.dkr.ecr.ap-southeast-2.amazonaws.com/logjam-api:latest"
@@ -277,13 +307,10 @@ resource "aws_ecs_task_definition" "api_migrate" {
 resource "aws_ecs_task_definition" "topo_export_worker" {
   container_definitions = jsonencode([{
     entryPoint = ["python3", "/app/export_worker.py"]
-    environment = [{
+    environment = concat([{
       name  = "AWS_REGION"
       value = "ap-southeast-2"
-      }, {
-      name  = "DB_HOST"
-      value = "logjam-db-enc.chwko8w4iz9p.ap-southeast-2.rds.amazonaws.com"
-      }, {
+      }], local.db_environment, [{
       name  = "DB_NAME"
       value = "logjam"
       }, {
@@ -291,10 +318,10 @@ resource "aws_ecs_task_definition" "topo_export_worker" {
       value = "5432"
       }, {
       name  = "EMAIL_FROM"
-      value = "noreply@notifications.logjamnsw.com"
+      value = "noreply@notifications.logjam.earth"
       }, {
       name  = "FRONTEND_URL"
-      value = "https://logjamnsw.com/"
+      value = "https://logjam.earth/"
       }, {
       name  = "SMTP_HOST"
       value = "smtp.resend.com"
@@ -307,7 +334,7 @@ resource "aws_ecs_task_definition" "topo_export_worker" {
       }, {
       name  = "S3_BUCKET_TOPO"
       value = "logjam-topo-jobs"
-    }]
+    }])
     essential = true
     # Floor only — CI re-registers this def pinned to a sha (see header).
     image = "620853681701.dkr.ecr.ap-southeast-2.amazonaws.com/logjam-topo-worker:latest"
@@ -423,7 +450,7 @@ resource "aws_scheduler_schedule" "place_registry" {
       # the task's only way out to Geofabrik and S3.
       network_configuration {
         subnets          = [data.aws_subnet.worker_a.id, data.aws_subnet.worker_b.id]
-        security_groups  = [aws_security_group.worker.id]
+        security_groups  = [aws_security_group.workers.id]
         assign_public_ip = true
       }
     }
@@ -513,7 +540,7 @@ resource "aws_scheduler_schedule" "gauges" {
 
       network_configuration {
         subnets          = [data.aws_subnet.worker_a.id, data.aws_subnet.worker_b.id]
-        security_groups  = [aws_security_group.worker.id]
+        security_groups  = [aws_security_group.workers.id]
         assign_public_ip = true
       }
     }
@@ -592,7 +619,7 @@ resource "aws_scheduler_schedule" "fire_history" {
 
       network_configuration {
         subnets          = [data.aws_subnet.worker_a.id, data.aws_subnet.worker_b.id]
-        security_groups  = [aws_security_group.worker.id]
+        security_groups  = [aws_security_group.workers.id]
         assign_public_ip = true
       }
     }
@@ -674,14 +701,14 @@ resource "aws_scheduler_schedule" "coverage" {
 
       network_configuration {
         subnets          = [data.aws_subnet.worker_a.id, data.aws_subnet.worker_b.id]
-        security_groups  = [aws_security_group.worker.id]
+        security_groups  = [aws_security_group.workers.id]
         assign_public_ip = true
       }
     }
   }
 }
 
-# The Weather overlay (topo/build_weather.py, ADR 0048): every hour, read
+# The Weather overlay (topo/build_weather.py, ADR 0049): every hour, read
 # Open-Meteo's latest ECMWF IFS run description and, when a new run has
 # landed, cut NSW out of it and publish it under master/weather/ in the topo
 # bucket. Runs land four times a day, 5 to 8 hours after their run time, so

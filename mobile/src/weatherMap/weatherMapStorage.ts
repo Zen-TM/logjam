@@ -1,4 +1,4 @@
-// The latest weather run kept on this phone with the saved areas (ADR 0048):
+// The latest weather run kept on this phone with the saved areas (ADR 0049):
 // ONE copy for all of them, laid out as the CDN lays it out under
 // `WEATHER_MAP_DIR`, so `weatherLayerUrl(KEPT_WEATHER_BASE, ...)` names its
 // files. The manifest is written last: a run with a manifest is whole, and a

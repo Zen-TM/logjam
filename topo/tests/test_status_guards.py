@@ -6,6 +6,7 @@ present, the rowcount is returned, the storage UPDATE shares the commit with
 the status UPDATE, and the 0-rows (reaped/deleted) path skips the charge.
 """
 
+import ast
 import os
 import sys
 import unittest
@@ -23,21 +24,80 @@ os.environ.setdefault("DB_PASSWORD", "test")
 os.environ.setdefault("JOB_ID", "job-123")
 os.environ.setdefault("EXPORT_JOB_ID", "export-123")
 
-try:
-    import worker  # noqa: E402
+# No try/except and no skipUnless: the stub makes these imports safe, so a
+# failure here is a real break (an unstubbed native import) and must be an
+# error, not a skip that leaves every status guard unrun with CI green.
+# Mutation that turns it red: `import notarealnativemodule` at the top of
+# worker.py or export_worker.py.
+import export_worker  # noqa: E402
+import worker  # noqa: E402
 
-    _WORKER_OK = True
-except Exception as _exc:  # noqa: BLE001
-    _WORKER_OK = False
-    _WORKER_ERR = _exc
 
-try:
-    import export_worker  # noqa: E402
+def _status_writes(module):
+    """(status, expected_status) of every `update_status(...)` call in a
+    worker, read from the source: the helper's tests below cannot see a call
+    site that forgot the guard."""
+    path = os.path.join(os.path.dirname(os.path.dirname(__file__)), module)
+    with open(path) as f:
+        tree = ast.parse(f.read())
+    writes = []
+    for node in ast.walk(tree):
+        if not (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "update_status"
+        ):
+            continue
+        status = ast.literal_eval(node.args[2])
+        expected = next(
+            (
+                ast.literal_eval(k.value)
+                for k in node.keywords
+                if k.arg == "expected_status"
+            ),
+            None,
+        )
+        writes.append((status, expected))
+    return sorted(writes, key=str)
 
-    _EXPORT_OK = True
-except Exception as _exc:  # noqa: BLE001
-    _EXPORT_OK = False
-    _EXPORT_ERR = _exc
+
+class TestEveryStatusWriteIsGuarded(unittest.TestCase):
+    """Mutation that turns it red: delete `expected_status="processing",` from
+    the `complete` or `failed` write in worker.py (or `"running"` from
+    export_worker.py), or add a transition that is not in the table here."""
+
+    def test_worker_writes(self):
+        self.assertEqual(
+            _status_writes("worker.py"),
+            sorted(
+                [
+                    ("processing", "pending"),
+                    ("processing", "processing"),
+                    ("complete", "processing"),
+                    ("failed", "processing"),
+                ],
+                key=str,
+            ),
+            "every update_status call in worker.py names the status it expects "
+            "(a reaped job must not be resurrected). Add expected_status=..., "
+            "and list a new transition in this table.",
+        )
+
+    def test_export_worker_writes(self):
+        self.assertEqual(
+            _status_writes("export_worker.py"),
+            sorted(
+                [
+                    ("running", "queued"),
+                    ("failed", "running"),
+                    ("completed", "running"),
+                ],
+                key=str,
+            ),
+            "every update_status call in export_worker.py names the status it "
+            "expects (a reaped job must not be resurrected). Add "
+            "expected_status=..., and list a new transition in this table.",
+        )
 
 
 class _FakeCursor:
@@ -85,9 +145,6 @@ class _FakeConn:
         return out
 
 
-@unittest.skipUnless(
-    _WORKER_OK, f"worker import failed: {globals().get('_WORKER_ERR', '?')}"
-)
 class TestWorkerUpdateStatusGuards(unittest.TestCase):
     def test_unguarded_write_has_no_status_predicate(self):
         conn = _FakeConn()
@@ -153,9 +210,6 @@ class TestWorkerUpdateStatusGuards(unittest.TestCase):
         self.assertEqual(len(conn.executes()), 1)
 
 
-@unittest.skipUnless(
-    _EXPORT_OK, f"export_worker import failed: {globals().get('_EXPORT_ERR', '?')}"
-)
 class TestExportWorkerUpdateStatusGuards(unittest.TestCase):
     def test_expected_status_appends_guard_and_param(self):
         conn = _FakeConn()
@@ -205,9 +259,6 @@ class TestExportWorkerUpdateStatusGuards(unittest.TestCase):
         self.assertFalse(hasattr(export_worker, "increment_user_storage"))
 
 
-@unittest.skipUnless(
-    _WORKER_OK, f"worker import failed: {globals().get('_WORKER_ERR', '?')}"
-)
 class TestWorkerPostCompletionSelfClean(unittest.TestCase):
     """A raise AFTER the `complete` flip must never delete outputs.
 

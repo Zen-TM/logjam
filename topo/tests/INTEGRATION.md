@@ -21,7 +21,7 @@ pip install psycopg2-binary           # host has no psycopg2 otherwise
 cd topo
 RUN_DB_IT=1 \
   DB_HOST=localhost DB_PORT=5432 DB_NAME=logjam \
-  DB_USER=<dev_user> DB_PASSWORD=<dev_pw> \
+  DB_USER=<dev_user> DB_PASSWORD=<dev_pw> DATABASE_SSL=disable \
   JOB_ID=unused \
   python3 -m unittest tests.test_status_guard_db -v
 ```

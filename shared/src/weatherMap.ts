@@ -2,7 +2,7 @@
 // quantity at a time, with a time slider over the forecast's steps, wind
 // arrows, and rain totals either side of the build. `topo/build_weather.py`
 // publishes it on the topo CDN after each model run; why a job and not the
-// client reads Open-Meteo: ADR 0048.
+// client reads Open-Meteo: ADR 0049.
 //
 // Every user reads the same files from our own CDN, so viewing the overlay
 // sends nothing about where anyone looks to Open-Meteo or anyone else.

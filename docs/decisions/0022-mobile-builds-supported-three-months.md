@@ -28,8 +28,10 @@ the `x-logjam-client` header (`requireClientHeader` in
 `api/src/routes/sync.ts`) and logged nothing, though a comment claimed it did.
 It now logs a `sync_client` line per request with `client_platform` and
 `client_version`, which `docs/operations/queries.md` aggregates. The API's
-log group keeps 14 days (updated 2026-10-01;
-`api/.ebextensions/cloudwatch-logs.config`, the figure
+log group keeps 14 days (updated 2026-10-01; the retention is
+`local.operational_log_retention_days` in `infra/terraform/envs/prod/logging.tf`
+(updated 2026-11-11: an Elastic Beanstalk configuration file used to set it,
+now deleted), the figure
 `frontend/public/privacy.html` promises), so longer windows need a metric,
 not logs.
 

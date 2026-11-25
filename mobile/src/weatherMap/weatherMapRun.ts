@@ -1,5 +1,5 @@
 // What one run of the Weather overlay is made of, as the manifest names it
-// (shared weatherMap.ts, ADR 0048): the same list for the CDN and for the
+// (shared weatherMap.ts, ADR 0049): the same list for the CDN and for the
 // phone's kept copy, so the two cannot disagree about a file's place.
 import {
   WEATHER_LAYERS,

@@ -543,7 +543,7 @@ export function LogsScreen({
 
     list: (
       <HeroSectionList
-        style={styles.list}
+        style={[styles.list, heroCollapse.listStyle]}
         {...mergeScrollProps(heroCollapse.scrollProps, pull.scrollProps)}
         contentContainerStyle={[styles.listContent, heroCollapse.inset()]}
         sections={yearSections}
@@ -553,14 +553,14 @@ export function LogsScreen({
         // screens of rows mounted, which for a few hundred trips means EVERY
         // row re-renders on any state change — tapping the search icon was
         // paying for 100+ row renders. Narrow the window and let the memoised
-        // rows below skip the rest.
+        // rows below skip the rest. Not `removeClippedSubviews`: see Places.
         initialNumToRender={12}
         maxToRenderPerBatch={8}
         windowSize={5}
-        removeClippedSubviews
+        removeClippedSubviews={false}
         refreshControl={
           <pull.Refresh
-            progressViewOffset={heroCollapse.headerHeight}
+            progressViewOffset={heroCollapse.refreshOffset}
             refreshing={syncStatus.state === "syncing"}
             onRefresh={() => {
               if (!online) {

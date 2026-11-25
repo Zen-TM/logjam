@@ -36,7 +36,6 @@
 import {
   Fragment,
   useEffect,
-  useMemo,
   useState,
   useSyncExternalStore,
   type ComponentProps,
@@ -88,7 +87,8 @@ import {
   type Glyph,
 } from "../ui";
 import { BasemapThumb } from "./BasemapThumb";
-import { MOBILE_BASEMAPS } from "./basemapMeta";
+import { useRegions } from "../regionsPreference";
+import { mobileBasemaps } from "./basemapMeta";
 import { basemapFallbackFor } from "./basemapReachability";
 import type { Connectivity } from "./connectivity";
 import { useSlopeBands } from "./slopeBandsPreference";
@@ -96,6 +96,7 @@ import { SlopeBandsEditor } from "./SlopeBandsEditor";
 import { pickCoverageCarrier } from "./coverageLayers";
 import { terrainSwitch, type TerrainSwitchState } from "./terrainSwitches";
 import type { BasemapId, MapArtifact } from "./sourceResolver";
+import { savedAreaTotals } from "../offline/artifactGroups";
 
 type Tab = SectionKeysOn<typeof MAP_LAYERS, "gps">;
 
@@ -381,12 +382,13 @@ function BasemapTab({
 }) {
   const theme = useTheme();
   const styles = useStyles();
+  const regionIds = useRegions();
   // The map draws the fallback while the pick's server is down (MapScreen);
   // the pick itself stays, so it comes back with the server.
   const shown = basemapToShow(
     basemapId,
     down,
-    basemapFallbackFor(basemapId, down),
+    basemapFallbackFor(basemapId, down, regionIds),
   );
   const name = (id: string) =>
     BASEMAP_CATALOG.find((e) => e.id === id)?.name ?? id;
@@ -398,10 +400,10 @@ function BasemapTab({
   return (
     <View style={styles.body}>
       {notice != null && <Text style={styles.legend}>{notice}</Text>}
-      {/* Order and membership are MOBILE_BASEMAPS', not the catalog's — see
+      {/* Order and membership are `mobileBasemaps`', not the catalog's — see
           basemapMeta.ts (the catalog also carries the Logjam Web-only "osm"
           raster). */}
-      {MOBILE_BASEMAPS.map((id) => {
+      {mobileBasemaps(regionIds).map((id) => {
         const entry = BASEMAP_CATALOG.find((candidate) => candidate.id === id);
         // Fail loudly: an id the catalog doesn't know is a programming error.
         if (!entry) throw new Error(`Unknown basemap id: ${id}`);
@@ -723,7 +725,6 @@ function LayersTab({
   choices: Partial<Record<OverlayTerrainKey, string | null>>;
 }) {
   const theme = useTheme();
-  const { assetHue } = useHues();
   const styles = useStyles();
 
   const overlayRow = (key: OverlayTerrainKey) => {
@@ -853,13 +854,7 @@ function OfflineTab({
   const { assetHue } = useHues();
   const styles = useStyles();
 
-  const savedRegions = artifacts.filter(
-    (artifact) => artifact.kind === "basemap-region",
-  );
-  const savedBytes = savedRegions.reduce(
-    (sum, artifact) => sum + artifact.sizeBytes,
-    0,
-  );
+  const { areas: savedAreas, bytes: savedBytes } = savedAreaTotals(artifacts);
 
   return (
     <View style={styles.body}>
@@ -886,12 +881,10 @@ function OfflineTab({
         icon="device"
         hue={assetHue.region}
         title={
-          savedRegions.length === 1
-            ? "1 offline map"
-            : `${savedRegions.length} offline maps`
+          savedAreas === 1 ? "1 offline map" : `${savedAreas} offline maps`
         }
         subtitle={
-          savedRegions.length === 0
+          savedAreas === 0
             ? "Save an offline map to use maps with no signal"
             : `${(savedBytes / 1024 / 1024).toFixed(0)} MB · rename or delete in Saved`
         }

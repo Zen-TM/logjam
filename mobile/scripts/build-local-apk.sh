@@ -14,9 +14,11 @@
 #   2. Cleartext is blocked in a release variant, so Logjam GPS cannot reach a
 #      local http API at all. LOGJAM_LOCAL_API=1 turns on the loopback-only
 #      exemption (plugins/withLocalApiCleartext.js).
-#   3. The Sentry sourcemap upload fails the build when no org/project is
-#      configured, which is every local build.
-#   4. `:app:packageRelease` is flaky above one worker on constrained hosts.
+#   3. The Sentry upload fails the build when there is no SENTRY_AUTH_TOKEN,
+#      which is every local build; this script switches it off.
+#   4. `:app:packageRelease` is flaky above one worker on constrained hosts, so
+#      one worker is the default; GRADLE_WORKERS=4 on a roomy, otherwise idle one
+#      (a 25 min cold build on 8 cores and 15 GiB).
 #
 # 1, 2 and 3 all present as something OTHER than a build problem — a bare
 # `TypeError: Network request failed` with no console output, which reads as a
@@ -34,8 +36,8 @@
 # A prod-pointed field APK is the same script with the EXPO_PUBLIC_* values
 # overridden in the shell, which Expo prefers to `.env`:
 #   LOGJAM_SENSOR_LOG=1 EXPO_PUBLIC_AUTH_MODE=oidc \
-#   EXPO_PUBLIC_API_URL=https://api.logjamnsw.com \
-#   EXPO_PUBLIC_WEB_URL=https://logjamnsw.com \
+#   EXPO_PUBLIC_API_URL=https://api.logjam.earth \
+#   EXPO_PUBLIC_WEB_URL=https://logjam.earth \
 #   EXPO_PUBLIC_OIDC_ISSUER=... EXPO_PUBLIC_OIDC_CLIENT_ID=... \
 #   ./scripts/build-local-apk.sh
 # The issuer and client id can come from `.env` instead.
@@ -76,7 +78,7 @@ echo "==> forcing a fresh JS bundle (.env is not a gradle input)"
 rm -rf "$generated_assets"
 
 echo "==> assembleRelease"
-(cd android && ./gradlew assembleRelease --max-workers=1)
+(cd android && ./gradlew assembleRelease --max-workers="${GRADLE_WORKERS:-1}")
 
 # Prove the two things that fail silently, rather than trusting the build. Both
 # are asserted, not printed: a warning nobody reads is how these got shipped in

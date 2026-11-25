@@ -54,9 +54,8 @@ const okResult = {
 const rendered = () =>
   renderGeoPdf.mock.calls.map(([input]) => input as GeoPdfRenderInput);
 
-// Map.tsx pulls in maplibre and a Vite virtual module; the dialog reads only
-// its base-layer list.
-vi.mock("../map/Map", () => ({
+// A fixed list, so the test does not move with the real catalogue.
+vi.mock("../map/baseLayers", () => ({
   BASE_LAYERS: [
     { id: "six-topo", name: "Topo", kind: "raster", tiles: [] },
     { id: "six-imagery", name: "Imagery", kind: "raster", tiles: [] },

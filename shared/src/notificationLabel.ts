@@ -8,6 +8,14 @@ import { ANNOUNCEMENT } from "./contracts/inbox.js";
 import { formatBytes } from "./format.js";
 import { EXPORT_FORMAT_LABELS, type ExportFormat } from "./topoExport.js";
 
+/**
+ * The second line of a finished LiDAR map's row when its vegetation layer was
+ * left out for size. topo/worker_common.py's VEGETATION_LEFT_OUT, word for
+ * word (notificationLabel.test.ts holds them equal): the email says it too.
+ */
+export const VEGETATION_LEFT_OUT_NOTE =
+  "The area is too large for the vegetation layer, so it was left out.";
+
 export type NotificationLabel = {
   text: string;
   detail?: string;
@@ -161,6 +169,9 @@ export function notificationLabel(n: TNotification): NotificationLabel {
         text: str(p.jobName)
           ? `${str(p.jobName)} map ready`
           : "LiDAR map ready",
+        ...(p.vegetationLeftOut === true && {
+          detail: VEGETATION_LEFT_OUT_NOTE,
+        }),
       };
     case "topo_failed":
       return {

@@ -92,6 +92,7 @@ import {
   landColor,
   landEdgeOpacity,
   landNameOf,
+  NSW_REGION,
   drawsCoverage,
   normalizeCarrier,
   WEATHER_MAP,
@@ -101,9 +102,9 @@ import {
   fireNameOf,
   NSW_COVERAGE,
   NSW_FIRE,
-  NSW_LAND,
   slopeReliefColor,
   SLOPE_MIN_ZOOM,
+  hillshadeExaggeration,
   zoomFadeIn,
   terrainBeforeIds,
   type TerrainLayerKey,
@@ -112,7 +113,6 @@ import {
   nswContourStyle,
   MAP_INK,
   TRIP_PLAN_PAGE,
-  planRouteNotAdded,
   type SharpenedArea,
   type SearchPin,
   searchPinAfter,
@@ -124,7 +124,10 @@ import {
   planModeReducer,
   planModeStart,
 } from "../plans/planMap";
-import { addDrawnRouteToPlan } from "../plans/addDrawnRoute";
+import {
+  drawnRouteTarget,
+  saveDrawnRouteForPlan,
+} from "../plans/addDrawnRoute";
 import { readCachedPlan } from "../plans/plansCache";
 import { PlanPlaceSheet } from "../plans/PlanPlaceSheet";
 
@@ -274,7 +277,8 @@ import {
   setGaugesLayer,
 } from "./basemapPreference";
 import { useSlopeBands } from "./slopeBandsPreference";
-import { MOBILE_BASEMAPS } from "./basemapMeta";
+import { useRegions } from "../regionsPreference";
+import { effectiveBasemap, mobileBasemaps } from "./basemapMeta";
 import { offlineCoverageMask, offlineMaskBoxes } from "./offlineMask";
 import { DraftToolPanel } from "./DraftToolPanel";
 import { FocusPulse } from "./FocusPulse";
@@ -296,7 +300,6 @@ import { RouteOptionsSheet } from "../routes/RouteOptionsSheet";
 import {
   BottomSheet,
   Button,
-  Chip,
   confirm,
   Icon,
   MapBanner,
@@ -935,13 +938,15 @@ export function MapScreen({
   // it.
   drawRouteFor?: {
     placeId: string | null;
-    /** Drawn from this plan's page: the finished route goes into it. */
+    /** Drawn from this plan's page: the finished route is made in it, in a
+     *  colour from `planRouteColors` that the plan's ways lack. */
     planId?: string;
+    planRouteColors?: string[];
     nonce: number;
   } | null;
   /** Back to a plan's page: its banner was tapped, or a route drawn for it
    *  was saved. */
-  onOpenPlan?: (planId: string) => void;
+  onOpenPlan?: (planId: string, notice?: string) => void;
   // "Continue recording" from the Saved tab: pick a finished track back up. An
   // id only; the row comes from this screen's own list. It lands here rather
   // than being done on Saved because arming the recorder needs the location
@@ -988,7 +993,9 @@ export function MapScreen({
   const mapReady = basemapAssets.localBaseUrl != null || basemapAssets.failed;
   // Seeded from (and written back to) the device preference: a map that reset
   // to the default on every launch made the choice worth nothing.
-  const [basemapId, setBasemapId] = useState<BasemapId>(readBasemapPreference);
+  const [pickedBasemapId, setBasemapId] = useState<BasemapId>(
+    readBasemapPreference,
+  );
   const chooseBasemap = useCallback((next: BasemapId) => {
     setBasemapId(next);
     setBasemapPreference(next);
@@ -1062,13 +1069,17 @@ export function MapScreen({
   );
   // A basemap whose tile server is down is not drawn; the fallback is, and the
   // pick stays, so the map returns to it when the server answers again.
+  const regionIds = useRegions();
+  // The pick can outlive its region (unchosen while the map is open).
+  const basemapId = effectiveBasemap(pickedBasemapId, regionIds);
   const { down: downBasemaps, probe: probeBasemaps } = useDownBasemaps(
     connectivity === "online",
+    regionIds,
   );
   const shownBasemapId = basemapToShow(
     basemapId,
     downBasemaps,
-    basemapFallbackFor(basemapId, downBasemaps),
+    basemapFallbackFor(basemapId, downBasemaps, regionIds),
   ) as BasemapId;
   // Both point tools run the SAME draft model — same anchors, same drag,
   // delete and snapping. What differs is the exit (measure discards silently,
@@ -1789,13 +1800,13 @@ export function MapScreen({
     const covering = basemapsCoveringViewport(
       artifacts,
       viewportBbox,
-      MOBILE_BASEMAPS,
+      mobileBasemaps(regionIds),
     );
     return {
       current: covering.includes(renderedBasemapId),
       others: covering.filter((id) => id !== renderedBasemapId),
     };
-  }, [artifacts, renderedBasemapId, viewportBbox, connectivity]);
+  }, [artifacts, renderedBasemapId, viewportBbox, connectivity, regionIds]);
 
   // Everywhere the phone has no saved tiles, blanked out — but only when the
   // basemap is actually being drawn FROM those saved tiles. Online there is
@@ -2058,6 +2069,7 @@ export function MapScreen({
       const discard = () => {
         routeDraft.close();
         setEditingRouteId(null);
+        setDraftPlaceId(null);
         setDraftPlanId(null);
         setDraftColor(null);
         if (typeof then === "function") then();
@@ -2106,6 +2118,8 @@ export function MapScreen({
         if (stored) {
           routeDraft.open({ points: stored.points, anchors: stored.anchors });
           setEditingRouteId(stored.editingRouteId);
+          setDraftPlaceId(stored.placeId);
+          setDraftPlanId(stored.planId);
           // Frame it too. A HUD announcing 22 points over an empty map reads
           // as "Logjam GPS lost my route" — the camera is the confirmation that
           // it came back. Handed to an effect below because fitCameraToBbox is
@@ -2166,8 +2180,10 @@ export function MapScreen({
       points: draftPoints(draft),
       anchors: draftAnchorIndices(draft),
       editingRouteId,
+      planId: draftPlanId,
+      placeId: draftPlaceId,
     }).catch(console.error);
-  }, [draft, editingRouteId]);
+  }, [draft, editingRouteId, draftPlanId, draftPlaceId]);
 
   /** Save the drawn points as a route. Offline is the expected case, not a
    *  degraded one: createRouteLocal writes the mirror and queues the op, so the
@@ -2180,9 +2196,49 @@ export function MapScreen({
       // Anchors ride along so a snapped route reopens with the user's own
       // handful of vertices rather than every snapped one.
       const anchors = routeDraft.anchorIndices();
-      let planForRoute: { planId: string; routeId: string } | null = null;
+      const target = drawnRouteTarget({
+        editingRouteId,
+        placeId: draftPlaceId,
+        planId: draftPlanId,
+      });
       setSavingRoute(true);
       try {
+        if (target === "plan" && draftPlanId) {
+          // Made in the plan alone: nothing is saved on this phone. A plan
+          // that refuses for good offers to keep the route in Saved; any other
+          // failure (offline, say) leaves the draft armed.
+          const planId = draftPlanId;
+          const route = {
+            name,
+            points,
+            anchors,
+            ...(draftColor ? { color: draftColor } : {}),
+          };
+          let saved: Awaited<ReturnType<typeof saveDrawnRouteForPlan>>;
+          try {
+            saved = await saveDrawnRouteForPlan(planId, route, {
+              ask: confirm,
+              keep: async () => {
+                await createRouteLocal(route);
+              },
+            });
+          } catch (err) {
+            console.error(err);
+            notify(
+              messageFromError(err, TRIP_PLAN_PAGE.copy.addCopyFailed),
+              "error",
+            );
+            return;
+          }
+          if (saved === "declined") return;
+          setNamingRoute(false);
+          routeDraft.close();
+          setDraftPlanId(null);
+          setDraftColor(null);
+          if (saved === "added")
+            onOpenPlan?.(planId, TRIP_PLAN_PAGE.copy.routeAdded);
+          return;
+        }
         if (editingRouteId) {
           await updateRouteLocal(editingRouteId, {
             name,
@@ -2219,13 +2275,12 @@ export function MapScreen({
           // was, so the user can pick a different name or back out themselves.
           if (!filled) return;
         } else {
-          const routeId = await createRouteLocal({
+          await createRouteLocal({
             name,
             points,
             anchors,
             ...(draftColor ? { color: draftColor } : {}),
           });
-          planForRoute = draftPlanId ? { planId: draftPlanId, routeId } : null;
         }
         setNamingRoute(false);
         routeDraft.close();
@@ -2233,14 +2288,6 @@ export function MapScreen({
         setDraftPlaceId(null);
         setDraftPlanId(null);
         setDraftColor(null);
-        if (planForRoute) {
-          const { planId, routeId } = planForRoute;
-          if (await addDrawnRouteToPlan(planId, routeId)) onOpenPlan?.(planId);
-          else {
-            const notAdded = planRouteNotAdded();
-            notify(`${notAdded.title}. ${notAdded.body}`, "error");
-          }
-        }
       } catch (err) {
         console.error(err);
         notify("Couldn't save that route.", "error");
@@ -2389,6 +2436,62 @@ export function MapScreen({
    *  `handleMapPress` — see the retroactive dismissal below. */
   const swallowNextPress = useRef(false);
 
+  /**
+   * Opens the point sheet at `tapped` and asks the overlays what is drawn under
+   * `screenPoint` (a promise where the point must first be found: a fix is
+   * projected, since a press near the arrow is not on it). One path for a tap
+   * on the map and a press on your own arrow, so the sheet has the same rows
+   * for both. An answer for a point the sheet has since left is dropped.
+   */
+  const askAbout = useCallback(
+    (
+      tapped: MapPoint,
+      screenPoint: PressEvent["point"] | Promise<PressEvent["point"]>,
+      lngLat: [number, number],
+    ) => {
+      setTappedPoint(tapped);
+      setTappedLand(null);
+      setTappedFire(null);
+      setTappedCoverage(null);
+      landAskedFor.current = tapped;
+      void Promise.resolve(screenPoint).then((point) => {
+        if (landAskedFor.current !== tapped) return;
+        // From the tiles on the phone, so this works offline and asks no one.
+        if (landLayerIds.length > 0) {
+          mapRef.current
+            ?.queryRenderedFeatures(point, { layers: landLayerIds })
+            .then((features) => {
+              if (landAskedFor.current === tapped)
+                setTappedLand(landNameOf(features));
+            })
+            // Never a failure to show: the sheet just has no land figure.
+            .catch(() => undefined);
+        }
+        if (fireLayerIdList.length > 0) {
+          mapRef.current
+            ?.queryRenderedFeatures(point, { layers: fireLayerIdList })
+            .then((features) => {
+              if (landAskedFor.current === tapped)
+                setTappedFire(fireNameOf(features));
+            })
+            .catch(() => undefined);
+        }
+        coverageAtTap(
+          mapRef.current,
+          point,
+          lngLat,
+          coverageLayerIdList,
+          coverageCarrier,
+        )
+          .then((name) => {
+            if (landAskedFor.current === tapped) setTappedCoverage(name);
+          })
+          .catch(() => undefined);
+      });
+    },
+    [coverageCarrier, coverageLayerIdList, fireLayerIdList, landLayerIds],
+  );
+
   const handleMapPress = useCallback(
     (event: NativeSyntheticEvent<PressEvent>) => {
       if (ignoreMapPress.current) return;
@@ -2424,56 +2527,16 @@ export function MapScreen({
       setTappedFix(null);
       // A tap is not a pan, so it does not stop follow mode — looking at a
       // spot on the map or opening the point panel should not drop follow mode.
-      const tapped = { latitude: lat, longitude: lon };
-      setTappedPoint(tapped);
-      setTappedLand(null);
-      setTappedFire(null);
-      setTappedCoverage(null);
-      landAskedFor.current = tapped;
-      // From the tiles on the phone, so this works offline and asks no one.
-      if (landLayerIds.length > 0) {
-        mapRef.current
-          ?.queryRenderedFeatures(event.nativeEvent.point, {
-            layers: landLayerIds,
-          })
-          .then((features) => {
-            if (landAskedFor.current === tapped)
-              setTappedLand(landNameOf(features));
-          })
-          // Never a failure to show: the sheet just has no land figure.
-          .catch(() => undefined);
-      }
-      if (fireLayerIdList.length > 0) {
-        mapRef.current
-          ?.queryRenderedFeatures(event.nativeEvent.point, {
-            layers: fireLayerIdList,
-          })
-          .then((features) => {
-            if (landAskedFor.current === tapped)
-              setTappedFire(fireNameOf(features));
-          })
-          .catch(() => undefined);
-      }
-      coverageAtTap(
-        mapRef.current,
-        event.nativeEvent.point,
-        [lon, lat],
-        coverageLayerIdList,
-        coverageCarrier,
-      )
-        .then((name) => {
-          if (landAskedFor.current === tapped) setTappedCoverage(name);
-        })
-        .catch(() => undefined);
+      askAbout({ latitude: lat, longitude: lon }, event.nativeEvent.point, [
+        lon,
+        lat,
+      ]);
     },
     [
       addToolPoint,
       anchorDeleteSideFor,
+      askAbout,
       collectingPoints,
-      coverageCarrier,
-      coverageLayerIdList,
-      fireLayerIdList,
-      landLayerIds,
       pressedAnchorIndex,
     ],
   );
@@ -3251,7 +3314,13 @@ export function MapScreen({
       setEditingRouteId(null);
       setDraftPlaceId(drawRouteFor.placeId);
       setDraftPlanId(drawRouteFor.planId ?? null);
-      setDraftColor(pickNextTrackColor(routes.data?.map((r) => r.color) ?? []));
+      setDraftColor(
+        pickNextTrackColor(
+          drawRouteFor.planId
+            ? (drawRouteFor.planRouteColors ?? [])
+            : (routes.data?.map((r) => r.color) ?? []),
+        ),
+      );
     };
     if (routeDraft.active && routeDraft.points.length > 0) {
       handleCancelRouteDraw(arm);
@@ -3582,18 +3651,33 @@ export function MapScreen({
           accuracyM: here.coords.accuracy,
           altitudeM: here.coords.altitude,
         });
-        setTappedLand(null);
-        setTappedFire(null);
-        setTappedCoverage(null);
-        setTappedPoint({
-          latitude: here.coords.latitude,
-          longitude: here.coords.longitude,
-        });
+        const fixLngLat: [number, number] = [
+          here.coords.longitude,
+          here.coords.latitude,
+        ];
+        // The overlays are asked about the fix itself, not the finger: a press
+        // up to 22 dp from the arrow is hundreds of metres away at low zoom.
+        // The press point is the fallback when the map cannot project it.
+        const fixPoint = (
+          mapRef.current?.project(fixLngLat) ?? Promise.reject(new Error())
+        ).catch(() => event.nativeEvent.point);
+        askAbout(
+          { latitude: here.coords.latitude, longitude: here.coords.longitude },
+          fixPoint,
+          fixLngLat,
+        );
         return;
       }
       handleMapPress(event);
     },
-    [camera.zoom, collectingPoints, dotWanted, handleMapPress, userCoord],
+    [
+      askAbout,
+      camera.zoom,
+      collectingPoints,
+      dotWanted,
+      handleMapPress,
+      userCoord,
+    ],
   );
 
   /**
@@ -4963,7 +5047,7 @@ export function MapScreen({
         activeTrack?.state === "done" ? null : (activeTrack?.state ?? null)
       }
       // The same gate the sensors run behind: no frames for a screen
-      // nobody is looking at (mobile/CLAUDE.md, Battery).
+      // nobody is looking at (ADR 0010).
       animate={sensorsActive}
       onPress={() => {
         if (activeTrack) {
@@ -5318,7 +5402,15 @@ export function MapScreen({
               // Lit from the map, not the default viewport: MapLibre Native
               // uploads a viewport light once (hillshade_layer_tweaker.cpp), so
               // the shading would depend on the bearing the layer mounted at.
-              paint={{ "hillshade-illumination-anchor": "map" }}
+              paint={{
+                "hillshade-illumination-anchor": "map",
+                "hillshade-exaggeration": hillshadeExaggeration(
+                  Math.max(
+                    r.layerMinZoom ?? 0,
+                    NSW_REGION.terrain.hillshade.minzoom,
+                  ),
+                ) as unknown as number,
+              }}
             />
           </ResolvedSource>
         ))}
@@ -5328,7 +5420,7 @@ export function MapScreen({
               key={`nsw-land-${r.key}`}
               type="fill"
               id={`nsw-land-${r.key}`}
-              source-layer={NSW_LAND.sourceLayer}
+              source-layer={NSW_REGION.terrain.land.sourceLayer}
               beforeId={groundBefore[`nsw-land-${r.key}`]}
               minzoom={Math.max(r.layerMinZoom ?? 0, LAND_EDGE_MINZOOM)}
               maxzoom={r.layerMaxZoom ?? MAX_LAYER_ZOOM}
@@ -5340,7 +5432,7 @@ export function MapScreen({
                 key={`nsw-land-edge-${i}-${r.key}`}
                 type="line"
                 id={`nsw-land-edge-${i}-${r.key}`}
-                source-layer={NSW_LAND.sourceLayer}
+                source-layer={NSW_REGION.terrain.land.sourceLayer}
                 beforeId={groundBefore[`nsw-land-edge-${i}-${r.key}`]}
                 minzoom={Math.max(r.layerMinZoom ?? 0, LAND_EDGE_MINZOOM)}
                 maxzoom={r.layerMaxZoom ?? MAX_LAYER_ZOOM}
@@ -6079,7 +6171,7 @@ export function MapScreen({
             "how far" through "which way" to "how fast and how high", and the
             two that were here first must not move when this one is switched
             on. It subscribes to its own value — a fix must not re-render this
-            screen (mobile/CLAUDE.md, Battery). */}
+            screen (ADR 0010). */}
         {speedElevationEnabled ? (
           <SpeedElevationChip
             active={sensorsActive}

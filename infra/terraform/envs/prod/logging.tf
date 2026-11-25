@@ -6,9 +6,8 @@
 # than debugging (var.audit_log_retention_days, audit.tf).
 #
 # Everything that must agree with this local: every retention_in_days in this
-# directory, the access-logs lifecycle rule (s3.tf), RetentionInDays in
-# api/.ebextensions/cloudwatch-logs.config (EB-owned groups Terraform cannot
-# name), and privacy.html's Retention section. Guard:
+# directory, the access-logs lifecycle rule (s3.tf), privacy.html's Retention
+# section and delete-account.html's list of what is kept. Guard:
 # api/src/logRetention.unit.test.ts.
 #
 # Container Insights groups remain unmanaged (AWS default, 1 day).
@@ -61,22 +60,6 @@ resource "aws_cloudwatch_log_group" "api_migrate" {
   retention_in_days = local.operational_log_retention_days
 }
 
-# The RDS log export (pgaudit and connection lines; see audit.tf and rds.tf).
-# RDS creates the group when the export starts (the AWS default keeps events
-# forever); managing it here bounds its retention. The subscription filter in
-# audit.tf copies each line to the audit bucket within minutes, and the
-# pgaudit_delivery_stalled alarm fires after 24 h without a delivery, so this
-# copy only has to outlive a stalled pipeline long enough to be noticed.
-import {
-  to = aws_cloudwatch_log_group.rds_postgresql
-  id = "/aws/rds/instance/logjam-db-enc/postgresql"
-}
-
-resource "aws_cloudwatch_log_group" "rds_postgresql" {
-  name              = local.rds_log_group
-  retention_in_days = local.operational_log_retention_days
-}
-
 # Logjam GPS versions in the field, kept as a metric because the log group
 # keeps only 14 days (docs/operations/queries.md reads it). One dimension, the
 # version: every distinct string the API accepts (CLIENT_HEADER_REGEX in
@@ -85,7 +68,7 @@ resource "aws_cloudwatch_log_group" "rds_postgresql" {
 # emits too many distinct values, which bounds anyone sending made-up versions.
 resource "aws_cloudwatch_log_metric_filter" "sync_client" {
   name           = "logjam-sync-client"
-  log_group_name = local.eb_api_stdout_log_group
+  log_group_name = local.api_log_group
   pattern        = "{ $.msg = \"sync_client\" && $.client_platform = \"mobile\" }"
 
   metric_transformation {

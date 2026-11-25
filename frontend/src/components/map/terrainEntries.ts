@@ -1,8 +1,7 @@
 import {
-  NSW_5M,
+  NSW_REGION,
   NSW_COVERAGE,
   NSW_FIRE,
-  NSW_LAND,
   WEATHER_MAP,
   type SharpenedOverlay,
   type TerrainLayerKey,
@@ -58,9 +57,9 @@ export const TERRAIN_ENTRIES = {
   },
   land: {
     id: "nswland",
-    pmtilesUrl: `${window.location.origin}/${NSW_LAND.archivePath}`,
+    pmtilesUrl: `${window.location.origin}/${NSW_REGION.terrain.land.archivePath}`,
     format: "land" as const,
-    attribution: NSW_LAND.creditHtml,
+    attribution: NSW_REGION.terrain.land.creditHtml,
   },
   hillshade: {
     id: "nswhillshade",
@@ -104,7 +103,7 @@ export function terrainEntries(
         template,
         minzoom: statewide.minzoom,
         maxzoom,
-        bounds: NSW_5M.coverage,
+        bounds: NSW_REGION.terrain.heights.coverage,
       },
     };
   };

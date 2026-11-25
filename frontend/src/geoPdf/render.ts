@@ -24,10 +24,7 @@ import {
   GEOPDF_MAX_CANVAS_BYTES,
   GEOPDF_PADDING_MM,
   getPaperDimensions,
-  NSW_CONTOURS,
-  NSW_LAND,
-  NSW_HILLSHADE,
-  NSW_SLOPE,
+  NSW_REGION,
   nswContourStyle,
   TILE_SIZE,
   type SharpenedOverlay,
@@ -373,14 +370,14 @@ async function renderInner(
   const areas = areasOnPage(input.areas, extent);
   const areaById = new Map(areas.map((a) => [a.id, a]));
   const contourZoom = nswVectorZoom(
-    NSW_CONTOURS,
+    NSW_REGION.terrain.contours,
     config.scale,
     centreLat,
     overlayZoom,
   );
   const wantContours = contourZoom !== null && drawn.contours;
   const landZoom = nswVectorZoom(
-    NSW_LAND,
+    NSW_REGION.terrain.land,
     config.scale,
     centreLat,
     overlayZoom,
@@ -432,11 +429,17 @@ async function renderInner(
       ? fetcher.open(archiveAt(vectorBaseUrl), vectorBaseUrl)
       : false,
     drawn.hillshade
-      ? openStatewide("heights", NSW_HILLSHADE.archivePath)
+      ? openStatewide("heights", NSW_REGION.terrain.hillshade.archivePath)
       : null,
-    wantSlope ? openStatewide("slope", NSW_SLOPE.archivePath) : null,
-    wantContours ? openStatewide("contours", NSW_CONTOURS.archivePath) : null,
-    wantLand ? openStatewide("land", NSW_LAND.archivePath) : null,
+    wantSlope
+      ? openStatewide("slope", NSW_REGION.terrain.slope.archivePath)
+      : null,
+    wantContours
+      ? openStatewide("contours", NSW_REGION.terrain.contours.archivePath)
+      : null,
+    wantLand
+      ? openStatewide("land", NSW_REGION.terrain.land.archivePath)
+      : null,
   ]);
   check();
 

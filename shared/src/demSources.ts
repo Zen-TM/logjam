@@ -22,6 +22,7 @@ import {
   type DemSampleAddress,
 } from "./demTiles.js";
 import type { SamplePosition } from "./elevation.js";
+import { NSW_REGION, REGIONS } from "./regions.js";
 
 export type DemSource = {
   /** Recorded on a saved `dem-region` file and on every result read from it. */
@@ -78,28 +79,13 @@ export const TERRARIUM = {
 } as const satisfies DemSource;
 
 /**
- * NSW Spatial Services' 5 m DEM: bare earth, from LiDAR in the east and
- * photogrammetry in the west, built by `topo/build_nsw_dem.py`. A z15 pixel is
- * ~4 m at this latitude, the first zoom finer than the data.
+ * Every public source, finest first: each region's, then the worldwide one.
+ * The order IS the precedence.
  */
-export const NSW_5M = {
-  id: "nsw-5m",
-  sampleZoom: 15,
-  // NSW and the ACT. Inside it a tile the build did not produce is simply
-  // absent, and the position falls through.
-  coverage: [140.9, -37.6, 153.7, -28.0],
-  urlTemplate: null,
-  archivePath: "master/dem/nsw-5m.pmtiles",
-  // The licence asks for the credit, the licence's name, a note that this is
-  // derived, and the date it was extracted from Spatial Services.
-  credit:
-    "Elevation: derived from the NSW 5 m Digital Elevation Model, © State of New South Wales (Spatial Services), extracted October 2026. CC BY 3.0 AU.",
-  creditHtml:
-    'Elevation: derived from the NSW 5 m Digital Elevation Model, © State of New South Wales (<a href="https://www.spatial.nsw.gov.au">Spatial Services</a>), extracted October 2026. <a href="https://creativecommons.org/licenses/by/3.0/au/">CC BY 3.0 AU</a>.',
-} as const satisfies DemSource;
-
-/** Every public source, finest first. The order IS the precedence. */
-export const DEM_SOURCES: readonly DemSource[] = [NSW_5M, TERRARIUM];
+export const DEM_SOURCES: readonly DemSource[] = [
+  ...REGIONS.flatMap((region) => region.dem),
+  TERRARIUM,
+];
 
 /** What a sharpened area's source id starts with, before its job id. */
 export const SHARPENED_SOURCE_PREFIX = "lidar-";
@@ -184,7 +170,9 @@ export function demCredits(
   const lines = sources
     .filter((source) => sourceIds.includes(source.id))
     .flatMap((source) =>
-      source.areaId ? [source.credit, NSW_5M.credit] : [source.credit],
+      source.areaId
+        ? [source.credit, NSW_REGION.terrain.heights.credit]
+        : [source.credit],
     );
   return [...new Set(lines)];
 }

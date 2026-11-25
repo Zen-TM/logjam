@@ -1,4 +1,4 @@
-// Fetching the Weather overlay's public files (ADR 0048). Foreground only
+// Fetching the Weather overlay's public files (ADR 0049). Foreground only
 // (ADR 0013): the callers are the overlay being switched on, the app returning
 // to the front, regained signal and a saved area being downloaded.
 //

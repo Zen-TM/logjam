@@ -33,8 +33,35 @@ describe("the tap sheet", () => {
   // `onCopy`, and a coordinates figure stops copying where it is pressed.
   it("copies every coordinates figure where it is pressed", () => {
     const sheet = read("MapPointSheet.tsx");
-    expect(sheet.match(/mapPointFacts\(/g)).toHaveLength(2);
-    expect(sheet.match(/fact\.copyable/g)).toHaveLength(2);
+    expect(sheet.match(/mapPointFacts\(/g)).toHaveLength(1);
+    expect(sheet.match(/fact\.copyable/g)).toHaveLength(1);
+  });
+
+  // Mutation: draw a second detail component for the viewer's own position,
+  // and its Options row and the facts drift from the tap sheet's.
+  it("draws the viewer's own position with the same detail as any point", () => {
+    const sheet = read("MapPointSheet.tsx");
+    expect(sheet.match(/<PointDetail/g)).toHaveLength(1);
+    expect(sheet).toContain('mapPointVerbs("gps", savedHereOnly, fix != null)');
+  });
+
+  // Mutation: copy the land, fire and coverage lookups back into the arrow
+  // branch of `handleMapOrArrowPress` (or null them there), and a tap on your
+  // own position has none of the overlay rows a tap on the map has.
+  it("asks the overlays the same way for a tap on the map and on your position", () => {
+    const screen = read("MapScreen.tsx");
+    expect(screen.match(/askAbout\(/g)).toHaveLength(2);
+    expect(screen.match(/landNameOf\(/g)).toHaveLength(1);
+    expect(screen.match(/fireNameOf\(/g)).toHaveLength(1);
+    expect(screen.match(/coverageAtTap\(/g)).toHaveLength(1);
+    const arrow = screen.slice(screen.indexOf("const handleMapOrArrowPress"));
+    const fixBranch = arrow.slice(0, arrow.indexOf("handleMapPress(event)"));
+    expect(fixBranch).toContain("askAbout(");
+    // Mutation: hand `askAbout` the finger's `event.nativeEvent.point` there
+    // again, and Land and Fire are named for a spot up to a kilometre from
+    // the position the sheet is titled for.
+    expect(fixBranch).toContain("mapRef.current?.project(fixLngLat)");
+    expect(fixBranch).not.toMatch(/askAbout\([^)]*event\.nativeEvent\.point/);
   });
 
   // Mutation: give the sheet a plain `onClose={onClose}` again, and the back

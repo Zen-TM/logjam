@@ -118,7 +118,7 @@ export const GAUGES_DIR = `${FileSystem.documentDirectory}gauges/`;
 
 /**
  * The latest weather run kept with a saved area, shared by all areas
- * (`weatherMap/weatherMapStorage.ts`, ADR 0048): the manifest and every file of
+ * (`weatherMap/weatherMapStorage.ts`, ADR 0049): the manifest and every file of
  * its run, replaced by the next. WIPED, though the files are public and the
  * same for everyone, because every on-device store joins the wipe (ADR 0006);
  * saving an area fetches them again.

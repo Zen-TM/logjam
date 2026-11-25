@@ -7,7 +7,6 @@ import {
   MAP_TERRAIN,
   OVERLAY_LEGENDS,
   overlayAwaitsChoice,
-  drawsCoverage,
   overlayChoiceLabel,
   overlayLegendRows,
   weatherLayer,
@@ -177,17 +176,6 @@ export default function LayersPopover({
   const hasVegetation = completedTopoJobs.some((job) =>
     job.layers.some((layer) => layer.name === "vegetation"),
   );
-  const overlaysOn = [
-    showPlaces,
-    showWays,
-    terrainLayers.land,
-    terrainLayers.fire,
-    drawsCoverage(terrainLayers.coverage, coverageCarrier),
-    terrainLayers.weather,
-    showGauges,
-    showMgaGrid,
-  ].filter(Boolean).length;
-
   const close = () => {
     setView(tabOf);
     onClose();
@@ -250,11 +238,7 @@ export default function LayersPopover({
                   ? { value: key, label: copy.tabBasemap }
                   : key === "terrain"
                     ? { value: key, label: copy.tabTerrain }
-                    : {
-                        value: key,
-                        label: copy.tabOverlays,
-                        count: overlaysOn,
-                      },
+                    : { value: key, label: copy.tabOverlays },
               )}
               value={view}
               onChange={setView}

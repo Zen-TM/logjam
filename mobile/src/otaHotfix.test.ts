@@ -155,13 +155,16 @@ describe("OTA hotfix plan", () => {
   });
 
   // Mutation: drop the app filter or the skipped filter, sort by
-  // completed_at, or let a run with no conclusion through.
+  // started_at or completed_at, or let a run with no conclusion through.
   it("publishes only on GitHub Actions' latest finished ota-plan pass", () => {
+    // Ids rise in the order the runs are made here, as GitHub's do.
+    let made = 0;
     const run = (
       conclusion: string | null,
       started_at: string | null,
       app = 15368,
     ) => ({
+      id: ++made,
       name: "ota-plan",
       app: { id: app },
       conclusion,
@@ -194,6 +197,22 @@ describe("OTA hotfix plan", () => {
     expect(planCheckRefusal([pass, run(null, null)], "abc")).toMatch(
       /still running/,
     );
+    // A run cancelled before it started, with no start time or the time it
+    // was cancelled, does not outrank the run that replaced it.
+    const superseded = [
+      run("cancelled", null),
+      run("cancelled", "2026-11-07T09:00:00Z"),
+    ];
+    expect(
+      planCheckRefusal(
+        [...superseded, run("success", "2026-11-07T03:00:00Z")],
+        "abc",
+      ),
+    ).toBeNull();
+    // The newest run stopped by hand refuses, whatever passed before it.
+    expect(
+      planCheckRefusal([pass, run("cancelled", "2026-11-07T00:30:00Z")], "abc"),
+    ).toMatch(/cancelled/);
   });
 
   // Mutation: drop the gate call from either workflow, move it after the step
@@ -244,6 +263,70 @@ describe("OTA hotfix plan", () => {
     expect(step).toContain(
       'refusal=$(node mobile/scripts/ota-hotfix.js gate rollback)\n          if [ -n "$refusal" ]; then echo "::error::$refusal"; exit 1; fi\n',
     );
+  });
+
+  // `ota-plan` is a required check, and the ruleset reads the newest check of
+  // that name: a skipped one passes, and a job has no check until the jobs it
+  // `needs` finish. So the plan runs on every event while the label is on
+  // (were it to skip on some, as it once did when another label was added,
+  // that event would turn a red plan green), one run at a time, and the
+  // `ota-plan` job has no `needs`: it starts with the run and waits for
+  // `verdict`, so a plan in progress shows as one.
+  // Mutation: add an event test such as `github.event.action != 'labeled'` to
+  // the plan's `if:`, drop `opened` or `unlabeled` from the trigger, put
+  // anything but the PR number in the concurrency group, give the `ota-plan`
+  // job a `needs:`, drop its `actions: read`, or have it pass on anything but
+  // verdict's success.
+  it("plans on every event while the label is on, and shows as running until the verdict", () => {
+    const plan = readFileSync(
+      join(__dirname, "../../.github/workflows/ota-plan.yml"),
+      "utf8",
+    );
+    const labelled =
+      "    if: contains(github.event.pull_request.labels.*.name, 'ota-hotfix')\n    runs-on:";
+    expect(plan).toContain(
+      "    types: [opened, reopened, synchronize, labeled, unlabeled]\n",
+    );
+    expect(plan).toContain(`\n  plan:\n${labelled}`);
+    expect(plan).toContain(
+      "concurrency:\n  group: ota-plan-${{ github.event.pull_request.number }}\n  cancel-in-progress: true\n",
+    );
+    expect(plan).toContain(
+      "\n  verdict:\n    needs: [plan, smoke]\n    if: ${{ !cancelled() && needs.plan.result != 'skipped' }}\n",
+    );
+    const reporter = plan.slice(plan.indexOf(`\n  ota-plan:\n${labelled}`));
+    expect(reporter.startsWith("\n  ota-plan:\n")).toBe(true);
+    expect(reporter).not.toMatch(/^ {4}needs:/m);
+    // Without it every request for the run's jobs is refused.
+    expect(reporter).toContain("    permissions:\n      actions: read\n");
+    expect(reporter).toContain(
+      'select(.name == "verdict" and .status == "completed") | .conclusion] | last // empty',
+    );
+    expect(reporter.trimEnd().endsWith('[ "$verdict" = success ]')).toBe(true);
+
+    // The step's own filter, over job lists as GitHub returns them: nothing
+    // until `verdict` has completed, then its conclusion.
+    // Mutation: drop `.status == "completed"`, or select another job's name.
+    const filter = /--jq '([^']+)'/.exec(reporter)?.[1] ?? "";
+    const read = (...jobs: object[]) =>
+      execFileSync("jq", ["-r", filter], {
+        input: JSON.stringify({ jobs }),
+        encoding: "utf8",
+      }).trim();
+    const job = (name: string, status: string, conclusion: string | null) => ({
+      name,
+      status,
+      conclusion,
+    });
+    expect(read(job("plan", "completed", "success"))).toBe("");
+    expect(read(job("verdict", "in_progress", null))).toBe("");
+    expect(
+      read(
+        job("smoke / emulator", "completed", "success"),
+        job("verdict", "completed", "failure"),
+      ),
+    ).toBe("failure");
+    expect(read(job("verdict", "completed", "success"))).toBe("success");
   });
 });
 

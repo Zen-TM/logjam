@@ -41,7 +41,10 @@ export function ConfirmHost() {
             <Text style={styles.title} accessibilityRole="header">
               {copy.confirmTitle}
             </Text>
-            <ScrollView style={styles.bodyScroll}>
+            <ScrollView
+              style={styles.bodyScroll}
+              keyboardShouldPersistTaps="handled"
+            >
               <Text style={styles.body}>{copy.confirmBody}</Text>
             </ScrollView>
             <View style={styles.actions}>

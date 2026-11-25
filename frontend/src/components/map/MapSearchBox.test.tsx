@@ -104,9 +104,26 @@ describe("MapSearchBox", () => {
       name: "Made Up River at One, River gauge",
     });
     expect(screen.queryByText("Other Creek at Two")).toBeNull();
-    fireEvent.pointerDown(option);
+    fireEvent.click(option);
     expect(onSelectGauge.mock.calls[0]?.[0]).toMatchObject({ id: "900001" });
     gaugeFile.current = null;
+  });
+
+  // Mutation: choose in onPointerDown again, which closes the list before a
+  // tap's click is sent, so the click lands on the map under it.
+  it("chooses on click, and keeps the input focused until then", async () => {
+    const onSelectLocation = vi.fn();
+    const input = renderBox({ onSelectLocation });
+    type(input, "Katoomba");
+    await settle();
+    const option = screen.getByRole("option", { name: /Katoomba Falls/ });
+
+    fireEvent.pointerDown(option);
+    expect(onSelectLocation).not.toHaveBeenCalled();
+    // fireEvent returns false when the event's default was cancelled.
+    expect(fireEvent.mouseDown(option)).toBe(false);
+    fireEvent.click(option);
+    expect(onSelectLocation).toHaveBeenCalledOnce();
   });
 
   // Mutation: start the geocode effect from the query instead of from
@@ -117,7 +134,7 @@ describe("MapSearchBox", () => {
     await settle();
     expect(geocode).not.toHaveBeenCalled();
 
-    fireEvent.pointerDown(
+    fireEvent.click(
       screen.getByRole("option", { name: /Search locations for/ }),
     );
     expect(geocode).toHaveBeenCalledOnce();
@@ -182,7 +199,7 @@ describe("MapSearchBox", () => {
     const falls = screen.getByRole("option", {
       name: "Katoomba Falls, Waterfall near Katoomba",
     });
-    fireEvent.pointerDown(falls);
+    fireEvent.click(falls);
     expect(onSelectLocation).toHaveBeenCalledWith(FALLS.lat, FALLS.lon);
   });
 
@@ -192,7 +209,7 @@ describe("MapSearchBox", () => {
     const input = renderBox();
     type(input, "Katoomba");
     await settle();
-    fireEvent.pointerDown(screen.getByRole("option", { name: /Falls/ }));
+    fireEvent.click(screen.getByRole("option", { name: /Falls/ }));
 
     fireEvent.focus(input);
     type(input, "Wollangambe");
@@ -267,7 +284,7 @@ describe("MapSearchBox", () => {
     type(input, "56 245000 6264000");
     const row = screen.getAllByRole("option")[0];
     expect(row.textContent).toContain("MGA 56 245000 6264000");
-    fireEvent.pointerDown(row);
+    fireEvent.click(row);
     expect(onSelectLocation).toHaveBeenCalledOnce();
     expect(onSelectLocation.mock.calls[0][0]).toBeCloseTo(-33.7, 0);
     expect(localStorage.getItem("logjam.recentSearches")).toContain("MGA 56");
@@ -277,7 +294,7 @@ describe("MapSearchBox", () => {
     localStorage.clear();
     const input = renderBox();
     type(input, "-33.71, 150.31");
-    fireEvent.pointerDown(screen.getAllByRole("option")[0]);
+    fireEvent.click(screen.getAllByRole("option")[0]);
 
     cleanup();
     renderBox();
@@ -294,7 +311,7 @@ describe("MapSearchBox", () => {
     const onSearchPin = vi.fn();
     const input = renderBox({ onSearchPin });
     type(input, "-33.71, 150.31");
-    fireEvent.pointerDown(screen.getAllByRole("option")[0]);
+    fireEvent.click(screen.getAllByRole("option")[0]);
     expect(onSearchPin).toHaveBeenLastCalledWith({ lat: -33.71, lon: 150.31 });
 
     type(input, "abc");
@@ -309,7 +326,7 @@ describe("MapSearchBox", () => {
       places: [{ id: "1", name: "Mine", altNames: [] } as unknown as TPlace],
     });
     type(input, "Mine");
-    fireEvent.pointerDown(screen.getAllByRole("option")[0]);
+    fireEvent.click(screen.getAllByRole("option")[0]);
     expect(onSearchPin).toHaveBeenLastCalledWith(null);
   });
 });

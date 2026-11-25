@@ -36,6 +36,7 @@ jobs:
   check:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     outputs:
       upstream: ${{ steps.version.outputs.upstream }}
       version: ${{ steps.version.outputs.version }}
@@ -101,7 +102,7 @@ jobs:
       - name: Apply the patch
         run: git -C maplibre-native apply --verbose "$GITHUB_WORKSPACE"/logjam/mobile/maplibre/*.patch
 
-      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+      - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
         with:
           distribution: temurin
           java-version: "17"
@@ -126,7 +127,7 @@ jobs:
           mkdir dist
           cp maplibre-native/platform/android/MapLibreAndroid/build/outputs/aar/MapLibreAndroid-vulkan-release.aar \
             "dist/android-sdk-vulkan-$VERSION.aar"
-          curl -fsSL "https://repo1.maven.org/maven2/org/maplibre/gl/android-sdk-vulkan/$UPSTREAM/android-sdk-vulkan-$UPSTREAM.pom" |
+          curl -fsSL --retry 5 --retry-delay 10 --retry-all-errors "https://repo1.maven.org/maven2/org/maplibre/gl/android-sdk-vulkan/$UPSTREAM/android-sdk-vulkan-$UPSTREAM.pom" |
             sed -e "s#<version>$UPSTREAM</version>#<version>$VERSION</version>#" \
               -e '/do_not_remove: published-with-gradle-metadata/d' > "dist/android-sdk-vulkan-$VERSION.pom"
           grep -q "<version>$VERSION</version>" "dist/android-sdk-vulkan-$VERSION.pom"
@@ -141,6 +142,7 @@ jobs:
   release:
     needs: [check, build]
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: write
     env:
