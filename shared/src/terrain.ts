@@ -37,7 +37,7 @@ export type TerrainLayerKey = (typeof TERRAIN_LAYER_KEYS)[number];
 /**
  * The Terrain layers that are overlays of their own: each drawn from its own
  * statewide archive rather than a DEM, with its own credit and its row under
- * Overlays, and none redrawn by a sharpened area or turned on by a job in it.
+ * Overlays (Weather's is the Weather tab), and none redrawn by a sharpened area or turned on by a job in it.
  */
 export const OVERLAY_TERRAIN_KEYS = [
   "weather",

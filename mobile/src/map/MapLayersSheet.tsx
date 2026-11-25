@@ -7,6 +7,7 @@
 //   Basemap  — what is the map made of?
 //   Terrain  — what shape is the ground?
 //   Layers   — what is drawn on top of it?
+//   Weather  — what is the weather doing, and which quantity is drawn?
 //   Offline  — what works with no signal?
 //
 // Tabs rather than a second sheet, per DESIGN.md: one sheet, content swapped
@@ -65,7 +66,7 @@ import {
   type TerrainSwitchKey,
 } from "@logjam/shared";
 
-import { type LayersOpen } from "./layersOpen";
+import { type LayersOpen, type LayersTab } from "./layersOpen";
 import {
   spacing,
   makeStyles,
@@ -98,7 +99,7 @@ import { terrainSwitch, type TerrainSwitchState } from "./terrainSwitches";
 import type { BasemapId, MapArtifact } from "./sourceResolver";
 import { savedAreaTotals } from "../offline/artifactGroups";
 
-type Tab = SectionKeysOn<typeof MAP_LAYERS, "gps">;
+type Tab = LayersTab;
 
 const copy = MAP_LAYERS.copy;
 
@@ -106,6 +107,7 @@ const TAB_LABEL: Record<Tab, string> = {
   basemap: copy.tabBasemap,
   terrain: copy.tabTerrain,
   overlays: copy.tabOverlays,
+  weather: copy.tabWeather,
   offline: copy.tabOffline,
 };
 
@@ -158,12 +160,16 @@ export function MapLayersSheetHost({
   open,
   onOpened,
   ...rest
-}: Omit<ComponentProps<typeof MapLayersSheet>, "visible" | "onClose"> & {
+}: Omit<
+  ComponentProps<typeof MapLayersSheet>,
+  "visible" | "startTab" | "onClose"
+> & {
   open: LayersOpen;
   /** Runs each time the sheet opens (the basemap reachability probe). */
   onOpened: () => void;
 }) {
   const visible = useSyncExternalStore(open.subscribe, open.get);
+  const startTab = useSyncExternalStore(open.subscribe, open.tab);
   useEffect(() => {
     if (visible) onOpened();
   }, [visible, onOpened]);
@@ -171,6 +177,7 @@ export function MapLayersSheetHost({
     <MapLayersSheet
       {...rest}
       visible={visible}
+      startTab={startTab}
       onClose={() => open.set(false)}
     />
   );
@@ -178,6 +185,7 @@ export function MapLayersSheetHost({
 
 export function MapLayersSheet({
   visible,
+  startTab,
   onClose,
   connectivity,
   basemapId,
@@ -198,6 +206,9 @@ export function MapLayersSheet({
   onImportFile,
 }: {
   visible: boolean;
+  /** The tab the opening asked for, if any: the sheet moves to it, once per
+   *  request (`LayersOpen.tab`). */
+  startTab: Tab | null;
   onClose: () => void;
   connectivity: Connectivity;
   basemapId: BasemapId;
@@ -237,7 +248,20 @@ export function MapLayersSheet({
     setWasVisible(visible);
     setLegend(null);
   }
+  const [seenStartTab, setSeenStartTab] = useState(startTab);
+  if (seenStartTab !== startTab) {
+    setSeenStartTab(startTab);
+    if (startTab) setTab(startTab);
+  }
   const online = connectivity === "online";
+  const weatherSwitch = terrainSwitch(
+    "weather",
+    terrainLayers.weather,
+    basemapId,
+    online,
+    artifacts,
+    weatherKept,
+  );
 
   // Exhaustive by type: a tab the contract names and this sheet does not
   // draw, or the reverse, fails `tsc` (`MAP_LAYERS`, shared/src/contracts).
@@ -284,6 +308,14 @@ export function MapLayersSheet({
         onOverlayChange={onTerrainLayerChange}
         onOpenOverlayLegend={setLegend}
         choices={choices}
+      />
+    ),
+    weather: () => (
+      <WeatherTab
+        state={weatherSwitch}
+        onChange={(on) => onTerrainLayerChange("weather", on)}
+        layer={choices.weather}
+        onLayerChange={(value) => onChoiceChange("weather", value)}
       />
     ),
     offline: () => (
@@ -544,6 +576,44 @@ function TerrainTab({
   );
 }
 
+/**
+ * The Weather tab: the switch, then what a legend holds (the layer picker, the
+ * key, the caveat and the credit) inline, since the layer is the tab's whole
+ * point. The switch follows the same rules the Overlays row's did
+ * (`terrainSwitch`: offline only while a run is kept).
+ */
+function WeatherTab({
+  state,
+  onChange,
+  layer,
+  onLayerChange,
+}: {
+  state: TerrainSwitchState;
+  onChange: (on: boolean) => void;
+  layer: string | null | undefined;
+  onLayerChange: (value: string) => void;
+}) {
+  const styles = useStyles();
+  const legend = OVERLAY_LEGENDS.weather;
+  return (
+    <View style={styles.body}>
+      <SwitchRow
+        icon="layers"
+        hue={legend.hue}
+        title={copy.showWeather}
+        description={state.reason}
+        disabled={state.disabled}
+        checked={state.checked}
+        onChange={onChange}
+      />
+      <OverlayLegendSheet
+        legend={legend}
+        choice={{ value: layer, onChange: onLayerChange }}
+      />
+    </View>
+  );
+}
+
 /** What the slope's colours mean: the account's bands, chosen on Logjam Web. */
 function SlopeLegend() {
   const styles = useStyles();
@@ -781,7 +851,6 @@ function LayersTab({
     land: () => overlayRow("land"),
     fire: () => overlayRow("fire"),
     coverage: () => overlayRow("coverage"),
-    weather: () => overlayRow("weather"),
     gauges: () => entryRow("gauges"),
     mgaGrid: () => entryRow("mgaGrid"),
     geoPdfs: () => entryRow("geoPdfs"),
