@@ -44,6 +44,19 @@ vi.mock("../../placeUtils", () => ({
     loading: terrain.checking,
   }),
 }));
+const weatherMap = vi.hoisted(() => ({
+  reading: null as {
+    layer: string;
+    value: number;
+    from: number | null;
+    shown: string;
+  } | null,
+  source: null as unknown,
+}));
+vi.mock("./weatherPoint", () => ({
+  // What the overlay draws is only read while it is on.
+  useWeatherPoint: (source: unknown) => (source ? weatherMap.reading : null),
+}));
 vi.mock("../../useIsMobile", () => ({ useIsMobile: () => false }));
 const toast = vi.hoisted(() => ({ done: vi.fn(), error: vi.fn() }));
 vi.mock("../feedback/ToastProvider", () => ({ useToast: () => toast }));
@@ -75,6 +88,7 @@ function mount(
       point={point}
       from={null}
       coverageCarrier="optus"
+      weatherPoint={weatherMap.source as never}
       {...(handlers.startAt ? { startAt: handlers.startAt } : {})}
       onClose={handlers.onClose ?? vi.fn()}
       onAddPlace={handlers.onAddPlace ?? vi.fn()}
@@ -115,12 +129,46 @@ beforeEach(() => {
   vi.spyOn(navigator, "onLine", "get").mockReturnValue(true);
 });
 afterEach(() => {
+  weatherMap.reading = null;
+  weatherMap.source = null;
   mapElement.remove();
   terrain.checking = false;
   terrain.reading = { elevationM: 1013, slopeDegrees: null, demSourceIds: [] };
   cleanup();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
+});
+
+describe("MapPointPopover weather map value", () => {
+  // Mutation: draw the row whatever the overlay says, or drop its hint and the
+  // figure reads as the forecast "Show the weather here" gives.
+  it("shows the overlay's figure with where it comes from, only while it is drawn", () => {
+    weatherMap.reading = {
+      layer: "rain",
+      value: 2.5,
+      from: null,
+      shown: "Today, 9 pm",
+    };
+    mount();
+    expect(screen.queryByText("Rain")).toBeNull();
+    cleanup();
+    weatherMap.source = {};
+    mount();
+    expect(screen.getByText("Rain")).toBeTruthy();
+    expect(screen.getByText("2.5 mm/h")).toBeTruthy();
+    expect(
+      screen.getByText(`Today, 9 pm · ${MAP_POINT.copy.weatherMapHint}`),
+    ).toBeTruthy();
+  });
+
+  // Mutation: draw a row for a point the archive has no value at.
+  it("has no row where the overlay has no value", () => {
+    weatherMap.source = {};
+    mount();
+    expect(
+      screen.queryByText(MAP_POINT.copy.weatherMapHint, { exact: false }),
+    ).toBeNull();
+  });
 });
 
 describe("MapPointPopover weather", () => {

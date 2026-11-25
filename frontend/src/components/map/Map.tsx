@@ -58,6 +58,7 @@ import {
   WEATHER_LAYER_DEFAULT,
   weatherReliefColor,
   type WeatherLayerKey,
+  type WeatherPointSource,
   TERRAIN_LAYER_KEYS,
   type SharpenedOverlay,
   type TerrainLayerKey,
@@ -740,10 +741,12 @@ function Map({
   slopeBands?: SlopeBand[];
   /** The carrier a `coverage` entry draws. */
   coverageCarrier?: CarrierId | null;
-  /** What the `weather` entry draws: its colours, and the wind arrows if any. */
+  /** What the `weather` entry draws: its colours, and the wind arrows if any;
+   *  and `point`, what the point panel reads its value from. */
   weather?: {
     layer: WeatherLayerKey;
     arrows: GeoJSON.FeatureCollection | null;
+    point: WeatherPointSource | null;
   };
   activeLayerId: string;
   selectingGeoPdfExtent?: boolean;
@@ -3835,6 +3838,7 @@ function Map({
           point={asked.point}
           from={asked.from}
           coverageCarrier={coverageCarrier}
+          weatherPoint={weather?.point ?? null}
           {...(asked.startAt ? { startAt: asked.startAt } : {})}
           onClose={closeAsked}
           onAddPlace={onAddPlaceAt}
