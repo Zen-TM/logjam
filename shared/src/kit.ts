@@ -38,6 +38,7 @@ export const KIT_COMPONENTS = {
   ChipPicker: both,
   ChipRail: both,
   RangePills: both,
+  ColourScale: both, // a colour key as one strip with its numbers (the weather bar)
   Scrubber: both, // a bounded run of steps dragged through, over the map (the weather bar)
   AttributeFilter: both,
   DateRangeFilter: gps(

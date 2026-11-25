@@ -1,8 +1,14 @@
-import { MAP_INK, ROUTE_ARROW_IMAGE, WEATHER_MAP } from "@logjam/shared";
+import {
+  MAP_INK,
+  WEATHER_MAP,
+  WIND_ARROW_FILTER,
+  WIND_ARROW_IMAGE,
+} from "@logjam/shared";
 import { describe, expect, it } from "vitest";
 
 import { weatherFixture as file } from "../weatherMap/weatherMapFixture";
 import {
+  WEATHER_ARROW_FILTER,
   WEATHER_ARROW_STYLE,
   weatherArrowData,
   weatherFieldLayerId,
@@ -76,16 +82,18 @@ describe("the field and its arrows", () => {
     expect(paint["color-relief-color"][0]).toBe("interpolate");
   });
 
-  // Mutation: align the icon to the viewport, or let overlap in, and the
-  // arrows turn with the map or pile up when zoomed out.
-  it("turns each arrow to where the wind blows and lets MapLibre thin them", () => {
+  // Mutation: align the icon to the viewport, drop the filter, or let the
+  // arrows block placement, and they turn with the map, pile up when zoomed
+  // out, or knock out a town's name.
+  it("turns each arrow to where the wind blows, thinned on the shared grid", () => {
     expect(WEATHER_ARROW_STYLE).toMatchObject({
-      iconImage: ROUTE_ARROW_IMAGE,
+      iconImage: WIND_ARROW_IMAGE,
       iconRotate: ["get", "rotate"],
       iconRotationAlignment: "map",
-      iconAllowOverlap: false,
+      iconIgnorePlacement: true,
       iconColor: MAP_INK.casing,
     });
+    expect(WEATHER_ARROW_FILTER).toEqual(WIND_ARROW_FILTER);
   });
 
   it("has no arrows until the wind file is in", () => {

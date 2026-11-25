@@ -3,6 +3,7 @@
 // and the out-of-date and missing cases for both clients.
 import {
   MAP_TERRAIN,
+  weatherScale,
   weatherShown,
   type WeatherPick,
   type WeatherLayerKey,
@@ -18,6 +19,8 @@ export type WeatherBarModel =
       title: string;
       /** The step or window on the map, and the run's age. */
       detail: string;
+      /** The colour scale's stops (shared `weatherScale`). */
+      scale: { label: string; colour: string }[];
       /** For a stepped layer: the steps the scrubber spans and the one shown. */
       scrub: {
         first: number;
@@ -60,6 +63,7 @@ export function weatherBarModel(input: {
     kind: "ready",
     title: `${layer.label} (${layer.unit})`,
     detail: `${shown.shown} · ${shown.age}`,
+    scale: weatherScale(layer.key),
     scrub: step === null ? null : { first, last, step, value: shown.shown },
   };
 }

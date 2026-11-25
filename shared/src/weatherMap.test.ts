@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
+import { parseRgbaHex } from "./topoSettings.js";
 
 import {
   OVERLAY_LEGENDS,
@@ -16,6 +17,8 @@ import {
   weatherLayer,
   weatherLayerUrl,
   weatherLegendRows,
+  weatherScale,
+  WIND_ARROW_FILTER,
   weatherReliefColor,
   weatherShown,
   weatherShownLabel,
@@ -133,21 +136,28 @@ describe("the slider", () => {
 });
 
 describe("the colours", () => {
+  const clear = /,0\.000\)$/;
   // Mutation: drop temperature's clear first stop and the tile's no-value
   // pixels (−32768) paint the coldest blue.
   it("leaves no value clear for every layer", () => {
     for (const layer of WEATHER_LAYERS)
-      expect(reliefAt(weatherReliefColor(layer.key), -32768)).toBe(
-        "rgba(0,0,0,0.000)",
-      );
+      expect(reliefAt(weatherReliefColor(layer.key), -32768)).toMatch(clear);
   });
 
   it("leaves a dry or calm map clear", () => {
-    expect(reliefAt(weatherReliefColor("rain"), 0)).toBe("rgba(0,0,0,0.000)");
-    expect(reliefAt(weatherReliefColor("rainPast168"), 0.2)).toBe(
-      "rgba(0,0,0,0.000)",
-    );
-    expect(reliefAt(weatherReliefColor("wind"), 3)).toBe("rgba(0,0,0,0.000)");
+    expect(reliefAt(weatherReliefColor("rain"), 0)).toMatch(clear);
+    expect(reliefAt(weatherReliefColor("rainPast168"), 0.5)).toMatch(clear);
+    expect(reliefAt(weatherReliefColor("wind"), 3)).toMatch(clear);
+  });
+
+  // Mutation: make a clear stop "#00000000", and the fade into the first
+  // colour passes through grey: a dark fringe round every shower.
+  it("fades in from the first colour, not from black", () => {
+    for (const layer of WEATHER_LAYERS) {
+      const [first, second] = layer.stops;
+      expect(parseRgbaHex(first!.colour)[3]).toBe(0);
+      expect(first!.colour.slice(0, 7)).toBe(second!.colour.slice(0, 7));
+    }
   });
 
   // Mutation: put two stops out of order or on one value, and MapLibre
@@ -167,11 +177,31 @@ describe("the colours", () => {
     expect(rows.map((r) => r.label)).toEqual([
       "0.2 mm/h",
       "1 mm/h",
-      "3 mm/h",
-      "8 mm/h",
+      "2.5 mm/h",
+      "5 mm/h",
+      "10 mm/h",
       "20 mm/h",
+      "40 mm/h",
     ]);
     for (const row of rows) expect(row.colour).toMatch(/^#[0-9a-f]{6}$/);
+  });
+
+  // Mutation: carry the unit into the scale's labels, and the bar's strip
+  // repeats "mm/h" under every notch.
+  it("gives the bar's scale bare numbers, the same colours as the key", () => {
+    expect(weatherScale("temperature").map((s) => s.label)).toEqual([
+      "−5",
+      "0",
+      "8",
+      "15",
+      "22",
+      "30",
+      "38",
+      "45",
+    ]);
+    expect(weatherScale("rain").map((s) => s.colour)).toEqual(
+      weatherLegendRows("rain").map((r) => r.colour),
+    );
   });
 
   it("falls back to rain for a stored layer it doesn't know", () => {
@@ -192,7 +222,27 @@ describe("the wind arrows", () => {
     ]);
     // The fixture's wind is from the west (270°): the arrowhead, drawn
     // pointing east, keeps pointing east.
-    expect(features[0]!.properties).toEqual({ speed: 18, rotate: 0 });
+    expect(features[0]!.properties).toEqual({ speed: 18, rotate: 0, thin: 0 });
+  });
+
+  // Mutation: thin by row alone, or swap the zoom bands, and a state-wide view
+  // keeps a solid mat of arrows or a close one loses most of them.
+  it("thins the grid to every fourth, then every second point as the map zooms out", () => {
+    const thin = (row: number, column: number) =>
+      windArrows(wind, 0).features[row * wind.columns + column]!.properties
+        .thin;
+    expect([
+      thin(0, 0),
+      thin(0, 2),
+      thin(2, 0),
+      thin(0, 1),
+      thin(1, 1),
+    ]).toEqual([0, 1, 1, 2, 2]);
+    expect(WIND_ARROW_FILTER).toEqual([
+      "<=",
+      ["get", "thin"],
+      ["step", ["zoom"], 0, 5.5, 1, 6.5, 2],
+    ]);
   });
 
   // Mutation: draw a null as 0, and a point with no forecast shows calm.

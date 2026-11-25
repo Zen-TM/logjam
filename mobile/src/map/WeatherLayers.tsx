@@ -1,10 +1,16 @@
 import { memo, useMemo } from "react";
-import { GeoJSONSource, Layer } from "@maplibre/maplibre-react-native";
-import type { WeatherLayerKey, WeatherWindFile } from "@logjam/shared";
+import { GeoJSONSource, Images, Layer } from "@maplibre/maplibre-react-native";
+import {
+  WIND_ARROW_IMAGE,
+  WIND_ARROW_SDF_URI,
+  type WeatherLayerKey,
+  type WeatherWindFile,
+} from "@logjam/shared";
 
 import { ResolvedSource } from "./ResolvedSource";
 import type { ResolvedTileSource } from "./sourceResolver";
 import {
+  WEATHER_ARROW_FILTER,
   WEATHER_ARROW_STYLE,
   WEATHER_ARROWS_ID,
   WEATHER_WIND_SOURCE_ID,
@@ -12,6 +18,11 @@ import {
   weatherFieldLayerId,
   weatherFieldPaint,
 } from "./weatherLayers";
+
+// An SDF, inlined, for the reasons at `ROUTE_ARROW_IMAGES` in MapScreen.tsx.
+const WIND_ARROW_IMAGES = {
+  [WIND_ARROW_IMAGE]: { source: { uri: WIND_ARROW_SDF_URI }, sdf: true },
+};
 
 /**
  * The Weather field and, for wind and gusts, its arrows. `beforeIds` is the
@@ -48,6 +59,7 @@ export const WeatherLayers = memo(function WeatherLayers({
           paint={paint as never}
         />
       </ResolvedSource>
+      {arrows ? <Images images={WIND_ARROW_IMAGES} /> : null}
       {arrows ? (
         <GeoJSONSource id={WEATHER_WIND_SOURCE_ID} data={data}>
           <Layer
@@ -55,6 +67,7 @@ export const WeatherLayers = memo(function WeatherLayers({
             type="symbol"
             id={WEATHER_ARROWS_ID}
             beforeId={beforeIds[WEATHER_ARROWS_ID]}
+            filter={WEATHER_ARROW_FILTER}
             style={WEATHER_ARROW_STYLE}
           />
         </GeoJSONSource>

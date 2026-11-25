@@ -1,4 +1,4 @@
-import { MAP_TERRAIN } from "@logjam/shared";
+import { MAP_TERRAIN, weatherScale } from "@logjam/shared";
 import { describe, expect, it } from "vitest";
 
 import { weatherFixture as file } from "./weatherMapFixture";
@@ -63,6 +63,17 @@ describe("weatherBarModel", () => {
     expect(model.kind === "ready" && model.scrub).toBeNull();
     expect(model.kind === "ready" && model.detail).toMatch(/^To /);
     expect(weatherDrawnStep(model)).toBe(0);
+  });
+
+  // Mutation: key the scale by rain whatever is picked, and a total's map in
+  // mm sits under a scale in mm/h.
+  it("carries the picked layer's colour scale, a total's included", () => {
+    for (const layer of ["rain", "temperature", "rainNext24"] as const) {
+      const model = weatherBarModel({ ...base, layer });
+      expect(model.kind === "ready" && model.scale).toEqual(
+        weatherScale(layer),
+      );
+    }
   });
 
   // Mutation: treat a total the run leaves out as ready, and the bar shows a

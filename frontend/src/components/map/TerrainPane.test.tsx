@@ -464,7 +464,7 @@ describe("the Weather row on Logjam Web", () => {
     const legend = screen.getByRole("dialog", { name: copy.weather });
     for (const { label } of OVERLAY_LEGENDS.weather.choice!.options)
       expect(screen.getByRole("radio", { name: label })).toBeTruthy();
-    expect(legend.textContent).toContain("22°");
+    expect(legend.textContent).toContain("22 °C");
     expect(legend.textContent).not.toContain("mm/h");
     fireEvent.click(screen.getByRole("radio", { name: "Rain, past 72 h" }));
     expect(onChange).toHaveBeenCalledWith("rainPast72");

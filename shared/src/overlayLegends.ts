@@ -72,7 +72,7 @@ export const OVERLAY_LEGENDS: Readonly<
   weather: {
     title: copy.weather,
     about: copy.weatherAbout,
-    hue: weatherLegendRows("rain")[2]!.colour,
+    hue: weatherLegendRows("rain")[1]!.colour,
     intro: copy.weatherLegend,
     rows: weatherLegendRows(WEATHER_LAYER_DEFAULT),
     rowsFor: (choice) =>

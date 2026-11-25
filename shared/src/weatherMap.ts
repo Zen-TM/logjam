@@ -22,6 +22,13 @@ import {
   rgbaCssFromHex,
 } from "./topoSettings.js";
 
+export { WIND_ARROW_SDF_URI } from "./windArrowSdf.js";
+
+/** Style-image name for the wind arrow, registered by each client's map. It
+ *  points east, as the route arrowhead does, so `windArrows`' `rotate` turns
+ *  it downwind. */
+export const WIND_ARROW_IMAGE = "wind-arrow";
+
 /** Bumped with the files' shape; each format has its own prefix. */
 export const WEATHER_MAP_FORMAT = 1;
 
@@ -105,47 +112,84 @@ export type WeatherLayer = {
   arrows?: boolean;
 };
 
-const CLEAR = "#00000000";
+// The first stop of each ramp is its first colour with no alpha, not clear
+// black: MapLibre mixes the channels as they are, so a fade from black draws a
+// grey fringe round every shower. Guard: weatherMap.test.ts.
+const clearOf = (colour: RgbaHex): RgbaHex => `${colour.slice(0, 7)}00`;
 
-// Rain runs pale blue to violet and purple, temperature blue to red, wind
-// green to red to purple: none reads as Slope's yellow-to-dark-red bands
-// alone, and the overlay is drawn over them translucent, so a band still
-// shows through. The alpha is in the stop: light rain stays light on the map.
-const RAIN_STOPS: readonly Stop[] = [
-  { value: 0.05, colour: CLEAR },
-  { value: 0.2, colour: "#a5d8ff8c", label: "0.2 mm/h" },
-  { value: 1, colour: "#4dabf7b2", label: "1 mm/h" },
-  { value: 3, colour: "#1c7ed6cc", label: "3 mm/h" },
-  { value: 8, colour: "#5f3dc4d9", label: "8 mm/h" },
-  { value: 20, colour: "#3b0764e6", label: "20 mm/h" },
-];
-const TOTAL_STOPS: readonly Stop[] = [
-  { value: 0.5, colour: CLEAR },
-  { value: 2, colour: "#a5d8ff8c", label: "2 mm" },
-  { value: 10, colour: "#4dabf7b2", label: "10 mm" },
-  { value: 25, colour: "#1c7ed6cc", label: "25 mm" },
-  { value: 50, colour: "#5f3dc4d9", label: "50 mm" },
-  { value: 100, colour: "#3b0764e6", label: "100 mm" },
+// Rain and its totals take the BoM radar's hues (lavender, blue, teal, then
+// yellow, orange and red for heavy falls), the ones an Australian already
+// reads a rain map in. Temperature runs purple to red through green and
+// wind green to red to purple, each with enough hues to read a value by eye.
+// The alpha is in the stop: light rain stays light, and the overlay is drawn
+// under the contours and labels, so the map stays legible over a heavy band.
+const RADAR = {
+  lavender: "#a9a9ff",
+  blue: "#4b5bff",
+  teal: "#00bfae",
+  yellow: "#ffd500",
+  orange: "#ff8a00",
+  red: "#e60000",
+  maroon: "#7a0010",
+} as const;
+
+function radarRamp(values: readonly number[], alpha: readonly string[]) {
+  const hues = Object.values(RADAR);
+  return values.map(
+    (value, i): Stop => ({
+      value,
+      colour: `${hues[i]}${alpha[i]}`,
+      label: String(value),
+    }),
+  );
+}
+
+function withClear(below: number, stops: readonly Stop[]): readonly Stop[] {
+  return [{ value: below, colour: clearOf(stops[0]!.colour) }, ...stops];
+}
+
+const RAIN_STOPS = withClear(
+  0.1,
+  radarRamp(
+    [0.2, 1, 2.5, 5, 10, 20, 40],
+    ["99", "b3", "bf", "c7", "cc", "d1", "d9"],
+  ),
+);
+const TOTAL_STOPS = withClear(
+  1,
+  radarRamp(
+    [2, 10, 25, 50, 100, 200, 400],
+    ["73", "8c", "99", "a6", "b3", "bf", "c7"],
+  ),
+);
+const TEMPERATURE_COLOURS: readonly [number, string][] = [
+  [-5, "#7048e8"],
+  [0, "#3b5bdb"],
+  [8, "#1098ad"],
+  [15, "#40c057"],
+  [22, "#fab005"],
+  [30, "#f76707"],
+  [38, "#e03131"],
+  [45, "#862e9c"],
 ];
 const TEMPERATURE_STOPS: readonly Stop[] = [
   // Below it is no value (−32768): clear, not the coldest colour.
-  { value: -1000, colour: CLEAR },
-  { value: -999, colour: "#4c6ef599" },
-  { value: -5, colour: "#4c6ef599", label: "−5°" },
-  { value: 5, colour: "#74c0fc99", label: "5°" },
-  { value: 15, colour: "#96f2d799", label: "15°" },
-  { value: 22, colour: "#ffec9999", label: "22°" },
-  { value: 30, colour: "#ff922b99", label: "30°" },
-  { value: 38, colour: "#c92a2aa6", label: "38°" },
+  { value: -1000, colour: "#7048e800" },
+  { value: -999, colour: "#7048e88c" },
+  ...TEMPERATURE_COLOURS.map(([value, hex]) => ({
+    value,
+    colour: `${hex}8c`,
+    label: String(value).replace("-", "−"),
+  })),
 ];
-const WIND_STOPS: readonly Stop[] = [
-  { value: 5, colour: CLEAR },
-  { value: 15, colour: "#96f2d773", label: "15 km/h" },
-  { value: 30, colour: "#ffe0668c", label: "30 km/h" },
-  { value: 50, colour: "#ff922ba6", label: "50 km/h" },
-  { value: 70, colour: "#e03131bf", label: "70 km/h" },
-  { value: 100, colour: "#862e9cd9", label: "100 km/h" },
-];
+const WIND_STOPS = withClear(5, [
+  { value: 10, colour: "#74c0fc4d", label: "10" },
+  { value: 20, colour: "#69db7c80", label: "20" },
+  { value: 35, colour: "#ffd43b99", label: "35" },
+  { value: 50, colour: "#ff922ba6", label: "50" },
+  { value: 70, colour: "#f03e3eb3", label: "70" },
+  { value: 100, colour: "#ae3ec9bf", label: "100" },
+]);
 
 /** The picker's options in order: the stepped fields, then the totals from
  *  the furthest past to the furthest ahead. */
@@ -229,9 +273,11 @@ export function weatherReliefColor(key: WeatherLayerKey): unknown[] {
   return ["interpolate", ["linear"], ["elevation"], ...stops];
 }
 
-/** The legend's key: each labelled stop's colour as it shows over a white
- *  map, opaque, since a legend sits on a sheet and not on the map. */
-export function weatherLegendRows(
+/** The bar's colour scale: each labelled stop's colour as it shows over a
+ *  white map, opaque, with its bare number; the bar names the unit once. A
+ *  strip spaces them evenly, so the gradient between two labels is the map's
+ *  own linear mix. Guard: weatherMap.test.ts. */
+export function weatherScale(
   key: WeatherLayerKey,
 ): { label: string; colour: string }[] {
   return weatherLayer(key).stops.flatMap((stop) =>
@@ -248,6 +294,18 @@ export function weatherLegendRows(
         ]
       : [],
   );
+}
+
+/** The legend's key: the scale's stops, each with the unit, since a legend
+ *  row stands alone on a sheet. */
+export function weatherLegendRows(
+  key: WeatherLayerKey,
+): { label: string; colour: string }[] {
+  const { unit } = weatherLayer(key);
+  return weatherScale(key).map(({ label, colour }) => ({
+    label: `${label} ${unit}`,
+    colour,
+  }));
 }
 
 /**
@@ -423,6 +481,28 @@ export function parseWeatherWind(raw: unknown): WeatherWindFile | null {
     : null;
 }
 
+/** 0 for every fourth point each way, 1 for every second, else 2: the
+ *  coarsest zoom band (`WIND_ARROW_FILTER`) that shows the point. */
+const thinOf = (row: number, column: number): number =>
+  row % 4 === 0 && column % 4 === 0
+    ? 0
+    : row % 2 === 0 && column % 2 === 0
+      ? 1
+      : 2;
+
+/**
+ * Which arrows a zoom shows: the grid thinned to every fourth point, then
+ * every second, so they stay about 90 px apart (the grid is 0.5°, 90 px at
+ * z7). A fixed grid and not collision: collision let the basemap's town
+ * names knock out arrows over land, where they matter, and left the sea full.
+ * Guard: weatherMap.test.ts and each client's weatherLayers.test.ts.
+ */
+export const WIND_ARROW_FILTER = [
+  "<=",
+  ["get", "thin"],
+  ["step", ["zoom"], 0, 5.5, 1, 6.5, 2],
+] as const;
+
 /** The wind arrows of one step, as points a symbol layer rotates: `rotate`
  *  turns the route arrowhead (which points east) to where the wind blows. */
 export function windArrows(
@@ -433,7 +513,7 @@ export function windArrows(
   features: {
     type: "Feature";
     geometry: { type: "Point"; coordinates: [number, number] };
-    properties: { speed: number; rotate: number };
+    properties: { speed: number; rotate: number; thin: number };
   }[];
 } {
   const at = wind.steps[step];
@@ -455,7 +535,11 @@ export function windArrows(
           ] as [number, number],
         },
         // Towards is `from` + 180°; the arrowhead at 0° points east (90°).
-        properties: { speed, rotate: (from + 90) % 360 },
+        properties: {
+          speed,
+          rotate: (from + 90) % 360,
+          thin: thinOf(row, column),
+        },
       });
     }
   return { type: "FeatureCollection", features };

@@ -1,13 +1,15 @@
 import {
   MAP_INK,
-  ROUTE_ARROW_IMAGE,
   WEATHER_CREDIT_URL,
   WEATHER_MAP,
   weatherReliefColor,
   type WeatherLayerKey,
+  WIND_ARROW_FILTER,
+  WIND_ARROW_IMAGE,
 } from "@logjam/shared";
 import type {
   ExpressionSpecification,
+  FilterSpecification,
   GeoJSONSourceSpecification,
   LayerSpecification,
 } from "maplibre-gl";
@@ -38,8 +40,9 @@ export function weatherFieldLayerSpec(
   };
 }
 
-/** The route arrowhead, a little larger the harder the wind blows; the
- *  strongest are placed first, so a crowded zoom keeps them and drops the calm. */
+/** The wind arrow, longer the harder the wind blows, on the grid
+ *  `WIND_ARROW_FILTER` thins by zoom. They overlap anything and block nothing:
+ *  the grid spaces them, and a label stays where it was. */
 export function windArrowsLayerSpec(
   source: string,
 ): Extract<LayerSpecification, { type: "symbol" }> {
@@ -47,28 +50,29 @@ export function windArrowsLayerSpec(
     id: WEATHER_ARROWS_LAYER,
     type: "symbol",
     source,
+    filter: WIND_ARROW_FILTER as unknown as FilterSpecification,
     layout: {
-      "icon-image": ROUTE_ARROW_IMAGE,
+      "icon-image": WIND_ARROW_IMAGE,
       "icon-rotate": ["get", "rotate"],
       "icon-rotation-alignment": "map",
       "icon-pitch-alignment": "map",
-      "icon-allow-overlap": false,
+      "icon-allow-overlap": true,
       "icon-ignore-placement": true,
       "icon-size": [
         "interpolate",
         ["linear"],
         ["get", "speed"],
         0,
-        0.35,
+        0.4,
         60,
-        0.7,
+        0.75,
       ],
-      "symbol-sort-key": ["-", 0, ["get", "speed"]],
     },
     paint: {
       "icon-color": MAP_INK.casing,
       "icon-halo-color": MAP_INK.ring,
       "icon-halo-width": 1,
+      "icon-halo-blur": 0.5,
     },
   };
 }

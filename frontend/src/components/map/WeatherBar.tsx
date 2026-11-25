@@ -4,8 +4,9 @@ import {
   WEATHER,
   WEATHER_MAP,
   type WeatherLayerKey,
+  weatherScale,
 } from "@logjam/shared";
-import { IconButton, Notice, Scrubber } from "../../ui";
+import { ColourScale, IconButton, Notice, Scrubber } from "../../ui";
 import {
   weatherView,
   type WeatherMapState,
@@ -77,28 +78,31 @@ export default function WeatherBar({
       icon="weatherMap"
       quiet
       controls={
-        step !== null && (
-          <>
-            <IconButton
-              icon="earlier"
-              label={copy.weatherEarlier}
-              onClick={() => onStep(Math.max(first, step - 1))}
-            />
-            <Scrubber
-              first={first}
-              last={last}
-              value={step}
-              onChange={onStep}
-              label={layer.label}
-              valueText={shown}
-            />
-            <IconButton
-              icon="later"
-              label={copy.weatherLater}
-              onClick={() => onStep(Math.min(last, step + 1))}
-            />
-          </>
-        )
+        <>
+          {step !== null && (
+            <>
+              <IconButton
+                icon="earlier"
+                label={copy.weatherEarlier}
+                onClick={() => onStep(Math.max(first, step - 1))}
+              />
+              <Scrubber
+                first={first}
+                last={last}
+                value={step}
+                onChange={onStep}
+                label={layer.label}
+                valueText={shown}
+              />
+              <IconButton
+                icon="later"
+                label={copy.weatherLater}
+                onClick={() => onStep(Math.min(last, step + 1))}
+              />
+            </>
+          )}
+          <ColourScale stops={weatherScale(layer.key)} />
+        </>
       }
     >
       {layer.label} <span className={classes.muted}>{layer.unit}</span> ·{" "}

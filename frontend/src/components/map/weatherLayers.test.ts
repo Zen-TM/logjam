@@ -1,6 +1,7 @@
 import {
   MAP_INK,
-  ROUTE_ARROW_IMAGE,
+  WIND_ARROW_FILTER,
+  WIND_ARROW_IMAGE,
   WEATHER_CREDIT_URL,
   WEATHER_MAP,
   weatherReliefColor,
@@ -40,19 +41,21 @@ describe("the wind arrows' layer", () => {
   const spec = windArrowsLayerSpec(WEATHER_WIND_SOURCE);
   // Mutation: drop icon-rotate or the map alignment, and the arrows all point
   // east, or turn with the map instead of staying on the wind's bearing.
-  it("rotates the route arrowhead by each point's own bearing, on the map", () => {
+  it("rotates the wind arrow by each point's own bearing, on the map", () => {
     expect(spec.layout).toMatchObject({
-      "icon-image": ROUTE_ARROW_IMAGE,
+      "icon-image": WIND_ARROW_IMAGE,
       "icon-rotate": ["get", "rotate"],
       "icon-rotation-alignment": "map",
-      "icon-allow-overlap": false,
     });
   });
-  // Mutation: set icon-allow-overlap true, and a state-wide view is a solid
-  // mat of arrowheads.
-  it("drops arrows that overlap, the strongest placed first", () => {
-    expect(spec.layout!["icon-allow-overlap"]).toBe(false);
-    expect(spec.layout!["symbol-sort-key"]).toEqual(["-", 0, ["get", "speed"]]);
+  // Mutation: drop the filter, and a state-wide view is a solid mat of
+  // arrows; let them block placement, and a town's name goes missing.
+  it("thins arrows on the shared grid and hides no label", () => {
+    expect(spec.filter).toEqual(WIND_ARROW_FILTER);
+    expect(spec.layout).toMatchObject({
+      "icon-allow-overlap": true,
+      "icon-ignore-placement": true,
+    });
   });
   it("is dark ink in a light halo", () => {
     expect(spec.paint).toMatchObject({

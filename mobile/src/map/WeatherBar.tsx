@@ -1,7 +1,13 @@
 import { useWindowDimensions, View } from "react-native";
 import { MAP_TERRAIN, WEATHER } from "@logjam/shared";
 
-import { IconButton, Notice, SCRUBBER_WIDTH, Scrubber } from "../ui";
+import {
+  ColourScale,
+  IconButton,
+  Notice,
+  SCRUBBER_WIDTH,
+  Scrubber,
+} from "../ui";
 import { controlSize, makeStyles, spacing, useTheme } from "../theme";
 import { type WeatherBarModel } from "../weatherMap/weatherBar";
 
@@ -66,31 +72,34 @@ export function WeatherBar({
     <Notice
       icon="weatherMap"
       controls={
-        scrub ? (
-          <View style={styles.scrub}>
-            <IconButton
-              icon="earlier"
-              accessibilityLabel={copy.weatherEarlier}
-              color={theme.text}
-              onPress={() => onStep(scrub.step - 1)}
-            />
-            <Scrubber
-              first={scrub.first}
-              last={scrub.last}
-              value={scrub.step}
-              onChange={onStep}
-              label={copy.weather}
-              valueText={scrub.value}
-              width={width}
-            />
-            <IconButton
-              icon="later"
-              accessibilityLabel={copy.weatherLater}
-              color={theme.text}
-              onPress={() => onStep(scrub.step + 1)}
-            />
-          </View>
-        ) : undefined
+        <View style={styles.controls}>
+          {scrub ? (
+            <View style={styles.scrub}>
+              <IconButton
+                icon="earlier"
+                accessibilityLabel={copy.weatherEarlier}
+                color={theme.text}
+                onPress={() => onStep(scrub.step - 1)}
+              />
+              <Scrubber
+                first={scrub.first}
+                last={scrub.last}
+                value={scrub.step}
+                onChange={onStep}
+                label={copy.weather}
+                valueText={scrub.value}
+                width={width}
+              />
+              <IconButton
+                icon="later"
+                accessibilityLabel={copy.weatherLater}
+                color={theme.text}
+                onPress={() => onStep(scrub.step + 1)}
+              />
+            </View>
+          ) : null}
+          <ColourScale stops={model.scale} />
+        </View>
       }
     >
       {`${model.title}\n${model.detail}`}
@@ -99,5 +108,6 @@ export function WeatherBar({
 }
 
 const useStyles = makeStyles(() => ({
+  controls: { alignSelf: "stretch", gap: spacing(0.5) },
   scrub: { flexDirection: "row", alignItems: "center", gap: spacing(0.5) },
 }));

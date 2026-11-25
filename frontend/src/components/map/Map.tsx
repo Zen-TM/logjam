@@ -105,6 +105,8 @@ import {
   ROUTE_ARROW_IMAGE,
   ROUTE_ARROW_MIN_ZOOM,
   ROUTE_ARROW_SDF_URI,
+  WIND_ARROW_IMAGE,
+  WIND_ARROW_SDF_URI,
   SAVED_ROUTE_MIN_ZOOM,
   type RouteDraft,
   type RoutePoint,
@@ -2818,7 +2820,9 @@ function Map({
           ? ROUTE_ARROW_SDF_URI
           : id === GAUGE_ICON_IMAGE
             ? GAUGE_ICON_SDF_URI
-            : null;
+            : id === WIND_ARROW_IMAGE
+              ? WIND_ARROW_SDF_URI
+              : null;
       // Badges are plain bitmaps, two colours and a rim, so there is no tint
       // to protect and MapLibre can take the decoded element itself. So are
       // the Coverage hatches, which are drawn at 2x.

@@ -4,7 +4,6 @@
 // the arrows' rotation.
 import {
   MAP_INK,
-  ROUTE_ARROW_IMAGE,
   WEATHER_MAP,
   weatherLayerUrl,
   weatherReliefColor,
@@ -12,8 +11,13 @@ import {
   type WeatherLayerKey,
   type WeatherMapFile,
   type WeatherWindFile,
+  WIND_ARROW_FILTER,
+  WIND_ARROW_IMAGE,
 } from "@logjam/shared";
-import type { SymbolLayerStyle } from "@maplibre/maplibre-react-native";
+import type {
+  FilterSpecification,
+  SymbolLayerStyle,
+} from "@maplibre/maplibre-react-native";
 
 import { hashKey, type ResolvedTileSource } from "./sourceResolver";
 
@@ -62,24 +66,27 @@ export function weatherFieldPaint(layer: WeatherLayerKey) {
 }
 
 /**
- * The arrowhead (an SDF the screen registers for routes) turned to where the
- * wind blows by each feature's `rotate`. Overlap is off so MapLibre thins
- * the arrows itself as the map zooms out; the size grows a little with the
- * speed. Dark with a light halo so they read over every field colour.
+ * The wind arrow (an SDF the screen registers) turned to where the
+ * wind blows by each feature's `rotate`. They sit on the grid
+ * `WIND_ARROW_FILTER` thins by zoom (`WEATHER_ARROW_FILTER`), overlapping
+ * anything and blocking nothing; the arrow grows with the speed. Dark with a light halo so they read over every field colour.
  * Guard: weatherLayers.test.ts.
  */
 export const WEATHER_ARROW_STYLE: SymbolLayerStyle = {
-  iconImage: ROUTE_ARROW_IMAGE,
+  iconImage: WIND_ARROW_IMAGE,
   iconRotate: ["get", "rotate"],
   iconRotationAlignment: "map",
   iconPitchAlignment: "map",
-  iconAllowOverlap: false,
-  iconIgnorePlacement: false,
-  iconSize: ["interpolate", ["linear"], ["get", "speed"], 0, 0.25, 60, 0.5],
+  iconAllowOverlap: true,
+  iconIgnorePlacement: true,
+  iconSize: ["interpolate", ["linear"], ["get", "speed"], 0, 0.3, 60, 0.55],
   iconColor: MAP_INK.casing,
   iconHaloColor: MAP_INK.ring,
   iconHaloWidth: 1.5,
 };
+
+export const WEATHER_ARROW_FILTER =
+  WIND_ARROW_FILTER as unknown as FilterSpecification;
 
 /** The arrows of one step, or an empty collection when there is no wind file. */
 export function weatherArrowData(
