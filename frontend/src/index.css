@@ -24,7 +24,7 @@
   /* A scrubber's track: a drag needs room to be worth making. */
   --scrubber-width: 12rem;
   /* The weather card: Play, Earlier, a scrubber and Later fit in a row of it. */
-  --notice-card-width: 22rem;
+  --notice-card-width: 24rem;
   /* The side margin every panel, sheet and list keeps. */
   --gutter: var(--space-2);
 

@@ -163,6 +163,25 @@ describe("the Weather bar", () => {
     ).toBeNull();
   });
 
+  // Mutation: put the layer and the time back on one line, and a long time or
+  // a total's title wraps it to a second line: the card changes height.
+  it("keeps the layer and the time on lines of their own", () => {
+    for (const layerKey of ["rain", "rainPast168"] as const) {
+      bar({ layerKey });
+      const title = screen.getByText((_, el) =>
+        Boolean(
+          el?.tagName === "SPAN" &&
+            el.textContent?.trim().startsWith("Rain") &&
+            !el.textContent.includes("Updated") &&
+            el.parentElement?.textContent?.includes("Updated"),
+        ),
+      );
+      const time = title.nextElementSibling as HTMLElement;
+      expect(time.textContent).toMatch(/· Updated/);
+      cleanup();
+    }
+  });
+
   it("says it is loading", () => {
     bar({ state: { status: "loading" } });
     expect(document.body.textContent).toBe(copy.weatherLoading);

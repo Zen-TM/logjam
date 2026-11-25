@@ -166,8 +166,14 @@ export default function WeatherBar({
         </span>
       }
     >
-      {layer.label} <span className={classes.muted}>{layer.unit}</span> ·{" "}
-      {shown} · <span className={classes.muted}>{age}</span>
+      {/* Always two lines, each cut rather than wrapped, so the card keeps
+          one height as the time and the layer change, as it keeps one width. */}
+      <span className={classes.line}>
+        {layer.label} <span className={classes.muted}>{layer.unit}</span>{" "}
+      </span>
+      <span className={classes.line}>
+        {shown} · <span className={classes.muted}>{age}</span>
+      </span>
     </Notice>
   );
 }
