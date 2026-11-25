@@ -212,6 +212,7 @@
 .noticeAction {
   display: inline-flex;
   flex: none;
+  gap: var(--space-1);
 }
 
 .noticeGlyph {

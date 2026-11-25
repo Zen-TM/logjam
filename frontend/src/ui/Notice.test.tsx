@@ -42,6 +42,17 @@ describe("Notice", () => {
     );
   });
 
+  // Mutation: drop the gap from `.noticeAction`, and two actions in one notice
+  // (the weather card's Try again and Hide) touch: the wrapper takes them out
+  // of the notice's own gap.
+  it("spaces the actions it holds", () => {
+    const dir = dirname(fileURLToPath(import.meta.url));
+    const css = readFileSync(join(dir, "MapControl.module.css"), "utf8");
+    expect(css.match(/\.noticeAction \{([^}]*)\}/)?.[1]).toContain(
+      "gap: var(--space-1)",
+    );
+  });
+
   // Mutation: make the words a `span` whatever `onText` says.
   it("makes the words a button when it has somewhere to go", () => {
     let pressed = 0;
