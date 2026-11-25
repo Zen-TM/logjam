@@ -72,7 +72,14 @@ export function WeatherBar({
     <Notice
       icon="weatherMap"
       controls={
-        <View style={styles.controls}>
+        // As wide as the scrubber's row, so a total's scale (no scrubber)
+        // still spaces its numbers.
+        <View
+          style={[
+            styles.controls,
+            { width: width + controlSize.md * 2 + spacing(0.5) * 2 },
+          ]}
+        >
           {scrub ? (
             <View style={styles.scrub}>
               <IconButton
@@ -108,6 +115,6 @@ export function WeatherBar({
 }
 
 const useStyles = makeStyles(() => ({
-  controls: { alignSelf: "stretch", gap: spacing(0.5) },
+  controls: { gap: spacing(0.5) },
   scrub: { flexDirection: "row", alignItems: "center", gap: spacing(0.5) },
 }));
