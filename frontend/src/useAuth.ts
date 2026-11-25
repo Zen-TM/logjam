@@ -11,6 +11,7 @@ import { clearTileCache } from "./geoPdf/cache";
 import { clearTripDraft } from "./tripDraft";
 import { clearRecentSearches } from "./recentSearches";
 import { friendInvite, planInvite } from "./pendingInvite";
+import { clearKeptStores } from "./signOutStores";
 import {
   completeSignInFromUrl,
   issuerUrl,
@@ -39,6 +40,7 @@ async function endSession() {
   // can't strand it.
   clearTripDraft();
   clearRecentSearches();
+  clearKeptStores(true);
   // An invite waiting in this tab was for whoever opened its link; the next
   // account to sign in here must not be handed it.
   friendInvite.clear();
@@ -59,7 +61,9 @@ async function endSession() {
   }
   // Once more: a render or prefetch worker may have written while the
   // sign-out was in flight. Before the navigation, which would abort it
-  // (frontend/AGENTS.md, ADR 0043).
+  // (frontend/AGENTS.md, ADR 0043). The stored view and filters are
+  // rewritten by the mounted app the same way.
+  clearKeptStores(true);
   await clearTileCache();
   if (to) window.location.assign(to);
   else window.location.reload();
@@ -89,6 +93,10 @@ export function useAuth() {
     import.meta.env.VITE_AUTH_MODE === "fake" ? "authenticated" : "loading",
   );
   const [error, setError] = useState<string | null>(null);
+  // Set once the sign-up form's own consent record has gone through, so the
+  // region step (RegionStep) can follow it; a reload forgets it and the
+  // account keeps the default region.
+  const [newAccount, setNewAccount] = useState(false);
 
   // True when the session check itself failed (offline, say) and put the
   // sign-in screen up with the refresh token still in localStorage: the user
@@ -100,6 +108,7 @@ export function useAuth() {
     // Whoever signs in starts with an empty tile cache, even after a
     // failed session check that left the last user's in place.
     clearRecentSearches();
+    clearKeptStores();
     await clearTileCache();
     sessionCheckFailed.current = false;
     // Await provisioning before flipping to authenticated: GET /users/me
@@ -145,6 +154,7 @@ export function useAuth() {
           // session that lapsed while the tab was shut): their GeoPDF tiles
           // go with it.
           clearRecentSearches();
+          clearKeptStores();
           void clearTileCache();
           setState("signIn");
         }
@@ -167,6 +177,7 @@ export function useAuth() {
   useEffect(() => {
     if (state === "signIn" && !sessionCheckFailed.current) {
       clearRecentSearches();
+      clearKeptStores();
       void clearTileCache();
     }
   }, [state]);
@@ -179,6 +190,7 @@ export function useAuth() {
     if (import.meta.env.VITE_AUTH_MODE === "fake") return;
     setSessionExpiredHandler(() => {
       clearRecentSearches();
+      clearKeptStores();
       void clearTileCache();
       setState((prev) => {
         if (prev !== "authenticated") return prev;
@@ -207,6 +219,7 @@ export function useAuth() {
   const handlePasswordSignIn = useCallback(
     async (email: string, password: string, newAccountUsername?: string) => {
       setError(null);
+      setNewAccount(false);
       let signedIn = false;
       try {
         signedIn = await signInWithPassword(email, password);
@@ -220,7 +233,8 @@ export function useAuth() {
       }
       await enterSession();
       if (newAccountUsername) {
-        await recordConsent(CURRENT_CONSENT_VERSION, newAccountUsername).catch(
+        await recordConsent(CURRENT_CONSENT_VERSION, newAccountUsername).then(
+          () => setNewAccount(true),
           console.error,
         );
       }
@@ -229,10 +243,14 @@ export function useAuth() {
     [enterSession],
   );
 
+  const finishNewAccount = useCallback(() => setNewAccount(false), []);
+
   return {
     state,
     error,
     signIn: handleSignIn,
     signInWithPassword: handlePasswordSignIn,
+    newAccount,
+    finishNewAccount,
   };
 }

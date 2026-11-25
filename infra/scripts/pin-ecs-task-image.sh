@@ -54,6 +54,7 @@ self_test() {
   "family": "f",
   "cpu": "1024",
   "memory": "4096",
+  "ephemeralStorage": {"sizeInGiB": 50},
   "networkMode": "awsvpc",
   "requiresCompatibilities": ["FARGATE"],
   "executionRoleArn": "arn:aws:iam::1:role/exec",
@@ -74,6 +75,9 @@ JSON
   check "container name and essential survive"  '.containerDefinitions[0].name == "c" and .containerDefinitions[0].essential'
   check "roles survive"                          '.executionRoleArn != null and .taskRoleArn != null'
   check "sizing and network survive"             '.cpu == "1024" and .memory == "4096" and .networkMode == "awsvpc"'
+  # The topo worker's disk (ecs.tf) is read from the live def; a filter that
+  # dropped it would put every pinned deploy back on Fargate's 20 GiB.
+  check "ephemeral storage survives"             '.ephemeralStorage.sizeInGiB == 50'
   check "every read-only field is dropped" '
     ([.taskDefinitionArn, .revision, .status, .requiresAttributes,
       .compatibilities, .registeredAt, .registeredBy, .deregisteredAt]

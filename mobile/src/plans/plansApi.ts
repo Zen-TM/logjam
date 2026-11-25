@@ -89,6 +89,32 @@ export const addPlanItem = (planId: string, body: TripPlanItemAdd) =>
     mediaOutOfSpace?: true;
   }>(`${plan(planId)}/items`, { method: "POST", body });
 
+/** A way's file straight into the plan: presign, then PUT the file to the
+ *  URL, then confirm (`planFileUpload.ts` runs the three). */
+export type PlanFileBody = {
+  filename: string;
+  mediaType: string;
+  displayName?: string;
+  metadata: Record<string, unknown>;
+};
+export const presignPlanFile = (
+  planId: string,
+  body: PlanFileBody & { sizeBytes: number },
+) =>
+  apiFetch<{ mediaId: string; displayUploadUrl: string }>(
+    `${plan(planId)}/items/media/presign`,
+    { method: "POST", body },
+  );
+export const confirmPlanFile = (
+  planId: string,
+  mediaId: string,
+  body: PlanFileBody,
+) =>
+  apiFetch<{ item: TripPlanItem }>(
+    `${plan(planId)}/items/media/${encodeURIComponent(mediaId)}/confirm`,
+    { method: "POST", body },
+  );
+
 /** What someone invited by username sees before joining; 404 otherwise. */
 export const getInvitedPreview = (id: string) =>
   apiFetch<TripPlanInvitedPreview>(`${plan(id)}/preview`);

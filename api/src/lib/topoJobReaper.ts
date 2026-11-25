@@ -13,6 +13,7 @@ import { sweepEgress } from "./egressMeter";
 import { normalizeUserUiPreferences, say } from "@logjam/shared";
 import { getEnv } from "./env";
 import { logger, safeErrorForLog } from "./logger";
+import { createSweepLeader } from "./sweepLeader";
 import { TOPO_EXPORT_STOPPED_MESSAGE } from "./failureCopy";
 
 // Stuck-job reaper for both topo pipelines.
@@ -266,8 +267,7 @@ async function notifyReaped(entries: ReapEntry[]): Promise<void> {
  * The status-guarded claim is the house dedup rule (root AGENTS.md): two API
  * instances sweeping concurrently both read the same overdue ids, but only one
  * `updateMany` per id reports `count === 1`. Notifying on the READ set instead would send the user
- * two notifications, two pushes and two emails per reaped job — prod runs the
- * API on Elastic Beanstalk, so >1 instance is a real configuration.
+ * two notifications, two pushes and two emails per reaped job.
  *
  * Winning the flip also proves the row was still `pending`/`queued`/overdue a
  * moment ago, which is why no confirm-read is needed.
@@ -321,7 +321,7 @@ async function failReapedTopoJob(
   return claim;
 }
 
-// A browser PUT of even the 25 GB cap finishes well inside a day; an
+// A browser PUT of even the 15 GB cap finishes well inside a day; an
 // `uploading` row older than this was abandoned (tab closed, network lost).
 const ABANDONED_UPLOAD_MS = 24 * 60 * 60 * 1000;
 
@@ -514,7 +514,12 @@ export async function reapStuckTopoJobs(
       (id) =>
         prisma.topoExportJob.updateMany({
           where: { id, status: "running" },
-          data: { status: "failed", errorMessage: REAPER_EXPORT_MESSAGE },
+          // completedAt ends the export's credits (topo_export_job_credits).
+          data: {
+            status: "failed",
+            errorMessage: REAPER_EXPORT_MESSAGE,
+            completedAt: new Date(),
+          },
         }),
       exportJobEntry,
     );
@@ -596,8 +601,17 @@ let timer: NodeJS.Timeout | null = null;
 
 /**
  * Start the periodic reaper. No-op if TOPO_REAPER_INTERVAL_MS is 0. Safe to call
- * once at boot; the returned stop function clears the timer for graceful
- * shutdown / tests.
+ * once at boot; the returned stop function clears the timer and releases the
+ * sweep lock for graceful shutdown / tests.
+ *
+ * Every background sweep runs from this one timer, and a tick runs only in the
+ * process holding the database's sweep lock (lib/sweepLeader.ts), so several
+ * API processes on one database sweep once, not once each. A new sweep joins
+ * runOnce; it never gets a timer of its own. Guards:
+ * lib/topoJobReaper.leader.unit.test.ts (a tick goes through the leader),
+ * lib/noOwnTimer.unit.test.ts (no other setInterval) and
+ * src/__tests__/sweepLeader.test.ts (one holder per database).
+ * Ticks that outlast the interval overlap, as they always have.
  */
 export function startTopoJobReaper(): () => void {
   const env = getEnv();
@@ -605,6 +619,8 @@ export function startTopoJobReaper(): () => void {
     logger.info("topo_job_reaper_disabled");
     return () => {};
   }
+
+  const leader = createSweepLeader();
 
   const runOnce = () => {
     reapStuckTopoJobs()
@@ -672,9 +688,14 @@ export function startTopoJobReaper(): () => void {
 
   // Run once shortly after boot (catches jobs stranded while the API was down),
   // then on the configured interval.
-  timer = setInterval(runOnce, env.TOPO_REAPER_INTERVAL_MS);
+  const tick = () => {
+    leader.runIfLeader(runOnce).catch((err) => {
+      logger.error({ err: safeErrorForLog(err) }, "sweep_tick_failed");
+    });
+  };
+  timer = setInterval(tick, env.TOPO_REAPER_INTERVAL_MS);
   timer.unref(); // don't keep the process alive for the reaper alone
-  setTimeout(runOnce, 10_000).unref();
+  setTimeout(tick, 10_000).unref();
 
   logger.info(
     {
@@ -693,5 +714,6 @@ export function startTopoJobReaper(): () => void {
       clearInterval(timer);
       timer = null;
     }
+    void leader.stop();
   };
 }

@@ -150,6 +150,8 @@ export const SCHEMA_SQL = `
           pointsJson     TEXT NOT NULL,
           anchorsJson    TEXT NOT NULL,
           editingRouteId TEXT,
+          planId         TEXT,
+          placeId        TEXT,
           savedAt        TEXT NOT NULL
         );
         -- DROP TABLE IF EXISTS cleans up legacy region_download: unfinished
@@ -174,6 +176,9 @@ export const ADDED_COLUMNS: {
   column: string;
   definition: string;
 }[] = [
+  // The plan a route being drawn is for, so a draft restored after a kill is
+  // still made in that plan and never saved to the account.
+  { table: "route_draft", column: "planId", definition: "TEXT" },
   // User-facing rename of a downloaded region/overlay (Saved tab). Display
   // only — resolution still keys off `logicalKey`.
   { table: "map_artifact", column: "label", definition: "TEXT" },
@@ -231,4 +236,7 @@ export const ADDED_COLUMNS: {
   { table: "track_point", column: "speedMps", definition: "REAL" },
   { table: "track_point", column: "headingDeg", definition: "REAL" },
   { table: "track_point", column: "altitudeAccuracyM", definition: "REAL" },
+  // The place a route being drawn is for, so a draft restored after a kill is
+  // still saved into that place's route slot.
+  { table: "route_draft", column: "placeId", definition: "TEXT" },
 ];

@@ -24,6 +24,10 @@ type TextFieldProps = {
   error?: string | null;
   /** One plain sentence under the input saying what it means or takes. */
   hint?: string;
+  /** The label of a question someone answers (`Field`'s `prominentLabel`). */
+  prominentLabel?: boolean;
+  /** The hint sits between the label and the input (`Field`'s `hintAbove`). */
+  hintAbove?: boolean;
   /** Marks the field "Required" beside its label. */
   requiredMark?: boolean;
   /** Keeps the error line's height when it is empty, so a submit that lights
@@ -65,6 +69,8 @@ export function TextField({
   onChangeText,
   error,
   hint,
+  prominentLabel,
+  hintAbove,
   requiredMark,
   reserveError,
   multiline,
@@ -113,6 +119,8 @@ export function TextField({
     <Field
       label={label}
       hint={hint}
+      prominentLabel={prominentLabel}
+      hintAbove={hintAbove}
       error={error}
       requiredMark={requiredMark}
       reserveError={reserveError}

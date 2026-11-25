@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import { DeleteObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import request from "supertest";
-import { NSW_5M } from "@logjam/shared";
+import { NSW_REGION } from "@logjam/shared";
 
 import {
   flatPng,
@@ -48,7 +48,7 @@ beforeAll(async () => {
       new PutObjectCommand({ Bucket: process.env.S3_BUCKET_TOPO, Key, Body }),
     );
   await put(
-    NSW_5M.archivePath,
+    NSW_REGION.terrain.heights.archivePath,
     readFileSync(join(FIXTURES, "nsw-5m-z15-katoomba.pmtiles")),
   );
   // One flat z16 tile: grey 128 decodes to 128.5 m, far from the ~980 m of
@@ -120,18 +120,20 @@ describe("a sharpened area", () => {
     expect(body.demSourceIds[0]).toBe(`lidar-${id}`);
     expect(body.elevationM).toBeCloseTo(128.5, 1);
     expect(body.attribution).toContain(CREDIT);
-    expect(body.attribution).toContain(NSW_5M.credit);
+    expect(body.attribution).toContain(NSW_REGION.terrain.heights.credit);
   });
 
   it("is the statewide height to a stranger, worded as anywhere else", async () => {
     const body = await heightFor(CAROL_SUB);
-    expect(body.demSourceIds).toEqual([NSW_5M.id]);
+    expect(body.demSourceIds).toEqual([NSW_REGION.terrain.heights.id]);
     expect(body.attribution).not.toContain(CREDIT);
     expect(await overlayFor(CAROL_SUB)).toBeUndefined();
   });
 
   it("reaches a user only while it is shared with them", async () => {
-    expect((await heightFor(BOB_SUB)).demSourceIds).toEqual([NSW_5M.id]);
+    expect((await heightFor(BOB_SUB)).demSourceIds).toEqual([
+      NSW_REGION.terrain.heights.id,
+    ]);
 
     const shared = await request(API_URL)
       .post("/shares")
@@ -154,7 +156,9 @@ describe("a sharpened area", () => {
       .delete(`/shares/topoJob/${id}/${BOB_ID}`)
       .set(as(ALICE_SUB));
     expect(revoked.status).toBeLessThan(300);
-    expect((await heightFor(BOB_SUB)).demSourceIds).toEqual([NSW_5M.id]);
+    expect((await heightFor(BOB_SUB)).demSourceIds).toEqual([
+      NSW_REGION.terrain.heights.id,
+    ]);
     expect(await overlayFor(BOB_SUB)).toBeUndefined();
   });
 });

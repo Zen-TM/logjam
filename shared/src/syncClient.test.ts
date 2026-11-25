@@ -20,7 +20,7 @@ import { pushOpDependencies, type SyncPushOp } from "./sync.js";
 const PLACE_A = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const PLACE_B = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const TRIP_A = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
-const WP_A = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+const PLACE_C = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
 
 let opCounter = 0;
 function op(
@@ -106,9 +106,9 @@ describe("planOutboxEnqueue (coalescing)", () => {
       entry(
         2,
         op({
-          entity: "waypoint",
+          entity: "place",
           op: "create",
-          id: WP_A,
+          id: PLACE_C,
           fields: { name: "w" },
         }),
       ),
@@ -291,7 +291,7 @@ describe("selectFlushBatch (dependency closure)", () => {
   it("takes queued ops in seq order up to max", () => {
     const entries = [
       entry(1, op({ entity: "place", op: "create", id: PLACE_A, fields: {} })),
-      entry(2, op({ entity: "waypoint", op: "create", id: WP_A, fields: {} })),
+      entry(2, op({ entity: "place", op: "create", id: PLACE_C, fields: {} })),
       entry(3, op({ entity: "place", op: "update", id: PLACE_A, fields: {} })),
     ];
     const { ready, deferred } = selectFlushBatch(entries, 2);
@@ -327,9 +327,9 @@ describe("selectFlushBatch (dependency closure)", () => {
       entry(
         4,
         op({
-          entity: "waypoint",
+          entity: "place",
           op: "create",
-          id: WP_A,
+          id: PLACE_C,
           fields: { placeId: PLACE_B },
         }),
       ),
@@ -349,9 +349,9 @@ describe("selectFlushBatch (dependency closure)", () => {
       entry(
         2,
         op({
-          entity: "waypoint",
+          entity: "place",
           op: "create",
-          id: WP_A,
+          id: PLACE_C,
           fields: { placeId: PLACE_A },
         }),
       ),
@@ -490,25 +490,25 @@ describe("collectDirtyFields + rebaseRow", () => {
       entry(
         1,
         op({
-          entity: "waypoint",
+          entity: "place",
           op: "create",
-          id: WP_A,
+          id: PLACE_C,
           fields: { name: "w", latitude: -33.6 },
         }),
       ),
       entry(
         2,
         op({
-          entity: "waypoint",
+          entity: "place",
           op: "update",
-          id: WP_A,
+          id: PLACE_C,
           fields: { name: "w2" },
         }),
         "deadRemote",
       ),
-      entry(3, op({ entity: "waypoint", op: "delete", id: WP_A })),
+      entry(3, op({ entity: "place", op: "delete", id: PLACE_C })),
     ];
-    expect(collectDirtyFields(entries, "waypoint", WP_A)).toEqual({
+    expect(collectDirtyFields(entries, "place", PLACE_C)).toEqual({
       name: "w",
       latitude: -33.6,
     });
@@ -660,9 +660,9 @@ describe("pushOpDependencies (shared single source)", () => {
     expect(
       pushOpDependencies(
         op({
-          entity: "waypoint",
+          entity: "place",
           op: "create",
-          id: WP_A,
+          id: PLACE_C,
           fields: { placeId: PLACE_B },
         }),
       ),

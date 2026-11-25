@@ -3,6 +3,8 @@
 # Requires DB_HOST_PROD, DB_NAME_PROD, DB_USER_PROD, DB_PASSWORD_PROD to be set
 # in the environment (DB_PORT_PROD optional, defaults to 5432). pg_dump takes
 # discrete connection flags, so no URL/encoding is needed.
+# Needs psql and a pg_dump at least as new as prod's Postgres (the major in
+# infra/brain/postgres/Dockerfile): an older pg_dump refuses the server.
 set -e
 
 if [ -z "$DB_HOST_PROD" ] || [ -z "$DB_NAME_PROD" ] || [ -z "$DB_USER_PROD" ] || [ -z "$DB_PASSWORD_PROD" ]; then

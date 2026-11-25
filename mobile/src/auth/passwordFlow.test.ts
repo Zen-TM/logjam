@@ -63,6 +63,7 @@ describe("signInWithPasswordFlow", () => {
     signInWithPassword.mockResolvedValue(session);
     expect(await signInWithPasswordFlow("a@b.co", "pw")).toEqual({
       type: "signedIn",
+      newAccount: false,
     });
     expect(finishSignIn).toHaveBeenCalledWith(session);
     expect(updateConsent).not.toHaveBeenCalled();
@@ -96,6 +97,22 @@ describe("signInWithPasswordFlow", () => {
     updateConsent.mockRejectedValue(new Error("offline"));
     expect(await signInWithPasswordFlow("a@b.co", "pw", "canyon_fan")).toEqual({
       type: "signedIn",
+      newAccount: true,
+    });
+  });
+
+  // Mutation: report `newAccount: true` for a plain sign-in, or false for the
+  // sign-up form: the region step is then asked of everyone, or of no one on
+  // the path new accounts take (AppShell shows it from this).
+  it("reports a new account for the sign-up form and not for a sign-in", async () => {
+    signInWithPassword.mockResolvedValue(session);
+    expect(
+      await signInWithPasswordFlow("a@b.co", "pw", "canyon_fan"),
+    ).toMatchObject({
+      newAccount: true,
+    });
+    expect(await signInWithPasswordFlow("a@b.co", "pw")).toMatchObject({
+      newAccount: false,
     });
   });
 

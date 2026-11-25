@@ -1,5 +1,5 @@
 // The last river gauge file on this phone (ADR 0044), and the last rain gauge
-// file (ADR 0047). Both are public and the same for everyone; they are wiped
+// file (ADR 0050). Both are public and the same for everyone; they are wiped
 // anyway because every on-device store joins the wipe (ADR 0006).
 import * as FileSystem from "expo-file-system/legacy";
 import {

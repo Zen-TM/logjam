@@ -40,11 +40,14 @@ resource "aws_cognito_user_pool" "main" {
   }
 
   # Route all verification/code emails through Resend (see lambda_cognito_email.tf)
-  # so they pass DKIM/DMARC on notifications.logjamnsw.com and reach the inbox.
+  # so they pass DKIM/DMARC on notifications.logjam.earth and reach the inbox.
   # kms_key_id is the CMK Cognito uses to encrypt the code before invoking the
   # Lambda, which decrypts and sends.
   lambda_config {
     kms_key_id = aws_kms_key.cognito_email.arn
+    # Caps new accounts per month (cognito_signup_cap.tf). It sits in the path
+    # of every self-service sign-up.
+    pre_sign_up = aws_lambda_function.cognito_pre_signup.arn
     custom_email_sender {
       lambda_arn     = aws_lambda_function.cognito_email_sender.arn
       lambda_version = "V1_0"
@@ -113,17 +116,17 @@ resource "aws_cognito_user_pool_client" "main" {
   allowed_oauth_flows_user_pool_client = true
   # profile: the code flow's ID token carries no profile claims without it.
   # aws.cognito.signin.user.admin: what change-email and GlobalSignOut call
-  # Cognito with. Guard: guards.tftest.hcl (cognito_client_scopes_and_api_grant).
+  # Cognito with. Guard: guards.tftest.hcl (cognito_client_scopes).
   allowed_oauth_scopes  = ["aws.cognito.signin.user.admin", "email", "openid", "phone", "profile"]
   auth_session_validity = 3
   # Logjam Web redirects to location.origin + "/" and the site answers on both
   # hosts; logjam://auth is Logjam GPS. The no-slash URL is what old builds use.
-  callback_urls                                 = ["https://logjamnsw.com/", "https://www.logjamnsw.com/", "logjam://auth"]
+  callback_urls                                 = ["https://logjam.earth/", "https://www.logjam.earth/", "logjam://auth"]
   enable_propagate_additional_user_context_data = false
   enable_token_revocation                       = true
   explicit_auth_flows                           = ["ALLOW_REFRESH_TOKEN_AUTH", "ALLOW_USER_AUTH"]
   id_token_validity                             = 60
-  logout_urls                                   = ["https://logjamnsw.com/", "https://www.logjamnsw.com/", "logjam://auth"]
+  logout_urls                                   = ["https://logjam.earth/", "https://www.logjam.earth/", "logjam://auth"]
   name                                          = "logjam"
   prevent_user_existence_errors                 = "ENABLED"
   read_attributes                               = []

@@ -7,7 +7,7 @@ import {
   ELEVATION_PROFILE_MAX_SAMPLES,
   ELEVATION_TRACK_MAX_SAMPLES,
   MAX_ROUTE_POINTS,
-  NSW_5M,
+  NSW_REGION,
 } from "@logjam/shared";
 
 import { s3 } from "../services/awsClients";
@@ -37,7 +37,7 @@ beforeAll(async () => {
   await s3.send(
     new PutObjectCommand({
       Bucket: process.env.S3_BUCKET_TOPO,
-      Key: NSW_5M.archivePath,
+      Key: NSW_REGION.terrain.heights.archivePath,
       Body: readFileSync(join(FIXTURES, "nsw-5m-z15-katoomba.pmtiles")),
     }),
   );
@@ -50,8 +50,8 @@ describe("POST /elevation/profile", () => {
       .set(as(ALICE_SUB))
       .send({ points: LINE });
     expect(res.status).toBe(200);
-    expect(res.body.demSourceIds).toEqual([NSW_5M.id]);
-    expect(res.body.attribution).toBe(NSW_5M.credit);
+    expect(res.body.demSourceIds).toEqual([NSW_REGION.terrain.heights.id]);
+    expect(res.body.attribution).toBe(NSW_REGION.terrain.heights.credit);
     expect(res.body.samples.length).toBeGreaterThan(2);
     // The ends are in shared/src/__fixtures__/dem-parity-nsw.json: 983.42 m
     // and 999.54 m, worked out by an independent decoder.
@@ -157,8 +157,8 @@ describe("POST /elevation/point", () => {
     // A hillside on the fixture: steeper than flat, short of a wall.
     expect(res.body.slopeDegrees).toBeGreaterThan(0);
     expect(res.body.slopeDegrees).toBeLessThan(90);
-    expect(res.body.demSourceIds).toEqual([NSW_5M.id]);
-    expect(res.body.attribution).toBe(NSW_5M.credit);
+    expect(res.body.demSourceIds).toEqual([NSW_REGION.terrain.heights.id]);
+    expect(res.body.attribution).toBe(NSW_REGION.terrain.heights.credit);
   });
 
   // No unauthenticated-401 case: fake auth treats a missing header as alice.

@@ -1,6 +1,6 @@
 # Metro, the dev client and devices
 
-Package `com.logjamnsw.mobile`, or `com.logjamnsw.mobile.dev` under
+Package `earth.logjam.gps`, or `earth.logjam.gps.dev` under
 `LOGJAM_APP_VARIANT=dev` (`mobile/AGENTS.md`). `npm run dev:android` sets up ports and
 launches; these are what it does not catch.
 

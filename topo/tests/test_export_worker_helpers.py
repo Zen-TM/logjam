@@ -30,19 +30,12 @@ os.environ.setdefault("DB_USER", "test")
 os.environ.setdefault("DB_PASSWORD", "test")
 os.environ.setdefault("EXPORT_JOB_ID", "export-123")
 
-try:
-    import export_worker  # noqa: E402
-    from area_export import AreaOutsideNsw  # noqa: E402
-    from export_worker import GENERIC_FAILURE, failure_sentence  # noqa: E402
-    from renderers.context import ExportTooLarge, RenderError  # noqa: E402
-
-    _IMPORT_OK = True
-except Exception as _exc:  # noqa: BLE001
-    _IMPORT_OK = False
-    _IMPORT_ERR = _exc
+import export_worker  # noqa: E402
+from area_export import AreaOutsideNsw  # noqa: E402
+from export_worker import GENERIC_FAILURE, failure_sentence  # noqa: E402
+from renderers.context import ExportTooLarge, RenderError  # noqa: E402
 
 
-@unittest.skipUnless(_IMPORT_OK, lambda: f"export_worker import failed: {_IMPORT_ERR}")
 class TestFailureSentence(unittest.TestCase):
     def test_a_render_failure_shows_none_of_its_stderr(self):
         error = RenderError(
@@ -86,7 +79,6 @@ class TestFailureSentence(unittest.TestCase):
         )
 
 
-@unittest.skipUnless(_IMPORT_OK, lambda: f"export_worker import failed: {_IMPORT_ERR}")
 class TestAreaBoxNeverLogged(unittest.TestCase):
     # Mutation: put `bbox` in render_area_export's log line, and an export's
     # box (where someone means to go) is in the worker's log.
@@ -117,7 +109,6 @@ class TestAreaBoxNeverLogged(unittest.TestCase):
                 self.assertNotIn(number, line)
 
 
-@unittest.skipUnless(_IMPORT_OK, lambda: f"export_worker import failed: {_IMPORT_ERR}")
 class TestSharpenedAreasInTheApisOrder(unittest.TestCase):
     # Mutation: return the rows in the database's order, and where two areas
     # overlap the file draws the one the map doesn't (the API sends them in

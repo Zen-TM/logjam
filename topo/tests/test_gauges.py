@@ -605,11 +605,11 @@ class TestRain(unittest.TestCase):
 
     def test_the_registry_keeps_only_cleared_owners(self):
         # Mutation: drop the owner check in rain_registry, or add an owner to
-        # RAIN_OWNERS without reading its terms into ADR 0047 → red.
+        # RAIN_OWNERS without reading its terms into ADR 0050 → red.
         self.assertEqual(
             g.RAIN_OWNERS,
             {"NSW - Water NSW"},
-            "a new owner's terms go in ADR 0047 first",
+            "a new owner's terms go in ADR 0050 first",
         )
 
         def station(no, owner):

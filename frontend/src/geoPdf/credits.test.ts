@@ -1,6 +1,6 @@
 // @vitest-environment node
 import {
-  NSW_5M,
+  NSW_REGION,
   type SharpenedArea,
   type TerrainLayerKey,
 } from "@logjam/shared";
@@ -119,7 +119,9 @@ describe("the credit block's upper bound", () => {
       upperBoundTerrainLines(requested, []).length,
     );
     expect(upperBoundTerrainLines(new Set(["slope"]), [])[0]).toContain(
-      NSW_5M.credit.slice(NSW_5M.credit.indexOf(" ")),
+      NSW_REGION.terrain.heights.credit.slice(
+        NSW_REGION.terrain.heights.credit.indexOf(" "),
+      ),
     );
   });
 });

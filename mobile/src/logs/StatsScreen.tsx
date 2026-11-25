@@ -189,6 +189,7 @@ export function StatsScreen({
               away leaves the reader unsure what they are looking at. */}
         <ScrollView
           horizontal
+          keyboardShouldPersistTaps="handled"
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.rail}
         >

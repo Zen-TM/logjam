@@ -1,4 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
+import {
+  appendRejectedFixes,
+  appendTrackPoints,
+  deleteTrack,
+} from "./tracksDb";
 
 // A connection that throws on a nested BEGIN, like SQLite. Reverting any track
 // write in tracksDb.ts to a bare `db.withTransactionAsync` turns this red.
@@ -23,12 +28,6 @@ const db = {
 };
 vi.mock("../offline/registryDb", () => ({ getOfflineDb: async () => db }));
 vi.mock("expo-sqlite", () => ({}));
-
-import {
-  appendRejectedFixes,
-  appendTrackPoints,
-  deleteTrack,
-} from "./tracksDb";
 
 describe("track writes", () => {
   it("deleteTrack waits for a location batch still being written", async () => {

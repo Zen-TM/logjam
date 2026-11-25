@@ -21,7 +21,40 @@
    titles, which a field label sitting under one must not mimic. */
 .label {
   composes: detail from "../textRoles.generated.module.css";
+  padding: 0;
   color: var(--color-text-muted);
+}
+
+/* A question someone answers: `rowTitle` in the text colour, so the hint under
+   it is the quieter line. */
+.labelProminent {
+  composes: rowTitle from "../textRoles.generated.module.css";
+  padding: 0;
+  color: var(--color-text);
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--form-label);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+/* The controls keep a row's gap between them, apart from the label, hint and
+   error at the field's own. */
+.controls {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+/* A legend is not a flex item, so the gap never reaches it. */
+.group > legend {
+  margin-bottom: var(--form-label);
 }
 
 .labelRow {

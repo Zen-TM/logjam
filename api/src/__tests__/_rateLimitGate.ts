@@ -12,7 +12,7 @@
 // it sleeps until the fixed window resets. Costs one request per file and at
 // most a couple of 60s waits per full run.
 
-import { beforeAll } from "vitest";
+import { afterAll, beforeAll, expect } from "vitest";
 
 const API_URL = process.env.API_URL ?? "http://localhost:8080";
 
@@ -46,23 +46,70 @@ export async function throttleWrites(res: {
   return false;
 }
 
-// Upper bound on any single test file's request count (tripLogsGlobal is the
-// hungriest at ~95). Keep ABOVE the real max or a file can start with too
-// little budget and 429 mid-file.
+// Upper bound on any single test file's request count. Keep ABOVE the real max
+// or a file can start with too little budget and 429 mid-file. The afterAll
+// below fails a file that spends more, so a file that outgrows this fails with
+// that message instead of 429ing at random.
 const FILE_BUDGET = 130;
+
+// Files that already send more than FILE_BUDGET, each with a ceiling a little
+// over what it sends today (so growth still fails). None fits the default
+// 300-request window, let alone a share of it: they pass only because CI and
+// the local slot raise RATE_LIMIT_GLOBAL_MAX, which is why the gate above
+// never sleeps there. Splitting a file, or raising FILE_BUDGET, removes its
+// entry.
+const OVER_BUDGET: Record<string, number> = {
+  "placeCopy.test.ts": 170,
+  "replaceTrack.test.ts": 165,
+  "planItems.test.ts": 370,
+};
 
 // Sleeping to the window reset takes up to ~61s; leave headroom.
 const GATE_TIMEOUT_MS = 90_000;
 
-beforeAll(async () => {
+async function probe() {
   const res = await fetch(`${API_URL}/trips`, {
     headers: { Authorization: "Bearer fake-token" },
   });
-  const remaining = Number(res.headers.get("ratelimit-remaining") ?? "0");
-  const resetSeconds = Number(res.headers.get("ratelimit-reset") ?? "60");
-  if (res.status === 429 || remaining < FILE_BUDGET) {
+  return {
+    status: res.status,
+    remaining: Number(res.headers.get("ratelimit-remaining") ?? "0"),
+    resetSeconds: Number(res.headers.get("ratelimit-reset") ?? "60"),
+    at: Date.now(),
+  };
+}
+
+let opened: Awaited<ReturnType<typeof probe>> | undefined;
+
+beforeAll(async () => {
+  let first = await probe();
+  if (first.status === 429 || first.remaining < FILE_BUDGET) {
     await new Promise((resolve) =>
-      setTimeout(resolve, (resetSeconds + 1) * 1000),
+      setTimeout(resolve, (first.resetSeconds + 1) * 1000),
+    );
+    first = await probe();
+  }
+  opened = first;
+}, GATE_TIMEOUT_MS);
+
+// The file's own spend: what the window had left when it began less what is
+// left now, minus the probe that reads it. Not measurable once the window has
+// rolled over in between, so a file that outlives one is not checked; the
+// budget is a bound on the common case, the gate's sleep covers the rest.
+afterAll(async () => {
+  if (!opened) return;
+  const closed = await probe();
+  const rolledOver = closed.at - opened.at >= opened.resetSeconds * 1000;
+  const spent = opened.remaining - closed.remaining - 1;
+  const file = (expect.getState().testPath ?? "").split("/").pop() ?? "";
+  const limit = OVER_BUDGET[file] ?? FILE_BUDGET;
+  if (!rolledOver && spent > limit) {
+    throw new Error(
+      `${file} sent ${spent} requests through the shared rate limit, over ` +
+        `${limit}: FILE_BUDGET (${FILE_BUDGET}) or its OVER_BUDGET entry in ` +
+        "src/__tests__/_rateLimitGate.ts, which the gate's wait assumes no " +
+        "file exceeds. Split the file; raising the number is for a file that " +
+        "cannot be split, and the window holds 300 requests.",
     );
   }
 }, GATE_TIMEOUT_MS);

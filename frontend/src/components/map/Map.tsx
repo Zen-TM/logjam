@@ -31,6 +31,7 @@ import {
   CONTOURS_MINOR_MIN_ZOOM,
   GAUGES_MIN_ZOOM,
   SLOPE_MIN_ZOOM,
+  hillshadeExaggeration,
   zoomFadeIn,
   PLACE_TYPE_COLORS,
   PLACE_BADGE_OFFSET,
@@ -49,7 +50,11 @@ import {
   landColor,
   landEdgeOpacity,
   nswContourStyle,
-  NSW_LAND,
+  NSW_REGION,
+  COVERAGE_HATCH_PIXEL_RATIO,
+  COVERAGE_HATCH_URIS,
+  coverageFilter,
+  type CarrierId,
   TERRAIN_LAYER_KEYS,
   type SharpenedOverlay,
   type TerrainLayerKey,
@@ -69,6 +74,7 @@ import {
   GRID_LABELS,
   GRID_LINES,
   LAND_EDGE_LAYER,
+  COVERAGE_FILL_LAYER,
   LAND_FILL_LAYER,
   PRESSABLE_LAYERS,
   pressClosedGauge,
@@ -171,6 +177,8 @@ import {
 import { fetchTrackGeoJSON, trackGeoCacheKey } from "../media/trackGeo";
 import { useToast } from "../feedback/ToastProvider";
 import { moveTerrainIntoBasemap, stackTopoLayers } from "./layerOrder";
+import { coverageLayerSpec } from "./coverageLayers";
+import { fireLayerSpecs } from "./fireLayers";
 import { TERRAIN_ENTRIES, type RoutedTiles } from "./terrainEntries";
 import {
   TERRAIN_PROTOCOL,
@@ -179,6 +187,7 @@ import {
   terrainTile,
 } from "./terrainRouter";
 import { messageFromError } from "../../errors/messageFromError";
+import { BASE_LAYERS } from "./baseLayers";
 import {
   BASEMAP_CATALOG,
   BASEMAP_FAIL_AFTER,
@@ -303,31 +312,6 @@ const BASEMAP_ASSETS_BASE_URL = "https://protomaps.github.io/basemaps-assets";
  */
 const PROTOMAPS_LAYER_PREFIX = "pm-";
 const PROTOMAPS_SOURCE_ID = "protomaps";
-
-// Derived from the canonical shared basemap catalog (map-sources.md D2) —
-// same ids, order, URLs, and zoom caps as before the consolidation. The
-// interactive map uses displayMaxZoom (six-imagery stays capped at 18 here
-// while the GeoPDF renderer keeps fetching its native 20).
-//
-// `kind` rides along because the two entry kinds are not interchangeable
-// downstream: a raster entry is an XYZ template, the vector entry a PMTiles
-// archive drawn from its style.
-//
-// The raster "osm" entry ("Default") is left out: the vector basemap draws the
-// same OpenStreetMap cartography and is the default, so offering both put two
-// renderings of one map side by side. Logjam GPS dropped it the same way.
-export const BASE_LAYERS = BASEMAP_CATALOG.filter(
-  (entry) => entry.id !== "osm",
-).map((entry) => ({
-  id: entry.id,
-  name: entry.name,
-  kind: entry.kind,
-  // Vector has no XYZ template — `tiles` stays empty and the picker falls back
-  // to a captioned placeholder instead of a tile thumbnail.
-  tiles: entry.kind === "raster" ? [entry.urlTemplate] : [],
-  maxzoom: entry.displayMaxZoom,
-  attribution: entry.attributionHtml,
-}));
 
 /**
  * Mounts the self-hosted Protomaps vector basemap: one PMTiles source plus the
@@ -618,6 +602,7 @@ function Map({
   sharpenedAreas,
   onBasemapHealth,
   slopeBands,
+  coverageCarrier = null,
   activeLayerId,
   selectingGeoPdfExtent,
   geoPdfPaperAspect,
@@ -638,6 +623,7 @@ function Map({
   flyToBounds,
   onFlyToBoundsConsumed,
   panelOpen,
+  toolsLocked,
   sheetOpen = false,
   placeHighlight,
   placeTypes,
@@ -725,7 +711,14 @@ function Map({
     id: string;
     pmtilesUrl: string;
     /** `slope` and `hillshade` are a terrarium DEM, drawn by MapLibre. */
-    format?: "raster" | "vector" | "slope" | "hillshade" | "land";
+    format?:
+      | "raster"
+      | "vector"
+      | "slope"
+      | "hillshade"
+      | "land"
+      | "fire"
+      | "coverage";
     attribution?: string;
     /** Read through the terrain router instead of `pmtilesUrl`'s archive. */
     tiles?: RoutedTiles;
@@ -736,6 +729,8 @@ function Map({
   onBasemapHealth?: (id: string, down: boolean) => void;
   /** The bands every `slope` entry is coloured in. */
   slopeBands?: SlopeBand[];
+  /** The carrier a `coverage` entry draws. */
+  coverageCarrier?: CarrierId | null;
   activeLayerId: string;
   selectingGeoPdfExtent?: boolean;
   geoPdfPaperAspect?: number;
@@ -787,6 +782,8 @@ function Map({
   onFlyToBoundsConsumed?: () => void;
   /** A page is open over the map's left edge; the chrome moves clear of it. */
   panelOpen: boolean;
+  /** A form's own pick is armed: no tool may start over it. */
+  toolsLocked?: boolean;
   /** A sheet is open beside that page (the Places filters). */
   sheetOpen?: boolean;
   /** The Places row under the pointer; its pin is lit. A channel, not a prop
@@ -828,6 +825,7 @@ function Map({
   const prevTopoKeyRef = useRef<string>("");
 
   const slopeBandsRef = useRef(slopeBands);
+  const coverageCarrierRef = useRef(coverageCarrier);
 
   // Keep refs up to date for use inside event handlers
   const selectPlaceRef = useRef(selectPlace);
@@ -837,22 +835,18 @@ function Map({
 
   // True whenever any coord-pick mode is active — read by once-on-load layer
   // handlers to suppress marker selection during picking.
+  const pickMode =
+    pickingCoords ||
+    (selectingFilterArea ?? false) ||
+    // The topo bbox draw belongs here too and was missing: without it, the
+    // click that anchors a corner over a place marker also opened that
+    // place's panel behind the box being drawn.
+    (selectingBbox ?? false) ||
+    (selectingGeoPdfExtent ?? false);
   const pickModeRef = useRef(false);
   useEffect(() => {
-    pickModeRef.current =
-      pickingCoords ||
-      (selectingFilterArea ?? false) ||
-      // The topo bbox draw belongs here too and was missing: without it, the
-      // click that anchors a corner over a place marker also opened that
-      // place's panel behind the box being drawn.
-      (selectingBbox ?? false) ||
-      (selectingGeoPdfExtent ?? false);
-  }, [
-    pickingCoords,
-    selectingFilterArea,
-    selectingBbox,
-    selectingGeoPdfExtent,
-  ]);
+    pickModeRef.current = pickMode;
+  }, [pickMode]);
 
   // Route draw/edit mode, read by the once-on-load layer handlers.
   const drawingRouteRef = useRef(false);
@@ -1020,6 +1014,10 @@ function Map({
   useEffect(() => {
     slopeBandsRef.current = slopeBands;
   }, [slopeBands]);
+
+  useEffect(() => {
+    coverageCarrierRef.current = coverageCarrier;
+  }, [coverageCarrier]);
 
   // Initialise map once
   useEffect(() => {
@@ -2165,11 +2163,14 @@ function Map({
       };
       map.once("click", handleClick);
       return () => {
-        map.getCanvas().style.cursor = "";
+        // An armed Measure or Draw tool keeps its crosshair after the pick.
+        map.getCanvas().style.cursor = drawingRouteRef.current
+          ? "crosshair"
+          : "";
         map.off("click", handleClick);
       };
     } else {
-      map.getCanvas().style.cursor = "";
+      map.getCanvas().style.cursor = drawingRouteRef.current ? "crosshair" : "";
     }
   }, [pickingCoords, mapLoaded]);
 
@@ -2335,6 +2336,8 @@ function Map({
       // the user was trying to delete.
       if (Date.now() - handlePressedAt.current < HANDLE_CLICK_SUPPRESS_MS)
         return;
+      // A pick armed over the draft owns the click, as it does for Enter.
+      if (pickModeRef.current) return;
       placeDrawPointRef.current(e.lngLat);
     };
     map.on("click", handleClick);
@@ -2436,7 +2439,8 @@ function Map({
     // a handful of markers is far cheaper than diffing them.
     for (const marker of vertexMarkersRef.current) marker.remove();
     vertexMarkersRef.current = [];
-    if (!drawingRoute) return;
+    // No handles under a pick: a click on one would also remove its vertex.
+    if (!drawingRoute || pickMode) return;
 
     // ONE HANDLE PER ANCHOR. Snapped filler gets none: it is geometry the tool
     // produced, not points the user placed, so a 1.5 km snapped run reads as
@@ -2514,7 +2518,7 @@ function Map({
       for (const marker of vertexMarkersRef.current) marker.remove();
       vertexMarkersRef.current = [];
     };
-  }, [drawPoints, drawAnchorIndices, drawingRoute, mapLoaded]);
+  }, [drawPoints, drawAnchorIndices, drawingRoute, pickMode, mapLoaded]);
 
   // Drag the drawn line between two anchors to introduce one there. Distinct
   // from clicking the map, which appends to the END of the route — this is how
@@ -2549,6 +2553,8 @@ function Map({
     }
 
     const onDown = (e: maplibregl.MapMouseEvent) => {
+      // A pick armed over the draft owns the press.
+      if (pickModeRef.current) return;
       // A press that landed on a vertex handle belongs to that handle.
       if (Date.now() - handlePressedAt.current < HANDLE_CLICK_SUPPRESS_MS)
         return;
@@ -2796,15 +2802,23 @@ function Map({
             ? GAUGE_ICON_SDF_URI
             : null;
       // Badges are plain bitmaps, two colours and a rim, so there is no tint
-      // to protect and MapLibre can take the decoded element itself.
-      const badgeUri = (PLACE_BADGE_URIS as Record<string, string>)[id];
-      if (badgeUri) {
+      // to protect and MapLibre can take the decoded element itself. So are
+      // the Coverage hatches, which are drawn at 2x.
+      const hatchUri = (COVERAGE_HATCH_URIS as Record<string, string>)[id];
+      const bitmapUri =
+        (PLACE_BADGE_URIS as Record<string, string>)[id] ?? hatchUri;
+      if (bitmapUri) {
         if (map.hasImage(id)) return;
-        const badge = new Image();
-        badge.onload = () => {
-          if (!map.hasImage(id)) map.addImage(id, badge);
+        const bitmap = new Image();
+        bitmap.onload = () => {
+          if (map.hasImage(id)) return;
+          map.addImage(
+            id,
+            bitmap,
+            hatchUri ? { pixelRatio: COVERAGE_HATCH_PIXEL_RATIO } : {},
+          );
         };
-        badge.src = badgeUri;
+        bitmap.src = bitmapUri;
         return;
       }
       if (sdfUri) {
@@ -2972,7 +2986,16 @@ function Map({
                     ) as maplibregl.ExpressionSpecification,
                   },
                 }
-              : { id: layerId, type: "hillshade", source: srcId },
+              : {
+                  id: layerId,
+                  type: "hillshade",
+                  source: srcId,
+                  paint: {
+                    "hillshade-exaggeration": hillshadeExaggeration(
+                      NSW_REGION.terrain.hillshade.minzoom,
+                    ) as maplibregl.ExpressionSpecification,
+                  },
+                },
           );
         }
         return;
@@ -2995,13 +3018,29 @@ function Map({
         }
       }
 
+      if (fmt === "coverage") {
+        const carrier = coverageCarrierRef.current;
+        if (!carrier) return;
+        const layer = coverageLayerSpec(srcId, carrier);
+        if (!map.getLayer(layer.id)) map.addLayer(layer);
+        return;
+      }
+
+      if (fmt === "fire") {
+        // The tint ages by the month: a map left open for weeks is at most
+        // that stale.
+        for (const layer of fireLayerSpecs(srcId, new Date()))
+          if (!map.getLayer(layer.id)) map.addLayer(layer);
+        return;
+      }
+
       if (fmt === "land") {
         if (!map.getLayer(LAND_FILL_LAYER)) {
           map.addLayer({
             id: LAND_FILL_LAYER,
             type: "fill",
             source: srcId,
-            "source-layer": NSW_LAND.sourceLayer,
+            "source-layer": NSW_REGION.terrain.land.sourceLayer,
             minzoom: LAND_EDGE_MINZOOM,
             // Unseen: it is what a tap reads, since a line has no inside.
             paint: { "fill-opacity": 0 },
@@ -3013,7 +3052,7 @@ function Map({
             id: `${LAND_EDGE_LAYER}-${i}`,
             type: "line",
             source: srcId,
-            "source-layer": NSW_LAND.sourceLayer,
+            "source-layer": NSW_REGION.terrain.land.sourceLayer,
             minzoom: LAND_EDGE_MINZOOM,
             paint: {
               "line-color": landColor() as maplibregl.ExpressionSpecification,
@@ -3160,6 +3199,16 @@ function Map({
         );
     }
   }, [topoLayers, slopeBands, mapLoaded]);
+
+  // The carrier, live, the same way: a filter change, never a new layer.
+  useEffect(() => {
+    if (!mapLoaded || !mapRef.current) return;
+    if (coverageCarrier && mapRef.current.getLayer(COVERAGE_FILL_LAYER))
+      mapRef.current.setFilter(
+        COVERAGE_FILL_LAYER,
+        coverageFilter(coverageCarrier) as maplibregl.FilterSpecification,
+      );
+  }, [topoLayers, coverageCarrier, mapLoaded]);
 
   // Fly to a topo job's bbox when requested from App.tsx
   const onTopoFlyConsumedRef = useRef(onTopoFlyConsumed);
@@ -3667,6 +3716,7 @@ function Map({
         layersButton={layersButton}
         tools={webMapTools(mapToolActions)}
         selectingArea={selectingArea}
+        toolsLocked={toolsLocked}
         notices={notices}
         search={
           // Live during a point pick or a route draw (a quick fly-to), off
@@ -3711,6 +3761,7 @@ function Map({
           map={drawableMap}
           point={asked.point}
           from={asked.from}
+          coverageCarrier={coverageCarrier}
           {...(asked.startAt ? { startAt: asked.startAt } : {})}
           onClose={closeAsked}
           onAddPlace={onAddPlaceAt}

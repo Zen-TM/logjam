@@ -15,7 +15,7 @@ for the latest readings, and writes `latest.json` (`GaugeLatestFile` in
 shared/src/gauges.ts). On the daily sweep it also extends each gauge's
 `history/<id>.json` (`GaugeHistoryFile`) from the Bureau of Meteorology.
 Every run also writes `rain.json` (`RainFile` in shared/src/rainGauges.ts):
-the daily rain totals of the gauges in rain_gauges.json, from BoM (ADR 0047).
+the daily rain totals of the gauges in rain_gauges.json, from BoM (ADR 0050).
 
 Sources and licences: readings, (c) State of New South Wales through
 WaterNSW, which asks for that notice on every use; history from BoM's Water
@@ -308,7 +308,7 @@ RAIN_ATTRIBUTION = (
     "Rain gauges: © State of New South Wales through WaterNSW, "
     "via the Bureau of Meteorology."
 )
-# Only owners whose terms allow republishing; the rest and why: ADR 0047.
+# Only owners whose terms allow republishing; the rest and why: ADR 0050.
 RAIN_OWNERS = {"NSW - Water NSW"}
 # Enough for the client's seven days, from a file a few days old.
 RAIN_DAYS = 10

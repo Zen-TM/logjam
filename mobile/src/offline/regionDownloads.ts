@@ -21,10 +21,10 @@ import { AppState } from "react-native";
 import {
   BASEMAP_CATALOG,
   DEM_SOURCES,
-  NSW_CONTOURS,
-  NSW_LAND,
-  NSW_LAND_CLIP,
-  NSW_SLOPE,
+  landClip,
+  NSW_REGION,
+  NSW_COVERAGE,
+  NSW_FIRE,
   SHARPENED_SOURCE_PREFIX,
   TERRAIN_ROUTED_FROM,
   demClipMinZoom,
@@ -69,6 +69,10 @@ export type RegionClipSpec = {
   slope?: boolean;
   /** Set when the clip is of the Land overlay: shared nswLand.ts. */
   land?: boolean;
+  /** Set when the clip is of the Fire history overlay: shared nswFire.ts. */
+  fire?: boolean;
+  /** Set when the clip is of the Coverage overlay: shared nswCoverage.ts. */
+  coverage?: boolean;
   /** Set when the clip is of a sharpened area's archive (sharpenedClips.ts). */
   area?: AreaClip;
   label: string;
@@ -126,9 +130,11 @@ function clipArchiveFor(spec: RegionClipSpec): {
       maxzoom: dem.sampleZoom,
     });
   }
-  if (spec.contours) return cdn(NSW_CONTOURS);
-  if (spec.slope) return cdn(NSW_SLOPE);
-  if (spec.land) return cdn(NSW_LAND_CLIP);
+  if (spec.contours) return cdn(NSW_REGION.terrain.contours);
+  if (spec.slope) return cdn(NSW_REGION.terrain.slope);
+  if (spec.land) return cdn(landClip(NSW_REGION.terrain.land));
+  if (spec.fire) return cdn(NSW_FIRE);
+  if (spec.coverage) return cdn(NSW_COVERAGE);
   const entry = BASEMAP_CATALOG.find((e) => e.id === "protomaps");
   if (!entry) throw new Error("protomaps missing from BASEMAP_CATALOG");
   return cdn({ archivePath: entry.urlTemplate });
@@ -325,14 +331,16 @@ export async function runRegionClip(
   onProgress: (progress: RegionJobProgress) => void,
   token: RegionCancelToken,
 ): Promise<RegionRunOutcome> {
-  // A DEM, contour, slope or land archive that is not on the CDN (not built yet) is
+  // A DEM, contour, slope, land, fire or coverage archive that is not on the CDN (not built yet) is
   // not this run's failure: the area keeps its worldwide heights and its
   // basemap, and the job leaves the queue as if it had never been planned.
   const optional =
     spec.demSourceId != null ||
     spec.contours === true ||
     spec.slope === true ||
-    spec.land === true;
+    spec.land === true ||
+    spec.fire === true ||
+    spec.coverage === true;
   let handle: FileHandle | null = null;
   const settle = async (stop: {
     stop: RegionRunOutcome;
@@ -484,12 +492,16 @@ export async function runRegionClip(
         ? `${SHARPENED_SOURCE_PREFIX}${spec.area.id}`
         : (spec.demSourceId ??
           (spec.contours
-            ? NSW_CONTOURS.id
+            ? NSW_REGION.terrain.contours.id
             : spec.slope
-              ? NSW_SLOPE.id
+              ? NSW_REGION.terrain.slope.id
               : spec.land
-                ? NSW_LAND.id
-                : "protomaps")),
+                ? NSW_REGION.terrain.land.id
+                : spec.fire
+                  ? NSW_FIRE.id
+                  : spec.coverage
+                    ? NSW_COVERAGE.id
+                    : "protomaps")),
       format: "pmtiles",
       sourceType:
         spec.demSourceId || spec.area?.layer === "heights"

@@ -34,7 +34,14 @@ describe("mapDataAttribution", () => {
           ok("b"),
           { status: "unavailable", key: "x", reason: "online-only-source" },
         ],
-        { contours: [], slope: [ok("s", "Slope")], land: [], hillshade: [] },
+        {
+          contours: [],
+          slope: [ok("s", "Slope")],
+          land: [],
+          fire: [],
+          coverage: [],
+          hillshade: [],
+        },
       ),
     ).toBe("Slope");
   });

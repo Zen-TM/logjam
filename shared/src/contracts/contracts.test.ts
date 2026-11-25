@@ -5,7 +5,7 @@ import { formatFieldValue, type AttributeRow } from "../logbook.js";
 import { validatePlacePayload } from "../placeValidation.js";
 import { PLACE_STATUS_ORDER } from "../placeStatus.js";
 import { BULK_SHARE_ITEM_TYPES } from "../sharing.js";
-import { TERRAIN_SWITCH_KEYS } from "../terrain.js";
+import { isOverlayTerrainKey, TERRAIN_SWITCH_KEYS } from "../terrain.js";
 import { DEFAULT_NOTIFICATION_PREFERENCES } from "../themeSchemes.js";
 import {
   abandonConfirm,
@@ -133,6 +133,13 @@ import {
   stepAfterPlaceTypeSave,
 } from "./index.js";
 
+// A verb declares `reason` (only this client has it, on purpose) or `gap` (not
+// built yet); each declaration in the const tuples carries one, so the union
+// has neither as a common key.
+const whyOneClient = (verb: object) =>
+  (verb as { reason?: string; gap?: string }).reason ??
+  (verb as { reason?: string; gap?: string }).gap;
+
 describe("every screen contract", () => {
   it("has an id of its own", () => {
     const ids = SCREEN_CONTRACTS.map((contract) => contract.id);
@@ -244,8 +251,16 @@ describe("the places filter sheet", () => {
       expect(copy[section.key], section.key).toBeTruthy();
   });
 
-  const system = (key: string) =>
-    SYSTEM_FIELD_DEFS.find((def) => def.key === key)!;
+  // A system def holds null for "unbounded"; a user's own definition leaves the
+  // bound out, which is the shape the filter functions take.
+  const system = (key: string) => {
+    const def = SYSTEM_FIELD_DEFS.find((candidate) => candidate.key === key)!;
+    return {
+      type: def.type,
+      min: def.min ?? undefined,
+      max: def.max ?? undefined,
+    };
+  };
 
   // Red when a shape is chosen by key: a canyon's grades must get exactly what
   // a user's own definition of the same shape gets.
@@ -256,24 +271,16 @@ describe("the places filter sheet", () => {
     );
     expect(attributeFilterShape(system("quality"))).toBe("pills");
     expect(attributeFilterShape(system("hours"))).toBe("threshold");
-    expect(attributeFilterShape({ type: "float", min: 0, max: null })).toBe(
-      "threshold",
-    );
+    expect(attributeFilterShape({ type: "float", min: 0 })).toBe("threshold");
     expect(attributeFilterShape({ type: "integer", min: 0, max: 100 })).toBe(
       "minMax",
     );
     expect(attributeFilterShape({ type: "float", min: 0.5, max: 3 })).toBe(
       "minMax",
     );
-    expect(
-      attributeFilterShape({ type: "boolean", min: null, max: null }),
-    ).toBe("boolean");
-    expect(attributeFilterShape({ type: "string", min: null, max: null })).toBe(
-      "text",
-    );
-    expect(attributeFilterShape({ type: "date", min: null, max: null })).toBe(
-      "date",
-    );
+    expect(attributeFilterShape({ type: "boolean" })).toBe("boolean");
+    expect(attributeFilterShape({ type: "string" })).toBe("text");
+    expect(attributeFilterShape({ type: "date" })).toBe("date");
   });
 });
 
@@ -408,7 +415,7 @@ describe("a place's verbs", () => {
 
   it("gives a reason for each verb only one client has", () => {
     for (const verb of PLACE_VERBS)
-      if ("on" in verb) expect(verb.reason ?? verb.gap).toBeTruthy();
+      if ("on" in verb) expect(whyOneClient(verb)).toBeTruthy();
     expect(placeVerbIds("gps")).not.toContain("makeTopo");
     expect(placeVerbIds("web")).toContain("makeTopo");
   });
@@ -735,7 +742,7 @@ describe("friends", () => {
 
   it("gives a reason for each share verb only one client has", () => {
     for (const verb of FRIEND_SHARE_VERBS)
-      if ("on" in verb) expect(verb.reason ?? verb.gap).toBeTruthy();
+      if ("on" in verb) expect(whyOneClient(verb)).toBeTruthy();
   });
 
   it("names the direction a friend's list runs", () => {
@@ -845,7 +852,7 @@ describe("the map's layers", () => {
   // Mutation: reorder the contract's rows or TERRAIN_SWITCH_KEYS alone, and a
   // client lists the layers in one order and stacks them in another.
   it("lists the Terrain group in the order it is stacked", () => {
-    const rows = TERRAIN_SWITCH_KEYS.filter((key) => key !== "land");
+    const rows = TERRAIN_SWITCH_KEYS.filter((key) => !isOverlayTerrainKey(key));
     // The bands sit under the Slope switch they colour.
     const slope = rows.indexOf("slope") + 1;
     const withBands = [
@@ -983,6 +990,8 @@ describe("the map's overlays list", () => {
       "places",
       "ways",
       "land",
+      "fire",
+      "coverage",
       "gauges",
       "mgaGrid",
       "importFile",
@@ -992,6 +1001,8 @@ describe("the map's overlays list", () => {
       "ways",
       "geoPdfs",
       "land",
+      "fire",
+      "coverage",
       "gauges",
       "mgaGrid",
       "importFile",
@@ -1135,8 +1146,7 @@ describe("the map point panel", () => {
       "weather",
     ]);
     for (const verb of MAP_POINT_VERBS)
-      if ("on" in verb)
-        expect((verb.reason ?? verb.gap).length).toBeGreaterThan(0);
+      if ("on" in verb) expect(whyOneClient(verb)?.length).toBeGreaterThan(0);
     expect(mapPointVerbs("gps")[0]).toEqual({
       id: "navigate",
       icon: "navigateTo",
@@ -1175,6 +1185,17 @@ describe("the map point panel", () => {
   // button beside the figure that already copies when pressed.
   it("has no verb that copies the coordinates", () => {
     expect(MAP_POINT_VERBS.map((verb) => verb.id)).not.toContain("copy");
+  });
+
+  // Mutation: drop `notAtFix` from the navigate verb, and a press on your own
+  // position offers to navigate you to where you already are; or ignore
+  // `atFix` in `mapPointVerbs`, and it offers nothing else either way.
+  it("offers every verb but Navigate at the viewer's own position", () => {
+    const ids = (atFix: boolean) =>
+      mapPointVerbs("gps", false, atFix).map((verb) => verb.id);
+    expect(ids(true)).toEqual(ids(false).filter((id) => id !== "navigate"));
+    expect(ids(true)).toContain("dropMarker");
+    expect(ids(true)).toContain("addPlace");
   });
 
   // Mutation: give a verb `hold: "gps"` that Logjam GPS's sheet does not draw
@@ -1289,6 +1310,8 @@ describe("the map point panel", () => {
       from: { latitude: -33.66, longitude: 150.34 },
       slopeDegrees: 12,
       land: "Private land",
+      fire: "Wildfire, Dec 2019",
+      coverage: "Telstra: no mobile reception",
       fix: { atMs: 0, accuracyM: 5, nowMs: 1_000 },
     });
     expect(facts.map((fact) => fact.key)).toEqual(keys);
@@ -1546,15 +1569,17 @@ describe("SETTINGS", () => {
   // so this order is both clients'. Mutation: move "privacy" above
   // "notifications", or give "map" no `on`.
   it("lists the pages in one order, the phone-only ones marked", () => {
-    expect(contractSectionKeys(SETTINGS, "gps").slice(0, 5)).toEqual([
+    expect(contractSectionKeys(SETTINGS, "gps").slice(0, 6)).toEqual([
       "display",
+      "regions",
       "map",
       "notifications",
       "offline",
       "privacy",
     ]);
-    expect(contractSectionKeys(SETTINGS, "web").slice(0, 3)).toEqual([
+    expect(contractSectionKeys(SETTINGS, "web").slice(0, 4)).toEqual([
       "display",
+      "regions",
       "notifications",
       "privacy",
     ]);

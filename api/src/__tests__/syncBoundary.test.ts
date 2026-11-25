@@ -22,7 +22,11 @@ import {
   SHARED_PLACE_ID,
   as,
   CANYON_TYPE_ID,
+  OTHER_USER_KEYS,
+  SHAREE_PLACE_KEYS,
+  keysOf,
 } from "./_actors";
+import { uploadPhoto } from "./_tombstones";
 
 // Mandatory privacy-boundary suite for GET /sync/delta.
 // Requires `make dev`. Seed baseline: alice owns SHARED_PLACE_ID, shared
@@ -151,6 +155,23 @@ describe("sync delta — sharee view (bob)", () => {
     }
   });
 
+  // An allow-list of keys: a column the serializer lets through, or a delta
+  // that spreads the raw row, is an extra key. `fieldDefsSnapshot` is the one
+  // optional extra (present only when the owner has definitions for the type).
+  // Mutation that turns it red: spread the raw place instead of
+  // serializeSharedPlace(place) in serializePlace (routes/sync.ts).
+  it("a shared place row carries exactly the sharee-visible keys", async () => {
+    const { changes } = await fullPull(BOB_SUB);
+    const shared = (changes.places as Record<string, unknown>[]).filter(
+      (c) => c.syncRole === "shared",
+    );
+    expect(shared.some((c) => c.id === SHARED_PLACE_ID)).toBe(true);
+    for (const place of shared) {
+      const { fieldDefsSnapshot: _snapshot, ...row } = place;
+      expect(keysOf(row)).toEqual([...SHAREE_PLACE_KEYS, "syncRole"].sort());
+    }
+  });
+
   it("cannot enumerate co-sharees and never sees an email anywhere", async () => {
     const { changes } = await fullPull(BOB_SUB);
     const shares = changes.placeShares as {
@@ -161,6 +182,22 @@ describe("sync delta — sharee view (bob)", () => {
     expect(
       shares.every((s) => s.sharedById === BOB_ID || s.sharedWithId === BOB_ID),
     ).toBe(true);
+    // Another user is named by id and username and nothing else, wherever the
+    // delta joins one. Mutation that turns it red: add `subject: true` to the
+    // sharedBy/sharedWith or friendship user selects in routes/sync.ts.
+    expect(shares.length).toBeGreaterThan(0);
+    for (const share of changes.placeShares as {
+      sharedBy: unknown;
+      sharedWith: unknown;
+    }[]) {
+      expect(keysOf(share.sharedBy)).toEqual(OTHER_USER_KEYS);
+      expect(keysOf(share.sharedWith)).toEqual(OTHER_USER_KEYS);
+    }
+    const friendships = changes.friendships as { counterpart: unknown }[];
+    expect(friendships.length).toBeGreaterThan(0);
+    for (const friendship of friendships) {
+      expect(keysOf(friendship.counterpart)).toEqual(OTHER_USER_KEYS);
+    }
     // No email key anywhere in the whole response.
     expect(JSON.stringify(changes)).not.toContain('"email"');
   });
@@ -222,33 +259,63 @@ describe("sync delta — revocation signals", () => {
       ),
     ).toBe(false);
 
-    // Re-share, then DELETE the place → the sharee-visible signal must be
-    // indistinguishable from the unshare (a bare place tombstone).
-    const reshare = await request(API_URL)
-      .post(`/places/${placeId}/share`)
+    // DELETE a second place that was never unshared → the sharee-visible
+    // signal must be the same bare place tombstone. A place the test unshared
+    // first would not do: the unshare's older tombstone is re-delivered inside
+    // the delta's overlap window and would satisfy the assertion by itself.
+    // Mutation that turns it red: skip the writeTombstones call in
+    // deletePlacesCascade (lib/bulkDelete.ts), or drop its mediaIds.
+    const second = await request(API_URL)
+      .post("/places")
+      .set(as(ALICE_SUB))
+      .send({
+        placeTypeId: CANYON_TYPE_ID,
+        name: "Deleted place",
+        latitude: -33.7,
+        longitude: 150.3,
+      });
+    expect(second.status).toBe(201);
+    const deletedId = second.body.id as string;
+    const shareDeleted = await request(API_URL)
+      .post(`/places/${deletedId}/share`)
       .set(as(ALICE_SUB))
       .send({ sharedWithUserId: BOB_ID });
-    expect(reshare.status).toBe(201);
+    expect(shareDeleted.status).toBe(201);
+    const photoId = await uploadPhoto(ALICE_SUB, "place", deletedId);
     const bobMid = await fullPull(BOB_SUB, afterUnshare.cursor);
+    const aliceMid = await fullPull(ALICE_SUB, afterUnshare.cursor);
 
     const del = await request(API_URL)
-      .delete(`/places/${placeId}`)
+      .delete(`/places/${deletedId}`)
       .set(as(ALICE_SUB));
     expect(del.status).toBe(204);
 
     const afterDelete = await fullPull(BOB_SUB, bobMid.cursor);
-    expect(
-      afterDelete.tombstones.some(
-        (t) => t.type === "place" && t.id === placeId,
-      ),
-    ).toBe(true);
-    // Signal shape parity: same tombstone type, no extra sharee-visible rows
-    // that would distinguish delete from unshare.
+    expect(afterDelete.tombstones).toContainEqual({
+      type: "place",
+      id: deletedId,
+    });
     expect(
       (afterDelete.changes.places as { id: string }[]).some(
-        (c) => c.id === placeId,
+        (c) => c.id === deletedId,
       ),
     ).toBe(false);
+    expect(afterDelete.tombstones).toContainEqual({
+      type: "media",
+      id: photoId,
+    });
+    // The owner forgets it too, and its photo.
+    const aliceAfter = await fullPull(ALICE_SUB, aliceMid.cursor);
+    expect(aliceAfter.tombstones).toContainEqual({
+      type: "place",
+      id: deletedId,
+    });
+    expect(aliceAfter.tombstones).toContainEqual({
+      type: "media",
+      id: photoId,
+    });
+
+    await request(API_URL).delete(`/places/${placeId}`).set(as(ALICE_SUB));
   });
 });
 

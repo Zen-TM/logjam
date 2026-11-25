@@ -11,8 +11,11 @@
 --
 -- RELEASE-SPECIFIC. The metrics below describe one release's data-moving
 -- migrations and switch themselves off once the base has them; the next
--- release that moves data replaces them. The generic half (migrations apply
--- over real rows; the result matches schema.prisma) lives in the script and
+-- release that moves data replaces them. Once the base has the migration
+-- named below, this file and verify.sql check nothing;
+-- api/src/lib/upgradeCheck.unit.test.ts turns red when a newer migration moves
+-- data and neither file names it. The generic half (migrations apply over
+-- real rows; the result matches schema.prisma) lives in the script and
 -- never goes stale.
 --
 -- `-v fixtures=1` first inserts made-up rows, so the check has something to
@@ -21,17 +24,18 @@
 
 \set ON_ERROR_STOP on
 
--- 20261101000300_drop_user_cognito_id: the column and its index go, and every
--- subject stays as it was. Off once the base has it.
+-- 20261113000000_launch_limit_defaults: every account ends up with 800 compute
+-- credits and 10 GiB of download quota, overrides included. Off once the base
+-- has it.
 SELECT NOT EXISTS (
   SELECT 1 FROM _prisma_migrations
-   WHERE migration_name = '20261101000300_drop_user_cognito_id'
-) AS drop_applies \gset
-\if :drop_applies
+   WHERE migration_name = '20261113000000_launch_limit_defaults'
+) AS limits_apply \gset
+\if :limits_apply
 \if :{?fixtures}
-INSERT INTO users (id, cognito_id, subject, username, email) VALUES
-  ('upgrade-fixture-x', NULL, 'upgrade-fixture-x-sub', 'upgrade_x', 'x@upgrade.invalid');
+INSERT INTO users (id, subject, username, email, monthly_compute_credits, monthly_egress_quota_bytes) VALUES
+  ('upgrade-fixture-x', 'upgrade-fixture-x-sub', 'upgrade_x', 'x@upgrade.invalid', 5000, 107374182400);
 \endif
 CREATE SCHEMA IF NOT EXISTS upgrade_check;
-CREATE TABLE upgrade_check.users AS SELECT id, subject FROM users;
+CREATE TABLE upgrade_check.users AS SELECT id FROM users;
 \endif

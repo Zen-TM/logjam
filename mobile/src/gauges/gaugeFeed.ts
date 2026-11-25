@@ -83,7 +83,7 @@ async function run(): Promise<GaugeLatestFile | null> {
 }
 
 /**
- * The rain gauge file (ADR 0047), on the press that asks for a forecast: the
+ * The rain gauge file (ADR 0050), on the press that asks for a forecast: the
  * new file, kept, or null when none was fetched (offline-only mode, no
  * connection, a failure or a bad file). Same request rules as `latest.json`:
  * only the public path, nothing else sent. Mobile data is allowed whatever the

@@ -4,7 +4,7 @@ import {
 } from "@aws-sdk/client-secrets-manager";
 
 // Populate SMTP_PASSWORD in process.env from Secrets Manager (RESEND_SECRET_ID)
-// when not already set. The Elastic Beanstalk container can't use ECS secrets
+// when not already set. The brain's container can't use ECS secrets
 // injection; the workers get SMTP_PASSWORD injected from the same secret, a
 // JSON object whose `apiKey` is Resend's API key and its SMTP password.
 //

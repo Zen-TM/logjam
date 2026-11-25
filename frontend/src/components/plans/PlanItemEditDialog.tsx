@@ -8,47 +8,35 @@
 import { useId, useState } from "react";
 import {
   abandonConfirm,
-  customFieldDisplayLabel,
   formatFieldValue,
-  LATITUDE_RANGE,
-  LONGITUDE_RANGE,
+  itemFieldDefs,
+  itemPatch,
+  itemWords,
+  sameValue,
   TRIP_PLAN_PAGE,
+  tripPlanAdoptTheirs,
   tripPlanInPlanNow,
   tripPlanSetAsideRows,
+  tripPlanTheirsChanged,
+  type ItemWords,
   type TripPlanItem,
 } from "@logjam/shared";
 import {
   Button,
   Dialog,
   ErrorBanner,
-  NumberField,
   SectionHeader,
-  TextArea,
   TextField,
 } from "../../ui";
-import CustomFieldInput, {
-  customFieldValueError,
-} from "../dialogs/CustomFieldInput";
-import { numericFieldError } from "../../numberInput";
 import { messageFromError } from "../../errors/messageFromError";
 import { ApiError } from "../../errors/ApiError";
 import { patchPlanItem } from "../../plansApi";
 import { wayNameError } from "../sidebar/panels/waysModel";
-import {
-  ITEM_ATTR,
-  itemFieldDefs,
-  itemPatch,
-  itemWords,
-  sameValue,
-  tripPlanAdoptTheirs,
-  tripPlanTheirsChanged,
-  type ItemWords,
-} from "@logjam/shared";
+import PlanPlaceFields from "./PlanPlaceFields";
+import { placeDetailsInvalid } from "./placeDetailsInvalid";
 import classes from "./plans.module.css";
 
 const copy = TRIP_PLAN_PAGE.copy;
-const LATITUDE = { min: LATITUDE_RANGE.min, max: LATITUDE_RANGE.max };
-const LONGITUDE = { min: LONGITUDE_RANGE.min, max: LONGITUDE_RANGE.max };
 
 export default function PlanItemEditDialog({
   planId,
@@ -107,17 +95,7 @@ export default function PlanItemEditDialog({
     setAsked(false);
   };
 
-  const detailsInvalid =
-    place != null &&
-    (values.latitude.trim() === "" ||
-      values.longitude.trim() === "" ||
-      numericFieldError(values.latitude, LATITUDE) != null ||
-      numericFieldError(values.longitude, LONGITUDE) != null ||
-      numericFieldError(values.elevation, {}) != null ||
-      defs.some(
-        (def) =>
-          customFieldValueError(def, values[ITEM_ATTR + def.key]) != null,
-      ));
+  const detailsInvalid = place != null && placeDetailsInvalid(values, defs);
 
   async function submit() {
     if (!item) return setError(copy.itemGone);
@@ -184,71 +162,13 @@ export default function PlanItemEditDialog({
           />
           {place && (
             <>
-              <TextField
-                label={copy.itemAlsoKnownAs}
-                value={values.altNames}
-                onChange={(event) => set({ altNames: event.target.value })}
-                hint={theirsHint("altNames") ?? copy.itemAlsoKnownAsHint}
+              <PlanPlaceFields
+                values={values}
+                defs={defs}
+                asked={asked}
+                set={set}
+                theirsHint={theirsHint}
               />
-              <div className={classes.pair}>
-                <NumberField
-                  label={copy.itemLatitude}
-                  required
-                  value={values.latitude}
-                  onChange={(latitude) => set({ latitude })}
-                  coordinate={{ axis: "latitude", onPair: set }}
-                  constraints={LATITUDE}
-                  showError={asked}
-                  hint={theirsHint("latitude")}
-                />
-                <NumberField
-                  label={copy.itemLongitude}
-                  required
-                  value={values.longitude}
-                  onChange={(longitude) => set({ longitude })}
-                  coordinate={{ axis: "longitude", onPair: set }}
-                  constraints={LONGITUDE}
-                  showError={asked}
-                  hint={theirsHint("longitude")}
-                />
-              </div>
-              <NumberField
-                label={copy.itemElevation}
-                value={values.elevation}
-                onChange={(elevation) => set({ elevation })}
-                constraints={{}}
-                showError={asked}
-                hint={theirsHint("elevation")}
-              />
-              <TextArea
-                label={copy.itemNotes}
-                value={values.notes}
-                onChange={(event) => set({ notes: event.target.value })}
-                hint={theirsHint("notes")}
-              />
-              {defs.length > 0 && (
-                <section className={classes.form}>
-                  <SectionHeader title={copy.itemAttributes} />
-                  {defs.map((def) => (
-                    <div key={def.key}>
-                      <CustomFieldInput
-                        def={def}
-                        value={values[ITEM_ATTR + def.key]}
-                        onChange={(value) =>
-                          set({ [ITEM_ATTR + def.key]: value })
-                        }
-                        showError={asked}
-                      />
-                      {theirsHint(ITEM_ATTR + def.key) && (
-                        <p className={classes.note}>
-                          {customFieldDisplayLabel(def)}:{" "}
-                          {theirsHint(ITEM_ATTR + def.key)}
-                        </p>
-                      )}
-                    </div>
-                  ))}
-                </section>
-              )}
               {place && tripPlanSetAsideRows(place).length > 0 && (
                 <section className={classes.form}>
                   <SectionHeader title={copy.placeSetAside} />

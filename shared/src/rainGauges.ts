@@ -1,7 +1,7 @@
 // Measured rain: each WaterNSW rain gauge's 9am-to-9am totals for the last
 // ten days, published once every two hours by topo/build_gauges.py beside the
 // river gauges' files. Why a public file, which stations, and the distance
-// past which the model is shown instead: ADR 0047.
+// past which the model is shown instead: ADR 0050.
 //
 // PRIVACY: the file is the same for everyone, so fetching it says nothing
 // about a spot; the nearest gauges are picked here, on the device. Guards for

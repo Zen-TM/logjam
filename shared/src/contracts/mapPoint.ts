@@ -55,6 +55,10 @@ export const MAP_POINT = {
     // Read from the Land overlay's own tiles on the device, only while it is
     // drawn: no coordinate goes anywhere for this.
     { key: "land" },
+    // The same, from the Fire history overlay's tiles.
+    { key: "fire" },
+    // And from the Coverage overlay's, for the carrier it draws.
+    { key: "coverage" },
   ],
   copy: {
     position: "Position",
@@ -63,6 +67,8 @@ export const MAP_POINT = {
     bearing: "Bearing",
     slope: "Slope",
     land: "Land tenure",
+    fire: "Last burnt",
+    coverage: "Coverage",
     accuracy: "Accuracy",
     fixAge: "Updated",
     // The title when the point is the viewer's own fix.
@@ -107,6 +113,9 @@ type PointVerbDeclaration = {
    * included.
    */
   hold?: ContractPlatform;
+  /** Left out when the point is the viewer's own position: there is nowhere
+   *  to navigate to from where they stand. */
+  notAtFix?: true;
 } & (
   | { on?: undefined; reason?: undefined }
   // Only one client has it, and `reason` says why.
@@ -123,6 +132,7 @@ export const MAP_POINT_VERBS = [
     label: "Navigate to this point",
     subtitle: "Live distance and bearing — nothing saved",
     hold: "gps",
+    notAtFix: true,
     on: "gps",
     reason:
       "Logjam Web is used at a desk, and a browser on a desk has nowhere to navigate to. Measure from here is its stand-in: the same distance, asked once.",
@@ -199,13 +209,17 @@ const asVerb =
  * The verbs one client's Options view has, in the order it draws them.
  * `savedHereOnly`: what a marker promises is true only once it has synced, so
  * the verb says "Saved on this phone" while that is all that is known.
+ * `atFix`: the point is the viewer's own position, so the verbs that make no
+ * sense from where they stand (Navigate to this point) are left out.
  */
 export function mapPointVerbs(
   platform: ContractPlatform,
   savedHereOnly = false,
+  atFix = false,
 ): MapPointVerb[] {
   return (MAP_POINT_VERBS as readonly PointVerbDeclaration[])
     .filter((verb) => verb.on == null || verb.on === platform)
+    .filter((verb) => !(atFix && verb.notAtFix))
     .map(asVerb(savedHereOnly));
 }
 
@@ -255,7 +269,9 @@ export type MapPointFact = {
     | "distance"
     | "bearing"
     | "slope"
-    | "land";
+    | "land"
+    | "fire"
+    | "coverage";
   label: string;
   value: string;
   /** Takes the whole line. */
@@ -293,6 +309,8 @@ export type MapPointFix = {
  * the fine DEM cannot tell, and then there is no slope figure at all. `land`
  * is the Land overlay's name for the class drawn at the point: null or absent
  * with the overlay off or nothing there, and then there is no land figure.
+ * `fire` is `fireNameOf`'s answer from the Fire history overlay, the same way,
+ * and `coverage` `coverageNameOf`'s from the Coverage overlay.
  */
 export function mapPointFacts(input: {
   point: MapPointCoord;
@@ -300,10 +318,13 @@ export function mapPointFacts(input: {
   from: MapPointCoord | null;
   slopeDegrees?: number | null;
   land?: string | null;
+  fire?: string | null;
+  coverage?: string | null;
   /** Given when the point IS the viewer's fix: how good and how old it is. */
   fix?: MapPointFix;
 }): MapPointFact[] {
-  const { point, elevation, from, slopeDegrees, land, fix } = input;
+  const { point, elevation, from, slopeDegrees, land, fire, coverage, fix } =
+    input;
   const copy = MAP_POINT.copy;
   const facts: MapPointFact[] = [
     {
@@ -377,5 +398,8 @@ export function mapPointFacts(input: {
       value: `${Math.round(slopeDegrees)}°`,
     });
   if (land) facts.push({ key: "land", label: copy.land, value: land });
+  if (fire) facts.push({ key: "fire", label: copy.fire, value: fire });
+  if (coverage)
+    facts.push({ key: "coverage", label: copy.coverage, value: coverage });
   return facts;
 }

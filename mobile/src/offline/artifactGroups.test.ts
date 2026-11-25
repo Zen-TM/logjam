@@ -7,6 +7,7 @@ import {
   overlayJobId,
   cardDates,
   regionGroupKey,
+  savedAreaTotals,
   settleUpdate,
   supersededBy,
   unionBbox,
@@ -178,6 +179,8 @@ describe("REGION_ARTIFACT_KINDS", () => {
         "contours-region",
         "slope-region",
         "land-region",
+        "fire-region",
+        "coverage-region",
         "basemap-region",
       ]),
     );
@@ -201,6 +204,8 @@ describe("isBundledRegionMember", () => {
     expect(member("contours-region", "nsw-contours")).toBe(true);
     expect(member("slope-region", "nsw-slope")).toBe(true);
     expect(member("land-region", "nsw-land")).toBe(true);
+    expect(member("fire-region", "nsw-fire")).toBe(true);
+    expect(member("coverage-region", "nsw-coverage")).toBe(true);
     expect(member("dem-region", "lidar-abc")).toBe(true);
   });
 });
@@ -286,5 +291,24 @@ describe("cardDates", () => {
       savedAt: "2026-10-03T00:00:00.000Z",
       updatedAt: "2026-11-06T00:00:00.000Z",
     });
+  });
+});
+
+describe("savedAreaTotals", () => {
+  // Mutation: filter to `kind === "basemap-region"` before summing (what the
+  // Offline tab did), and the DEM clip's bytes drop out: this goes red.
+  it("counts an area once and sums its maps and clips", () => {
+    const totals = savedAreaTotals([
+      artifact({ id: "a", groupId: "g1", sizeBytes: 1_000_000 }),
+      artifact({
+        id: "b",
+        groupId: "g1",
+        kind: "dem-region",
+        sizeBytes: 3_000_000,
+      }),
+      artifact({ id: "c", groupId: "g1", logicalKey: "osm", sizeBytes: 500 }),
+      artifact({ id: "d", kind: "topo-overlay", sizeBytes: 9_000_000 }),
+    ]);
+    expect(totals).toEqual({ areas: 1, bytes: 4_000_500 });
   });
 });

@@ -25,6 +25,8 @@ export const REGION_ARTIFACT_KINDS: readonly MapArtifact["kind"][] = [
   "contours-region",
   "slope-region",
   "land-region",
+  "fire-region",
+  "coverage-region",
 ];
 
 export function isRegionArtifact(artifact: Pick<MapArtifact, "kind">): boolean {
@@ -33,7 +35,7 @@ export function isRegionArtifact(artifact: Pick<MapArtifact, "kind">): boolean {
 
 /**
  * Whether a file of a saved area came without the user picking it: the vector
- * map, the elevation, contours, slope and land clips and a sharpened area's
+ * map, the elevation, contours, slope, land, fire and coverage clips and a sharpened area's
  * clips. The user picked only the raster maps, so only those can go on their
  * own; deleting any other leaves an area that quietly loses a tool offline.
  * Guard: `artifactGroups.test.ts` ("isBundledRegionMember").
@@ -192,4 +194,27 @@ export function groupArtifacts(
     }
   }
   return [...groups.values()];
+}
+
+/** The saved areas as Saved lists them: one card per area, holding its maps and clips. */
+export function savedAreaGroups(
+  artifacts: readonly MapArtifact[],
+): ArtifactGroup[] {
+  return groupArtifacts(artifacts.filter(isRegionArtifact), regionGroupKey);
+}
+
+/**
+ * How many saved areas there are and what they hold, read from the same cards
+ * Saved draws (`savedAreaGroups`), so the Offline tab and sign-out cannot count
+ * a different set of files than Saved lists.
+ */
+export function savedAreaTotals(artifacts: readonly MapArtifact[]): {
+  areas: number;
+  bytes: number;
+} {
+  const groups = savedAreaGroups(artifacts);
+  return {
+    areas: groups.length,
+    bytes: groups.reduce((sum, group) => sum + group.sizeBytes, 0),
+  };
 }

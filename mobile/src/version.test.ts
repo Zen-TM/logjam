@@ -57,20 +57,18 @@ describe("storeListingUrl", () => {
     expect(
       storeListingUrl({
         os: "android",
-        androidPackage: "com.logjamnsw.mobile",
+        androidPackage: "earth.logjam.gps",
       }),
-    ).toBe(
-      "https://play.google.com/store/apps/details?id=com.logjamnsw.mobile",
-    );
+    ).toBe("https://play.google.com/store/apps/details?id=earth.logjam.gps");
   });
 
   it.each([
     // The one that matters: iOS HAS a bundleIdentifier and no
     // listing, so a package id present there must still yield no link — the
     // block screen's text is all it gets until there is a listing.
-    ["ios", "com.logjamnsw.mobile"],
-    ["web", "com.logjamnsw.mobile"],
-    ["macos", "com.logjamnsw.mobile"],
+    ["ios", "earth.logjam.gps"],
+    ["web", "earth.logjam.gps"],
+    ["macos", "earth.logjam.gps"],
     // Android with nothing to link to: the app.json read came back empty.
     ["android", ""],
     ["android", null],

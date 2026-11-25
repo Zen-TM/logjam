@@ -1,7 +1,16 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import request from "supertest";
 import prisma from "../services/prisma";
-import { API_URL, BOB_ID, BOB_SUB, CAROL_ID, CAROL_SUB, as } from "./_actors";
+import {
+  API_URL,
+  BOB_ID,
+  BOB_SUB,
+  CANYON_TYPE_ID,
+  CAROL_ID,
+  CAROL_SUB,
+  as,
+} from "./_actors";
+import { deltaCursor, tombstonesSince } from "./_tombstones";
 
 // Two people get one friendship row, whichever of them asked and however
 // close together they asked. Requires `make dev`.
@@ -79,6 +88,69 @@ describe("one friendship per pair", () => {
         where: { payload: { path: ["friendshipId"], equals: friendship.id } },
       }),
     ).toBe(0);
+  });
+
+  // Mutation that turns it red: drop the friendshipDeleteTombstones row from
+  // the decline transaction in PATCH /friends/:id/decline (routes/friends.ts).
+  it("declining a request tombstones the edge for both people", async () => {
+    const friendship = await prisma.friendship.create({
+      data: { requesterId: BOB_ID, addresseeId: CAROL_ID },
+    });
+    const bobCursor = await deltaCursor(BOB_SUB);
+    const carolCursor = await deltaCursor(CAROL_SUB);
+
+    const res = await request(API_URL)
+      .patch(`/friends/${friendship.id}/decline`)
+      .set(as(CAROL_SUB));
+    expect(res.status).toBe(204);
+
+    const gone = { type: "friendship", id: friendship.id };
+    expect(await tombstonesSince(BOB_SUB, bobCursor)).toContainEqual(gone);
+    expect(await tombstonesSince(CAROL_SUB, carolCursor)).toContainEqual(gone);
+  });
+
+  // Mutation that turns it red: pass `userIds: []` to the
+  // friendshipDeleteTombstones call in DELETE /friends/:id (routes/friends.ts),
+  // or skip its writeTombstones call.
+  it("unfriending tombstones the edge for both people, and the places shared across it", async () => {
+    const friendship = await prisma.friendship.create({
+      data: { requesterId: BOB_ID, addresseeId: CAROL_ID, status: "accepted" },
+    });
+    const place = await request(API_URL).post("/places").set(as(BOB_SUB)).send({
+      placeTypeId: CANYON_TYPE_ID,
+      name: "Unfriended share",
+      latitude: -33.72,
+      longitude: 150.32,
+    });
+    expect(place.status).toBe(201);
+    const share = await prisma.placeShare.create({
+      data: {
+        placeId: place.body.id,
+        sharedById: BOB_ID,
+        sharedWithId: CAROL_ID,
+      },
+    });
+    const bobCursor = await deltaCursor(BOB_SUB);
+    const carolCursor = await deltaCursor(CAROL_SUB);
+
+    const res = await request(API_URL)
+      .delete(`/friends/${friendship.id}`)
+      .set(as(BOB_SUB));
+    expect(res.status).toBe(204);
+
+    const gone = { type: "friendship", id: friendship.id };
+    expect(await tombstonesSince(BOB_SUB, bobCursor)).toContainEqual(gone);
+    expect(await tombstonesSince(CAROL_SUB, carolCursor)).toContainEqual(gone);
+    // Carol forgets the place, bob the share row.
+    expect(await tombstonesSince(CAROL_SUB, carolCursor)).toContainEqual({
+      type: "place",
+      id: place.body.id,
+    });
+    expect(await tombstonesSince(BOB_SUB, bobCursor)).toContainEqual({
+      type: "placeShare",
+      id: share.id,
+    });
+    await request(API_URL).delete(`/places/${place.body.id}`).set(as(BOB_SUB));
   });
 
   it("accepts a waiting request when its addressee asks back", async () => {

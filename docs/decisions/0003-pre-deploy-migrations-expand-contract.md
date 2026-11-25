@@ -17,8 +17,9 @@ mid-swap or break the old image.
 
 - **Prod migrations run in a gated pre-deploy one-shot, NOT at container boot.**
   `deploy-api.yml` RunTasks `aws_ecs_task_definition.api_migrate` (`prisma migrate deploy`,
-  image just pushed to `:latest`, as the least-priv `logjam_app` role) and gates
-  the EB version swap on its exit code — a failing migration aborts the deploy
+  the image just pushed, pinned by its sha, as the least-priv `logjam_app` role) and gates
+  the brain's release pointer on its exit code (updated 2026-11-12: it gated
+  Elastic Beanstalk's version swap, on an image tagged `:latest`) — a failing migration aborts the deploy
   with the old version still serving, instead of crash-looping the new container
   at boot. `boot.ts` no longer migrates.
 - **CI migration validation:** CI additionally validates every migration against

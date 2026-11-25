@@ -11,7 +11,7 @@ describe("API smoke tests (fake auth)", () => {
     expect(res.body.status).toBe("ok");
   });
 
-  it("responses carry a restrictive Content-Security-Policy header (SEC-004)", async () => {
+  it("responses carry a restrictive Content-Security-Policy header", async () => {
     const res = await request(API_URL).get("/health");
     expect(res.headers["content-security-policy"]).toContain(
       "default-src 'none'",

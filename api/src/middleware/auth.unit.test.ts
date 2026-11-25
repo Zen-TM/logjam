@@ -308,7 +308,41 @@ describe("requireAuth — oidc mode, real tokens", () => {
 
 describe("auth module-load fail-closed guards", () => {
   // Mutation: delete the positive check, let it accept "cognito" again, or
-  // drop the fake-refused guard, and the matching test goes red.
+  // drop the fake-refused guard, and the matching test goes red. Dropping
+  // `isProdRuntime` from either check in auth.ts turns the LOGJAM_RUNTIME
+  // tests red.
+
+  function plainComposeHost() {
+    delete process.env.ECS_CONTAINER_METADATA_URI_V4;
+    delete process.env.AWS_EXECUTION_ENV;
+    delete process.env.AWS_LAMBDA_FUNCTION_NAME;
+    process.env.LOGJAM_RUNTIME = "prod";
+  }
+
+  it("refuses AUTH_MODE=fake when LOGJAM_RUNTIME=prod, however the rest reads", async () => {
+    vi.resetModules();
+    plainComposeHost();
+    process.env.AUTH_MODE = "fake";
+    process.env.NODE_ENV = "development";
+    process.env.DB_HOST = "postgres";
+    await expect(import("./auth")).rejects.toThrow(/refused/);
+  });
+
+  it("refuses any other AUTH_MODE when LOGJAM_RUNTIME=prod", async () => {
+    vi.resetModules();
+    plainComposeHost();
+    process.env.AUTH_MODE = "cognito";
+    process.env.NODE_ENV = "production";
+    await expect(import("./auth")).rejects.toThrow(/must be "oidc"/);
+  });
+
+  it("accepts AUTH_MODE=oidc when LOGJAM_RUNTIME=prod", async () => {
+    vi.resetModules();
+    plainComposeHost();
+    process.env.AUTH_MODE = "oidc";
+    process.env.NODE_ENV = "production";
+    await expect(import("./auth")).resolves.toBeDefined();
+  });
 
   it("refuses AUTH_MODE=fake in a production NODE_ENV", async () => {
     vi.resetModules();
@@ -322,7 +356,7 @@ describe("auth module-load fail-closed guards", () => {
     vi.resetModules();
     process.env.AUTH_MODE = "fake";
     process.env.NODE_ENV = "test";
-    process.env.DB_HOST = "prod.abc.ap-southeast-2.rds.amazonaws.com";
+    process.env.DB_HOST = "db.prod.example.com";
     await expect(import("./auth")).rejects.toThrow(/refused/);
   });
 
@@ -341,6 +375,19 @@ describe("auth module-load fail-closed guards", () => {
     process.env.NODE_ENV = "test";
     process.env.DB_HOST = "localhost";
     process.env.AWS_EXECUTION_ENV = "AWS_ECS_FARGATE";
+    await expect(import("./auth")).rejects.toThrow(/refused/);
+  });
+
+  // Mutation: drop AWS_LAMBDA_FUNCTION_NAME from hasAwsRuntime in auth.ts.
+  it("refuses AUTH_MODE=fake in a Lambda runtime, with every other signal reading local", async () => {
+    vi.resetModules();
+    process.env.AUTH_MODE = "fake";
+    process.env.NODE_ENV = "test";
+    process.env.DB_HOST = "localhost";
+    delete process.env.LOGJAM_RUNTIME;
+    delete process.env.ECS_CONTAINER_METADATA_URI_V4;
+    delete process.env.AWS_EXECUTION_ENV;
+    process.env.AWS_LAMBDA_FUNCTION_NAME = "some-function";
     await expect(import("./auth")).rejects.toThrow(/refused/);
   });
 

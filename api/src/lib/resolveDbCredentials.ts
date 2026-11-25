@@ -3,11 +3,11 @@ import {
   GetSecretValueCommand,
 } from "@aws-sdk/client-secrets-manager";
 
-// Populate DB_USER/DB_PASSWORD in process.env from the RDS-managed Secrets
-// Manager secret (DB_SECRET_ID) when DB_PASSWORD is not already set.
+// Populate DB_USER/DB_PASSWORD in process.env from the Secrets Manager secret
+// (DB_SECRET_ID) when DB_PASSWORD is not already set.
 //
 // Why this exists: lib/databaseUrl.ts composes the connection string from
-// DB_USER/DB_PASSWORD and throws if either is missing, so the EB container
+// DB_USER/DB_PASSWORD and throws if either is missing, so the container
 // entrypoint (src/boot.ts) must resolve credentials BEFORE prisma.ts is
 // imported. ECS Fargate workers get DB_USER/DB_PASSWORD via ECS secrets
 // injection and local dev sets DB_PASSWORD directly, so for them this is a

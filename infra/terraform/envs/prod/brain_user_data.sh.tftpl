@@ -1,0 +1,52 @@
+#!/bin/bash
+# The brain's user data, rendered by brain_instance.tf: cloud-init runs it once
+# per instance, as root. It installs Docker, the Compose plugin and the ECR
+# credential helper, puts infra/brain/ at /opt/brain, writes
+# /etc/brain/brain.env, and hands over to host/install.sh. Everything after
+# that is the host scripts' job. No secret is in here (the host reads them from
+# Secrets Manager).
+set -euo pipefail
+export HOME=/root DOCKER_CONFIG=/root/.docker
+
+# The Elastic IP attaches while this runs, which drops the connection once.
+retry() {
+  local n
+  for n in $(seq 30); do
+    "$@" && return 0
+    echo "brain: attempt $n of $* failed" >&2
+    sleep 10
+  done
+  return 1
+}
+
+# Most of these are on the AMI already; naming them makes the host scripts'
+# tools (aws, python3, flock, blkid, wipefs, mkfs.ext4, findmnt, mountpoint) a
+# stated requirement rather than an accident of the image.
+retry dnf -y install docker amazon-ecr-credential-helper awscli-2 python3 util-linux e2fsprogs
+systemctl enable --now docker.service
+
+# Docker finds this file without HOME: when it is unset the CLI falls back to
+# root's home directory, which is /root.
+install -d -m 0700 /root/.docker
+cat > /root/.docker/config.json <<'BRAIN_DOCKER_CONFIG_EOF'
+${docker_config}
+BRAIN_DOCKER_CONFIG_EOF
+
+# The Compose plugin comes out of the Postgres image (infra/brain/postgres/Dockerfile),
+# so this instance needs only AWS to boot.
+cid=$(retry docker create '${pg_image}')
+install -d -m 0755 /usr/local/lib/docker/cli-plugins
+docker cp "$cid:/usr/local/lib/brain/docker-compose" /usr/local/lib/docker/cli-plugins/docker-compose
+chmod 0755 /usr/local/lib/docker/cli-plugins/docker-compose
+docker rm "$cid" > /dev/null
+docker compose version
+
+# infra/brain/ minus postgres/, tests/ and api.env.
+${host_files}
+
+install -d -m 0755 /etc/brain
+cat > /etc/brain/brain.env <<'BRAIN_ENV_EOF'
+${brain_env}
+BRAIN_ENV_EOF
+
+exec /opt/brain/host/install.sh

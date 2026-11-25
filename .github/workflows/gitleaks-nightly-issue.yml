@@ -1,0 +1,61 @@
+name: gitleaks nightly issue
+
+# CI's nightly run scans every branch for secrets (its gitleaks job, with
+# `--all`), where a pull request scans only its own history. Nobody watches a
+# nightly run, so this opens one issue when that job did not pass (or rewrites
+# the open one), and closes it when it passes again. Its own workflow, started
+# by CI finishing: a job inside CI that ran only at night would show on every
+# pull request as a skipped check (infra/scripts/check-required-checks.py
+# fails on a job a pull request starts that is neither required nor named),
+# and CI's own gitleaks job, which runs on every pull request, should not hold
+# `issues: write`.
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: The CI run to report on, as if it were last night's
+        required: true
+
+permissions: {}
+
+jobs:
+  issue:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.event == 'schedule' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      TITLE: "The nightly gitleaks scan is red"
+      RUN_ID: ${{ inputs.run_id || github.event.workflow_run.id }}
+    steps:
+      - name: Open, update or close the issue
+        run: |
+          set -euo pipefail
+          # Anything but a pass or a cancelled run opens the issue, a job that
+          # is missing included: if CI's job is renamed, this says so the next
+          # morning instead of going quiet.
+          result=$(gh api --paginate "repos/$GH_REPO/actions/runs/$RUN_ID/jobs?per_page=100" \
+            --jq '.jobs[] | select(.name == "gitleaks") | .conclusion' | tail -n1)
+          run_url="$GITHUB_SERVER_URL/$GH_REPO/actions/runs/$RUN_ID"
+          n=$(gh issue list --state open --search "\"$TITLE\" in:title" \
+            --json number,title --jq ".[] | select(.title == \"$TITLE\") | .number" | head -n1)
+          case "$result" in
+            success)
+              [ -z "$n" ] || gh issue close "$n" --comment "Green again in $run_url"
+              exit 0
+              ;;
+            cancelled) exit 0 ;;
+          esac
+          body="The \`gitleaks\` job of the nightly CI run ended \`${result:-missing}\`: [run]($run_url). At night it scans every branch, where a pull request scans only its own history, so a finding is most likely on a branch with no pull request. The job's log names each finding's file, rule and commit, with the secret redacted. For a real secret, rotate it first, then delete the branch or rewrite its history; a false positive goes in \`.gitleaks.toml\`."
+          if [ -n "$n" ]; then
+            gh issue edit "$n" --body "$body"
+          else
+            gh issue create --title "$TITLE" --label task --label triage --body "$body"
+          fi

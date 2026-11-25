@@ -10,7 +10,7 @@ convention) to keep this suite runnable on a host without GDAL Python
 bindings. numpy is real (only osgeo/etc are stubbed when absent).
 
 apply_fire_history itself (the GDAL warp + file-writing wrapper) is NOT
-exercised here — it mirrors apply_svtm_weighting's warp block, which is only
+exercised here — it mirrors svtm_formation_aligned's warp block, which is only
 integration-tested against real GDAL. This suite is intentionally scoped to
 the pure pre/post logic around that warp.
 """
@@ -27,6 +27,7 @@ import numpy as np  # noqa: E402
 from pipeline import (  # noqa: E402
     _capture_year_from_las_files,
     _compute_stale_mask,
+    _fire_stale_summary,
 )
 
 
@@ -154,6 +155,53 @@ class TestComputeStaleMask(unittest.TestCase):
         # max(valid_mask.sum(), 1) guards the denominator.
         _, stale_fraction = _compute_stale_mask(fire_year, 2018, valid)
         self.assertEqual(stale_fraction, 0.0)
+
+
+class TestFireStaleSummary(unittest.TestCase):
+    """The summary is counted over blocks of the area. Red if a block's counts
+    replace the last block's and are not added to them, the first or last
+    fire year is taken from one block only, or a block with no fire in it
+    resets them."""
+
+    def setUp(self):
+        rng = np.random.default_rng(8)
+        self.fire_year = rng.choice(
+            np.array([0, 0, 2003, 2013, 2019, 2020], dtype=np.uint16), (40, 30)
+        )
+        self.fire_year[10:20] = 0  # rows with no fire on record
+        self.fire_year[25, 3] = 1994
+        self.fire_year[2, 7] = 2023
+        self.valid = rng.random((40, 30)) > 0.3
+
+    def blocks(self, rows):
+        return (
+            (self.fire_year[top : top + rows], self.valid[top : top + rows])
+            for top in range(0, 40, rows)
+        )
+
+    def test_it_is_the_whole_area_s_whatever_blocks_it_is_counted_in(self):
+        _, fraction = _compute_stale_mask(self.fire_year, 2018, self.valid)
+        whole = {
+            "capture_year": 2018,
+            "stale_fraction": fraction,
+            "fire_years_min": 1994,
+            "fire_years_max": 2023,
+        }
+        self.assertTrue(0 < fraction < 1)
+        for rows in (1, 7, 16, 40):
+            self.assertEqual(_fire_stale_summary(self.blocks(rows), 2018), whole)
+
+    def test_an_area_with_no_fire_on_record_has_no_fire_years(self):
+        none = [(np.zeros((3, 3), np.uint16), np.ones((3, 3), bool))]
+        self.assertEqual(
+            _fire_stale_summary(none, 2018),
+            {
+                "capture_year": 2018,
+                "stale_fraction": 0.0,
+                "fire_years_min": None,
+                "fire_years_max": None,
+            },
+        )
 
 
 if __name__ == "__main__":

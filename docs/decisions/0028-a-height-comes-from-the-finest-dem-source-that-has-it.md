@@ -25,8 +25,9 @@ Proposal: #359.
 ## Decision
 
 - **One declaration.** `DEM_SOURCES` in `shared/src/demSources.ts` lists every
-  source, finest first; the order is the precedence. No other file names a
-  source's URL, zoom or credit.
+  source, finest first; the order is the precedence. It is derived: each
+  region's sources (`shared/src/regions.ts`), then the worldwide one. No file
+  but those two names a source's URL, zoom or credit (updated 2026-11-07).
 - **One sampler.** `sampleDem` in the same file decides which source answers.
   The API and Logjam GPS supply only tile I/O (a `DemTileReader`), following
   [0020](0020-share-the-decision-not-the-drawing.md).
@@ -130,7 +131,8 @@ parity pair `api/src/services/elevation.unit.test.ts` and
 
 ## Consequences
 
-- **Positive:** A new DEM is one entry in `DEM_SOURCES`. A line that crosses
+- **Positive:** A new DEM is one entry in its region's `dem` (updated
+  2026-11-07). A line that crosses
   onto a finer DEM keeps the finer heights on that side and gains no false
   climb at the join.
 - **Negative:** The chart can show a step at a seam that the totals beside it

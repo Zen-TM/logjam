@@ -54,19 +54,6 @@ export type { TPlace, TNotification, TTripLog, TUser } from "@logjam/shared";
 import type { TPlace, TNotification, TTripLog, TUser } from "@logjam/shared";
 import { usernameAvailable as sharedUsernameAvailable } from "@logjam/shared";
 
-// Only http(s) URLs are safe to render as a clickable <a href> or store as a
-// place source link — any other scheme (javascript:, data:, vbscript:, ...)
-// is an XSS/hygiene sink. Single source for both the save-time reject in
-// PlaceDialog and the render-time guard in PlaceDetailPanel.
-export function isHttpUrl(url: string): boolean {
-  try {
-    const parsed = new URL(url);
-    return parsed.protocol === "http:" || parsed.protocol === "https:";
-  } catch {
-    return false;
-  }
-}
-
 export type TFriend = {
   id: string;
   username: string;
@@ -311,21 +298,29 @@ export type RopeWikiApplyResult = {
   sourceUpdatedAt: string | null;
 };
 
-export function importFromRopeWiki(): Promise<ImportResult> {
-  return apiFetch<ImportResult>("/ropewiki/import", { method: "POST" });
-}
+const regionQuery = (regionId: string) =>
+  `?region=${encodeURIComponent(regionId)}`;
 
-export function applyRopeWikiImport(
-  decisions: RopeWikiApplyDecision[],
-): Promise<RopeWikiApplyResult> {
-  return apiFetch<RopeWikiApplyResult>("/ropewiki/import/apply", {
+export function importFromRopeWiki(regionId: string): Promise<ImportResult> {
+  return apiFetch<ImportResult>(`/ropewiki/import${regionQuery(regionId)}`, {
     method: "POST",
-    body: { decisions },
   });
 }
 
-export function refreshFromRopeWiki(): Promise<RefreshResult> {
-  return apiFetch<RefreshResult>("/ropewiki/refresh", { method: "POST" });
+export function applyRopeWikiImport(
+  regionId: string,
+  decisions: RopeWikiApplyDecision[],
+): Promise<RopeWikiApplyResult> {
+  return apiFetch<RopeWikiApplyResult>(
+    `/ropewiki/import/apply${regionQuery(regionId)}`,
+    { method: "POST", body: { decisions } },
+  );
+}
+
+export function refreshFromRopeWiki(regionId: string): Promise<RefreshResult> {
+  return apiFetch<RefreshResult>(`/ropewiki/refresh${regionQuery(regionId)}`, {
+    method: "POST",
+  });
 }
 
 export type CreatePlaceData = {
@@ -882,6 +877,7 @@ export function updateUserPreferences(
     leaderboardOptIn: boolean;
     copyPlaceMedia: boolean;
     slopeBands: SlopeBand[];
+    regions: string[];
   }>,
 ): Promise<TUser> {
   return apiFetch<TUser>("/users/me", { method: "PATCH", body: prefs });

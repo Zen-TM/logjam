@@ -143,9 +143,9 @@
     <p>
       Logjam runs on AWS in the <code>ap-southeast-2</code> (Sydney) region.
       Photos, topo input, and rendered tiles are stored in S3. The database is
-      RDS PostgreSQL. Authentication is handled by Amazon Cognito within the
-      same Australian region. Deleting a stored file is final: our storage
-      keeps no earlier versions to restore. Email, push notifications, app
+      PostgreSQL, on a server we run in that region. Authentication is handled
+      by Amazon Cognito within the same Australian region. A file you delete is kept for about 10 days,
+      then gone (see &ldquo;Retention&rdquo;). Email, push notifications, app
       updates and crash reports go through providers outside Australia (see
       &ldquo;Overseas disclosure&rdquo; below).
     </p>
@@ -173,6 +173,11 @@
       Neither kind of email contains place names or coordinates. Sending them
       is a cross-border disclosure of your email address, and — for account
       emails — of a short-lived authentication code.
+    </p>
+    <p>
+      Email you send to us is separate: it is forwarded to, and read in,
+      mailboxes run by mail providers outside Australia. They receive your
+      email address and whatever you write.
     </p>
     <p>
       Logjam GPS also relies on these services outside Australia:
@@ -224,8 +229,8 @@
     <p>
       A crash report goes to <strong>Sentry</strong> (Functional Software,
       Inc., United States). It contains the error and where in Logjam GPS it
-      happened, recent app activity leading up to it, and technical details
-      such as the app version, phone model and operating system. It does not
+      happened, recent activity in Logjam GPS leading up to it, and technical
+      details such as its version, phone model and operating system. It does not
       contain your account identity. Before a report leaves your phone, Logjam
       GPS removes web addresses, coordinate pairs and map-tile references from
       its text, and removes any field named for a location, a name, notes,
@@ -325,7 +330,7 @@
           everyone, again every five minutes while the tab is open. The
           request says nothing about your places or where you are looking on
           the map. Logjam GPS asks for the same file, only while the layer is
-          on and the app is open, and keeps the last copy on the phone so the
+          on and Logjam GPS is open, and keeps the last copy on the phone so the
           gauges still show offline; signing out deletes that copy. When a
           place has a river gauge, its page and your trips&rsquo; pages ask
           Logjam for that gauge&rsquo;s public history file, once when the page
@@ -384,7 +389,10 @@
           you made keep working until they expire or a leader turns them off.
           Log records
           are not removed by account deletion; they expire as described under
-          &ldquo;Retention&rdquo;.</li>
+          &ldquo;Retention&rdquo;. Backups and copies of deleted files last about
+          10 days. The steps are on the
+          <a href="/delete-account.html">Delete your account</a> page, which
+          also covers what to do if you cannot sign in.</li>
       <li><strong>Correct:</strong> you can edit your username, email, place
           records, and trip logs at any time, and can ask us to correct any
           other personal information that is inaccurate.</li>
@@ -415,6 +423,8 @@
       <li>Files sent to friends as a copy: 7 days.</li>
       <li>Exports of an area: 7 days after they are produced, record
           included.</li>
+      <li id="retention-backups">Backups of our database, and copies of files you delete (or that
+          are deleted with your account): about 10 days after the deletion.</li>
     </ul>
     <p>
       Logs are kept after the record they relate to is removed, including after
@@ -455,7 +465,7 @@
     <h2>Open source and self-hosting</h2>
     <p>
       Logjam is open-source software licensed under AGPL-3.0. This policy applies
-      only to the official hosted service at <code>logjamnsw.com</code> operated
+      only to the official hosted service at <code>logjam.earth</code> operated
       by Zen Marcos. Anyone who self-hosts or runs a modified version is an
       independent operator responsible for their own privacy practices — see the
       open-source clause in the <a href="/tos.html">Terms of Use</a>.
@@ -464,7 +474,7 @@
     <h2>Contact</h2>
     <p>
       Logjam is operated by Zen Marcos. Privacy questions:
-      <a href="mailto:zentmarcos@gmail.com?subject=Logjam%20privacy">zentmarcos@gmail.com</a>.
+      <a href="mailto:support@logjam.earth?subject=Logjam%20privacy">support@logjam.earth</a>.
     </p>
 
     <hr />

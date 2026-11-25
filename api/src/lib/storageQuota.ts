@@ -2,12 +2,17 @@ import { say } from "@logjam/shared";
 import type { PrismaClient, Prisma } from "@prisma/client";
 import prisma from "../services/prisma";
 import { AppError } from "../middleware/errorHandler";
+import { getEnv } from "./env";
+import { logger } from "./logger";
 
 // All helpers accept an optional Prisma client so callers inside an
 // interactive `prisma.$transaction(async (tx) => …)` can pass `tx` and make
 // the quota mutation atomic with the row write it accounts for.
 // The default keeps standalone call sites unchanged.
 export type DbClient = PrismaClient | Prisma.TransactionClient;
+
+/** What a refusal for the site-wide storage cap says. */
+const SITE_STORAGE_FULL_SENTENCE = say`The storage everyone on Logjam shares is full, so nothing new can be added right now. Try again later.`;
 
 export async function getStorageUsage(userId: string, db: DbClient = prisma) {
   const user = await db.user.findUnique({
@@ -40,6 +45,27 @@ export async function assertHasStorageQuota(
   const used = charged - freedBytes;
   if (used >= quota || used + pendingBytes > quota)
     throw storageFull(charged, quota);
+
+  // The site-wide cap, after the user's own so a user over theirs is told that.
+  // A 429 with no figures, not the 507: Logjam Web shows the sentence as is, and
+  // Logjam GPS parks a 507 upload with "free some space", which deleting their
+  // own files would not fix; it retries a 429 instead, and the cap can clear.
+  const siteCap = getEnv().SITE_STORAGE_BYTES;
+  if (siteCap === 0) return;
+  // ponytail: a SUM over users per check, a scan per upload. Keep a running
+  // total (or a materialised view) when users number in the tens of thousands.
+  const { _sum } = await db.user.aggregate({
+    _sum: { storageUsedBytes: true },
+  });
+  const siteUsed = (_sum.storageUsedBytes ?? 0n) - freedBytes;
+  if (
+    siteUsed >= BigInt(siteCap) ||
+    siteUsed + pendingBytes > BigInt(siteCap)
+  ) {
+    // No user data in the line; no alarm watches it yet.
+    logger.warn({ siteCap }, "site_storage_cap_reached");
+    throw new AppError(429, SITE_STORAGE_FULL_SENTENCE);
+  }
 }
 
 /** The 507 a write past the storage quota answers with. */

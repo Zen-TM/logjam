@@ -13,22 +13,21 @@
 // credential. Nothing here logs either (`terrainRouter.test.ts`, "logs
 // nothing").
 import {
-  NSW_CONTOURS,
-  NSW_HILLSHADE,
-  NSW_SLOPE,
+  NSW_REGION,
   SHARPENED_ARCHIVE_URL,
   sharpenedDemSource,
   terrainTileArchive,
   type SharpenedOverlay,
   type TerrainArchiveLayer,
+  type OverlayTerrainKey,
   type TerrainLayerKey,
 } from "@logjam/shared";
 import { PMTiles } from "pmtiles";
 
 export const TERRAIN_PROTOCOL = "logjam-terrain";
 
-/** Land is no surface a sharpened area replaces: its archive is read as it is. */
-export type RoutedTerrainKey = Exclude<TerrainLayerKey, "land">;
+/** An overlay is no surface a sharpened area replaces: its archive is read as it is. */
+export type RoutedTerrainKey = Exclude<TerrainLayerKey, OverlayTerrainKey>;
 
 /**
  * Each Terrain layer's statewide archive, declared once: the unrouted
@@ -36,9 +35,9 @@ export type RoutedTerrainKey = Exclude<TerrainLayerKey, "land">;
  * (`terrainRouter.test.ts`, "reads the statewide archive the entries do").
  */
 export const TERRAIN_STATEWIDE = {
-  contours: NSW_CONTOURS,
-  slope: NSW_SLOPE,
-  hillshade: NSW_HILLSHADE,
+  contours: NSW_REGION.terrain.contours,
+  slope: NSW_REGION.terrain.slope,
+  hillshade: NSW_REGION.terrain.hillshade,
 } as const satisfies Record<
   RoutedTerrainKey,
   { archivePath: string; minzoom: number; maxzoom: number; creditHtml: string }

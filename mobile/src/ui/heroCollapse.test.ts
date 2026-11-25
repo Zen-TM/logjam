@@ -7,6 +7,7 @@ import {
   collapseRanges,
   compactHeroTitle,
   heroReach,
+  listTop,
   roomBelow,
   rowTarget,
   snapTarget,
@@ -180,6 +181,20 @@ describe("roomBelow", () => {
   });
 });
 
+describe("listTop", () => {
+  // Mutation: return the whole header, and the full hero's room is lost; return
+  // 0, and the scroll bar runs behind the header again.
+  it("starts the list under the header as folded", () => {
+    expect(listTop(300, DISTANCE)).toBe(300 - DISTANCE);
+  });
+  // Mutation: drop the clamp, and an unmeasured hero pushes the list off the
+  // top of the screen.
+  it("never goes above the screen, nor shifts before the hero is measured", () => {
+    expect(listTop(100, 250)).toBe(0);
+    expect(listTop(300, 0)).toBe(300);
+  });
+});
+
 describe("heroReach", () => {
   // Mutation: gate on `collapsed` alone (drop `moving`), and the invisible full
   // hero takes the tap that was meant to stop a fling.
@@ -211,10 +226,10 @@ describe("rowTarget", () => {
     gap: 16,
     range: 3000,
   };
-  const folded = base.header - DISTANCE;
-  // Mutation: drop the `folded` term, and the row lands a hero's height too low.
+  // Mutation: subtract the folded header again (the list's top is already
+  // under it), and the row lands a folded header too high.
   it("puts the row a gap under the folded header", () => {
-    expect(rowTarget({ ...base, contentY: 1000 })).toBe(1000 - folded - 16);
+    expect(rowTarget({ ...base, contentY: 1000 })).toBe(1000 - 16);
   });
   // Mutation: drop the null returns, and a row laid out before the header was
   // measured, or before the list was padded for it, scrolls to a short offset.
@@ -228,8 +243,8 @@ describe("rowTarget", () => {
   // past the end of the list or leaves the header half-folded.
   it("never leaves the header half-folded or the list past its end", () => {
     expect(rowTarget({ ...base, contentY: 1000, range: 600 })).toBe(600);
-    expect(rowTarget({ ...base, contentY: 150 })).toBe(0);
-    expect(rowTarget({ ...base, contentY: folded + 16 + 150 })).toBe(DISTANCE);
+    expect(rowTarget({ ...base, contentY: 16 + 20 })).toBe(0);
+    expect(rowTarget({ ...base, contentY: 16 + DISTANCE - 20 })).toBe(DISTANCE);
   });
 });
 
@@ -243,6 +258,14 @@ describe("the hook", () => {
   it("feeds the scroll to the native driver", () => {
     expect(hook).toMatch(/Animated\.event\([\s\S]*useNativeDriver: true/);
     expect(hook).not.toContain("useNativeDriver: false");
+  });
+  // Mutation: drop the `instance === mounted.current` check from `setList`,
+  // and the list handed its ref again when a page is shown again is reset to
+  // the top: the header comes back expanded over a list that kept its offset.
+  it("resets only for a list it has not seen, not for the same one's ref again", () => {
+    expect(hook).toMatch(
+      /if \(!instance \|\| instance === mounted\.current\) return;\s*mounted\.current = instance;\s*scrollY\.setValue\(0\);/,
+    );
   });
   // Mutation: bring `LayoutAnimation` back, and the swap lays the list out again.
   it("never animates layout", () => {
@@ -302,10 +325,12 @@ describe("list screens collapse their hero", () => {
       /\{\.\.\.(heroCollapse\.scrollProps|mergeScrollProps\(heroCollapse\.scrollProps,)/,
     );
     expect(source).toContain("heroCollapse.inset(");
+    // The list starts under the folded header, so its scroll bar does.
+    expect(source).toContain("heroCollapse.listStyle");
     // Saved has no pull to refresh.
     if (!file.includes("SavedScreen"))
       expect(source).toContain(
-        "progressViewOffset={heroCollapse.headerHeight}",
+        "progressViewOffset={heroCollapse.refreshOffset}",
       );
     expect(source).toMatch(/<Hero(FlatList|SectionList|ScrollView)\b/);
     expect(source).toContain("compact={compact}");
@@ -332,6 +357,23 @@ describe("list screens collapse their hero", () => {
   ])("%s draws its add through HeroAdd", (file) => {
     const source = readFileSync(new URL(file, import.meta.url), "utf8");
     expect(source).toContain("<HeroAdd");
+  });
+  // Mutation: put Plans' add back in the hero's body as a `Button`, or draw
+  // `HeroAdd` only when `compact`, and the full hero has its add under the
+  // title instead of top right like the other lists; drop `emptyCarriesAdd`,
+  // and an empty Upcoming list shows two adds (or an empty Past, none).
+  it("draws Plans' add in the hero's actions, full and compact", () => {
+    const source = readFileSync(
+      new URL("../plans/PlansScreen.tsx", import.meta.url),
+      "utf8",
+    );
+    expect(source).toMatch(
+      /actions=\{\s*emptyCarriesAdd \? undefined : \(\s*<HeroAdd\s+label=\{copy\.add\}\s+icon="add"\s+compact=\{compact\}/,
+    );
+    expect(source).toMatch(
+      /emptyCarriesAdd =\s*listReady && bucket === "upcoming" && rows\.length === 0/,
+    );
+    expect(source).not.toMatch(/<Button\s+label=\{copy\.add\}/);
   });
   // Mutation: move Saved's ChipRail back inside its ScrollView, or add
   // "buckets" back to Inbox's list-header keys, and the filter rail scrolls

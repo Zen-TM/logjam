@@ -153,11 +153,19 @@ export function seededDrift(base: Snapshot, now: Snapshot): Drift[] {
 
 /** Delete every row absent from the baseline. Foreign keys make the order
  *  matter and the schema does not say it, so retry the refused tables until a
- *  pass deletes nothing more. */
+ *  pass deletes nothing more. A delete trigger (the compute carry-over) can
+ *  write into a table an earlier pass already swept, so repeat until a whole
+ *  sweep deletes nothing. */
 export async function sweepToBaseline(base: Snapshot): Promise<void> {
+  while (await sweepOnce(base));
+}
+
+/** One sweep of every table; whether it deleted anything. */
+async function sweepOnce(base: Snapshot): Promise<boolean> {
   const prisma = await appDb();
   const defs = await tables(prisma);
   let pending = defs;
+  let deleted = false;
   for (let pass = 0; pass < defs.length + 1 && pending.length; pass++) {
     const refused: TableDef[] = [];
     let progressed = false;
@@ -168,7 +176,7 @@ export async function sweepToBaseline(base: Snapshot): Promise<void> {
           `DELETE FROM "${def.table}" t WHERE NOT (${def.keyExpr} = ANY($1::text[]))`,
           known,
         );
-        if (n > 0) progressed = true;
+        if (n > 0) progressed = deleted = true;
       } catch {
         refused.push(def);
       }
@@ -176,6 +184,7 @@ export async function sweepToBaseline(base: Snapshot): Promise<void> {
     if (!progressed && refused.length === pending.length) break;
     pending = refused;
   }
+  return deleted;
 }
 
 /** Pure: rows present now that the baseline lacks. */

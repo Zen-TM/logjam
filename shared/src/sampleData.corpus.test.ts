@@ -16,9 +16,10 @@
 // for that file, numbers rounded to 6 places. After an intended change, rerun
 // with `-u` and read the diff. The ZIP-slip and empty-ZIP guards are in
 // elvisZip.test.ts.
-// Mutation that turns it red: changing DERIVATIVE_STEM_TOKENS (the ELVIS
-// goldens change), or the control-point transform in buildGeoTransform (the
-// sheet golden changes).
+// Mutation that turns it red: running with REQUIRE_SAMPLES=1 and no
+// SAMPLE_DATA_DIR (the file fails instead of skipping three cases); changing
+// DERIVATIVE_STEM_TOKENS (the ELVIS goldens change), or the control-point
+// transform in buildGeoTransform (the sheet golden changes).
 import { readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -26,7 +27,7 @@ import { describe, expect, it } from "vitest";
 import {
   classifyElvisEntries,
   ElvisZipError,
-  parseZipCentralDirectory,
+  readZipEntries,
 } from "./elvisZip";
 import {
   chooseMainViewport,
@@ -36,6 +37,13 @@ import { buildTilePlan } from "./geoPdfImport/tilePlan";
 import { buildGeoTransform } from "./geoPdfImport/transform";
 
 const sampleDir = process.env.SAMPLE_DATA_DIR;
+// ci.yml's `shared` job sets REQUIRE_SAMPLES: there a missing directory fails
+// the run rather than skipping every case below. setup-smoke.yml runs these
+// tests without the samples and does not set it.
+if (process.env.REQUIRE_SAMPLES && !sampleDir)
+  throw new Error(
+    "REQUIRE_SAMPLES is set but SAMPLE_DATA_DIR is not: the corpus tests would skip. Fetch the samples (see the top of this file) before the tests.",
+  );
 const golden = (name: string) =>
   join(__dirname, "__fixtures__", "sample-data", `${name}.golden`);
 
@@ -50,12 +58,15 @@ function render(value: unknown): string {
   );
 }
 
-/** What the web client does: the last 64 KiB holds the central directory. */
-function elvisReport(path: string): unknown {
+/** What both clients do: read the entries through ranges of the file. */
+async function elvisReport(path: string): Promise<unknown> {
   const bytes = new Uint8Array(readFileSync(path));
-  const tail = bytes.subarray(Math.max(0, bytes.length - 65536));
   try {
-    return classifyElvisEntries(parseZipCentralDirectory(tail, bytes.length));
+    return classifyElvisEntries(
+      await readZipEntries(bytes.length, async (start, end) =>
+        bytes.subarray(start, end),
+      ),
+    );
   } catch (err) {
     if (err instanceof ElvisZipError)
       return { error: err.code, sentence: err.sentence };
@@ -71,7 +82,7 @@ describe.runIf(sampleDir)("public sample inputs", () => {
     "elvis-katoomba-2506258-dem2m.zip",
   ]) {
     it(`ELVIS checks report the golden for ${name}`, async () => {
-      await expect(render(elvisReport(file(name)))).toMatchFileSnapshot(
+      await expect(render(await elvisReport(file(name)))).toMatchFileSnapshot(
         golden(name),
       );
     });

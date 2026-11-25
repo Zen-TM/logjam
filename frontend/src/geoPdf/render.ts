@@ -24,10 +24,7 @@ import {
   GEOPDF_MAX_CANVAS_BYTES,
   GEOPDF_PADDING_MM,
   getPaperDimensions,
-  NSW_CONTOURS,
-  NSW_LAND,
-  NSW_HILLSHADE,
-  NSW_SLOPE,
+  NSW_REGION,
   nswContourStyle,
   TILE_SIZE,
   type SharpenedOverlay,
@@ -373,14 +370,14 @@ async function renderInner(
   const areas = areasOnPage(input.areas, extent);
   const areaById = new Map(areas.map((a) => [a.id, a]));
   const contourZoom = nswVectorZoom(
-    NSW_CONTOURS,
+    NSW_REGION.terrain.contours,
     config.scale,
     centreLat,
     overlayZoom,
   );
   const wantContours = contourZoom !== null && drawn.contours;
   const landZoom = nswVectorZoom(
-    NSW_LAND,
+    NSW_REGION.terrain.land,
     config.scale,
     centreLat,
     overlayZoom,
@@ -432,11 +429,17 @@ async function renderInner(
       ? fetcher.open(archiveAt(vectorBaseUrl), vectorBaseUrl)
       : false,
     drawn.hillshade
-      ? openStatewide("heights", NSW_HILLSHADE.archivePath)
+      ? openStatewide("heights", NSW_REGION.terrain.hillshade.archivePath)
       : null,
-    wantSlope ? openStatewide("slope", NSW_SLOPE.archivePath) : null,
-    wantContours ? openStatewide("contours", NSW_CONTOURS.archivePath) : null,
-    wantLand ? openStatewide("land", NSW_LAND.archivePath) : null,
+    wantSlope
+      ? openStatewide("slope", NSW_REGION.terrain.slope.archivePath)
+      : null,
+    wantContours
+      ? openStatewide("contours", NSW_REGION.terrain.contours.archivePath)
+      : null,
+    wantLand
+      ? openStatewide("land", NSW_REGION.terrain.land.archivePath)
+      : null,
   ]);
   check();
 
@@ -1060,18 +1063,11 @@ async function renderInner(
       for (const e of baseEntries) if (e.last <= strip.index) e.promise = null;
       bump("base", mark);
 
-      // 2. Terrain: hillshade, then Land's borders, then slope.
-      let landDrawn = false;
-      const drawLandOnce = () => {
-        if (!landDrawn) drawLand(ctx, land, top, bottom);
-        landDrawn = true;
-      };
+      // 2. Terrain: hillshade, then slope, then Land's borders over the
+      // water, as the map stacks them (TERRAIN_LAYER_KEYS).
       for (const [i, p] of terrainPlans.entries()) {
         mark = performance.now();
-        if (p.key === "slope") {
-          drawLandOnce();
-          basemapBandsTo(2);
-        }
+        if (p.key === "slope") basemapBandsTo(2);
         const bands = await terrainWork[i]!;
         // Let go as soon as drawn; the other layer's may still be painting.
         terrainWork[i] = null;
@@ -1099,7 +1095,8 @@ async function renderInner(
           if (e.last <= strip.index) e.decoded = null;
         bump(p.key, mark);
       }
-      drawLandOnce();
+      basemapBandsTo(2);
+      drawLand(ctx, land, top, bottom);
       if (scratch) scratch.width = scratch.height = 0;
       scratch = null;
 

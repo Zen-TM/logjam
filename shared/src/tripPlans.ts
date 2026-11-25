@@ -15,6 +15,7 @@ import {
   parseRouteAnchors,
   parseRoutePoints,
   ROUTE_ERRORS,
+  validateRoutePayload,
 } from "./routeValidation.js";
 
 /** What a member may do in a plan. A plan can have more than one leader. */
@@ -1158,10 +1159,49 @@ export type TripPlanRoutePatch = {
 export type TripPlanFilePatch = { displayName?: Cas<string | null> };
 
 /** POST /plans/:id/items: a copy of one of the caller's own things. */
-export type TripPlanItemAdd = {
+export type TripPlanItemCopy = {
   kind: TripPlanItemKind;
   id: string;
 };
+
+/**
+ * A place made in the plan, owned by no account. `placeTypeId` is a system
+ * type's (a plan holds no user's own type); `fieldValues` are checked against
+ * that type's attributes as a plan place's edit is.
+ */
+export type TripPlanNewPlace = {
+  placeTypeId: string;
+  name: string;
+  altNames?: string[];
+  latitude: number;
+  longitude: number;
+  elevation?: number | null;
+  notes?: string | null;
+  fieldValues?: Record<string, unknown>;
+};
+
+/** A way made in the plan: its points and anchors as the way tools produce them. */
+export type TripPlanNewRoute = {
+  name: string;
+  /** A palette colour; left out, the API picks one the plan's ways lack. */
+  color?: string;
+  points: [number, number][];
+  anchors?: number[] | null;
+};
+
+/** POST /plans/:id/items: a place or way made straight into the plan. */
+export type TripPlanItemNew =
+  | { kind: "place"; new: TripPlanNewPlace }
+  | { kind: "route"; new: TripPlanNewRoute };
+
+export type TripPlanItemAdd = TripPlanItemCopy | TripPlanItemNew;
+
+/** Whether an add makes a new item rather than copying one. */
+export function isTripPlanItemNew(
+  input: TripPlanItemAdd,
+): input is TripPlanItemNew {
+  return "new" in input;
+}
 
 /** POST /plans/:id/items. */
 export function parseTripPlanItemAdd(
@@ -1170,10 +1210,69 @@ export function parseTripPlanItemAdd(
   return checked(() => {
     const input = record(body, "body");
     if (!isTripPlanItemKind(input.kind)) bad("kind is not an item kind");
+    if (input.new !== undefined) {
+      if (input.id !== undefined)
+        bad("an add is a copy or a new item, not both");
+      if (input.kind === "place")
+        return { kind: "place", new: newPlace(input.new) };
+      if (input.kind === "route")
+        return { kind: "route", new: newRoute(input.new) };
+      bad("a file can't be made in a plan");
+    }
     const id = text(input.id, "id");
     if (!id) bad("id is empty");
     return { kind: input.kind, id };
   });
+}
+
+function newPlace(value: unknown): TripPlanNewPlace {
+  const input = record(value, "new");
+  onlyFields(input, [
+    "placeTypeId",
+    "name",
+    "altNames",
+    "latitude",
+    "longitude",
+    "elevation",
+    "notes",
+    "fieldValues",
+  ]);
+  const place: TripPlanNewPlace = {
+    placeTypeId: text(input.placeTypeId, "placeTypeId"),
+    name: text(input.name, "name"),
+    ...position(input, "new"),
+  };
+  if (input.altNames !== undefined)
+    place.altNames = cappedStrings(
+      input.altNames,
+      "altNames",
+      PLACE_MAX_ALT_NAMES,
+    );
+  if (input.elevation !== undefined)
+    place.elevation = numberOrNull(input.elevation, "elevation");
+  if (input.notes !== undefined) place.notes = textOrNull(input.notes, "notes");
+  if (input.fieldValues !== undefined)
+    place.fieldValues = record(input.fieldValues, "fieldValues");
+  return place;
+}
+
+function newRoute(value: unknown): TripPlanNewRoute {
+  const input = record(value, "new");
+  onlyFields(input, ["name", "color", "points", "anchors"]);
+  if (Array.isArray(input.points) && input.points.length > MAX_ROUTE_POINTS)
+    bad("points is over the cap", 413);
+  const error = validateRoutePayload(input, { requireCore: true });
+  if (error) bad(error);
+  const points = parseRoutePoints(input.points);
+  if ("error" in points) bad(points.error);
+  const anchors = parseRouteAnchors(input.anchors, points.points.length);
+  if ("error" in anchors) bad(anchors.error);
+  return {
+    name: (input.name as string).trim(),
+    ...(input.color !== undefined && { color: input.color as string }),
+    points: points.points,
+    anchors: anchors.anchors,
+  };
 }
 
 // ── Plan item edits ──

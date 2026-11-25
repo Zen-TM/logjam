@@ -129,7 +129,7 @@ feature in NSW, never a geocoding service.**
 - **Bundling the file in app releases, or shipping guests a fixed copy:**
   freshness tied to releases, a bigger app for everyone, and a guest-only path.
 - **Refreshes by OTA update:** ties data to signed releases every month
-  ([0009](0009-signed-ota-updates.md)) and ignores the Wi-Fi rule.
+  ([0046](0046-ota-hotfixes-publish-from-ci-on-a-labelled-merge.md)) and ignores the Wi-Fi rule.
 - **Postgres trigram search:** it would rank differently from the phone, and
   the in-memory index measured above costs about 35 MB.
 - **Diffs between versions:** a diff format, apply logic and a fallback to save

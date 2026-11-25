@@ -1,7 +1,7 @@
 // The forecast for one cell: the phone's kept copy at once, a fresh one only
 // when `refresh` is called, which is only ever on a press (ADR 0038). The same
 // press fetches the rain gauge file, the same for everyone, and the gauges
-// near the spot are picked here, on the phone (ADR 0047).
+// near the spot are picked here, on the phone (ADR 0050).
 //
 // PRIVACY: a failure is a state, never a log line: the error could carry the
 // cell.

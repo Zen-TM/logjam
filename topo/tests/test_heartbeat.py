@@ -26,13 +26,7 @@ os.environ.setdefault("DB_USER", "test")
 os.environ.setdefault("DB_PASSWORD", "test")
 os.environ.setdefault("JOB_ID", "job-123")
 
-try:
-    import worker  # noqa: E402
-
-    _WORKER_OK = True
-except Exception as _exc:  # noqa: BLE001
-    _WORKER_OK = False
-    _WORKER_ERR = _exc
+import worker  # noqa: E402
 
 
 class _FakeConn:
@@ -47,9 +41,6 @@ class _FakeConn:
         self.closed = True
 
 
-@unittest.skipUnless(
-    _WORKER_OK, f"worker import failed: {globals().get('_WORKER_ERR', '?')}"
-)
 class TestHeartbeatLoop(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp()

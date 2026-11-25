@@ -26,12 +26,21 @@ vi.mock("../sync/mediaUpload", () => ({
 }));
 vi.mock("../sync/mirrorStore", () => ({ getMediaById: vi.fn() }));
 vi.mock("../sync/mediaCache", () => ({ ensureDisplayCached: vi.fn() }));
+const plan = vi.hoisted(() => ({ uploadPlanFile: vi.fn() }));
+vi.mock("../plans/planFileUpload", () => ({
+  uploadPlanFile: plan.uploadPlanFile,
+}));
 vi.mock("../offline/localStores", () => ({
   IMPORTS_DIR: "file:///imports/",
   scratchFileUri: vi.fn(async (name: string) => `file:///scratch/${name}`),
 }));
 
-const { kmlFromKmz, pickImportColor } = await import("./vectorImports");
+const { kmlFromKmz, pickImportColor, importVectorFileIntoPlan } = await import(
+  "./vectorImports"
+);
+const FileSystem = await import("expo-file-system/legacy");
+const DocumentPicker = await import("expo-document-picker");
+const mediaUpload = await import("../sync/mediaUpload");
 const { TRACK_COLORS } = await import("@logjam/shared");
 
 const KML = `<?xml version="1.0"?><kml><Document><Placemark><Point>
@@ -88,5 +97,75 @@ describe("pickImportColor", () => {
 
   it("ignores rows with no colour", () => {
     expect(pickImportColor([null, undefined])).toBe(TRACK_COLORS[0]);
+  });
+});
+
+describe("importVectorFileIntoPlan", () => {
+  const GPX = `<?xml version="1.0"?><gpx version="1.1"><trk><name>Ridge</name><trkseg>
+    <trkpt lat="-33.5" lon="150.4"></trkpt><trkpt lat="-33.51" lon="150.41"></trkpt>
+  </trkseg></trk></gpx>`;
+
+  function pick(name: string) {
+    vi.mocked(DocumentPicker.getDocumentAsync).mockResolvedValue({
+      canceled: false,
+      assets: [{ uri: "file:///cache/pick.gpx", name }],
+    } as never);
+    vi.mocked(FileSystem.getInfoAsync).mockResolvedValue({
+      exists: true,
+      size: GPX.length,
+    } as never);
+    vi.mocked(FileSystem.readAsStringAsync).mockResolvedValue(GPX);
+    vi.mocked(FileSystem.deleteAsync).mockResolvedValue(undefined);
+  }
+
+  // Mutation: leave the uploaded scratch copy out of the cleanup, and it stays
+  // on the phone.
+  it("uploads the file into the plan and keeps nothing in the account", async () => {
+    vi.clearAllMocks();
+    pick("ridge.gpx");
+    expect(await importVectorFileIntoPlan("p")).toEqual({
+      status: "added",
+      name: "Ridge",
+    });
+    expect(plan.uploadPlanFile).toHaveBeenCalledTimes(1);
+    expect(plan.uploadPlanFile).toHaveBeenCalledWith(
+      "p",
+      expect.objectContaining({
+        filename: "Ridge.gpx",
+        displayName: "Ridge",
+        mediaType: "application/gpx+xml",
+        metadata: expect.objectContaining({ featureCount: 1 }),
+      }),
+    );
+    expect(mediaUpload.createStandaloneMediaLocal).not.toHaveBeenCalled();
+    // The scratch copy that was uploaded is deleted.
+    expect(FileSystem.deleteAsync).toHaveBeenCalledWith(
+      expect.stringContaining("plan-import-"),
+      { idempotent: true },
+    );
+  });
+
+  // Mutation: as above, for the path that throws.
+  it("deletes the scratch copy when the upload fails", async () => {
+    vi.clearAllMocks();
+    pick("ridge.gpx");
+    plan.uploadPlanFile.mockRejectedValueOnce(new Error("offline"));
+    await expect(importVectorFileIntoPlan("p")).rejects.toThrow("offline");
+    expect(FileSystem.deleteAsync).toHaveBeenCalledWith(
+      expect.stringContaining("plan-import-"),
+      { idempotent: true },
+    );
+  });
+
+  it("uploads nothing when the picker is cancelled", async () => {
+    vi.clearAllMocks();
+    vi.mocked(DocumentPicker.getDocumentAsync).mockResolvedValue({
+      canceled: true,
+      assets: null,
+    } as never);
+    expect(await importVectorFileIntoPlan("p")).toEqual({
+      status: "cancelled",
+    });
+    expect(plan.uploadPlanFile).not.toHaveBeenCalled();
   });
 });

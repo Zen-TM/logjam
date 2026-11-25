@@ -2,15 +2,11 @@
 // estimator UI, the download caps, the tile-pyramid downloader, and resume:
 // all derive from the same deterministic plan so they can never disagree.
 
-import {
-  DEM_SOURCES,
-  NSW_5M,
-  TERRARIUM,
-  type DemSource,
-} from "./demSources.js";
-import { NSW_CONTOURS } from "./nswContours.js";
-import { NSW_LAND_CLIP } from "./nswLand.js";
-import { NSW_HILLSHADE, NSW_SLOPE } from "./terrain.js";
+import { DEM_SOURCES, TERRARIUM, type DemSource } from "./demSources.js";
+import { NSW_COVERAGE } from "./nswCoverage.js";
+import { NSW_FIRE } from "./nswFire.js";
+import { landClip } from "./nswLand.js";
+import { NSW_REGION } from "./regions.js";
 
 export type RegionBbox = {
   west: number;
@@ -306,7 +302,7 @@ export function estimateRegionSeconds(totalTiles: number): number {
 /**
  * MEASURED bytes of one tile of a DEM archive at each zoom a clip holds. The
  * sampler reads only the `sampleZoom`; the shallower zooms are saved for the
- * hillshade (`NSW_HILLSHADE`), which would vanish below z15 without them.
+ * hillshade (`NSW_REGION.terrain.hillshade`), which would vanish below z15 without them.
  *
  * z15: full tiles of six whole sheets built by `topo/build_nsw_dem.py`, from
  * 4.7 KB on the Hay plain to 36 KB in the ranges. People save rugged ground,
@@ -334,7 +330,9 @@ const DEM_ARCHIVE_TILE_BYTES: Record<
 
 /** The zoom a saved clip of this DEM archive starts at. */
 export function demClipMinZoom(source: DemSource): number {
-  return source.id === NSW_5M.id ? NSW_HILLSHADE.minzoom : source.sampleZoom;
+  return source.id === NSW_REGION.terrain.heights.id
+    ? NSW_REGION.terrain.hillshade.minzoom
+    : source.sampleZoom;
 }
 
 /**
@@ -409,6 +407,33 @@ const LAND_TILE_BYTES: Record<number, { meanBytes: number; p90Bytes: number }> =
     13: { meanBytes: 3_600, p90Bytes: 8_500 },
   };
 
+/**
+ * MEASURED bytes of one tile of the Fire history overlay at each zoom, as
+ * stored (gzip), from every tile of a 40 km Blue Mountains box, in the
+ * November 2026 build. A coarse tile holds every fire under it, so it weighs
+ * most.
+ */
+const FIRE_TILE_BYTES: Record<number, { meanBytes: number; p90Bytes: number }> =
+  {
+    8: { meanBytes: 89_000, p90Bytes: 136_000 },
+    9: { meanBytes: 49_000, p90Bytes: 83_000 },
+    10: { meanBytes: 23_000, p90Bytes: 64_000 },
+    11: { meanBytes: 9_700, p90Bytes: 33_000 },
+    12: { meanBytes: 3_100, p90Bytes: 9_000 },
+  };
+
+/**
+ * MEASURED bytes of one tile of the Coverage overlay, as stored (gzip), every
+ * carrier's together, from every tile of a 40 km Blue Mountains box, in the
+ * 2026 release's build. The archive holds z12 alone.
+ */
+const COVERAGE_TILE_BYTES: Record<
+  number,
+  { meanBytes: number; p90Bytes: number }
+> = {
+  12: { meanBytes: 8_300, p90Bytes: 13_900 },
+};
+
 function estimateStatewideClip(
   bbox: RegionBbox,
   archive: { minzoom: number; maxzoom: number },
@@ -421,15 +446,35 @@ function estimateStatewideClip(
 }
 
 export function estimateContourClip(bbox: RegionBbox): RegionSizeEstimate {
-  return estimateStatewideClip(bbox, NSW_CONTOURS, CONTOUR_TILE_BYTES);
+  return estimateStatewideClip(
+    bbox,
+    NSW_REGION.terrain.contours,
+    CONTOUR_TILE_BYTES,
+  );
 }
 
 export function estimateSlopeClip(bbox: RegionBbox): RegionSizeEstimate {
-  return estimateStatewideClip(bbox, NSW_SLOPE, SLOPE_TILE_BYTES);
+  return estimateStatewideClip(
+    bbox,
+    NSW_REGION.terrain.slope,
+    SLOPE_TILE_BYTES,
+  );
 }
 
 export function estimateLandClip(bbox: RegionBbox): RegionSizeEstimate {
-  return estimateStatewideClip(bbox, NSW_LAND_CLIP, LAND_TILE_BYTES);
+  return estimateStatewideClip(
+    bbox,
+    landClip(NSW_REGION.terrain.land),
+    LAND_TILE_BYTES,
+  );
+}
+
+export function estimateFireClip(bbox: RegionBbox): RegionSizeEstimate {
+  return estimateStatewideClip(bbox, NSW_FIRE, FIRE_TILE_BYTES);
+}
+
+export function estimateCoverageClip(bbox: RegionBbox): RegionSizeEstimate {
+  return estimateStatewideClip(bbox, NSW_COVERAGE, COVERAGE_TILE_BYTES);
 }
 
 export interface MultiSourceRegionPlan {
@@ -439,6 +484,10 @@ export interface MultiSourceRegionPlan {
   slope: RegionSizeEstimate;
   /** The Land overlay's clip, the same way. */
   land: RegionSizeEstimate;
+  /** The Fire history overlay's clip, the same way. */
+  fire: RegionSizeEstimate;
+  /** The Coverage overlay's clip, the same way. */
+  coverage: RegionSizeEstimate;
   /**
    * DEM archive clips: cut by byte range from our own CDN, so they count toward
    * the bytes but not toward `totalTiles` or `seconds`, which are about tiles
@@ -472,8 +521,8 @@ export interface MultiSourceRegionPlan {
  * goes offline — which is the trip the download exists for. Costing it into
  * these totals (rather than adding it silently later) is what keeps the size
  * estimate, the tile cap and the free-space check honest. So are the clips
- * of each DEM archive the area touches and of the statewide contours, slope
- * and land, which every area saves too.
+ * of each DEM archive the area touches and of the statewide contours, slope,
+ * land, fire history and coverage, which every area saves too.
  */
 export function planRegionForBasemaps(
   bbox: RegionBbox,
@@ -484,6 +533,8 @@ export function planRegionForBasemaps(
   const contours = estimateContourClip(bbox);
   const slope = estimateSlopeClip(bbox);
   const land = estimateLandClip(bbox);
+  const fire = estimateFireClip(bbox);
+  const coverage = estimateCoverageClip(bbox);
   const demPlan = planRegionTiles(bbox, DEM_ZOOM, DEM_ZOOM);
   const demArchives = planDemDownload(bbox).map((source) => {
     const { perZoom } = planRegionTiles(
@@ -525,11 +576,15 @@ export function planRegionForBasemaps(
     [...perSource, ...demArchives].reduce((sum, s) => sum + s.size[key], 0) +
     contours[key] +
     slope[key] +
-    land[key];
+    land[key] +
+    fire[key] +
+    coverage[key];
   return {
     contours,
     slope,
     land,
+    fire,
+    coverage,
     perSource,
     demArchives,
     totalTiles,

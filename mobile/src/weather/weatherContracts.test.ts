@@ -59,7 +59,7 @@ describe("Logjam GPS draws what the weather contracts name", () => {
     expect(rail).toContain("{ width }");
   });
 
-  // ADR 0047: WaterNSW's terms ask for its notice wherever its figures are.
+  // ADR 0050: WaterNSW's terms ask for its notice wherever its figures are.
   // Mutation: drop `rain` from Credit, or stop WeatherView passing it the
   // gauges' credit → red.
   it("draws the rain gauges' credit beside Open-Meteo's", () => {

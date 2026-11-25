@@ -6,13 +6,16 @@
 // the right one, and a basemap that swaps a beat after the screen appears
 // re-fetches every tile it just drew.
 import {
+  type CarrierId,
   MAP_OVERLAY_DEFAULTS,
+  normalizeCarrier,
   normalizeTerrainLayers,
   type TerrainSwitchKey,
 } from "@logjam/shared";
 
 import { readPref, writePref } from "../prefsDb";
-import { DEFAULT_BASEMAP, MOBILE_BASEMAPS } from "./basemapMeta";
+import { readRegions } from "../regionsPreference";
+import { defaultBasemap, mobileBasemaps } from "./basemapMeta";
 import type { BasemapId } from "./sourceResolver";
 
 const BASEMAP_PREF_KEY = "mapBasemapId";
@@ -22,7 +25,11 @@ export function readBasemapPreference(): BasemapId {
   const stored = readPref(BASEMAP_PREF_KEY);
   // An id we no longer offer (a removed source, an older build's pick) reads as
   // "nothing recorded" rather than throwing out of the resolver later.
-  return MOBILE_BASEMAPS.find((id) => id === stored) ?? DEFAULT_BASEMAP;
+  const regions = readRegions();
+  return (
+    mobileBasemaps(regions).find((id) => id === stored) ??
+    defaultBasemap(regions)
+  );
 }
 
 const TERRAIN_LAYERS_PREF_KEY = "mapTerrainLayers";
@@ -43,6 +50,15 @@ export function setTerrainLayers(
 ): boolean {
   return writePref(TERRAIN_LAYERS_PREF_KEY, JSON.stringify(layers));
 }
+
+const COVERAGE_CARRIER_PREF_KEY = "mapCoverageCarrier";
+
+/** The network the Coverage overlay draws, or null until the user picks. */
+export const readCoverageCarrier = (): CarrierId | null =>
+  normalizeCarrier(readPref(COVERAGE_CARRIER_PREF_KEY));
+
+export const setCoverageCarrier = (id: CarrierId): boolean =>
+  writePref(COVERAGE_CARRIER_PREF_KEY, id);
 
 const readOverlay = (key: string, fallback: boolean): boolean => {
   const stored = readPref(key);

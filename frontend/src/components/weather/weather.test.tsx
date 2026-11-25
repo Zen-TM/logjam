@@ -386,7 +386,7 @@ describe("rain gauges", () => {
     ],
   };
 
-  // The privacy boundary of ADR 0047: the file is fetched by its public path
+  // The privacy boundary of ADR 0050: the file is fetched by its public path
   // alone and the gauge is picked here. Mutation that turns it red: add the
   // spot (or its cell) to the rain request, or stop drawing the gauge's row.
   it("fetches the public file with the forecast and draws the gauge near", async () => {

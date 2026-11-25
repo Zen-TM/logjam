@@ -36,7 +36,7 @@ export type WeatherState =
 /** How long the forecast waits for the gauge file, as Logjam GPS's fetch. */
 export const RAIN_WAIT_MS = 15_000;
 
-/** The public rain gauge file (ADR 0047), or null on any failure or after
+/** The public rain gauge file (ADR 0050), or null on any failure or after
  *  `RAIN_WAIT_MS`: the past days then show the model's figures, as they did
  *  before gauges, and a stalled file holds up the forecast for at most
  *  `RAIN_WAIT_MS`. */
@@ -73,7 +73,7 @@ export function useOnline(): boolean {
  * from a press, and nothing is kept: closing the view drops the forecast. A
  * failure is only ever `failed`, never the error, which could carry the cell.
  * The same press fetches the rain gauge file, the same for everyone, and the
- * gauges near the spot are picked here (ADR 0047).
+ * gauges near the spot are picked here (ADR 0050).
  *
  * The model is a per-device preference, read by every view that shows a
  * forecast. Choosing one asks again at once: the press that picked it is the

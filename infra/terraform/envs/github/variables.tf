@@ -3,8 +3,8 @@
 # release. Public URLs, not secrets.
 locals {
   actions_variables = {
-    PROD_API_URL = "https://api.logjamnsw.com"
-    PROD_WEB_URL = "https://logjamnsw.com"
+    PROD_API_URL = "https://api.logjam.earth"
+    PROD_WEB_URL = "https://logjam.earth"
   }
 }
 

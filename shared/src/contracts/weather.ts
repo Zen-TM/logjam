@@ -12,7 +12,7 @@
 // credit is CC BY 4.0's condition for Open-Meteo's data: it is always drawn.
 //
 // The rain that has fallen is measured where a rain gauge is near enough
-// (rainGauges.ts, ADR 0047): a row per gauge, named, with Open-Meteo's
+// (rainGauges.ts, ADR 0050): a row per gauge, named, with Open-Meteo's
 // figure only on the days the gauge has not sent yet, each marked.
 import type { IconIdea } from "../icons.js";
 import { RAIN_GAUGE_MAX_M, type PastRain } from "../rainGauges.js";

@@ -8,10 +8,7 @@ import {
   computeZoom,
   geoPdfBaseTileZoom,
   geoPdfMaxNativeZoom,
-  NSW_CONTOURS,
-  NSW_LAND,
-  NSW_HILLSHADE,
-  NSW_SLOPE,
+  NSW_REGION,
   TARGET_DPI,
   type SharpenedOverlay,
   type TileCoord,
@@ -126,7 +123,9 @@ export function planTerrainBlocks(
 ): TerrainBlocks {
   const { north, south, east, west } = config.extent;
   const maxzoom =
-    archiveLayer === "heights" ? NSW_HILLSHADE.maxzoom : NSW_SLOPE.maxzoom;
+    archiveLayer === "heights"
+      ? NSW_REGION.terrain.hillshade.maxzoom
+      : NSW_REGION.terrain.slope.maxzoom;
   const demZoom = terrainReadZoom(
     Math.min(g.zoom, g.overlayZoom),
     maxzoom,
@@ -196,14 +195,14 @@ export function statewideReads(input: GeoPdfRenderInput): StatewideRead[] {
     if (!wanted) continue;
     const path =
       archiveLayer === "heights"
-        ? NSW_HILLSHADE.archivePath
-        : NSW_SLOPE.archivePath;
+        ? NSW_REGION.terrain.hillshade.archivePath
+        : NSW_REGION.terrain.slope.archivePath;
     for (const r of planTerrainBlocks(config, g, areas, archiveLayer, whole)
       .blocks[0]!.reads)
       if (r.source === STATEWIDE) add(path, r);
   }
   const contourZoom = nswVectorZoom(
-    NSW_CONTOURS,
+    NSW_REGION.terrain.contours,
     config.scale,
     g.centreLat,
     g.overlayZoom,
@@ -220,10 +219,11 @@ export function statewideReads(input: GeoPdfRenderInput): StatewideRead[] {
       g.nativeH,
     );
     const tiles = contourTilesBySource(areas, t.tiles).get(STATEWIDE) ?? [];
-    for (const tile of tiles) add(NSW_CONTOURS.archivePath, tile);
+    for (const tile of tiles)
+      add(NSW_REGION.terrain.contours.archivePath, tile);
   }
   const landZoom = nswVectorZoom(
-    NSW_LAND,
+    NSW_REGION.terrain.land,
     config.scale,
     g.centreLat,
     g.overlayZoom,
@@ -239,7 +239,7 @@ export function statewideReads(input: GeoPdfRenderInput): StatewideRead[] {
       g.nativeW,
       g.nativeH,
     );
-    for (const tile of t.tiles) add(NSW_LAND.archivePath, tile);
+    for (const tile of t.tiles) add(NSW_REGION.terrain.land.archivePath, tile);
   }
   return [...out.values()];
 }

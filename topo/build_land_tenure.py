@@ -9,8 +9,8 @@ hand when DPIRD publishes a new version.
 Input  : the layer's File Geodatabase, unzipped, NOT committed. SEED's download
          link refuses a script, so it is fetched by hand from
          https://data.nsw.gov.au/data/dataset/nsw-land-tenure
-Output : one PMTiles archive, for the path `NSW_LAND.archivePath` names in
-         shared/src/nswLand.ts. README.md has the recipe.
+Output : one PMTiles archive, for the path `NSW_REGION.terrain.land.archivePath`
+         names in shared/src/regions.ts. README.md has the recipe.
 
 tippecanoe, not `ogr2ogr -f MVT`: one feature of this layer has 18 million
 vertices, and the OGR driver held so much of it in memory that a statewide run

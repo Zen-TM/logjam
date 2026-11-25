@@ -4,7 +4,7 @@ import {
   LAND_EDGE_LINES,
   landClass,
   MAP_TERRAIN,
-  NSW_LAND,
+  NSW_REGION,
   TILE_SIZE,
   type TileToMapTransform,
 } from "@logjam/shared";
@@ -45,7 +45,10 @@ export function buildLand(
   for (const tile of tiles) {
     let decoded;
     try {
-      decoded = decodeVectorTileLayer(tile.data, NSW_LAND.sourceLayer);
+      decoded = decodeVectorTileLayer(
+        tile.data,
+        NSW_REGION.terrain.land.sourceLayer,
+      );
     } catch {
       continue;
     }
@@ -62,7 +65,9 @@ export function buildLand(
       bottom: Math.round(dy + size * transform.scaleY),
     };
     for (const feature of decoded.features) {
-      const kind = landClass(feature.properties[NSW_LAND.classProperty]);
+      const kind = landClass(
+        feature.properties[NSW_REGION.terrain.land.classProperty],
+      );
       if (feature.type !== 3 || !kind) continue;
       const scaleX = (size / feature.extent) * transform.scaleX;
       const scaleY = (size / feature.extent) * transform.scaleY;

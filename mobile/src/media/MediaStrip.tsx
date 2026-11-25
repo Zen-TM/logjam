@@ -266,7 +266,11 @@ export function MediaStrip({
 
   return (
     <View>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+      <ScrollView
+        horizontal
+        keyboardShouldPersistTaps="handled"
+        showsHorizontalScrollIndicator={false}
+      >
         <View style={styles.row}>
           {/* The slot's panel can REPLACE what is in it, so its tile outlives
               the limit; a strip with no such panel still stops offering "Add"

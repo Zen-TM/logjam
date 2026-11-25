@@ -1,5 +1,7 @@
 import {
+  isOverlayTerrainKey,
   TERRAIN_LAYER_KEYS,
+  VALID_GEOPDF_OVERLAY_NAMES,
   takesNswContours,
   takesNswHillshade,
   type TerrainLayerKey,
@@ -86,9 +88,12 @@ export function shownOverlays(
   if (!terrainFollowsMap) return new Set(chosen);
   return new Set([
     ...[...chosen].filter((name) => !TERRAIN.includes(name)),
-    // No job has a Land layer of its own.
+    // No job has an overlay of its own, and what the renderer cannot draw
+    // is never asked of it.
     ...TERRAIN_LAYER_KEYS.filter(
-      (key) => terrain[key] || (jobInArea && key !== "land"),
+      (key) =>
+        VALID_GEOPDF_OVERLAY_NAMES.has(key) &&
+        (terrain[key] || (jobInArea && !isOverlayTerrainKey(key))),
     ),
   ]);
 }

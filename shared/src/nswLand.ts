@@ -1,30 +1,11 @@
 // The Land overlay: who holds the land, statewide, from the NSW Land Tenure
-// layer. One archive built by `topo/build_land_tenure.py`, which keeps the
-// source's one attribute, so a class here is the source's own word for it.
+// layer (`NSW_REGION.terrain.land`, regions.ts). Its build keeps the source's
+// one attribute, so a class here is the source's own word for it.
 //
 // It answers who holds the land, not whether anyone may go there: no dataset
 // answers that, so neither a name nor a colour here says "allowed" or "no
 // access", and none is red or a traffic-light green.
-import { NSW_5M } from "./demSources.js";
-
-export const NSW_LAND = {
-  /** A saved clip is filed under this, beside the area it was saved with. */
-  id: "nsw-land",
-  /** A PMTiles archive under the CDN's `/master`, beside the contours. */
-  archivePath: "master/land/nsw-tenure.pmtiles",
-  /** The build script's `SOURCE_LAYER` (test_land_tenure.py). */
-  sourceLayer: "land",
-  /** The source's attribute, kept as it is (test_land_tenure.py). */
-  classProperty: "TenureClass",
-  /** The build script's zooms: z13 is about a metre, and deeper ones overzoom. */
-  minzoom: 8,
-  maxzoom: 13,
-  coverage: NSW_5M.coverage,
-  credit:
-    "Land: NSW Land Tenure, December 2024 v2 © State of New South Wales (Department of Primary Industries and Regional Development), CC BY 4.0",
-  creditHtml:
-    'Land: <a href="https://data.nsw.gov.au/data/dataset/nsw-land-tenure">NSW Land Tenure</a>, December 2024 v2 &copy; State of New South Wales (Department of Primary Industries and Regional Development), <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>',
-} as const;
+import { NSW_REGION } from "./regions.js";
 
 /**
  * The source's classes, in the order a legend lists them, with what a person
@@ -65,7 +46,11 @@ export const LAND_EDGE_MINZOOM = 12;
  * What a saved area keeps of the archive: the zooms a map draws. The rest stay
  * for a print at a coarse scale, and a z8 tile weighs what 100 z13 ones do.
  */
-export const NSW_LAND_CLIP = { ...NSW_LAND, minzoom: LAND_EDGE_MINZOOM };
+export function landClip<Land extends { minzoom: number }>(
+  land: Land,
+): Omit<Land, "minzoom"> & { minzoom: number } {
+  return { ...land, minzoom: LAND_EDGE_MINZOOM };
+}
 
 /**
  * A holding's border, bottom of the map first: two soft lines and a sharp one.
@@ -106,7 +91,7 @@ export function landEdgeOpacity(opacity: number): unknown[] {
 export function landColor(): unknown[] {
   return [
     "match",
-    ["get", NSW_LAND.classProperty],
+    ["get", NSW_REGION.terrain.land.classProperty],
     ...LAND_CLASSES.flatMap((c) => [c.source, c.colour]),
     "rgba(0,0,0,0)",
   ];
@@ -126,6 +111,7 @@ export function landNameOf(
   features: readonly { properties?: Record<string, unknown> | null }[],
 ): string | null {
   return (
-    landClass(features[0]?.properties?.[NSW_LAND.classProperty])?.name ?? null
+    landClass(features[0]?.properties?.[NSW_REGION.terrain.land.classProperty])
+      ?.name ?? null
   );
 }

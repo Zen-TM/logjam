@@ -18,16 +18,19 @@ platform: privacy constrains every feature. Each package has its own
   values or field labels in plain text. Guards: `api/src/lib/logger.unit.test.ts`,
   `mobile/src/sentry/scrubEvent.test.ts`, `topo/tests/test_log_privacy.py`.
 - A committed example (fixture, seed, screenshot, demo) is published or made
-  up, never a user's, in any form. Guard: `scripts/snapshot-scrub.sql` for
-  snapshots; review for the rest.
+  up, never a user's, in any form. Guards: `api/src/lib/snapshotScrub.unit.test.ts`
+  for snapshots (every text column is scrubbed or named as safe),
+  `api/src/lib/seedPrivacy.unit.test.ts` for the seed; review for the rest.
 
 ## Environments
 
 - **Local dev** is `make dev` with `.env.local`: fake auth as the seeded user
   alice, Postgres in docker, MiniStack for S3 and ECS. `AUTH_MODE=fake` refuses
   to start in a prod runtime (`api/src/middleware/auth.ts`); keep it that way.
-- **Prod** is real AWS (`ap-southeast-2`) with Cognito; `api/.env` is
-  prod-style. Never run a command that reaches prod without the maintainer's
+- **Prod** is real AWS (`ap-southeast-2`) with Cognito, its API and Postgres on
+  one self-managed instance, the brain
+  ([0047](docs/decisions/0047-prod-runs-on-one-self-managed-instance-with-object-lock-backups.md));
+  `api/.env` is prod-style. Never run a command that reaches prod without the maintainer's
   explicit confirmation.
 
 ## How we work
@@ -43,10 +46,11 @@ platform: privacy constrains every feature. Each package has its own
 - Logic both clients need lives in `shared/`, with a parity test; look for it
   there before writing it in a client. [0020](docs/decisions/0020-share-the-decision-not-the-drawing.md)
 - Format with `make format` (Biome and Ruff), never Prettier: it also
-  rewrites Markdown and YAML, which nothing formats back. The pre-commit hook
-  formats what you stage.
+  rewrites YAML, and Markdown outside the packages, which nothing formats
+  back. The pre-commit hook formats what you stage.
 - User copy names the surface, **Logjam Web** or **Logjam GPS**, never "the
-  app" or "the web app" where either could be meant.
+  app" or "the web app" where either could be meant. Guard:
+  `shared/src/copyRules.test.ts`.
 - Before opening an issue or a PR, read its form in `.github/ISSUE_TEMPLATE/`
   or `.github/pull_request_template.md` and use its headings and labels: `gh`
   doesn't show them. A PR's title becomes its squash commit on `main`, so it
@@ -84,7 +88,7 @@ code already says or how it got there. If a rename would do, rename.
 
 - Cite what a reader can open (an ADR, a test): no audit codes (`SEC-001`),
   private plans or chat links. An issue, only while open, for a hold or
-  workaround.
+  workaround. Guard: `infra/scripts/check-repo-hygiene.py`.
 - A comment states a rule only when it names its guard: the test that turns
   red when the rule breaks or, where no test can, the mechanism that holds it
   (`prevent_destroy`, a CI check, an ADR). A test that cannot fail is no guard.
@@ -98,6 +102,14 @@ Each package's `AGENTS.md` says how its suites run.
 - A change to a privacy or security boundary (share visibility, email
   omission, log redaction, the error-detail whitelist, auth fail-closed) ships
   a test that the boundary holds.
-- A new guard test names the mutation that turns it red.
+- A new guard test names the mutation that turns it red: one note for the
+  test (an `it`, an `it.each`, a test method), not for each row or assertion
+  in it. Guard, for every test an `AGENTS.md` names:
+  `infra/scripts/check-repo-hygiene.py`.
+- A test that scans source asserts a floor on what it found, so a pattern
+  that stops matching cannot pass by checking nothing.
+- A test fails, never skips or returns early, when its premise is missing (a
+  seed row, a sample file, an import), unless a check names where CI runs that
+  case instead.
 - A rule that must hold gets an executable check; two lists that must agree
   become one declaration plus a test.

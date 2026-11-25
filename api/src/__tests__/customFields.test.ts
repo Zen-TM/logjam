@@ -2,8 +2,10 @@ import { describe, it, expect, vi } from "vitest";
 import request from "supertest";
 import { MAX_SCOPED_PLACE_TYPES, PLACE_TYPE_COLORS } from "@logjam/shared";
 
-import { API_URL } from "./_actors";
+import prisma from "../services/prisma";
+import { ALICE_SUB, API_URL } from "./_actors";
 import { throttleWrites } from "./_rateLimitGate";
+import { deltaCursor, tombstonesSince } from "./_tombstones";
 
 // This file WRITES — definitions, a place type, the legacy-PATCH refusals — and
 // `userPatchLimiter` (30/60s, per user) is a second, tighter limiter than the
@@ -99,6 +101,33 @@ describe("custom-fields route (fake auth)", () => {
         }) => plain,
       ),
     );
+  });
+
+  // Mutation that turns it red: skip the writeTombstones call in
+  // deleteFieldDef (lib/customFieldDefs.ts).
+  it("tombstones a deleted definition for its owner", async () => {
+    const key = `tomb_${Date.now()}`;
+    const created = await write(() =>
+      request(API_URL)
+        .post("/custom-fields/place")
+        .set(AUTH)
+        .send({ field: { key, label: "Tombstoned", type: "string" } }),
+    );
+    expect(created.status).toBe(201);
+    const { id } = await prisma.customFieldDef.findFirstOrThrow({
+      where: { key, entity: "place" },
+      select: { id: true },
+    });
+
+    const cursor = await deltaCursor(ALICE_SUB);
+    const removed = await write(() =>
+      request(API_URL).delete(`/custom-fields/place/${key}`).set(AUTH),
+    );
+    expect(removed.status).toBe(200);
+    expect(await tombstonesSince(ALICE_SUB, cursor)).toContainEqual({
+      type: "customFieldDef",
+      id,
+    });
   });
 
   it("creates, relabels and deletes one definition, addressed by key", async () => {

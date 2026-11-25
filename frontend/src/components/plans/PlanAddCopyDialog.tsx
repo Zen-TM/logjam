@@ -10,7 +10,7 @@ import {
   tripPlanAddOutcome,
   formatBytes,
   placeMatchesSearch,
-  planAddVerbLabel,
+  PLAN_ITEM_ADD,
   TRIP_PLAN_PAGE,
   tripPlanAddCopiesLabel,
   tripPlanAddable,
@@ -57,6 +57,7 @@ export default function PlanAddCopyDialog({
   files,
   user,
   initial,
+  startOn = "places",
   onAdded,
   onClose,
 }: {
@@ -70,6 +71,8 @@ export default function PlanAddCopyDialog({
   user: TUser | null;
   /** Ticked on arrival: the thing pressed on the map. */
   initial: Ticked | null;
+  /** The tab it opens on when nothing was pressed on the map. */
+  startOn?: TripPlanItemGroup;
   onAdded: () => void;
   onClose: () => void;
 }) {
@@ -77,7 +80,7 @@ export default function PlanAddCopyDialog({
   const formId = useId();
   const formRef = useRef<HTMLFormElement>(null);
   const [tab, setTab] = useState<TripPlanItemGroup>(
-    initial ? TRIP_PLAN_ITEM_GROUP[initial.kind] : "places",
+    initial ? TRIP_PLAN_ITEM_GROUP[initial.kind] : startOn,
   );
   const [picked, setPicked] = useState<Ticked[]>(initial ? [initial] : []);
   const [query, setQuery] = useState("");
@@ -199,12 +202,12 @@ export default function PlanAddCopyDialog({
     <Dialog
       open
       size="large"
-      title={planAddVerbLabel("copy")}
+      title={PLAN_ITEM_ADD.label}
       onClose={onClose}
       dismissible={!busy}
       toolbar={
         <ChipRail
-          label={planAddVerbLabel("copy")}
+          label={PLAN_ITEM_ADD.label}
           value={tab}
           onChange={setTab}
           options={TRIP_PLAN_ITEM_GROUPS.map(({ group, title }) => ({

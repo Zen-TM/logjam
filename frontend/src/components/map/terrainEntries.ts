@@ -1,6 +1,7 @@
 import {
-  NSW_5M,
-  NSW_LAND,
+  NSW_REGION,
+  NSW_COVERAGE,
+  NSW_FIRE,
   type SharpenedOverlay,
   type TerrainLayerKey,
 } from "@logjam/shared";
@@ -32,11 +33,23 @@ export const TERRAIN_ENTRIES = {
     format: "slope" as const,
     attribution: TERRAIN_STATEWIDE.slope.creditHtml,
   },
+  coverage: {
+    id: "nswcoverage",
+    pmtilesUrl: `${window.location.origin}/${NSW_COVERAGE.archivePath}`,
+    format: "coverage" as const,
+    attribution: NSW_COVERAGE.creditHtml,
+  },
+  fire: {
+    id: "nswfire",
+    pmtilesUrl: `${window.location.origin}/${NSW_FIRE.archivePath}`,
+    format: "fire" as const,
+    attribution: NSW_FIRE.creditHtml,
+  },
   land: {
     id: "nswland",
-    pmtilesUrl: `${window.location.origin}/${NSW_LAND.archivePath}`,
+    pmtilesUrl: `${window.location.origin}/${NSW_REGION.terrain.land.archivePath}`,
     format: "land" as const,
-    attribution: NSW_LAND.creditHtml,
+    attribution: NSW_REGION.terrain.land.creditHtml,
   },
   hillshade: {
     id: "nswhillshade",
@@ -80,13 +93,15 @@ export function terrainEntries(
         template,
         minzoom: statewide.minzoom,
         maxzoom,
-        bounds: NSW_5M.coverage,
+        bounds: NSW_REGION.terrain.heights.coverage,
       },
     };
   };
   return {
     contours: routed("contours", TERRAIN_STATEWIDE.contours.maxzoom),
     slope: routed("slope", deepest),
+    coverage: TERRAIN_ENTRIES.coverage,
+    fire: TERRAIN_ENTRIES.fire,
     land: TERRAIN_ENTRIES.land,
     hillshade: routed("hillshade", deepest),
   };

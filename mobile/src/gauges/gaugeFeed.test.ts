@@ -202,7 +202,7 @@ describe("refreshRain", () => {
     ],
   };
 
-  // ADR 0047: the file is the same for everyone, so the request says nothing
+  // ADR 0050: the file is the same for everyone, so the request says nothing
   // of the spot. Mutation: add a header or a query → red.
   it("asks the CDN for the public file with nothing else sent, and keeps it", async () => {
     answer(JSON.stringify(rain));

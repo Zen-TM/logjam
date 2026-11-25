@@ -57,12 +57,13 @@ terraform init -input=false
 terraform output <name>
 ```
 
-Plan locally. Build the Cognito email Lambda first, because the plan hashes
-its bundle. Pass `-lock=false` so a read-only plan never holds the lock the
+Plan locally. Build the two Cognito Lambdas first, because the plan hashes
+their bundles. Pass `-lock=false` so a read-only plan never holds the lock the
 apply workflow needs:
 
 ```sh
 (cd infra/lambda/cognito-email-sender && npm ci && npm run build)
+(cd infra/lambda/cognito-pre-signup && npm ci && npm run build)
 terraform -chdir=infra/terraform/envs/prod plan -lock=false
 ```
 

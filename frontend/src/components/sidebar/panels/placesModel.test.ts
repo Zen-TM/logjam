@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   EMPTY_PLACE_FILTERS,
+  NSW_REGION,
+  PLACES_ADD,
+  canyonRegionsOf,
   regionEdgesKm,
   type PlaceFilters,
 } from "@logjam/shared";
@@ -10,6 +13,7 @@ import {
   idRange,
   normaliseBucket,
   placesBounds,
+  ropewikiAddEntries,
   sheetFilterCount,
   withBucket,
 } from "./placesModel";
@@ -102,5 +106,45 @@ describe("idRange", () => {
   it("falls back to the clicked row when there is no anchor in the list", () => {
     expect(idRange(ids, null, "c")).toEqual(["c"]);
     expect(idRange(ids, "gone", "c")).toEqual(["c"]);
+  });
+});
+
+describe("the Add menu's RopeWiki entries", () => {
+  const NZ = { ...NSW_REGION, id: "nz", name: "New Zealand" };
+  const NO_LIST = { ...NSW_REGION, id: "none", name: "Nowhere", canyons: null };
+
+  // Mutation: build one entry whatever the regions, or keep a region whose
+  // `canyons` is null.
+  it("lists one per canyon region and none for a region without a list", () => {
+    const regions = canyonRegionsOf(
+      ["nsw", "nz", "none"],
+      [NSW_REGION, NZ, NO_LIST],
+    );
+    expect(ropewikiAddEntries(regions, null).map((entry) => entry.id)).toEqual([
+      "importRopewiki-nsw",
+      "importRopewiki-nz",
+    ]);
+    expect(ropewikiAddEntries([], null)).toEqual([]);
+  });
+
+  // Mutation: pass a constant for `offers` to ROPEWIKI_OFFER.menu, or label
+  // by region index.
+  it("names the region only when there is a choice, and keeps today's label for one", () => {
+    expect(ropewikiAddEntries([NSW_REGION], null)[0].label).toBe(
+      PLACES_ADD.copy.importRopewiki,
+    );
+    expect(
+      ropewikiAddEntries([NSW_REGION, NZ], null).map((entry) => entry.label),
+    ).toEqual(["Import NSW from RopeWiki", "Import New Zealand from RopeWiki"]);
+  });
+
+  // Mutation: set the busy label on every entry, or leave the others enabled.
+  it("marks only the region being imported busy and locks the rest", () => {
+    const entries = ropewikiAddEntries([NSW_REGION, NZ], "nz");
+    expect(entries.map((entry) => entry.label)).toEqual([
+      "Import NSW from RopeWiki",
+      PLACES_ADD.copy.importingRopewiki,
+    ]);
+    expect(entries.every((entry) => entry.disabled)).toBe(true);
   });
 });

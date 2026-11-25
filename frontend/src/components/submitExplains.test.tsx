@@ -7,7 +7,12 @@ import { recordConsent } from "../placeUtils";
 import ConsentGate from "./ConsentGate";
 import RouteNameDialog from "./dialogs/RouteNameDialog";
 
-afterEach(cleanup);
+// clearAllMocks, so the "records nothing" test cannot see a call an earlier
+// test made, whatever order the tests run in.
+afterEach(() => {
+  cleanup();
+  vi.clearAllMocks();
+});
 
 // shared/DESIGN.md §5: a submit is never disabled for validation — pressing it
 // says what is missing. Mutation that turns these red: put `disabled={!agreed}`

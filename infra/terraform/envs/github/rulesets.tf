@@ -18,11 +18,13 @@ locals {
   # gitleaks also flags generic high-entropy secrets. The heavy jobs
   # (api-integration, mobile, migrations, migration-upgrade, topo-e2e,
   # rollback-compat's "Live release on this schema", terraform-ci's,
-  # setup-smoke) skip, and so pass, on a PR that touches nothing they test
-  # (infra/scripts/ci-scope.sh); dependency-review passes when no manifest
-  # changed, and expo-doctor when the PR is not a Logjam GPS release. Each
-  # workflow starts on every PR: a required check whose workflow never starts
-  # leaves the PR waiting.
+  # setup-smoke, brain-e2e behind brain-e2e-gate, the Postgres image's tests
+  # behind brain-postgres) skip, and so pass, on a PR
+  # that touches nothing they test (infra/scripts/ci-scope.sh);
+  # dependency-review passes when no manifest changed, expo-doctor when
+  # the PR is not a Logjam GPS release, and ota-plan when it is not labelled
+  # ota-hotfix. Each workflow starts on every PR: a
+  # required check whose workflow never starts leaves the PR waiting.
   required_checks = [
     "shared",
     "api",
@@ -52,6 +54,9 @@ locals {
     "gitleaks",
     "pr-closes",
     "expo-doctor",
+    "brain-e2e-gate", # ci.yml's one name for the brain-e2e matrix
+    "brain-postgres", # ci.yml's one name for the brain-postgres-image matrix
+    "ota-plan",       # skips, which passes, unless the PR is labelled ota-hotfix
   ]
 }
 
@@ -150,7 +155,10 @@ resource "github_repository_ruleset" "main_review" {
 
 # A mobile-v* tag push is a Logjam GPS release (deploy-mobile.yml), and the
 # workflow also accepts a tag on a release/mobile-v* branch: only admins may
-# create, move or delete either.
+# create, move or delete either. An OTA hotfix publishes from the release
+# branch, so ota-hotfix.yml may also push one, with a deploy key held in the
+# main-only mobile-ota Environment. Not GitHub Actions as a whole: any
+# collaborator's pull-request workflow can ask for a write token.
 import {
   to = github_repository_ruleset.mobile_release_tags
   id = "logjam:24101808"
@@ -208,6 +216,11 @@ resource "github_repository_ruleset" "mobile_release_branches" {
     actor_id    = local.admin_bypass.actor_id
     actor_type  = local.admin_bypass.actor_type
     bypass_mode = local.admin_bypass.bypass_mode
+  }
+
+  bypass_actors {
+    actor_type  = "DeployKey"
+    bypass_mode = "always"
   }
 
   rules {

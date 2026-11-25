@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { DEM_SOURCES, NSW_5M, TERRARIUM } from "./demSources.js";
+import { DEM_SOURCES, TERRARIUM } from "./demSources.js";
 import {
   DEM_SOURCE_ID,
   MAX_REGION_AREA_KM2,
@@ -21,6 +21,7 @@ import {
   type OfflineBasemapId,
   type RegionBbox,
 } from "./mapRegionEstimate.js";
+import { NSW_REGION } from "./regions.js";
 
 describe("lonLatToTile", () => {
   it("maps the origin to the centre tile", () => {
@@ -245,7 +246,9 @@ describe("planRegionForBasemaps", () => {
         job.demArchives[0].size.p90Bytes +
         job.contours.p90Bytes +
         job.slope.p90Bytes +
-        job.land.p90Bytes,
+        job.land.p90Bytes +
+        job.fire.p90Bytes +
+        job.coverage.p90Bytes,
     );
   });
 
@@ -256,7 +259,7 @@ describe("planRegionForBasemaps", () => {
     const [clip] = planRegionForBasemaps(b, [], 15, maxZoomFor).demArchives;
     const z15 = planRegionTiles(b, 15, 15).totalTiles;
     expect(clip!.size.meanBytes).toBeGreaterThan(z15 * 24_000 * 1.5);
-    expect(demClipMinZoom(NSW_5M)).toBe(8);
+    expect(demClipMinZoom(NSW_REGION.terrain.heights)).toBe(8);
     expect(demClipMinZoom(TERRARIUM)).toBe(TERRARIUM.sampleZoom);
   });
 
@@ -272,8 +275,36 @@ describe("planRegionForBasemaps", () => {
         job.demArchives[0].size.meanBytes +
         job.contours.meanBytes +
         job.slope.meanBytes +
-        job.land.meanBytes,
+        job.land.meanBytes +
+        job.fire.meanBytes +
+        job.coverage.meanBytes,
     );
+  });
+
+  // Mutation: halve FIRE_TILE_BYTES, and the estimate no longer brackets the
+  // measured clip. (Leaving it out of the totals turns the two sum tests
+  // above red.)
+  it("prices the fire clip from its measured tiles", () => {
+    // A real clip of 40 km of the Blue Mountains is 795 KB.
+    const box = { west: 150.05, south: -33.95, east: 150.5, north: -33.55 };
+    const { fire } = planRegionForBasemaps(box, [], 15, maxZoomFor);
+    expect(fire.meanBytes).toBeGreaterThan(650_000);
+    expect(fire.meanBytes).toBeLessThan(950_000);
+    expect(fire.p90Bytes).toBeGreaterThan(795_000);
+    expect(fire.p90Bytes).toBeLessThan(2_500_000);
+  });
+
+  // Mutation: halve COVERAGE_TILE_BYTES, and the estimate no longer brackets
+  // the measured clip. (Leaving it out of the totals turns the two sum tests
+  // above red.)
+  it("prices the coverage clip from its measured tiles", () => {
+    // A real clip of 40 km of the Blue Mountains is 346 KB: 42 z12 tiles.
+    const box = { west: 150.05, south: -33.95, east: 150.5, north: -33.55 };
+    const { coverage } = planRegionForBasemaps(box, [], 15, maxZoomFor);
+    expect(coverage.meanBytes).toBeGreaterThan(300_000);
+    expect(coverage.meanBytes).toBeLessThan(400_000);
+    expect(coverage.p90Bytes).toBeGreaterThan(400_000);
+    expect(coverage.p90Bytes).toBeLessThan(700_000);
   });
 
   // Mutation: halve LAND_TILE_BYTES, and the estimate no longer brackets the

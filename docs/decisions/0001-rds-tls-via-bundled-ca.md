@@ -1,7 +1,7 @@
 # 0001. The API image connects to RDS over verified TLS using a bundled CA
 
 - **Date:** 2026-06-11
-- **Status:** Accepted
+- **Status:** Superseded by [0048](0048-database-connections-verify-the-brains-certificate-and-never-fall-back-to-plain.md)
 - **Supersedes:** —
 
 ## Context
@@ -13,7 +13,8 @@ This broke prod on 2026-06-11.
 ## Decision
 
 The Docker image bundles the RDS CA at `/app/rds-ca.pem` (Dockerfile ADD);
-`services/prisma.ts` enables *verified* TLS whenever that file exists, and
+`lib/dbConnection.ts` (`dbConnectionConfig()`, used by `services/prisma.ts`
+and the sweep lock client) enables *verified* TLS whenever that file exists, and
 stays plain on the dev host where it doesn't. `DATABASE_SSL_CA` overrides the
 path (fails loud if missing). `DATABASE_SSL=disable` forces a plain connection
 even when the CA is present — set only on local-dev worker task defs
