@@ -571,8 +571,12 @@ function App() {
   const weatherUrl = weatherMap.drawnUrl;
   const { archiveGone: weatherArchiveGone } = weatherMap;
   const mapWeather = useMemo(
-    () => ({ layer: weatherLayerKey, arrows: weatherMap.arrows }),
-    [weatherLayerKey, weatherMap.arrows],
+    () => ({
+      layer: weatherLayerKey,
+      arrows: weatherMap.arrows,
+      point: weatherMap.point,
+    }),
+    [weatherLayerKey, weatherMap.arrows, weatherMap.point],
   );
   const online = useOnline();
   const sharpenedAreas = useMemo(

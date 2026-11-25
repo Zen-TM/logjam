@@ -4,6 +4,7 @@ import {
   parseWeatherMap,
   parseWeatherWind,
   weatherLayerUrl,
+  weatherPointSource,
   weatherWindUrl,
   type WeatherLayerKey,
   type WeatherWindFile,
@@ -133,6 +134,24 @@ export function useWeatherMap(on: boolean, layerKey: WeatherLayerKey) {
     [wantsWind, drawnStep, wind, path],
   );
 
+  /** What the point panel reads: the value of the layer and step drawn. */
+  const point = useMemo(
+    () =>
+      file && drawn.kind === "ready"
+        ? weatherPointSource({
+            base: BASE,
+            file,
+            layer: drawn.layer.key,
+            step: drawn.step,
+            wind: wind && wind.path === path ? wind.data : null,
+            now,
+          })
+        : null,
+    // `drawn` is a new object each render; what it holds is these.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [file, drawn.kind, drawnUrl, drawnStep, wind, path, now],
+  );
+
   /** An archive the manifest names is gone (the job pruned that run): drop the
    *  manifest and ask once for the current one. The same run twice means it is
    *  the current one, and it is failed. */
@@ -161,6 +180,7 @@ export function useWeatherMap(on: boolean, layerKey: WeatherLayerKey) {
     now,
     drawnUrl,
     arrows,
+    point,
     settled,
     settle: setSettled,
     archiveGone,

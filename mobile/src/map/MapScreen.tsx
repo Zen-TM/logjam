@@ -96,6 +96,7 @@ import {
   drawsCoverage,
   normalizeCarrier,
   WEATHER_MAP,
+  weatherPointSource,
   weatherLayer,
   type OverlayTerrainKey,
   type WeatherLayerKey,
@@ -1754,6 +1755,21 @@ export function MapScreen({
   const weatherResolved = useMemo(
     () => (weatherDrawn ? [weatherDrawn.source] : []),
     [weatherDrawn],
+  );
+  // What the point sheet reads its weather figure from: what is drawn.
+  const weatherPoint = useMemo(
+    () =>
+      weatherDrawn && weather.file
+        ? weatherPointSource({
+            base: weather.base,
+            file: weather.file,
+            layer: weatherDrawn.layer,
+            step: weatherDrawn.step,
+            wind: weather.wind,
+            now: weather.now,
+          })
+        : null,
+    [weatherDrawn, weather.file, weather.base, weather.wind, weather.now],
   );
   const slopeResolved = useMemo(
     () =>
@@ -6271,6 +6287,7 @@ export function MapScreen({
         land={tappedLand}
         fire={tappedFire}
         coverage={tappedCoverage}
+        weatherPoint={weatherPoint}
         userCoord={userCoord}
         onClose={() => setTappedPoint(null)}
         onClosed={openParkedPlaceForm}
