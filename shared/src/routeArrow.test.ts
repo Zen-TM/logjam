@@ -117,9 +117,11 @@ describe("the route arrowhead", () => {
     // The committed module is the artifact; the generator is how it stays
     // adjustable. Editing one without re-running the other is the drift this
     // catches.
-    const committed = readFileSync(GENERATED, "utf8");
-    execFileSync("node", [GENERATOR], { stdio: "pipe" });
-    expect(readFileSync(GENERATED, "utf8")).toBe(committed);
+    // `--stdout`: compared, never rewritten, so a drifted file stays drifted
+    // for the next run to report too.
+    expect(
+      execFileSync("node", [GENERATOR, "--stdout"], { encoding: "utf8" }),
+    ).toBe(readFileSync(GENERATED, "utf8"));
   });
 });
 
