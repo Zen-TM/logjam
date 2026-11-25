@@ -1344,7 +1344,7 @@ test.describe("desktop", () => {
     await expect(
       page.getByRole("dialog", { name: "Map layers" }),
     ).toBeVisible();
-    await expectNoViolations(page, "dialog");
+    await expectNoViolations(page, "[role='dialog'][aria-label='Map layers']");
     await page.keyboard.press("Escape");
     await expect(page.getByRole("slider")).toBeVisible();
     await expectNoViolations(page, "[data-tone='info']");
@@ -2082,7 +2082,7 @@ test.describe("narrow web", () => {
   test("the Weather tab and bar at phone width", async ({ page }) => {
     await stubWeatherManifest(page);
     await showWeather(page);
-    await expectNoViolations(page, "dialog");
+    await expectNoViolations(page, "[role='dialog'][aria-label='Map layers']");
     expect(
       (await page.getByRole("dialog").last().boundingBox())!.width,
     ).toBeLessThanOrEqual(390);
