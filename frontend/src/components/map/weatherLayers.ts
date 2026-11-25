@@ -62,7 +62,7 @@ export function windArrowsLayerSpec(
         ["linear"],
         ["get", "speed"],
         0,
-        0.4,
+        0.55,
         60,
         0.75,
       ],

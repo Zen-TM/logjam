@@ -77,7 +77,7 @@ export const WEATHER_ARROW_STYLE: SymbolLayerStyle = {
   iconPitchAlignment: "map",
   iconAllowOverlap: true,
   iconIgnorePlacement: true,
-  iconSize: ["interpolate", ["linear"], ["get", "speed"], 0, 0.3, 60, 0.55],
+  iconSize: ["interpolate", ["linear"], ["get", "speed"], 0, 0.4, 60, 0.6],
   iconColor: MAP_INK.casing,
   iconHaloColor: MAP_INK.ring,
   iconHaloWidth: 1.5,
