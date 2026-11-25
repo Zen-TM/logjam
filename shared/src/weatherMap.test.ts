@@ -233,11 +233,13 @@ describe("the wind arrows", () => {
         .thin;
     expect([
       thin(0, 0),
+      thin(4, 4),
+      thin(4, 0),
       thin(0, 2),
-      thin(2, 0),
+      thin(2, 4),
       thin(0, 1),
       thin(1, 1),
-    ]).toEqual([0, 1, 1, 2, 2]);
+    ]).toEqual([0, 0, 0, 1, 1, 2, 2]);
     expect(WIND_ARROW_FILTER).toEqual([
       "<=",
       ["get", "thin"],

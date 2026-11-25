@@ -78,9 +78,9 @@ export default function WeatherBar({
       icon="weatherMap"
       quiet
       controls={
-        <>
+        <span className={classes.controls}>
           {step !== null && (
-            <>
+            <span className={classes.scrub}>
               <IconButton
                 icon="earlier"
                 label={copy.weatherEarlier}
@@ -99,10 +99,10 @@ export default function WeatherBar({
                 label={copy.weatherLater}
                 onClick={() => onStep(Math.min(last, step + 1))}
               />
-            </>
+            </span>
           )}
           <ColourScale stops={weatherScale(layer.key)} />
-        </>
+        </span>
       }
     >
       {layer.label} <span className={classes.muted}>{layer.unit}</span> ·{" "}

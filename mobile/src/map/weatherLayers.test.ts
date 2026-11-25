@@ -83,13 +83,14 @@ describe("the field and its arrows", () => {
   });
 
   // Mutation: align the icon to the viewport, drop the filter, or let the
-  // arrows block placement, and they turn with the map, pile up when zoomed
+  // arrows collide or block placement, and they turn with the map, pile up when zoomed
   // out, or knock out a town's name.
   it("turns each arrow to where the wind blows, thinned on the shared grid", () => {
     expect(WEATHER_ARROW_STYLE).toMatchObject({
       iconImage: WIND_ARROW_IMAGE,
       iconRotate: ["get", "rotate"],
       iconRotationAlignment: "map",
+      iconAllowOverlap: true,
       iconIgnorePlacement: true,
       iconColor: MAP_INK.casing,
     });

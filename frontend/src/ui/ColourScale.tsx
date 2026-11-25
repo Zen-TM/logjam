@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 import classes from "./ColourScale.module.css";
 
 /**
@@ -15,9 +16,11 @@ export function ColourScale({
     <span className={classes.scale} aria-hidden>
       <span
         className={classes.strip}
-        style={{
-          background: `linear-gradient(to right, ${stops.map((s) => s.colour).join(", ")})`,
-        }}
+        style={
+          {
+            "--scale-stops": stops.map((s) => s.colour).join(", "),
+          } as CSSProperties
+        }
       />
       <span className={classes.ticks}>
         {stops.map((s) => (

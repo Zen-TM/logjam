@@ -11,6 +11,7 @@ import {
   WEATHER_MAP,
   parseWeatherMap,
   type WeatherLayerKey,
+  weatherScale,
 } from "@logjam/shared";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import WeatherBar from "./WeatherBar";
@@ -188,5 +189,24 @@ describe("the Weather bar", () => {
     bar({ state: { status: "failed" } });
     expect(document.querySelector("[aria-live=off]")).toBeNull();
     expect(screen.getByRole("alert").textContent).toContain(copy.weatherFailed);
+  });
+});
+
+describe("the Weather bar's colour scale", () => {
+  // Mutation: drop the ColourScale, key it by rain whatever is picked, or show
+  // it only beside the scrubber, and the map's colours have no numbers here.
+  it("shows the picked layer's scale, a total's included, hidden from a screen reader", () => {
+    for (const layerKey of ["rain", "temperature", "rainPast24"] as const) {
+      bar({ layerKey });
+      const hidden = [...document.querySelectorAll('[aria-hidden="true"]')].map(
+        (e) => e.textContent,
+      );
+      expect(hidden).toContain(
+        weatherScale(layerKey)
+          .map((s) => s.label)
+          .join(""),
+      );
+      cleanup();
+    }
   });
 });

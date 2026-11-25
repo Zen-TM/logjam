@@ -22,8 +22,8 @@ describe("ColourScale", () => {
     expect(scale.getAttribute("aria-hidden")).toBe("true");
     expect(scale.textContent).toBe("123");
     const strip = scale.firstElementChild as HTMLElement;
-    expect(strip.style.background).toMatch(
-      /linear-gradient\(to right, (#ff0000|rgb\(255, 0, 0\)), (#00ff00|rgb\(0, 255, 0\)), (#0000ff|rgb\(0, 0, 255\))\)/,
+    expect(strip.style.getPropertyValue("--scale-stops")).toBe(
+      "#ff0000, #00ff00, #0000ff",
     );
   });
 });

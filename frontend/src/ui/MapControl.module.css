@@ -126,6 +126,7 @@
 .noticeControls {
   display: flex;
   flex-wrap: wrap;
+  max-width: 100%;
   justify-content: center;
   gap: var(--space-1);
 }

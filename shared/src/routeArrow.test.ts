@@ -6,6 +6,7 @@ import { inflateSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
 
 import { ROUTE_ARROW_SDF_URI } from "./routeArrowSdf.js";
+import { WIND_ARROW_SDF_URI } from "./windArrowSdf.js";
 import { ARROW_FEATURE_KIND, arrowSegmentFeatures } from "./routeArrow.js";
 
 /**
@@ -164,5 +165,38 @@ describe("arrowSegmentFeatures", () => {
   it("has nothing to draw on a route that is a single point", () => {
     expect(arrowSegmentFeatures([[1, 2]], {})).toEqual([]);
     expect(arrowSegmentFeatures([], {})).toEqual([]);
+  });
+});
+
+// The Weather overlay's wind arrow, built by the same SDF writer.
+describe("the wind arrow", () => {
+  // Mutation: draw it to the image's edge in the generator, and its halo is
+  // cut off flat; edit windArrowSdf.ts by hand, and the generator no longer
+  // makes what ships.
+  it("leaves the field room on every side, and is what its generator makes", () => {
+    expect(WIND_ARROW_SDF_URI.startsWith("data:image/png;base64,")).toBe(true);
+    const { width, height, alpha } = readAlpha(WIND_ARROW_SDF_URI);
+    const inked: [number, number][] = [];
+    for (let y = 0; y < height; y++)
+      for (let x = 0; x < width; x++)
+        if (alpha[y * width + x]! >= EDGE_ALPHA) inked.push([x, y]);
+    expect(inked.length).toBeGreaterThan(0);
+    const xs = inked.map(([x]) => x);
+    const ys = inked.map(([, y]) => y);
+    expect(Math.min(...xs)).toBeGreaterThanOrEqual(8);
+    expect(Math.min(...ys)).toBeGreaterThanOrEqual(8);
+    expect(width - 1 - Math.max(...xs)).toBeGreaterThanOrEqual(8);
+    expect(height - 1 - Math.max(...ys)).toBeGreaterThanOrEqual(8);
+
+    const generated = join(here, "windArrowSdf.ts");
+    const committed = readFileSync(generated, "utf8");
+    execFileSync(
+      "node",
+      [join(here, "../scripts/generate-wind-arrow-sdf.mjs")],
+      {
+        stdio: "pipe",
+      },
+    );
+    expect(readFileSync(generated, "utf8")).toBe(committed);
   });
 });
