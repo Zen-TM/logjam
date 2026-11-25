@@ -738,15 +738,15 @@ def main(argv: List[str]) -> int:
             parser.error("run needs --bucket or S3_BUCKET_TOPO")
         run(args.bucket)
         return 0
-    path, rows = (
+    target, rows = (
         (GAUGES_FILE, registry())
         if args.command == "registry"
         else (RAIN_GAUGES_FILE, rain_registry())
     )
-    path.write_text(
+    target.write_text(
         "[\n" + ",\n".join(json.dumps(r, separators=(",", ":")) for r in rows) + "\n]\n"
     )
-    print(f"wrote {path}")
+    print(f"wrote {target}")
     return 0
 
 
