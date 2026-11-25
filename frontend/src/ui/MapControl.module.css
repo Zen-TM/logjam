@@ -142,8 +142,21 @@
   text-align: start;
 }
 
+/* The action sits over the card's top right corner rather than in a column of
+   its own, so only the first line of words makes room for it and the second
+   runs on beneath it. */
+.fixedWidth {
+  position: relative;
+}
+
 .fixedWidth .noticeAction {
-  margin-inline-start: auto;
+  position: absolute;
+  top: var(--space-1);
+  right: calc((40px - var(--control-sm)) / 2);
+}
+
+.fixedWidth.withAction .noticeText > :first-child {
+  padding-inline-end: calc(var(--control-sm) + var(--space-0-5));
 }
 
 /* As tall as the two lines of words beside it (`lh`, so it follows the text
