@@ -57,5 +57,9 @@ test("a pruned run's archive: the manifest is asked for again and the new run is
   await asked;
   expect(manifests).toBe(2);
   await expect(page.getByRole("slider")).toBeVisible();
-  await expect(page.getByText(/map file is missing/)).toHaveCount(0);
+  // Only Weather's own toast: CI serves no other Terrain archive, so a layer on
+  // by default may say its file is missing too.
+  await expect(
+    page.getByText(/^Weather couldn't be loaded — its map file is missing/),
+  ).toHaveCount(0);
 });
