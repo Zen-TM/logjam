@@ -9,6 +9,8 @@ import {
   type WeatherMapFile,
 } from "@logjam/shared";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { decodeDemPng } from "../offline/demPng";
+import { canReadWeatherPoint, readWeatherPoint } from "./weatherPoint";
 
 // A real terrarium tile stands in for the archive's (the weather tiles are
 // the same encoding, RGB, 256 square: topo/build_weather.py).
@@ -40,9 +42,6 @@ vi.mock("@logjam/shared", async (orig) => ({
 vi.mock("../map/snapLines", () => ({
   fileSource: (path: string) => ({ getKey: () => `file://${path}` }),
 }));
-
-import { decodeDemPng } from "../offline/demPng";
-import { canReadWeatherPoint, readWeatherPoint } from "./weatherPoint";
 
 const file = {
   path: "runs/20261107T0000Z-20261107T0600Z/",

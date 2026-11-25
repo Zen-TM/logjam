@@ -66,7 +66,7 @@ import {
   type TerrainSwitchKey,
 } from "@logjam/shared";
 
-import { type LayersOpen, type LayersTab } from "./layersOpen";
+import { type LayersOpen, type LayersTab as OpenTab } from "./layersOpen";
 import {
   spacing,
   makeStyles,
@@ -99,7 +99,7 @@ import { terrainSwitch, type TerrainSwitchState } from "./terrainSwitches";
 import type { BasemapId, MapArtifact } from "./sourceResolver";
 import { savedAreaTotals } from "../offline/artifactGroups";
 
-type Tab = LayersTab;
+type Tab = OpenTab;
 
 const copy = MAP_LAYERS.copy;
 
