@@ -188,15 +188,13 @@ describe("the wind arrow", () => {
     expect(width - 1 - Math.max(...xs)).toBeGreaterThanOrEqual(8);
     expect(height - 1 - Math.max(...ys)).toBeGreaterThanOrEqual(8);
 
-    const generated = join(here, "windArrowSdf.ts");
-    const committed = readFileSync(generated, "utf8");
-    execFileSync(
+    // `--stdout`: compared, never rewritten, so a drifted file stays drifted
+    // for the next run to report too.
+    const generated = execFileSync(
       "node",
-      [join(here, "../scripts/generate-wind-arrow-sdf.mjs")],
-      {
-        stdio: "pipe",
-      },
+      [join(here, "../scripts/generate-wind-arrow-sdf.mjs"), "--stdout"],
+      { encoding: "utf8" },
     );
-    expect(readFileSync(generated, "utf8")).toBe(committed);
+    expect(generated).toBe(readFileSync(join(here, "windArrowSdf.ts"), "utf8"));
   });
 });
