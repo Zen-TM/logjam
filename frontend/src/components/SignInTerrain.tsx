@@ -19,7 +19,7 @@ import {
   OUTLET,
   traceDownhill,
   valleyLight,
-} from "./signInTerrain";
+} from "./signInTerrainUtils";
 import classes from "./SignInTerrain.module.css";
 import type { Area, Terrain } from "./useSignInArea";
 
