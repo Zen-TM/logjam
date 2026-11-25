@@ -6,7 +6,8 @@ import {
   makeStyles,
   useTheme,
   controlSize,
-  hitSlop,
+  opacity,
+  slopTo,
 } from "../theme";
 import { Icon, type Glyph } from "./Icon";
 
@@ -77,10 +78,19 @@ export function Notice({
           accessibilityRole="button"
           accessibilityHint={textHint}
           onPress={onText}
-          hitSlop={hitSlop}
-          style={styles.textPress}
+          hitSlop={slopTo(controlSize.sm)}
+          style={({ pressed }) => [styles.textPress, pressed && styles.pressed]}
         >
-          <Text style={[styles.text, styles.pressable]}>{children}</Text>
+          <Text
+            style={[
+              styles.text,
+              styles.pressable,
+              critical && styles.criticalText,
+            ]}
+            numberOfLines={numberOfLines}
+          >
+            {children}
+          </Text>
         </Pressable>
       ) : (
         <Text
@@ -143,7 +153,14 @@ const useStyles = makeStyles((theme, textRole) => ({
     justifyContent: "center",
     gap: spacing(1),
   },
-  textPress: { flexShrink: 1 },
+  // A target of the control's least height, the words centred in it, and
+  // `hitSlop` taking it to 48 dp.
+  textPress: {
+    flexShrink: 1,
+    minHeight: controlSize.sm,
+    justifyContent: "center",
+  },
+  pressed: { opacity: opacity.pressed },
   pressable: { textDecorationLine: "underline" },
   // `flexShrink`, not `flex: 1`: the notice hugs its words until they wrap.
   text: {

@@ -32,7 +32,8 @@ import { useWeatherPlay } from "./weatherMap/useWeatherPlay";
 //    return in the change listener (layer 1).
 //  - `MapScreen.tsx`: drop `!sensorsActive ||` from the GPS watcher's, the
 //    heading's or the compass probe's effect, or the GPS-quality timer's; make
-//    `sensorsActive` `mapFocused || appActive` (layer 2).
+//    `sensorsActive` `mapFocused || appActive` (layer 2); or drop
+//    `active={sensorsActive}` from `<WeatherBar>`.
 //  - Add a `setInterval` or `Accelerometer.addListener` to any file, or a second
 //    one to a declared file (layer 3).
 //  - `topoAutoDownload.ts`, `placeRegistry.ts` or `useGauges.ts`: drop the
@@ -342,12 +343,15 @@ describe("the map's sensors and timers", () => {
     ).toBe("mapFocused && appActive");
   });
 
-  it("hands the readout chips the same gate", () => {
+  // Mutation: in MapScreen, drop `active={sensorsActive}` from `<WeatherBar>`
+  // (or any chip), and Play ticks behind another tab.
+  it("hands the readout chips and Weather's bar the same gate", () => {
     const handed: Record<string, string[]> = {};
     walk(parse(mapScreen), (n) => {
       if (!ts.isJsxSelfClosingElement(n) && !ts.isJsxOpeningElement(n)) return;
       const tag = n.tagName.getText();
-      if (tag !== "SpeedElevationChip" && tag !== "NavReadout") return;
+      if (!["SpeedElevationChip", "NavReadout", "WeatherBar"].includes(tag))
+        return;
       const active = n.attributes.properties.find(
         (p) => ts.isJsxAttribute(p) && p.name.getText() === "active",
       ) as ts.JsxAttribute | undefined;
@@ -355,10 +359,11 @@ describe("the map's sensors and timers", () => {
     });
     expect(
       handed,
-      "SpeedElevationChip and NavReadout tick only while their `active` prop is true: MapScreen must pass `active={sensorsActive}` at each use.",
+      "SpeedElevationChip, NavReadout and WeatherBar's Play run only while their `active` prop is true: MapScreen must pass `active={sensorsActive}` at each use.",
     ).toEqual({
       SpeedElevationChip: ["{sensorsActive}"],
       NavReadout: expect.arrayContaining(["{sensorsActive}"]),
+      WeatherBar: ["{sensorsActive}"],
     });
     expect(handed.NavReadout.every((a) => a === "{sensorsActive}")).toBe(true);
   });

@@ -6106,6 +6106,7 @@ export function MapScreen({
         {weatherOn ? (
           <WeatherBar
             model={weatherBar}
+            active={sensorsActive}
             onStep={(step) =>
               weather.file && setWeatherPick({ path: weather.file.path, step })
             }

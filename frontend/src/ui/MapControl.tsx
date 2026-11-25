@@ -119,7 +119,12 @@ export function Notice({
           title={textHint}
           onClick={onText}
         >
-          {children}
+          {/* The clamp is a `-webkit-box`, which the button's own layout is not. */}
+          {twoLines ? (
+            <span className={classes.twoLines}>{children}</span>
+          ) : (
+            children
+          )}
         </button>
       ) : (
         <span

@@ -28,18 +28,21 @@ const copy = MAP_TERRAIN.copy;
  * top, and a card a fifth of the screen high hides the map it is about.
  *
  * Play steps on by itself once a `WEATHER_MAP.playMs` and loops; the user's
- * own drag or press, a new layer, the app leaving the front, and the bar
- * unmounting (Weather off) all stop it. The X in every state is Weather's
+ * own drag or press, a new layer, the app leaving the front, the Map tab or
+ * screen losing focus (`active`), and the bar unmounting (Weather off) all stop it. The X in every state is Weather's
  * switch.
  */
 export function WeatherBar({
   model,
+  active,
   onStep,
   onRetry,
   onDismiss,
   onChooseLayer,
 }: {
   model: WeatherBarModel;
+  /** Whether the Map tab is focused and the app in front (`sensorsActive`); Play runs only then. */
+  active: boolean;
   onStep: (step: number) => void;
   onRetry: () => void;
   /** Turns Weather off, as its switch does. */
@@ -59,7 +62,10 @@ export function WeatherBar({
     model.kind === "ready" && model.scrub
       ? { layer: model.layer, ...model.scrub }
       : null;
-  const playing = stepped !== null && playingLayer === stepped.layer;
+  const playing = active && stepped !== null && playingLayer === stepped.layer;
+  // Pause, not mask: a new layer, a state that is not stepped, or the map
+  // losing focus forgets Play, so coming back does not restart it.
+  if (playingLayer !== null && !playing) setPlayingLayer(null);
   useWeatherPlay(
     playing,
     () => {

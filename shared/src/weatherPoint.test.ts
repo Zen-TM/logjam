@@ -8,6 +8,7 @@ import { parseWeatherMap, type WeatherWindFile } from "./weatherMap.js";
 import {
   clearWeatherTile,
   weatherPointReading,
+  weatherPointShown,
   weatherPointSource,
   weatherValueAt,
   weatherValueText,
@@ -249,5 +250,47 @@ describe("a reading's figure", () => {
     expect(weatherValueText("rainPast24", 0.34)).toBe("0.3 mm");
     expect(weatherValueText("wind", 23.6)).toBe("24 km/h");
     expect(weatherValueText("temperature", -2.6)).toBe("−3 °C");
+  });
+});
+
+describe("the reading a panel shows", () => {
+  const source = weatherPointSource({
+    base: BASE,
+    file,
+    layer: "rain",
+    step: 0,
+    wind: null,
+    now: Date.parse(file.anchor),
+  })!;
+  const point = { latitude: LAT, longitude: LON };
+  const reading = { layer: "rain", value: 1, from: null, shown: "x" } as const;
+  const read = { ...point, layer: "rain", reading } as const;
+
+  // Mutation: compare `source` by identity, and a Play step or a clock tick
+  // (a new source, the same layer) drops the row until it is read again.
+  it("holds across a new source for the same point and layer", () => {
+    expect(weatherPointShown(read, { ...source, shown: "later" }, point)).toBe(
+      reading,
+    );
+  });
+
+  // Mutation: drop the coordinate check, and a new point shows the last
+  // point's figure until its own arrives.
+  it("clears for another point", () => {
+    expect(
+      weatherPointShown(read, source, { ...point, latitude: LAT + 0.1 }),
+    ).toBeNull();
+    expect(
+      weatherPointShown(read, source, { ...point, longitude: LON + 0.1 }),
+    ).toBeNull();
+  });
+
+  // Mutation: drop the layer check, and rain's figure sits under temperature.
+  it("clears for another layer, and with the overlay off", () => {
+    expect(
+      weatherPointShown(read, { ...source, layer: "temperature" }, point),
+    ).toBeNull();
+    expect(weatherPointShown(read, null, point)).toBeNull();
+    expect(weatherPointShown(null, source, point)).toBeNull();
   });
 });

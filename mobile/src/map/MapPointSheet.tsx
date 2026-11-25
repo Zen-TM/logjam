@@ -23,7 +23,8 @@ import {
   mapPointVerbs,
   type MapPointCoord,
   type MapPointView,
-  type WeatherPointReading,
+  type WeatherPointRead,
+  weatherPointShown,
   type WeatherPointSource,
 } from "@logjam/shared";
 
@@ -219,10 +220,7 @@ function PointDetail({
 
   // The weather map's own value, for the layer and step drawn now. Never a
   // failure to show, and not logged: the error could carry the point.
-  const [weatherRead, setWeatherRead] = useState<{
-    source: WeatherPointSource;
-    reading: WeatherPointReading | null;
-  } | null>(null);
+  const [weatherRead, setWeatherRead] = useState<WeatherPointRead | null>(null);
   useEffect(() => {
     if (!weatherPoint || !canReadWeatherPoint(weatherPoint, allowNetwork))
       return;
@@ -230,15 +228,21 @@ function PointDetail({
     readWeatherPoint(weatherPoint, point)
       .catch(() => null)
       .then((reading) => {
-        if (current) setWeatherRead({ source: weatherPoint, reading });
+        if (current)
+          setWeatherRead({
+            latitude: point.latitude,
+            longitude: point.longitude,
+            layer: weatherPoint.layer,
+            reading,
+          });
       });
     return () => {
       current = false;
     };
   }, [weatherPoint, point, allowNetwork]);
   const weatherMap =
-    weatherPoint && weatherRead?.source === weatherPoint
-      ? weatherRead.reading
+    weatherPoint && canReadWeatherPoint(weatherPoint, allowNetwork)
+      ? weatherPointShown(weatherRead, weatherPoint, point)
       : null;
 
   // The forecast's cell is fixed by the height the panel had at the press: a

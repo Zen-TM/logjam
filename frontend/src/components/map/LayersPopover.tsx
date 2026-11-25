@@ -678,7 +678,7 @@ function OverlayLegendBody({
   onToggle: (next: boolean) => void;
 }) {
   return (
-    <>
+    <div className={classes.legend}>
       {legend.choice && choice && (
         <ChipRail
           label={legend.choice.label}
@@ -693,7 +693,7 @@ function OverlayLegendBody({
           wrap
         />
       )}
-      <p>{legend.intro}</p>
+      <p className={classes.legendText}>{legend.intro}</p>
       <ul className={classes.legendList}>
         {overlayLegendRows(legend, choice?.value).map(
           ({ label, colour, pattern }) => (
@@ -708,9 +708,9 @@ function OverlayLegendBody({
           ),
         )}
       </ul>
-      <p>{legend.caveat}</p>
-      <p>{legend.credit}</p>
-    </>
+      <p className={classes.legendText}>{legend.caveat}</p>
+      <p className={classes.legendText}>{legend.credit}</p>
+    </div>
   );
 }
 

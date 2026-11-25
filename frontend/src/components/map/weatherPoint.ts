@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import {
   demArchive,
   weatherPointReading,
+  weatherPointShown,
+  type WeatherPointRead,
   type WeatherPointReading,
   type WeatherPointSource,
   type MapPointCoord,
@@ -41,10 +43,7 @@ export function useWeatherPoint(
   source: WeatherPointSource | null,
   point: MapPointCoord,
 ): WeatherPointReading | null {
-  const [read, setRead] = useState<{
-    source: WeatherPointSource;
-    reading: WeatherPointReading | null;
-  } | null>(null);
+  const [read, setRead] = useState<WeatherPointRead | null>(null);
   const { latitude, longitude } = point;
   useEffect(() => {
     if (!source) return;
@@ -52,11 +51,12 @@ export function useWeatherPoint(
     readWeatherPoint(source, { latitude, longitude })
       .catch(() => null)
       .then((reading) => {
-        if (live) setRead({ source, reading });
+        if (live)
+          setRead({ latitude, longitude, layer: source.layer, reading });
       });
     return () => {
       live = false;
     };
   }, [source, latitude, longitude]);
-  return source && read?.source === source ? read.reading : null;
+  return weatherPointShown(read, source, { latitude, longitude });
 }

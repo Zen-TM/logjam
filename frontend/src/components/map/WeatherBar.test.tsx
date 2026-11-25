@@ -64,9 +64,9 @@ const bar = (
     onDismiss,
     onChooseLayer,
   };
-  const view = (layerKey: WeatherLayerKey) => (
+  const view = (layerKey: WeatherLayerKey, state = over.state ?? ready) => (
     <WeatherBar
-      state={over.state ?? ready}
+      state={state}
       layerKey={layerKey}
       now={over.now ?? T0 + 1.5 * hour}
       settled={over.settled ?? null}
@@ -80,6 +80,8 @@ const bar = (
     onDismiss,
     onChooseLayer,
     changeLayer: (key: WeatherLayerKey) => rerender(view(key)),
+    setState: (state: WeatherMapState) =>
+      rerender(view(over.layerKey ?? "rain", state)),
   };
 };
 const slider = () =>
@@ -318,6 +320,28 @@ describe("the Weather bar's Play", () => {
         }) as HTMLInputElement
       ).value,
     ).toBe("2");
+  });
+
+  // Mutation: mask Play by layer (`playingLayer === layerKey`) without
+  // clearing `playingLayer`, and rain → temperature → rain plays again.
+  it("stays paused when the layer comes back", () => {
+    const { changeLayer } = bar();
+    play();
+    changeLayer("temperature");
+    changeLayer("rain");
+    expect(screen.getByRole("button", { name: copy.weatherPlay })).toBeTruthy();
+    tick(2);
+    expect(slider().value).toBe("2");
+  });
+
+  // Mutation: as above, for a state that is not stepped: Play must not wake
+  // when the bar returns from loading.
+  it("stays paused when the bar goes through a state without steps", () => {
+    const { setState } = bar();
+    play();
+    setState({ status: "loading" });
+    setState({ status: "ready", file });
+    expect(screen.getByRole("button", { name: copy.weatherPlay })).toBeTruthy();
   });
 
   // Mutation: drop the `visibilitychange` listener, and a hidden tab keeps

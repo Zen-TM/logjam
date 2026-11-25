@@ -65,4 +65,32 @@ describe("Notice", () => {
     expect(rule).toContain("background: var(--color-warning)");
     expect(rule).toContain("color: var(--color-on-fill)");
   });
+
+  // Mutation: drop the `:hover`/`:active` rule, and the words answer no press;
+  // drop `min-height`, and a single line is a 21 px target.
+  it("answers the press on the words, and is a control high", () => {
+    const css = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), "MapControl.module.css"),
+      "utf8",
+    );
+    expect(css).toMatch(
+      /\.textButton:hover,\s*\.textButton:active \{[^}]*opacity: var\(--opacity-pressed\)/,
+    );
+    expect(css.match(/\.textButton \{([^}]*)\}/)?.[1]).toContain(
+      "min-height: var(--control-sm)",
+    );
+  });
+
+  // Mutation: drop the `twoLines` branch from the button, and a title the user
+  // typed runs to any length in the words that open Layers.
+  it("clamps the words of a button to two lines too", () => {
+    render(
+      <Notice onText={() => {}} twoLines>
+        A long name
+      </Notice>,
+    );
+    const words = screen.getByRole("button").firstElementChild!;
+    expect(words.className).toMatch(/twoLines/);
+    expect(words.textContent).toBe("A long name");
+  });
 });

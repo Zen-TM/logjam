@@ -169,8 +169,14 @@
 }
 
 /* The words as a button: no button look, the dotted underline says it is
-   pressable. */
+   pressable, and the press answers by dimming. The words sit centred in a
+   target of the control's least height, so a single line is not a 21 px
+   sliver; the two-line head is taller than that and is not changed. */
 .textButton {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: var(--control-sm);
   padding: 0;
   border: 0;
   background: none;
@@ -179,6 +185,11 @@
   text-decoration: underline dotted;
   text-underline-offset: var(--space-0-5);
   cursor: pointer;
+}
+
+.textButton:hover,
+.textButton:active {
+  opacity: var(--opacity-pressed);
 }
 
 .twoLines {

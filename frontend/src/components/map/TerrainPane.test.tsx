@@ -5,6 +5,9 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
@@ -474,6 +477,29 @@ describe("the Weather tab on Logjam Web", () => {
     expect(text).toContain(copy.weatherLegend);
     expect(text).toContain(copy.weatherCaveat);
     expect(text).toContain(OVERLAY_LEGENDS.weather.credit);
+  });
+
+  // Mutation: drop `className={classes.legendText}` from a legend paragraph,
+  // and it is 16 px with the browser's margins, a 40 px gap in the tab.
+  it("sets the legend's prose in the body role, without margins", () => {
+    const { container } = pane({});
+    const prose = [copy.weatherLegend, copy.weatherCaveat].map(
+      (text) =>
+        [...container.querySelectorAll("p")].find(
+          (p) => p.textContent === text,
+        )!,
+    );
+    expect(prose).toHaveLength(2);
+    for (const p of prose) expect(p.className).toMatch(/legendText/);
+    expect(
+      readFileSync(
+        join(
+          dirname(fileURLToPath(import.meta.url)),
+          "LayersPopover.module.css",
+        ),
+        "utf8",
+      ),
+    ).toMatch(/\.legendText \{[^}]*composes: body from[^}]*margin: 0/);
   });
 
   // Mutation: list it among the Terrain rows, and it shows twice.

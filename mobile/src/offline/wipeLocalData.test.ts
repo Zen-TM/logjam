@@ -52,6 +52,10 @@ vi.mock("./registryDb", () => ({
   getOfflineDb: () => Promise.resolve(fakeDb()),
   notifyRegistryChanged: () => {},
 }));
+vi.mock("@logjam/shared", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@logjam/shared")>()),
+  clearWeatherTile: () => record("clear:weather-tile"),
+}));
 vi.mock("./demLookup", () => ({ clearOfflineDemCache: () => {} }));
 vi.mock("../api/apiFetch", () => ({ invalidateCurrentUser: () => {} }));
 vi.mock("./regionDownloadQueue", () => ({
@@ -212,6 +216,13 @@ describe("wipeAllLocalData", () => {
       expect(at).toBeGreaterThanOrEqual(0);
       expect(at).toBeLessThan(firstDelete);
     }
+  });
+
+  // Mutation: drop `clearWeatherTile()` from the wipe, and the held forecast
+  // tile (archive handle, tile values) outlives the sign-out in memory.
+  it("drops the held forecast tile", async () => {
+    await wipeAllLocalData();
+    expect(events).toContain("clear:weather-tile");
   });
 
   // Red if the per-directory try/catch is removed or hoisted around the loop,

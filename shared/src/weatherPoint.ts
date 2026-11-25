@@ -187,6 +187,33 @@ export async function weatherPointReading(
   return { layer: source.layer, value, from, shown: source.shown };
 }
 
+/** What a panel keeps of a read: the point and layer it was read for. */
+export type WeatherPointRead = {
+  latitude: number;
+  longitude: number;
+  layer: WeatherLayerKey;
+  reading: WeatherPointReading | null;
+};
+
+/**
+ * The reading to show now: the kept one while it is for this point and this
+ * layer, so it holds across the steps Play takes and the clock's ticks (each
+ * builds a new `source`) and clears on a new point or layer, or none.
+ */
+export function weatherPointShown(
+  read: WeatherPointRead | null,
+  source: WeatherPointSource | null,
+  point: { latitude: number; longitude: number },
+): WeatherPointReading | null {
+  return source &&
+    read &&
+    read.layer === source.layer &&
+    read.latitude === point.latitude &&
+    read.longitude === point.longitude
+    ? read.reading
+    : null;
+}
+
 /** A reading's figure as the panel says it: "2.5 mm/h", "−3 °C". */
 export function weatherValueText(layer: WeatherLayerKey, value: number) {
   const { unit } = weatherLayer(layer);

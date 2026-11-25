@@ -69,6 +69,9 @@ export default function WeatherBar({
   const pause = useCallback(() => setPlayingLayer(null), []);
   const stepped = view.kind === "ready" && view.step !== null ? view : null;
   const playing = stepped !== null && playingLayer === layerKey;
+  // Pause, not mask: a layer change or a state that is not stepped (loading,
+  // failed, out of date) forgets Play, so coming back does not restart it.
+  if (playingLayer !== null && !playing) setPlayingLayer(null);
   useWeatherPlay(
     playing,
     () => {

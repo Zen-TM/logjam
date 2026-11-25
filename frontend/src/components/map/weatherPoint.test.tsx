@@ -85,6 +85,24 @@ describe("the point panel's weather map value", () => {
     await expect(decodeWeatherTile(new Uint8Array([1]))).rejects.toThrow();
   });
 
+  // Mutation: key the held reading on the source's identity, and a new source
+  // for the same point and layer (a Play step) blinks the row to null.
+  it("keeps the reading across a new source, and clears for a new point", async () => {
+    tiles.decoded = new Float32Array(256 * 256).fill(2.5);
+    const { result, rerender } = renderHook(
+      ({ s, p }) => useWeatherPoint(s, p),
+      { initialProps: { s: source, p: point } },
+    );
+    await waitFor(() => expect(result.current).not.toBeNull());
+    rerender({ s: { ...source, shown: "later" }, p: point });
+    expect(result.current).not.toBeNull();
+    // Mutation: drop the coordinates from the held read, and the old point's
+    // value shows at the new one.
+    tiles.decoded = new Float32Array(256 * 256).fill(-32768);
+    rerender({ s: source, p: { latitude: -33.6, longitude: 150.3 } });
+    expect(result.current).toBeNull();
+  });
+
   // Mutation: read while the overlay is off and the panel asks the CDN for a
   // layer nobody is looking at.
   it("reads nothing with the overlay off", async () => {
