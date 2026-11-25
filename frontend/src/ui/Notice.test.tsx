@@ -48,7 +48,7 @@ describe("Notice", () => {
   it("spaces the actions it holds", () => {
     const dir = dirname(fileURLToPath(import.meta.url));
     const css = readFileSync(join(dir, "MapControl.module.css"), "utf8");
-    expect(css.match(/\.noticeAction \{([^}]*)\}/)?.[1]).toContain(
+    expect(css.match(/^\.noticeAction \{([^}]*)\}/m)?.[1]).toContain(
       "gap: var(--space-1)",
     );
   });
