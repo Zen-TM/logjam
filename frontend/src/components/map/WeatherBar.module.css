@@ -1,0 +1,26 @@
+.line {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.muted {
+  color: var(--color-text-muted);
+}
+
+/* The buttons and scrubber over the colour scale, across the card (its width
+   is the Notice's `fixedWidth`, so a total's scale spaces its numbers as a
+   stepped layer's does). */
+.controls {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  width: 100%;
+}
+
+.scrub {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}

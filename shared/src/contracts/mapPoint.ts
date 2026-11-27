@@ -25,6 +25,12 @@ import type { IconIdea } from "../icons.js";
 import { MAP_MEASURE, MAP_MEASURE_ICON } from "./mapMeasure.js";
 import type { ContractPlatform, ScreenContract } from "./types.js";
 import { WEATHER } from "./weather.js";
+import {
+  WEATHER_MAP,
+  weatherLayer,
+  type WeatherLayerKey,
+} from "../weatherMap.js";
+import { weatherValueText } from "../weatherPoint.js";
 
 export const MAP_POINT = {
   id: "map.point",
@@ -59,6 +65,10 @@ export const MAP_POINT = {
     { key: "fire" },
     // And from the Coverage overlay's, for the carrier it draws.
     { key: "coverage" },
+    // The Weather overlay's own value, from the archive it draws and only
+    // while it is on: not the forecast behind Options, which is Open-Meteo's
+    // for this height.
+    { key: "weatherMap" },
   ],
   copy: {
     position: "Position",
@@ -69,6 +79,10 @@ export const MAP_POINT = {
     land: "Land tenure",
     fire: "Last burnt",
     coverage: "Coverage",
+    // Under the weather map's figure: where it comes from, so it is never
+    // read as the forecast "Show the weather here" gives for this height.
+    weatherMapHint: `Weather map, ${WEATHER_MAP.cellKm} km cell`,
+    windFrom: "from the",
     accuracy: "Accuracy",
     fixAge: "Updated",
     // The title when the point is the viewer's own fix.
@@ -271,12 +285,14 @@ export type MapPointFact = {
     | "slope"
     | "land"
     | "fire"
-    | "coverage";
+    | "coverage"
+    | "weatherMap";
   label: string;
   value: string;
   /** Takes the whole line. */
   span?: true;
-  /** Why there is no figure: the value is then "—" and this is its caption. */
+  /** A caption under the value: why there is no figure (the value is then
+   *  "—"), or where the weather map's figure comes from. */
   note?: string;
   /** Pressing the figure copies it, on both clients. */
   copyable?: true;
@@ -310,7 +326,9 @@ export type MapPointFix = {
  * is the Land overlay's name for the class drawn at the point: null or absent
  * with the overlay off or nothing there, and then there is no land figure.
  * `fire` is `fireNameOf`'s answer from the Fire history overlay, the same way,
- * and `coverage` `coverageNameOf`'s from the Coverage overlay.
+ * and `coverage` `coverageNameOf`'s from the Coverage overlay. `weatherMap` is
+ * what the Weather overlay draws at the point (`weatherPointReading`): absent
+ * with the overlay off or no value there, and then there is no figure.
  */
 export function mapPointFacts(input: {
   point: MapPointCoord;
@@ -320,11 +338,26 @@ export function mapPointFacts(input: {
   land?: string | null;
   fire?: string | null;
   coverage?: string | null;
+  weatherMap?: {
+    layer: WeatherLayerKey;
+    value: number;
+    from: number | null;
+    shown: string;
+  } | null;
   /** Given when the point IS the viewer's fix: how good and how old it is. */
   fix?: MapPointFix;
 }): MapPointFact[] {
-  const { point, elevation, from, slopeDegrees, land, fire, coverage, fix } =
-    input;
+  const {
+    point,
+    elevation,
+    from,
+    slopeDegrees,
+    land,
+    fire,
+    coverage,
+    weatherMap,
+    fix,
+  } = input;
   const copy = MAP_POINT.copy;
   const facts: MapPointFact[] = [
     {
@@ -401,5 +434,20 @@ export function mapPointFacts(input: {
   if (fire) facts.push({ key: "fire", label: copy.fire, value: fire });
   if (coverage)
     facts.push({ key: "coverage", label: copy.coverage, value: coverage });
+  if (weatherMap) {
+    const layer = weatherLayer(weatherMap.layer);
+    // A step says when; a total's name already says its window.
+    const when = layer.hours === undefined ? `${weatherMap.shown} · ` : "";
+    facts.push({
+      key: "weatherMap",
+      label: layer.label,
+      value:
+        weatherValueText(layer.key, weatherMap.value) +
+        (weatherMap.from === null
+          ? ""
+          : ` ${copy.windFrom} ${compassPointFor(weatherMap.from)}`),
+      note: `${when}${copy.weatherMapHint}`,
+    });
+  }
   return facts;
 }

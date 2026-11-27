@@ -35,6 +35,8 @@ export { AttributeFilter } from "./AttributeFilter";
 export { DateRangeField } from "./DateRangeField";
 export { FilterField } from "./FilterField";
 export { RangePills } from "./RangePills";
+export { ColourScale } from "./ColourScale";
+export { Scrubber } from "./Scrubber";
 export { Tooltip } from "./Tooltip";
 export { SectionHeader, SheetSection, SideSheet } from "./SideSheet";
 export { InfoTip, SettingsRow } from "./SettingsRow";

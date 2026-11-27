@@ -23,11 +23,18 @@ import {
   mapPointVerbs,
   type MapPointCoord,
   type MapPointView,
+  type WeatherPointRead,
+  weatherPointShown,
+  type WeatherPointSource,
 } from "@logjam/shared";
 
 import { spacing, makeStyles, muted } from "../theme";
 import { BottomSheet, Row, StatGrid, type Stat } from "../ui";
 import { slopeAt } from "../offline/demLookup";
+import {
+  canReadWeatherPoint,
+  readWeatherPoint,
+} from "../weatherMap/weatherPoint";
 import { useElevationProfile } from "./useElevationProfile";
 import { useWeather } from "../weather/useWeather";
 import { showWeatherRow } from "../weather/weatherState";
@@ -51,6 +58,7 @@ export function MapPointSheet({
   land,
   fire,
   coverage,
+  weatherPoint,
   onClose,
   onClosed,
   run,
@@ -69,6 +77,8 @@ export function MapPointSheet({
   fire: string | null;
   /** The carrier's predicted reception at the point, or null: the Coverage overlay off, no carrier chosen, or nothing known there. */
   coverage: string | null;
+  /** What the Weather overlay is drawing, or null with it off: its value at the point is read from this. */
+  weatherPoint: WeatherPointSource | null;
   /** Latest fix as [lon, lat], or null when the dot isn't running. */
   userCoord: [number, number] | null;
   onClose: () => void;
@@ -126,6 +136,7 @@ export function MapPointSheet({
           land={land}
           fire={fire}
           coverage={coverage}
+          weatherPoint={weatherPoint}
           userCoord={userCoord}
           run={run}
           onInfo={onInfo}
@@ -145,6 +156,7 @@ function PointDetail({
   land,
   fire,
   coverage,
+  weatherPoint,
   userCoord,
   run,
   onInfo,
@@ -158,6 +170,7 @@ function PointDetail({
   land: string | null;
   fire: string | null;
   coverage: string | null;
+  weatherPoint: WeatherPointSource | null;
   userCoord: [number, number] | null;
   run: MapHoldRun;
   onInfo: (message: string) => void;
@@ -205,6 +218,33 @@ function PointDetail({
     };
   }, [point.latitude, point.longitude, allowNetwork]);
 
+  // The weather map's own value, for the layer and step drawn now. Never a
+  // failure to show, and not logged: the error could carry the point.
+  const [weatherRead, setWeatherRead] = useState<WeatherPointRead | null>(null);
+  useEffect(() => {
+    if (!weatherPoint || !canReadWeatherPoint(weatherPoint, allowNetwork))
+      return;
+    let current = true;
+    readWeatherPoint(weatherPoint, point)
+      .catch(() => null)
+      .then((reading) => {
+        if (current)
+          setWeatherRead({
+            latitude: point.latitude,
+            longitude: point.longitude,
+            layer: weatherPoint.layer,
+            reading,
+          });
+      });
+    return () => {
+      current = false;
+    };
+  }, [weatherPoint, point, allowNetwork]);
+  const weatherMap =
+    weatherPoint && canReadWeatherPoint(weatherPoint, allowNetwork)
+      ? weatherPointShown(weatherRead, weatherPoint, point)
+      : null;
+
   // The forecast's cell is fixed by the height the panel had at the press: a
   // height arriving later must not turn the view into another cell's.
   const [pressedElevation, setPressedElevation] = useState<number | null>(null);
@@ -242,6 +282,7 @@ function PointDetail({
     land,
     fire,
     coverage,
+    weatherMap,
     ...(fix
       ? { fix: { atMs: fix.atMs, accuracyM: fix.accuracyM, nowMs: openedAt } }
       : {}),

@@ -5,13 +5,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useGauges } from "./gauges/useGauges";
 import { useNow } from "./ui/useNow";
+import { useWeatherPlay } from "./weatherMap/useWeatherPlay";
 
 // Guards for mobile/AGENTS.md "Nothing automatic wakes the radio or the CPU
 // behind a dark screen: a timer arms only in the foreground, and a sensor runs
 // only while the screen that shows it is focused" (ADR 0013, ADR 0010).
 //
 // Three layers:
-//  1. `useNow` and `useGauges` run as plain functions with React stubbed
+//  1. `useNow`, `useGauges` and `useWeatherPlay` run as plain functions with React stubbed
 //     (mobile's vitest has no renderer), and their interval must not tick while
 //     AppState is `background`.
 //  2. MapScreen cannot be rendered here, so a syntax-tree check says each
@@ -31,7 +32,8 @@ import { useNow } from "./ui/useNow";
 //    return in the change listener (layer 1).
 //  - `MapScreen.tsx`: drop `!sensorsActive ||` from the GPS watcher's, the
 //    heading's or the compass probe's effect, or the GPS-quality timer's; make
-//    `sensorsActive` `mapFocused || appActive` (layer 2).
+//    `sensorsActive` `mapFocused || appActive` (layer 2); or drop
+//    `active={sensorsActive}` from `<WeatherBar>`.
 //  - Add a `setInterval` or `Accelerometer.addListener` to any file, or a second
 //    one to a declared file (layer 3).
 //  - `topoAutoDownload.ts`, `placeRegistry.ts` or `useGauges.ts`: drop the
@@ -52,6 +54,7 @@ const { appState, effects, setters } = vi.hoisted(() => ({
 }));
 
 vi.mock("react", () => ({
+  useRef: (current: unknown) => ({ current }),
   useState: (init: unknown) => {
     const set = vi.fn();
     setters.push(set);
@@ -154,6 +157,52 @@ describe("the hooks that tick", () => {
       setNow.mock.calls.length,
       "useGauges kept ticking after AppState went to background: the change listener must clear the interval (ADR 0013).",
     ).toBe(stopped);
+  });
+});
+
+describe("Weather's Play", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    appState.currentState = "active";
+  });
+  const SECOND = 1000;
+
+  // Mutation: arm the interval without the `AppState.currentState ===
+  // "active"` check, and Play runs behind a dark screen.
+  it("starts no timer behind a dark screen, and pauses instead", async () => {
+    appState.currentState = "background";
+    const advance = vi.fn();
+    const pause = vi.fn();
+    mount(() => useWeatherPlay(true, advance, pause), 0);
+    await vi.advanceTimersByTimeAsync(10 * SECOND);
+    expect(advance).not.toHaveBeenCalled();
+    expect(pause).toHaveBeenCalledOnce();
+  });
+
+  // Mutation: drop the change listener, or arm the interval while not
+  // playing, and Play ticks on after the app leaves the front or a pause.
+  it("ticks once a playMs in front, and stops on background", async () => {
+    const advance = vi.fn();
+    const pause = vi.fn();
+    mount(() => useWeatherPlay(true, advance, pause), 0);
+    await vi.advanceTimersByTimeAsync(3 * SECOND);
+    expect(advance).toHaveBeenCalledTimes(3);
+
+    appState.listeners.forEach((l) => l("background"));
+    expect(pause).toHaveBeenCalledOnce();
+    await vi.advanceTimersByTimeAsync(10 * SECOND);
+    expect(
+      advance,
+      "Play kept ticking after AppState went to background: the change listener must clear the interval (ADR 0013).",
+    ).toHaveBeenCalledTimes(3);
+  });
+
+  it("arms nothing while paused", async () => {
+    const advance = vi.fn();
+    mount(() => useWeatherPlay(false, advance, vi.fn()), 0);
+    await vi.advanceTimersByTimeAsync(10 * SECOND);
+    expect(advance).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
   });
 });
 
@@ -294,12 +343,15 @@ describe("the map's sensors and timers", () => {
     ).toBe("mapFocused && appActive");
   });
 
-  it("hands the readout chips the same gate", () => {
+  // Mutation: in MapScreen, drop `active={sensorsActive}` from `<WeatherBar>`
+  // (or any chip), and Play ticks behind another tab.
+  it("hands the readout chips and Weather's bar the same gate", () => {
     const handed: Record<string, string[]> = {};
     walk(parse(mapScreen), (n) => {
       if (!ts.isJsxSelfClosingElement(n) && !ts.isJsxOpeningElement(n)) return;
       const tag = n.tagName.getText();
-      if (tag !== "SpeedElevationChip" && tag !== "NavReadout") return;
+      if (!["SpeedElevationChip", "NavReadout", "WeatherBar"].includes(tag))
+        return;
       const active = n.attributes.properties.find(
         (p) => ts.isJsxAttribute(p) && p.name.getText() === "active",
       ) as ts.JsxAttribute | undefined;
@@ -307,10 +359,11 @@ describe("the map's sensors and timers", () => {
     });
     expect(
       handed,
-      "SpeedElevationChip and NavReadout tick only while their `active` prop is true: MapScreen must pass `active={sensorsActive}` at each use.",
+      "SpeedElevationChip, NavReadout and WeatherBar's Play run only while their `active` prop is true: MapScreen must pass `active={sensorsActive}` at each use.",
     ).toEqual({
       SpeedElevationChip: ["{sensorsActive}"],
       NavReadout: expect.arrayContaining(["{sensorsActive}"]),
+      WeatherBar: ["{sensorsActive}"],
     });
     expect(handed.NavReadout.every((a) => a === "{sensorsActive}")).toBe(true);
   });
@@ -337,6 +390,16 @@ const INTERVALS: Declared[] = [
     file: "gauges/useGauges.ts",
     count: 1,
     why: "armed only while AppState is active; held by the hook tests above",
+  },
+  {
+    file: "weatherMap/useWeatherMap.ts",
+    count: 1,
+    why: "the overlay's age clock: the effect arms it only while AppState is active, clears it on every change and re-arms it on return to the foreground",
+  },
+  {
+    file: "weatherMap/useWeatherPlay.ts",
+    count: 1,
+    why: "Play's beat: armed only while the user has pressed Play and AppState is active, cleared on pause, on leaving the foreground and on unmount; held by the hook tests above",
   },
   {
     file: "tracks/RecordingSheet.tsx",

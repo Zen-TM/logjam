@@ -239,3 +239,23 @@ describe("typed text is the `body` role", () => {
     expect(offenders).toEqual([]);
   });
 });
+
+describe("a notice's pressable words are a control", () => {
+  // No renderer here, so the kit file is read. Mutation: drop `pressed &&`
+  // (no answer to the press), `minHeight: controlSize.sm` (a 17 dp target),
+  // `critical && styles.criticalText` or `numberOfLines` from the `onText`
+  // branch (it stops honouring what the other branch does).
+  it("answers the press, is at least a control high, and keeps the words' props", () => {
+    const code = readFileSync(join(SRC, "ui/Notice.tsx"), "utf8");
+    const onText = code.slice(
+      code.indexOf("{onText ? ("),
+      code.indexOf(") : (", code.indexOf("{onText ? (")),
+    );
+    expect(onText.length).toBeGreaterThan(100);
+    expect(onText).toContain("pressed && styles.pressed");
+    expect(onText).toContain("slopTo(controlSize.sm)");
+    expect(onText).toContain("critical && styles.criticalText");
+    expect(onText).toContain("numberOfLines={numberOfLines}");
+    expect(code).toMatch(/textPress: \{[^}]*minHeight: controlSize\.sm/);
+  });
+});

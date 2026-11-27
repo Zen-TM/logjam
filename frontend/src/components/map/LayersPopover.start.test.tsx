@@ -3,7 +3,7 @@ import { createRef } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { TERRAIN_LAYER_DEFAULTS } from "@logjam/shared";
 import { ToastProvider } from "../feedback/ToastProvider";
-import LayersPopover from "./LayersPopover";
+import LayersPopover, { type LayersStart } from "./LayersPopover";
 
 vi.stubGlobal(
   "ResizeObserver",
@@ -23,7 +23,7 @@ Object.assign(HTMLElement.prototype, {
 
 afterEach(cleanup);
 
-type Start = { view: "sharpened" } | null;
+type Start = LayersStart | null;
 
 function popover(
   open: boolean,
@@ -55,6 +55,8 @@ function popover(
         onTerrainLayerChange={noop}
         coverageCarrier="telstra"
         onCoverageCarrierChange={noop}
+        weatherLayer="rain"
+        onWeatherLayerChange={noop}
         slopeBands={[]}
         onSlopeBandsChange={noop}
         mapView={null}
@@ -85,6 +87,15 @@ describe("the Layers popover's start view", () => {
     const { rerender } = render(popover(false, null));
     rerender(popover(true, { view: "sharpened" }));
     expect(onSharpened()).toBeTruthy();
+  });
+
+  // Mutation: drop "weather" from the popover's start views, or its tab from
+  // `MAP_LAYERS`: the Weather bar's title opens Layers on the wrong tab.
+  it("opens on the Weather tab when asked", () => {
+    const { rerender } = render(popover(false, null));
+    rerender(popover(true, { view: "weather" }));
+    expect(chip("Weather").getAttribute("aria-checked")).toBe("true");
+    expect(screen.getByRole("switch", { name: "Show weather" })).toBeTruthy();
   });
 
   // Mutation: compare the request by value, and a second Show after Back
@@ -156,6 +167,22 @@ describe("the Layers popover's light dismiss", () => {
 });
 
 describe("the Layers popover's overlays", () => {
+  // Mutation: put the Weather row back in the overlays list, and it shows
+  // there as well as on its tab.
+  it("holds no Weather row: Weather has a tab, after Overlays", () => {
+    render(popover(true, null));
+    expect(screen.getAllByRole("radio").map((r) => r.textContent)).toEqual([
+      "Map",
+      "Terrain",
+      "Overlays",
+      "Weather",
+    ]);
+    fireEvent.click(chip("Overlays"));
+    expect(screen.queryByRole("switch", { name: "Show weather" })).toBeNull();
+    fireEvent.click(chip("Weather"));
+    expect(screen.getByRole("switch", { name: "Show weather" })).toBeTruthy();
+  });
+
   // Mutation: list the overlay rows in OVERLAY_TERRAIN_KEYS (stacking) order,
   // and Fire history comes above Land tenure, against the contract.
   it("lists each statewide overlay once, in the contract's order", () => {

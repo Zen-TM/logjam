@@ -23,6 +23,7 @@ export * from "./weather.js";
 export * from "./placeRegistry.js";
 export * from "./gauges.js";
 export * from "./weatherMap.js";
+export * from "./weatherPoint.js";
 export * from "./placeTypes.js";
 export * from "./placeEdit.js";
 export * from "./placeSources.js";

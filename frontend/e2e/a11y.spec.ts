@@ -161,6 +161,66 @@ async function openAnnouncement(page: Page, narrow = false) {
   return dialog;
 }
 
+// Stubbed: the manifest is a public file, and the archives fail like a dropped
+// connection, which the map retries and is not a pruned run (the bar and the
+// legend are what is measured, not the field).
+async function stubWeatherManifest(page: Page) {
+  await page.route("**/master/weather/v1/runs/**", (route) => route.abort());
+  const hour = 3_600_000;
+  const start = Math.ceil(Date.now() / hour) * hour;
+  await page.route("**/master/weather/v1/latest.json", (route) =>
+    route.fulfill({
+      json: {
+        format: 1,
+        model: "ecmwf_ifs",
+        run: new Date(start - 9 * hour).toISOString(),
+        built: new Date(start - hour).toISOString(),
+        anchor: new Date(start).toISOString(),
+        path: "runs/20261107T0000Z-20261107T0900Z/",
+        bounds: [139, -39.5, 156, -26],
+        zoom: 5,
+        steps: Array.from({ length: 24 }, (_, i) => ({
+          time: new Date(start + i * hour).toISOString(),
+          hours: 1,
+        })),
+        totals: [
+          "rainPast168",
+          "rainPast72",
+          "rainPast24",
+          "rainNext24",
+          "rainNext72",
+        ],
+        attribution: "",
+      },
+    }),
+  );
+}
+
+// Weather on from its Layers tab, the legend inline beneath the switch.
+async function showWeather(page: Page) {
+  await openApp(page);
+  await page.getByRole("button", { name: "Layers", exact: true }).click();
+  const layers = page.getByRole("dialog", { name: "Map layers" });
+  await layers.getByRole("radio", { name: /^Weather/ }).click();
+  await layers.getByRole("switch", { name: "Show weather" }).click();
+}
+
+// From the stepped card to the rain totals' card, whose period rail sits where
+// the scrubber was: the card's own words open Layers on its Weather tab.
+async function showRainTotals(page: Page) {
+  await page.getByTitle("Choose what the weather map shows").click();
+  await page
+    .getByRole("dialog", { name: "Map layers" })
+    .getByRole("radio", { name: "Rain accumulation" })
+    .click();
+  await page.keyboard.press("Escape");
+  const rail = page.getByRole("radiogroup", {
+    name: "Rain accumulation period",
+  });
+  await expect(rail).toBeVisible();
+  return rail;
+}
+
 test.describe("desktop", () => {
   test.use({ viewport: { width: 1440, height: 900 } });
 
@@ -1300,6 +1360,21 @@ test.describe("desktop", () => {
     ).toBeFocused();
   });
 
+  test("the Weather tab and bar", async ({ page }) => {
+    await stubWeatherManifest(page);
+    await showWeather(page);
+    await expect(
+      page.getByRole("dialog", { name: "Map layers" }),
+    ).toBeVisible();
+    await expectNoViolations(page, "[role='dialog'][aria-label='Map layers']");
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("slider")).toBeVisible();
+    await expectNoViolations(page, "[data-tone='info']");
+    // The totals' card, with its rail of periods in place of the scrubber.
+    await showRainTotals(page);
+    await expectNoViolations(page, "[data-tone='info']");
+  });
+
   // Stubbed: the gauge file is public and never fetched from prod here.
   test("a river gauge's panel", async ({ page }) => {
     const now = Math.floor(Date.now() / 1000);
@@ -2027,6 +2102,30 @@ test.describe("narrow web", () => {
     const dialog = await openAnnouncement(page, true);
     await expectNoViolations(page, "dialog");
     expect((await dialog.boundingBox())!.width).toBe(390);
+  });
+
+  test("the Weather tab and bar at phone width", async ({ page }) => {
+    await stubWeatherManifest(page);
+    await showWeather(page);
+    await expectNoViolations(page, "[role='dialog'][aria-label='Map layers']");
+    expect(
+      (await page.getByRole("dialog").last().boundingBox())!.width,
+    ).toBeLessThanOrEqual(390);
+    await page.keyboard.press("Escape");
+    const slider = page.getByRole("slider");
+    await expect(slider).toBeVisible();
+    await expectNoViolations(page, "[data-tone='info']");
+    // Inside the phone: not past either edge.
+    const box = (await slider.boundingBox())!;
+    expect(box.x).toBeGreaterThanOrEqual(0);
+    expect(box.x + box.width).toBeLessThanOrEqual(390);
+    // The totals' card: its rail scrolls inside the card, so the card (not the
+    // rail's own width, which is the five chips) stays inside the phone.
+    await showRainTotals(page);
+    await expectNoViolations(page, "[data-tone='info']");
+    const card = (await page.locator("[data-tone='info']").boundingBox())!;
+    expect(card.x).toBeGreaterThanOrEqual(0);
+    expect(card.x + card.width).toBeLessThanOrEqual(390);
   });
 
   test("the tab bar and its More menu", async ({ page }) => {

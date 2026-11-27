@@ -54,6 +54,9 @@ export const FIRE_FILL_LAYER = "topo-nswfire-fill";
 export const FIRE_EDGE_LAYER = "topo-nswfire-edge";
 /** The Coverage overlay's hatch, the same way. */
 export const COVERAGE_FILL_LAYER = "topo-nswcoverage-fill";
+/** The Weather overlay's colour field and its wind arrows, the same way. */
+export const WEATHER_FIELD_LAYER = "topo-nswweather-dem";
+export const WEATHER_ARROWS_LAYER = "topo-nswweather-arrows";
 
 type RenderedQuery = {
   getLayer(id: string): unknown;

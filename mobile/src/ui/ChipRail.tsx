@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   ScrollView,
   StyleSheet,
+  Text,
   View,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
@@ -9,8 +10,9 @@ import {
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 
-import { spacing, withAlpha, useTheme } from "../theme";
+import { makeStyles, muted, spacing, withAlpha, useTheme } from "../theme";
 import { Chip, CHIP_HEIGHT, type ChipOption } from "./Chip";
+import { railNudge } from "./railNudge";
 
 // A single-line (`scroll`) control is exactly one chip tall — re-exported so
 // a bar replacing it in the same slot (Saved's multi-select bar) can
@@ -35,13 +37,22 @@ export function ChipRail<T extends string>({
   onChange,
   scroll = false,
   trailing,
+  label,
+  hint,
 }: {
   options: ChipOption<T>[];
   value: T;
   onChange: (next: T) => void;
   scroll?: boolean;
   trailing?: React.ReactNode;
+  /** The group's accessible name, as Logjam Web's rail has. */
+  label?: string;
+  /** One plain sentence about the choice (why a chip is off), drawn under the
+   *  rail; a screen reader reaches it as text, as Field's and ChipPicker's. */
+  hint?: string;
 }) {
+  const hintStyles = useHintStyles();
+  const hintLine = hint ? <Text style={hintStyles.hint}>{hint}</Text> : null;
   const chips = options.map((option) => (
     <Chip
       key={option.value}
@@ -58,13 +69,16 @@ export function ChipRail<T extends string>({
 
   if (!scroll)
     return (
-      <View accessibilityRole="radiogroup" style={styles.group}>
-        {chips}
-        {trailing}
+      <View accessibilityRole="radiogroup" accessibilityLabel={label}>
+        <View style={styles.group}>
+          {chips}
+          {trailing}
+        </View>
+        {hintLine}
       </View>
     );
   return (
-    <Rail value={value} trailing={trailing}>
+    <Rail value={value} trailing={trailing} label={label} hint={hint}>
       {chips}
     </Rail>
   );
@@ -80,11 +94,16 @@ function Rail<T extends string>({
   value,
   children,
   trailing,
+  label,
+  hint,
 }: {
   value: T;
   children: React.ReactNode[];
   trailing?: React.ReactNode;
+  label?: string;
+  hint?: string;
 }) {
+  const hintStyles = useHintStyles();
   const scrollRef = useRef<ScrollViewInstance>(null);
   const offsets = useRef(new Map<number, { x: number; width: number }>());
   const viewport = useRef({ x: 0, width: 0 });
@@ -97,26 +116,25 @@ function Rail<T extends string>({
   // over nothing.
   const [overflow, setOverflow] = useState({ start: false, end: false });
 
-  useEffect(() => {
-    const chip = offsets.current.get(activeIndex);
-    if (chip == null) return;
-    const { x, width } = viewport.current;
-    // The visible band stops at the fades, which are drawn only where there is
-    // more rail beyond them.
-    const bandStart = x > 1 ? x + FADE_WIDTH : x;
-    const bandEnd = x + width - FADE_WIDTH;
-    if (chip.x < bandStart) {
-      scrollRef.current?.scrollTo({
-        x: Math.max(0, chip.x - FADE_WIDTH),
-        animated: true,
-      });
-    } else if (chip.x + chip.width > bandEnd) {
-      scrollRef.current?.scrollTo({
-        x: chip.x + chip.width - width + FADE_WIDTH,
-        animated: true,
-      });
-    }
-  }, [activeIndex]);
+  // The selection already brought into view. The effect below runs before the
+  // chips and the rail have been laid out, so it cannot nudge on first mount:
+  // each `onLayout` calls this too, and it acts once layout is known, once per
+  // selection.
+  const nudged = useRef<number | null>(null);
+  const nudge = () => {
+    if (nudged.current === activeIndex) return;
+    const to = railNudge(
+      offsets.current.get(activeIndex),
+      viewport.current,
+      FADE_WIDTH,
+    );
+    if (to === undefined) return;
+    // Not animated for the first selection: the rail opens already there.
+    const animated = nudged.current !== null;
+    nudged.current = activeIndex;
+    if (to !== null) scrollRef.current?.scrollTo({ x: to, animated });
+  };
+  useEffect(nudge, [activeIndex]);
 
   const trackOverflow = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
@@ -130,43 +148,50 @@ function Rail<T extends string>({
   };
 
   return (
-    <View accessibilityRole="radiogroup">
-      <ScrollView
-        ref={scrollRef}
-        horizontal
-        keyboardShouldPersistTaps="handled"
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.rail}
-        onScroll={trackOverflow}
-        onLayout={(event) => {
-          viewport.current = {
-            ...viewport.current,
-            width: event.nativeEvent.layout.width,
-          };
-        }}
-        onContentSizeChange={() =>
-          // Seed the end fade before any scroll happens.
-          setOverflow((current) =>
-            current.end ? current : { ...current, end: true },
-          )
-        }
-        scrollEventThrottle={16}
-      >
-        {childArray.map((chip, index) => (
-          <View
-            key={chip.key}
-            onLayout={(event) => {
-              const { x, width } = event.nativeEvent.layout;
-              offsets.current.set(index, { x, width });
-            }}
-          >
-            {chip}
-          </View>
-        ))}
-        {trailing}
-      </ScrollView>
-      {overflow.start ? <EdgeFade side="start" /> : null}
-      {overflow.end ? <EdgeFade side="end" /> : null}
+    <View accessibilityRole="radiogroup" accessibilityLabel={label}>
+      {/* The fades' containing block is the chip row alone, so they never
+          reach the hint under it. Guard: kit.test.ts. */}
+      <View>
+        <ScrollView
+          ref={scrollRef}
+          horizontal
+          keyboardShouldPersistTaps="handled"
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.rail}
+          onScroll={trackOverflow}
+          onLayout={(event) => {
+            viewport.current = {
+              ...viewport.current,
+              width: event.nativeEvent.layout.width,
+            };
+            nudge();
+          }}
+          onContentSizeChange={() =>
+            // Seed the end fade before any scroll happens.
+            setOverflow((current) =>
+              current.end ? current : { ...current, end: true },
+            )
+          }
+          scrollEventThrottle={16}
+        >
+          {childArray.map((chip, index) => (
+            <View
+              key={chip.key}
+              onLayout={(event) => {
+                const { x, width } = event.nativeEvent.layout;
+                offsets.current.set(index, { x, width });
+                nudge();
+              }}
+            >
+              {chip}
+            </View>
+          ))}
+          {trailing}
+        </ScrollView>
+        {overflow.start ? <EdgeFade side="start" /> : null}
+        {overflow.end ? <EdgeFade side="end" /> : null}
+      </View>
+      {hint ? <Text style={hintStyles.hint}>{hint}</Text> : null}
     </View>
   );
 }
@@ -194,6 +219,10 @@ function EdgeFade({ side }: { side: "start" | "end" }) {
 }
 
 const FADE_WIDTH = spacing(6);
+
+const useHintStyles = makeStyles((theme, textRole) => ({
+  hint: { ...muted(theme, textRole.detail), marginTop: spacing(0.5) },
+}));
 
 const styles = StyleSheet.create({
   group: { flexDirection: "row", flexWrap: "wrap", gap: spacing(1) },
