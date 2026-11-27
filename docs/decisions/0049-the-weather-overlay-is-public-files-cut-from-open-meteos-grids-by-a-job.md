@@ -108,8 +108,10 @@ receives.**
   it in Saved as a row of its own: its size is one shared run, a number the
   user can't move by deleting anything. Guards:
   `mobile/src/offline/regionDownloads.test.ts`,
-  `mobile/src/offline/regionDownloadQueue.test.ts`. Everything else above
-  stands.
+  `mobile/src/offline/regionDownloadQueue.test.ts`,
+  `mobile/src/offline/regionMbtilesSweep.test.ts`. The discard of a
+  half-saved area in `mobile/src/saved/SavedScreen.tsx` has no guard test.
+  Everything else above stands.
 
 ## Consequences
 

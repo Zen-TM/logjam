@@ -236,10 +236,12 @@ export async function sweepOrphanFiles(
     if (!name.endsWith(extension)) continue;
     const id = name.slice(0, -extension.length);
     if (known.has(id) || liveIds.has(id)) continue;
-    await FileSystem.deleteAsync(`${dir}${name}`, { idempotent: true }).catch(
-      () => {},
-    );
-    swept += 1;
+    try {
+      await FileSystem.deleteAsync(`${dir}${name}`, { idempotent: true });
+      swept += 1;
+    } catch {
+      // Left for the next sweep.
+    }
   }
   return swept;
 }

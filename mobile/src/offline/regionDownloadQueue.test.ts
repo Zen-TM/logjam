@@ -372,19 +372,54 @@ describe("stopping an update", () => {
     expect(dropKeptWeatherWithoutAreas).not.toHaveBeenCalled();
   });
 
-  // Mutation: drop the write from `publish`, and `regionDownloads` never sees
-  // a job on its way, so the last saved area's delete drops the run under a
-  // download that has yet to finish.
-  it("tells regionDownloads while a job is queued, running or paused", async () => {
+  // Mutation: drop the write from `publish`, or narrow its predicate to
+  // "paused" alone, to the queue's being non-empty, or to leave paused out, and
+  // `regionDownloads` misreads what is on its way, so the last saved area's
+  // delete drops the run under a download that has yet to finish, or a
+  // finished queue leaves it for good.
+  it("tells regionDownloads while a job is queued, downloading or paused, and not once all have settled", async () => {
     expect(regionJobsLive()).toBe(false);
-    enqueueRegionDownloads([{ ...job("live"), groupId: "card" }]);
+    let finishA: (outcome: unknown) => void = () => {};
+    runRegionDownload.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finishA = resolve;
+        }),
+    );
+    // A alone, downloading; then B queued behind it, which pauses once it
+    // runs (the default runner).
+    enqueueRegionDownloads([{ ...job("a"), groupId: "ga" }]);
     await vi.advanceTimersByTimeAsync(0);
     expect(regionJobsLive()).toBe(true);
+    enqueueRegionDownloads([{ ...job("b"), groupId: "gb" }]);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(regionJobsLive()).toBe(true);
+    // The queue announces A's finished group the moment A settles, with B
+    // still `queued` and nothing else running: only that state keeps it live.
+    const liveAtToast: boolean[] = [];
+    const stopListening = onRegionDownloadToast(() =>
+      liveAtToast.push(regionJobsLive()),
+    );
+    finishA(ready("a"));
+    await vi.advanceTimersByTimeAsync(0);
+    stopListening();
+    expect(liveAtToast).toEqual([true]);
+    // A is ready and B paused: only B keeps it live.
+    expect(regionJobsLive()).toBe(true);
     stopRegionGroup({
-      groupId: "card",
+      groupId: "gb",
       update: false,
-      jobs: [jobOf("live", "paused")],
+      jobs: [jobOf("b", "paused")],
     });
+    await vi.advanceTimersByTimeAsync(0);
+    // Only A, settled to ready, is left in the queue.
+    expect(regionJobsLive()).toBe(false);
+    // A failed job is settled too, though it stays in the queue to Retry.
+    runRegionDownload.mockResolvedValueOnce({
+      status: "failed",
+      code: "unknown",
+    });
+    enqueueRegionDownloads([{ ...job("c"), groupId: "gc" }]);
     await vi.advanceTimersByTimeAsync(0);
     expect(regionJobsLive()).toBe(false);
   });

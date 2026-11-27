@@ -547,10 +547,16 @@ export async function runRegionClip(
  */
 export async function dropKeptWeatherWithoutAreas(): Promise<void> {
   try {
-    if (regionJobsLive() || (await listArtifacts()).some(isRegionArtifact))
-      return;
     // Loaded when needed: only an area's removal reaches the weather files.
-    await (await import("../weatherMap/weatherMapStorage")).dropKeptWeather();
+    const { dropKeptWeather } = await import("../weatherMap/weatherMapStorage");
+    // The queue's flag is read on both sides of the registry read: a download
+    // enqueued while it is pending, or one that saved (and so left the flag)
+    // in the meantime, must not lose its run. The drop starts in the same turn
+    // as the last read, so no later enqueue falls between them.
+    const liveBefore = regionJobsLive();
+    const areas = (await listArtifacts()).some(isRegionArtifact);
+    if (liveBefore || areas || regionJobsLive()) return;
+    await dropKeptWeather();
   } catch (err) {
     console.error(err);
   }

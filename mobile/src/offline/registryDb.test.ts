@@ -20,10 +20,12 @@ vi.mock("expo-sqlite", () => ({
 
 const dirNames: string[] = [];
 const deleted: string[] = [];
+let failDelete = false;
 vi.mock("expo-file-system/legacy", () => ({
   getInfoAsync: () => Promise.resolve({ exists: true }),
   readDirectoryAsync: () => Promise.resolve(dirNames),
   deleteAsync: (uri: string) => {
+    if (failDelete) return Promise.reject(new Error("busy"));
     deleted.push(uri);
     return Promise.resolve();
   },
@@ -52,7 +54,7 @@ describe("sweepOrphanFiles", () => {
     artifactRows.push({ id: "kept" });
     deleted.length = 0;
 
-    await sweepOrphanFiles("dir/", ".pmtiles");
+    expect(await sweepOrphanFiles("dir/", ".pmtiles")).toBe(0);
 
     expect(deleted).toEqual([]);
   });
@@ -63,7 +65,9 @@ describe("sweepOrphanFiles", () => {
     artifactRows.length = 0;
     deleted.length = 0;
 
-    await sweepOrphanFiles("dir/", ".pmtiles", new Set(["inflight"]));
+    expect(
+      await sweepOrphanFiles("dir/", ".pmtiles", new Set(["inflight"])),
+    ).toBe(0);
 
     expect(deleted).toEqual([]);
   });
@@ -74,8 +78,24 @@ describe("sweepOrphanFiles", () => {
     artifactRows.length = 0;
     deleted.length = 0;
 
-    await sweepOrphanFiles("dir/", ".pmtiles");
+    expect(await sweepOrphanFiles("dir/", ".pmtiles")).toBe(0);
 
     expect(deleted).toEqual([]);
+  });
+
+  // Mutation: count the file before (or whatever became of) its delete, and a
+  // clip that could not be deleted reconciles the kept weather run for
+  // nothing, every Saved-tab open.
+  it("counts only the files it deleted", async () => {
+    dirNames.length = 0;
+    dirNames.push("stuck.pmtiles");
+    artifactRows.length = 0;
+    deleted.length = 0;
+    failDelete = true;
+    try {
+      expect(await sweepOrphanFiles("dir/", ".pmtiles")).toBe(0);
+    } finally {
+      failDelete = false;
+    }
   });
 });

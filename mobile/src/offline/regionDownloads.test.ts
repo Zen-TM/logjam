@@ -90,11 +90,18 @@ const insertArtifact = vi.hoisted(() => vi.fn());
 const registry = vi.hoisted(() => ({
   deleted: null as { kind: string } | null,
   listed: [] as { kind: string }[],
+  /** Holds `listArtifacts` pending until it resolves. */
+  gate: Promise.resolve(),
+  reads: 0,
 }));
 vi.mock("./registryDb", () => ({
   insertArtifact,
   deleteArtifact: vi.fn(async () => registry.deleted),
-  listArtifacts: vi.fn(async () => registry.listed),
+  listArtifacts: vi.fn(async () => {
+    registry.reads += 1;
+    await registry.gate;
+    return registry.listed;
+  }),
 }));
 const dropKeptWeather = vi.hoisted(() => vi.fn(async () => {}));
 const { setRegionJobsLive } = await import("./regionLiveJobs");
@@ -525,6 +532,7 @@ describe("runRegionClip", () => {
 describe("the kept weather run", () => {
   beforeEach(() => {
     dropKeptWeather.mockClear();
+    registry.reads = 0;
     setRegionJobsLive(false);
     registry.deleted = {
       kind: "basemap-region",
@@ -551,6 +559,33 @@ describe("the kept weather run", () => {
     setRegionJobsLive(false);
     await dropKeptWeatherWithoutAreas();
     expect(dropKeptWeather).toHaveBeenCalledOnce();
+  });
+
+  // Mutation: drop the `regionJobsLive()` read after the registry's, and a
+  // download enqueued while the list is pending loses the run it has just
+  // begun to keep; drop the one before it, and a download that saves (and so
+  // leaves the flag) while the list is pending, its artifact not yet in the
+  // list read, loses it too.
+  it("stays for a download that goes live, or settles, while the registry is read", async () => {
+    registry.listed = [];
+    let release = () => {};
+    registry.gate = new Promise<void>((resolve) => (release = resolve));
+    const goingLive = dropKeptWeatherWithoutAreas();
+    await vi.waitFor(() => expect(registry.reads).toBe(1));
+    setRegionJobsLive(true);
+    release();
+    await goingLive;
+    expect(dropKeptWeather).not.toHaveBeenCalled();
+
+    setRegionJobsLive(true);
+    registry.gate = new Promise<void>((resolve) => (release = resolve));
+    const settling = dropKeptWeatherWithoutAreas();
+    await vi.waitFor(() => expect(registry.reads).toBe(2));
+    setRegionJobsLive(false);
+    release();
+    await settling;
+    expect(dropKeptWeather).not.toHaveBeenCalled();
+    registry.gate = Promise.resolve();
   });
 
   // Mutation: drop on every delete, not on none left, and removing one of two
