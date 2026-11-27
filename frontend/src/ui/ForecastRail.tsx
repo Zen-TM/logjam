@@ -19,6 +19,9 @@ export type ForecastCard = {
   rainLevel: number;
   chance: string | null;
   wind: string | null;
+  /** A figure not of its row's kind ("Model" in a gauge's row): said under
+   *  it, and its bar drawn muted. */
+  note: string | null;
   /** Everything on the card, in words. */
   spoken: string;
 };
@@ -33,12 +36,17 @@ export type ForecastCard = {
 export function ForecastRail({
   title,
   summary,
+  summaryNote,
+  summarySpoken,
   cards,
   labels,
 }: {
   title: string;
   /** A total for the row ("34 mm"), at its right. */
   summary?: string | null;
+  /** Said under the total ("Model"), and `summarySpoken` for a screen reader. */
+  summaryNote?: string | null;
+  summarySpoken?: string | null;
   cards: readonly ForecastCard[];
   /** The two buttons' names: each says which row it pages. */
   labels: { back: string; on: string };
@@ -58,7 +66,21 @@ export function ForecastRail({
     <section className={classes.rail}>
       <div className={classes.heading}>
         <h4 className={classes.title}>{title}</h4>
-        {summary && <span className={classes.summary}>{summary}</span>}
+        {summary && (
+          <span className={classes.total}>
+            <span className={classes.summary} aria-hidden={!!summarySpoken}>
+              {summary}
+            </span>
+            {summaryNote && (
+              <span className={classes.meta} aria-hidden={!!summarySpoken}>
+                {summaryNote}
+              </span>
+            )}
+            {summarySpoken && (
+              <span className="visually-hidden">{summarySpoken}</span>
+            )}
+          </span>
+        )}
         <div className={classes.buttons}>
           <IconButton
             icon="scrollBack"
@@ -92,6 +114,7 @@ export function ForecastRail({
             <span className={classes.bar} aria-hidden>
               <span
                 className={classes.fill}
+                data-muted={card.note !== null}
                 style={{ width: `${card.rainLevel * 100}%` }}
               />
             </span>
@@ -100,6 +123,7 @@ export function ForecastRail({
             </span>
             {card.chance && <span className={classes.meta}>{card.chance}</span>}
             {card.wind && <span className={classes.meta}>{card.wind}</span>}
+            {card.note && <span className={classes.meta}>{card.note}</span>}
           </li>
         ))}
       </ul>

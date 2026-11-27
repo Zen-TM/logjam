@@ -10,7 +10,14 @@
 //
 // The rows are one function both clients draw (`weatherRows`). The
 // credit is CC BY 4.0's condition for Open-Meteo's data: it is always drawn.
+//
+// The rain that has fallen is measured where a rain gauge is near enough
+// (rainGauges.ts, ADR 0050): a row per gauge, named, with Open-Meteo's
+// figure only on the days the gauge has not sent yet, each marked.
 import type { IconIdea } from "../icons.js";
+import { RAIN_GAUGE_MAX_M, type PastRain } from "../rainGauges.js";
+import { formatDistanceM } from "../trackStats.js";
+import { gaugeDisplayName } from "./gauges.js";
 import {
   OPEN_METEO_CREDIT_URL,
   WEATHER_HOURS_SHOWN,
@@ -36,9 +43,18 @@ export const WEATHER = {
     hours: `Next ${WEATHER_HOURS_SHOWN} hours`,
     days: "Next 7 days",
     // Named for where its figures come from, so a measured week (a gauge's)
-    // never reads as the model's guess.
+    // never reads as the model's guess, and the other way round.
     pastModel: `Modelled rain, past ${WEATHER_PAST_DAYS} days`,
-    pastGauge: `Rain gauge, past ${WEATHER_PAST_DAYS} days`,
+    pastGauge: "Rain gauge at",
+    // Under a gauge's day that Open-Meteo filled in.
+    modelledDay: "Model",
+    // Said in place of the "Model" under a week's total that sums such a day.
+    modelledTotal: "including modelled days",
+    noGaugeNear: `No rain gauge within ${RAIN_GAUGE_MAX_M / 1000} km, so these are Open-Meteo's.`,
+    // A gauge is near but sent nothing for these days (an outage, or a kept
+    // forecast older than the kept gauge file).
+    gaugeSilent:
+      "The rain gauges near here have nothing for these days, so these are Open-Meteo's.",
     model: "Forecast model",
     // Says what the choice means; the models' names are `WEATHER_MODELS`.
     // Logjam GPS shows it above the chips. Logjam Web's menu heads the list
@@ -199,6 +215,9 @@ export type WeatherCard = {
   chance: string | null;
   /** "25 km/h" or `WEATHER_NONE`; null for a past day. */
   wind: string | null;
+  /** `WEATHER.copy.modelledDay` on a gauge's day that the model filled in:
+   *  said under the figure, and its bar drawn muted. Null otherwise. */
+  note: string | null;
   /** Every figure on the card, in words, for a screen reader. */
   spoken: string;
 };
@@ -213,7 +232,14 @@ export type WeatherRow = {
   title: string;
   /** "34 mm" over the row's days, for the rain row; null otherwise. */
   summary: string | null;
+  /** `WEATHER.copy.modelledDay` when a day in the total is the model's, said
+   *  under it like the day's own mark; null for a fully measured week. */
+  summaryNote: string | null;
+  /** The total in words for a screen reader when it is marked; null otherwise. */
+  summarySpoken: string | null;
   cards: WeatherCard[];
+  /** A line under the row, saying where its figures come from. */
+  note: string | null;
 };
 
 // A row's bars are against its wettest card, but never against less than this:
@@ -238,14 +264,18 @@ function hourLabel(hour: WeatherHour): string {
  * The rows both clients draw, in the order of `WEATHER.sections`: the next
  * hours, the next days, the rain that has fallen. A row with nothing left in it
  * (a kept forecast that has outlived its hours) is absent.
+ *
+ * The rain that has fallen is a row for each gauge in `rain` or, with none,
+ * the model's row; `rain` is null where the gauge file could not be had, and
+ * the model's row then says nothing of gauges.
  */
 export function weatherRows(
   forecast: WeatherForecast,
   now: number,
+  rain: PastRain | null = null,
 ): WeatherRow[] {
   const hours = weatherHoursFrom(forecast, now);
   const days = weatherDaysFrom(forecast, now);
-  const past = forecast.past.days;
   const hourLevels = rainLevels(
     "hours",
     hours.map((h) => h.rainMm),
@@ -253,10 +283,6 @@ export function weatherRows(
   const dayLevels = rainLevels(
     "days",
     days.map((d) => d.rainMm),
-  );
-  const pastLevels = rainLevels(
-    "past",
-    past.map((d) => d.rainMm),
   );
   const rows: WeatherRow[] = [
     {
@@ -268,6 +294,9 @@ export function weatherRows(
           ? `Next ${hours.length} ${hours.length === 1 ? "hour" : "hours"}`
           : WEATHER.copy.hours,
       summary: null,
+      summaryNote: null,
+      summarySpoken: null,
+      note: null,
       cards: withSpoken(
         hours.map((hour, i) => {
           const condition = weatherCondition(hour.code);
@@ -295,6 +324,7 @@ export function weatherRows(
             chance:
               hour.rainChance != null ? chanceText(hour.rainChance) : null,
             wind: windText(hour.windKmh),
+            note: null,
           };
         }),
       ),
@@ -303,6 +333,9 @@ export function weatherRows(
       key: "days",
       title: WEATHER.copy.days,
       summary: null,
+      summaryNote: null,
+      summarySpoken: null,
+      note: null,
       cards: withSpoken(
         days.map((day, i) => {
           const facts = weatherDayFacts(day, now);
@@ -317,34 +350,90 @@ export function weatherRows(
             rainLevel: dayLevels[i],
             chance: facts.chance,
             wind: facts.wind,
+            note: null,
           };
         }),
       ),
     },
-    {
-      key: "past",
-      title:
-        forecast.past.source === "gauge"
-          ? WEATHER.copy.pastGauge
-          : WEATHER.copy.pastModel,
-      summary: formatRainMm(past.reduce((sum, day) => sum + day.rainMm, 0)),
-      cards: withSpoken(
-        past.map((day, i) => ({
-          key: day.date,
-          label: dayLabel(day.date, now),
-          current: false,
-          glyph: null,
-          glyphLabel: "",
-          temperature: null,
-          rain: rainText(day.rainMm),
-          rainLevel: pastLevels[i],
-          chance: null,
-          wind: null,
-        })),
-      ),
-    },
+    ...pastRows(forecast, now, rain),
   ];
   return rows.filter((row) => row.cards.length > 0);
+}
+
+/** One row of a past day's rain: the model's, or a gauge's with the model's
+ *  figure where the gauge has none (`measured` null). */
+function pastRow(
+  forecast: WeatherForecast,
+  now: number,
+  title: string,
+  measured: (number | null)[] | null,
+  note: string | null,
+): WeatherRow {
+  const days = forecast.past.days.map((day, i) => {
+    const mm = measured?.[i] ?? null;
+    return { day, mm: mm ?? day.rainMm, modelled: !!measured && mm === null };
+  });
+  const levels = rainLevels(
+    "past",
+    days.map((d) => d.mm),
+  );
+  const summary = formatRainMm(days.reduce((sum, d) => sum + d.mm, 0));
+  const modelled = days.some((d) => d.modelled);
+  return {
+    key: "past",
+    title,
+    summary,
+    summaryNote: modelled ? WEATHER.copy.modelledDay : null,
+    summarySpoken: modelled
+      ? `${summary}, ${WEATHER.copy.modelledTotal}`
+      : null,
+    note,
+    cards: withSpoken(
+      days.map(({ day, mm, modelled }, i) => ({
+        key: day.date,
+        label: dayLabel(day.date, now),
+        current: false,
+        glyph: null,
+        glyphLabel: "",
+        temperature: null,
+        rain: rainText(mm),
+        rainLevel: levels[i],
+        chance: null,
+        wind: null,
+        note: modelled ? WEATHER.copy.modelledDay : null,
+      })),
+    ),
+  };
+}
+
+function pastRows(
+  forecast: WeatherForecast,
+  now: number,
+  rain: PastRain | null,
+): WeatherRow[] {
+  if (!rain?.gauges.length)
+    return [
+      pastRow(
+        forecast,
+        now,
+        WEATHER.copy.pastModel,
+        null,
+        !rain
+          ? null
+          : rain.near
+            ? WEATHER.copy.gaugeSilent
+            : WEATHER.copy.noGaugeNear,
+      ),
+    ];
+  return rain.gauges.map((g) =>
+    pastRow(
+      forecast,
+      now,
+      `${WEATHER.copy.pastGauge} ${gaugeDisplayName(g.gauge.name)}, ${formatDistanceM(g.distanceM)}`,
+      g.mm,
+      null,
+    ),
+  );
 }
 
 type BareCard = Omit<WeatherCard, "spoken"> & { spokenLabel?: string };
@@ -361,6 +450,7 @@ function withSpoken(cards: BareCard[]): WeatherCard[] {
         `${card.chance === WEATHER_NONE ? "0%" : card.chance} chance`,
       card.wind &&
         (card.wind === WEATHER_NONE ? "no wind" : `wind ${card.wind}`),
+      card.note === WEATHER.copy.modelledDay && "modelled",
     ]
       .filter(Boolean)
       .join(", "),

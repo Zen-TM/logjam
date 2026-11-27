@@ -81,8 +81,9 @@ export type WeatherHour = {
   windKmh: number;
 };
 
-/** Where a day's rain figure comes from: the row says so (see `weatherRows`). */
-export type WeatherRainSource = "model" | "gauge";
+/** Open-Meteo's past days are the model's own; measured rain is a gauge's,
+ *  from rainGauges.ts, never folded into a forecast. */
+export type WeatherRainSource = "model";
 
 export type WeatherPastDay = {
   /** YYYY-MM-DD, in the spot's own time zone. */

@@ -166,6 +166,7 @@ COPY build_fire_history.py /app/build_fire_history.py
 COPY build_coverage.py /app/build_coverage.py
 COPY build_weather.py /app/build_weather.py
 COPY gauges.json /app/gauges.json
+COPY rain_gauges.json /app/rain_gauges.json
 COPY renderers/ /app/renderers/
 COPY icons/ /app/icons/
 

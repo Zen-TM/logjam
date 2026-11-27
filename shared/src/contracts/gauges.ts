@@ -69,6 +69,8 @@ const NAME_WORDS: Record<string, string> = {
   "U/S": "upstream of",
   DOWNSTREAM: "downstream",
   UPSTREAM: "upstream",
+  // A tipping-bucket rain gauge (rainGauges.ts): a code, kept as written.
+  TBRG: "TBRG",
 };
 
 /** A gauge's name for reading: "Colo River at Upper Colo". A word the table

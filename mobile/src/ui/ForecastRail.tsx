@@ -27,6 +27,9 @@ export type ForecastCard = {
   rainLevel: number;
   chance: string | null;
   wind: string | null;
+  /** A figure not of its row's kind ("Model" in a gauge's row): said under
+   *  it, and its bar drawn muted. */
+  note: string | null;
   /** Everything on the card, in words. */
   spoken: string;
 };
@@ -50,11 +53,16 @@ const GAP = spacing(0.5);
 export function ForecastRail({
   title,
   summary,
+  summaryNote,
+  summarySpoken,
   cards,
 }: {
   title: string;
   /** A total for the row ("34 mm"), at its right. */
   summary?: string | null;
+  /** Said under the total ("Model"), and `summarySpoken` for a screen reader. */
+  summaryNote?: string | null;
+  summarySpoken?: string | null;
   cards: readonly ForecastCard[];
 }) {
   const theme = useTheme();
@@ -62,9 +70,23 @@ export function ForecastRail({
   const width = forecastCardWidth(useWindowDimensions().fontScale);
   return (
     <View style={styles.rail}>
-      <View style={styles.heading} accessible accessibilityRole="header">
+      <View
+        style={styles.heading}
+        accessible
+        accessibilityRole="header"
+        accessibilityLabel={
+          summarySpoken ? `${title}, ${summarySpoken}` : undefined
+        }
+      >
         <Text style={styles.title}>{title}</Text>
-        {summary ? <Text style={styles.summary}>{summary}</Text> : null}
+        {summary ? (
+          <View>
+            <Text style={styles.summary}>{summary}</Text>
+            {summaryNote ? (
+              <Text style={styles.summaryNote}>{summaryNote}</Text>
+            ) : null}
+          </View>
+        ) : null}
       </View>
       <ScrollView
         horizontal
@@ -93,7 +115,11 @@ export function ForecastRail({
             ) : null}
             <View style={styles.bar}>
               <View
-                style={[styles.fill, { width: `${card.rainLevel * 100}%` }]}
+                style={[
+                  styles.fill,
+                  card.note !== null && styles.mutedFill,
+                  { width: `${card.rainLevel * 100}%` },
+                ]}
               />
             </View>
             <Text style={[styles.rain, card.rainLevel === 0 && styles.dry]}>
@@ -103,6 +129,7 @@ export function ForecastRail({
               <Text style={styles.meta}>{card.chance}</Text>
             ) : null}
             {card.wind ? <Text style={styles.meta}>{card.wind}</Text> : null}
+            {card.note ? <Text style={styles.meta}>{card.note}</Text> : null}
           </View>
         ))}
       </ScrollView>
@@ -115,6 +142,10 @@ const useStyles = makeStyles((theme, textRole) => ({
   heading: { flexDirection: "row", alignItems: "baseline", gap: spacing(1) },
   title: { ...textRole.control, color: theme.text, flexShrink: 1 },
   summary: { ...muted(theme, textRole.detail), fontVariant: ["tabular-nums"] },
+  summaryNote: {
+    ...muted(theme, textRole.meta),
+    fontVariant: ["tabular-nums"],
+  },
   track: { gap: GAP },
   card: {
     alignItems: "center",
@@ -145,6 +176,8 @@ const useStyles = makeStyles((theme, textRole) => ({
     borderRadius: radius.sm,
     backgroundColor: theme.accent,
   },
+  // A figure the row's source didn't give (a gauge's modelled day).
+  mutedFill: { backgroundColor: theme.textMuted },
   rain: {
     ...textRole.detail,
     color: theme.text,
