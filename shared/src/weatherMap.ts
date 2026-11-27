@@ -54,6 +54,12 @@ export const WEATHER_MAP = {
   settleMs: 150,
   /** How long Play rests on a step before it moves to the next. */
   playMs: 1000,
+  /** Hours after `file.anchor` that a forecast total is still drawn. The job
+   *  publishes hourly, so online the anchor is an hour or two old and this
+   *  never bites; it catches a kept run or a stopped job, before a meaningful
+   *  part of the next 24 h is in the past. A past total never runs out: its
+   *  window is fixed and labelled. Guard: weatherMap.test.ts. */
+  forecastTotalHours: 6,
 } as const;
 
 export type WeatherFieldKey = "rain" | "temperature" | "wind" | "gusts";
@@ -347,6 +353,26 @@ export const weatherChipLayer = (
 export const isWeatherTotal = (layer: WeatherLayer): boolean =>
   layer.hours !== undefined;
 
+/** Whether a layer's numbers are the model's estimate of what fell (a past
+ *  total), which its title says. Guard: weatherMap.test.ts. */
+export const isWeatherEstimate = (layer: WeatherLayer): boolean =>
+  layer.hours !== undefined && layer.hours < 0;
+
+/** The run's totals less the forecast ones that have run out: `now` is more
+ *  than `WEATHER_MAP.forecastTotalHours` past the anchor. Every read of
+ *  `file.totals` for the rail or the default period goes through this.
+ *  Guard: weatherMap.test.ts. */
+export const weatherTotalsNow = (
+  file: WeatherMapFile,
+  now: number,
+): WeatherTotalKey[] =>
+  file.totals.filter(
+    (key) =>
+      weatherLayer(key).hours! < 0 ||
+      now - Date.parse(file.anchor) <=
+        WEATHER_MAP.forecastTotalHours * 3_600_000,
+  );
+
 /** The `color-relief-color` for a layer: its stops, interpolated. */
 export function weatherReliefColor(key: WeatherLayerKey): unknown[] {
   const stops = weatherLayer(key).stops.flatMap((s) => [
@@ -508,8 +534,9 @@ export function weatherShownLabel(
  * What the overlay shows for a manifest, the layer picked and the step the
  * user picked (null until they do), on both clients: the step clamped to
  * those still to come, starting at the one now falls in. A stepped layer
- * whose every step is past is out of date, never drawn as today's; a total
- * the run left out (an hour no run held) is missing. Each client maps this to
+ * whose every step is past is out of date, never drawn as today's, nor is a
+ * forecast total once it has run out (`weatherTotalsNow`); a total the run left
+ * out (an hour no run held) is missing. Each client maps this to
  * its own bar and archive. Guard: weatherMap.test.ts.
  */
 export type WeatherShown =
@@ -544,6 +571,8 @@ export function weatherShown(input: {
   if (isWeatherTotal(layer)) {
     if (!file.totals.includes(layer.key as WeatherTotalKey))
       return { kind: "missing" };
+    if (!weatherTotalsNow(file, now).includes(layer.key as WeatherTotalKey))
+      return { kind: "outOfDate" };
     const shown = weatherShownLabel(file, layer.key, 0, now);
     return { kind: "ready", layer, step: null, first: 0, last: 0, shown, age };
   }

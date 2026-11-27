@@ -98,6 +98,7 @@ import {
   WEATHER_MAP,
   weatherPointSource,
   weatherLayer,
+  weatherTotalsNow,
   type OverlayTerrainKey,
   type WeatherLayerKey,
   fireNameOf,
@@ -6454,7 +6455,9 @@ export function MapScreen({
         choices={{ coverage: coverageCarrier, weather: weatherLayerKey }}
         onChoiceChange={chooseOverlayChoice}
         weatherKept={keptWeather !== null}
-        weatherTotals={weather.file?.totals ?? null}
+        weatherTotals={
+          weather.file ? weatherTotalsNow(weather.file, weather.now) : null
+        }
         artifacts={artifacts}
         hasVegetation={mergedOverlays.jobs.some((job) =>
           job.layers.some((layer) => layer.name === "vegetation"),

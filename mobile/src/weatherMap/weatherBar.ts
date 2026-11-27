@@ -3,8 +3,12 @@
 // and the out-of-date and missing cases for both clients.
 import {
   MAP_TERRAIN,
+  isWeatherEstimate,
+  isWeatherTotal,
+  weatherLayer,
   weatherScale,
   weatherShown,
+  weatherTotalsNow,
   type WeatherPick,
   type WeatherLayerKey,
   type WeatherMapFile,
@@ -14,7 +18,14 @@ import {
 export type WeatherBarModel =
   | { kind: "loading"; text: string }
   | { kind: "failed"; text: string; canRetry: boolean }
-  | { kind: "outOfDate"; text: string }
+  /** A forecast total that has run out carries the rail as `missing` does,
+   *  so a past period can be picked; a stepped layer has no rail. */
+  | {
+      kind: "outOfDate";
+      text: string;
+      layer?: WeatherLayerKey;
+      totals?: WeatherTotalKey[];
+    }
   /** A total this run leaves out: failed words, and the card's rail of
    *  periods, so another can be picked. Nothing to retry until a newer run. */
   | {
@@ -66,21 +77,28 @@ export function weatherBarModel(input: {
     picked: input.picked,
     now,
   });
+  const totals = weatherTotalsNow(file, now);
   if (shown.kind === "outOfDate")
-    return { kind: "outOfDate", text: copy.weatherOutOfDate };
+    return {
+      kind: "outOfDate",
+      text: copy.weatherOutOfDate,
+      ...(isWeatherTotal(weatherLayer(input.layer))
+        ? { layer: input.layer, totals }
+        : {}),
+    };
   if (shown.kind !== "ready")
     return {
       kind: "missing",
       text: copy.weatherFailed,
       layer: input.layer,
-      totals: file.totals,
+      totals,
     };
   const { layer, step, first, last } = shown;
   return {
     kind: "ready",
     layer: layer.key,
-    totals: file.totals,
-    title: `${layer.label} (${layer.unit})`,
+    totals,
+    title: `${layer.label} (${layer.unit})${isWeatherEstimate(layer) ? `, ${copy.weatherEstimated}` : ""}`,
     detail: `${shown.shown} · ${shown.age}`,
     scale: weatherScale(layer.key),
     scrub: step === null ? null : { first, last, step, value: shown.shown },

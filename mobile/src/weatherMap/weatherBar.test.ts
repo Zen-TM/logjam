@@ -91,6 +91,34 @@ describe("weatherBarModel", () => {
     });
   });
 
+  // Mutation: drop `isWeatherEstimate` from the title, and a past total reads
+  // as a gauge's count; apply it to every total, and a forecast says "estimated".
+  it("ends a past total's title with estimated, and no other", () => {
+    expect(weatherBarModel({ ...base, layer: "rainPast168" })).toMatchObject({
+      title: "Rain, past 7 days (mm), estimated",
+    });
+    expect(weatherBarModel({ ...base, layer: "rainNext24" })).toMatchObject({
+      title: "Rain, next 24 h (mm)",
+    });
+  });
+
+  // Mutation: read `file.totals` instead of `weatherTotalsNow`, or leave the
+  // rail data off the out-of-date model, and a kept run's run-out forecast has
+  // a card with no way to a past period, or its rail enables the dead period.
+  it("says a run-out forecast total is out of date, with the rail's data", () => {
+    const now = Date.parse("2026-11-07T16:30Z");
+    expect(weatherBarModel({ ...base, layer: "rainNext24", now })).toEqual({
+      kind: "outOfDate",
+      text: copy.weatherOutOfDate,
+      layer: "rainNext24",
+      totals: ["rainPast168"],
+    });
+    // A past total in the same run is still drawn.
+    expect(
+      weatherBarModel({ ...base, layer: "rainPast168", now }),
+    ).toMatchObject({ kind: "ready", totals: ["rainPast168"] });
+  });
+
   // Mutation: leave `totals` off a ready model, and the rail cannot disable
   // the periods the run lacks.
   it("carries the run's totals on a ready bar", () => {

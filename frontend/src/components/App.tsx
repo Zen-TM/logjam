@@ -141,6 +141,7 @@ import {
   drawsCoverage,
   WEATHER_LAYER_DEFAULT,
   weatherLayer,
+  weatherTotalsNow,
   normalizeUserUiPreferences,
   type TerrainSwitchKey,
   MAP_OVERLAY_DEFAULTS,
@@ -2405,7 +2406,7 @@ function App() {
           onWeatherLayerChange={setWeatherLayer}
           weatherTotals={
             weatherMap.state.status === "ready"
-              ? weatherMap.state.file.totals
+              ? weatherTotalsNow(weatherMap.state.file, weatherMap.now)
               : null
           }
           slopeBands={slopeBands.bands}

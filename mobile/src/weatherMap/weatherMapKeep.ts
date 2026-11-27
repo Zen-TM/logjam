@@ -5,7 +5,9 @@
 // asked again every CHECK_EVERY files, and not by a timer (ADR 0013). About 420
 // small files, about 12 MB, shared by all areas, each run replacing the one
 // before; the manifest is written last, so a download that stops, or loses its
-// connection, leaves the run before it whole. Guard: weatherMapKeep.test.ts.
+// connection, leaves the run before it whole. The run lasts as long as a saved
+// area does: the last one's removal drops it (`dropKeptWeather`), and so does
+// the sign-out wipe. Guard: weatherMapKeep.test.ts.
 import { downloadFromPresignedUrl } from "../api/presignedTransfer";
 import { config } from "../config";
 import { assertSpaceFor } from "../offline/freeSpace";

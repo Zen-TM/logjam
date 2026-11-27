@@ -150,7 +150,10 @@ import {
   type CompletedOverlaysResponse,
 } from "../map/topoOverlays";
 import { downloadTopoOverlay } from "../offline/overlayDownloads";
-import { deleteDownloadedArtifact } from "../offline/regionDownloads";
+import {
+  deleteDownloadedArtifact,
+  dropKeptWeatherWithoutAreas,
+} from "../offline/regionDownloads";
 import { renameArtifact } from "../offline/registryDb";
 import { canUpdateRegion, startRegionUpdate } from "../offline/regionUpdate";
 import { useMapArtifacts } from "../offline/useMapArtifacts";
@@ -767,7 +770,9 @@ export function SavedScreen({
     });
     if (!ok) return;
     const gone = new Set(group.regions.map((region) => region.id));
-    for (const id of gone) void deleteRegionFile(id);
+    Promise.all([...gone].map(deleteRegionFile))
+      .then(dropKeptWeatherWithoutAreas)
+      .catch(console.error);
     setOrphans((current) => current.filter((row) => !gone.has(row.id)));
   }, []);
   // Per-job detail (which basemap, pause/resume/stop, failure copy) lives in

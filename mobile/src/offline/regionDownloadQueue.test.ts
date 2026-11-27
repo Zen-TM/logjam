@@ -44,6 +44,7 @@ vi.mock("./registryDb", () => ({ renameArtifactGroup }));
 vi.mock("./regionDownloads", () => ({
   deleteClipFile: vi.fn(),
   deleteDownloadedArtifact: vi.fn(),
+  dropKeptWeatherWithoutAreas: vi.fn(),
   swapSuperseded,
 }));
 const runRegionDownload = vi.hoisted(() =>
@@ -76,7 +77,9 @@ const {
   stopRegionGroup,
 } = await import("./regionDownloadQueue");
 const { deleteRegionFile } = await import("./regionMbtiles");
-const { deleteDownloadedArtifact } = await import("./regionDownloads");
+const { deleteDownloadedArtifact, dropKeptWeatherWithoutAreas } = await import(
+  "./regionDownloads"
+);
 
 const job = (id: string) => ({
   taskKind: "tile-pyramid" as const,
@@ -313,6 +316,22 @@ describe("stopping an update", () => {
     expect(vi.mocked(deleteDownloadedArtifact).mock.calls.flat()).toContain(
       "done",
     );
+  });
+
+  // Mutation: drop the call from `deleteAbandonedRegion`, and a first save
+  // stopped before it was saved (no artifact to delete) leaves the weather run
+  // its keep began, in a store nothing lists.
+  it("drops the kept weather run when it stops a first save with no area left", async () => {
+    vi.mocked(dropKeptWeatherWithoutAreas).mockClear();
+    enqueueRegionDownloads([{ ...job("never-saved"), groupId: "card" }]);
+    await vi.advanceTimersByTimeAsync(0);
+    stopRegionGroup({
+      groupId: "card",
+      update: false,
+      jobs: [jobOf("never-saved", "paused")],
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(dropKeptWeatherWithoutAreas).toHaveBeenCalled();
   });
 
   // Mutation: announce a stopped run, and what is left of an update the user

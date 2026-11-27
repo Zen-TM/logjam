@@ -542,12 +542,16 @@ export async function cancelAllRegionDownloads(): Promise<void> {
  */
 async function deleteAbandonedRegion(id: string): Promise<void> {
   const { deleteRegionFile } = await import("./regionMbtiles");
-  const { deleteClipFile, deleteDownloadedArtifact } = await import(
-    "./regionDownloads"
-  );
+  const {
+    deleteClipFile,
+    deleteDownloadedArtifact,
+    dropKeptWeatherWithoutAreas,
+  } = await import("./regionDownloads");
   await deleteRegionFile(id);
   await deleteClipFile(id);
   await deleteDownloadedArtifact(id);
+  // A first save that never finished has no artifact to take the run with it.
+  await dropKeptWeatherWithoutAreas();
 }
 
 export type { OfflineBasemapId };

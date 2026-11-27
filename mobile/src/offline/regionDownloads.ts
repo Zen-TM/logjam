@@ -40,7 +40,7 @@ import type { MapArtifact } from "../map/sourceResolver";
 import { failureDetail } from "./failureDetail";
 import { assertSpaceFor } from "./freeSpace";
 import { REGION_DIR } from "./localStores";
-import { settleUpdate } from "./artifactGroups";
+import { isRegionArtifact, settleUpdate } from "./artifactGroups";
 import {
   deleteArtifact,
   insertArtifact,
@@ -536,6 +536,23 @@ export async function runRegionClip(
   }
 }
 
+/**
+ * The kept weather run (ADR 0049) lives only while a saved area does, and
+ * Saved does not list it: when no region is left in the registry (the list
+ * Saved draws its areas from), it goes. Called wherever an area is removed
+ * for good: a delete in Saved, a cancelled download, a discarded half-saved
+ * one. Never rejects. Guard: regionDownloads.test.ts.
+ */
+export async function dropKeptWeatherWithoutAreas(): Promise<void> {
+  try {
+    if ((await listArtifacts()).some(isRegionArtifact)) return;
+    // Loaded when needed: only an area's removal reaches the weather files.
+    await (await import("../weatherMap/weatherMapStorage")).dropKeptWeather();
+  } catch (err) {
+    console.error(err);
+  }
+}
+
 /** Delete any downloaded artifact (region or overlay): registry row + file. */
 export async function deleteDownloadedArtifact(id: string): Promise<void> {
   const artifact = await deleteArtifact(id);
@@ -543,6 +560,7 @@ export async function deleteDownloadedArtifact(id: string): Promise<void> {
     await FileSystem.deleteAsync(`file://${artifact.path}`, {
       idempotent: true,
     }).catch(() => {});
+    if (isRegionArtifact(artifact)) await dropKeptWeatherWithoutAreas();
   }
 }
 

@@ -115,14 +115,8 @@ export function WeatherBar({
         {model.text}
       </Notice>
     );
-  if (model.kind === "outOfDate")
-    return (
-      <Notice icon="warning" tone="warning" action={dismiss}>
-        {model.text}
-      </Notice>
-    );
-  const periods = (layer: WeatherLayerKey, totals: WeatherTotalKey[]) =>
-    isWeatherTotal(weatherLayer(layer)) ? (
+  const periods = (layer?: WeatherLayerKey, totals?: WeatherTotalKey[]) =>
+    layer && totals && isWeatherTotal(weatherLayer(layer)) ? (
       <ChipRail<WeatherTotalKey>
         key="periods"
         scroll
@@ -133,7 +127,9 @@ export function WeatherBar({
         onChange={onLayerChange}
       />
     ) : null;
-  if (model.kind === "missing")
+  // A total the run lacks or has run out carries the rail; a stepped layer's
+  // out-of-date card has none.
+  if (model.kind === "missing" || (model.kind === "outOfDate" && model.layer))
     return (
       <Notice
         icon="warning"
@@ -146,6 +142,12 @@ export function WeatherBar({
           </View>
         }
       >
+        {model.text}
+      </Notice>
+    );
+  if (model.kind === "outOfDate")
+    return (
+      <Notice icon="warning" tone="warning" action={dismiss}>
         {model.text}
       </Notice>
     );
