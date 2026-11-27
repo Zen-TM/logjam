@@ -21,8 +21,9 @@ describe("railNudge", () => {
     expect(railNudge({ x: 500, width: 80 }, viewport, 48)).toBe(
       500 + 80 - 300 + 48,
     );
-    expect(railNudge({ x: 240, width: 80 }, viewport, 48)).toBe(
-      240 + 80 - 300 + 48,
+    // Inside the viewport (ends at 280 of 300) but under the fade.
+    expect(railNudge({ x: 200, width: 80 }, viewport, 48)).toBe(
+      200 + 80 - 300 + 48,
     );
   });
 

@@ -110,7 +110,8 @@ describe("kit screen-reader roles", () => {
 // which fires before layout. Mutation: drop `nudge()` from either `onLayout`,
 // and a rail opened on a chip off the end stays at its start; drop either
 // `accessibilityLabel={label}`, and a screen reader hears an unnamed group on
-// the weather card.
+// the weather card; drop either layout's hint line, or draw the scrolling
+// one inside the fades' box, and a greyed period loses its reason.
 describe("ChipRail", () => {
   it("nudges from layout, and names its radiogroup", () => {
     const source = readFileSync(
@@ -120,5 +121,9 @@ describe("ChipRail", () => {
     expect(source.match(/\bnudge\(\);/g)?.length).toBeGreaterThanOrEqual(2);
     expect(source).toContain("useEffect(nudge, [activeIndex])");
     expect(source.match(/accessibilityLabel=\{label\}/g)).toHaveLength(2);
+    expect(source).toContain("{hintLine}");
+    expect(source).toMatch(
+      /<EdgeFade side="end" \/> : null\}\s*<\/View>\s*\{hint \? <Text style=\{hintStyles\.hint\}>/,
+    );
   });
 });

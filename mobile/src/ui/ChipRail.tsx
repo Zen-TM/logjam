@@ -48,7 +48,7 @@ export function ChipRail<T extends string>({
   /** The group's accessible name, as Logjam Web's rail has. */
   label?: string;
   /** One plain sentence about the choice (why a chip is off), drawn under the
-   *  rail and read with the group, as Logjam Web's rail has. */
+   *  rail; a screen reader reaches it as text, as Field's and ChipPicker's. */
   hint?: string;
 }) {
   const hintStyles = useHintStyles();
@@ -69,11 +69,7 @@ export function ChipRail<T extends string>({
 
   if (!scroll)
     return (
-      <View
-        accessibilityRole="radiogroup"
-        accessibilityLabel={label}
-        accessibilityHint={hint}
-      >
+      <View accessibilityRole="radiogroup" accessibilityLabel={label}>
         <View style={styles.group}>
           {chips}
           {trailing}
@@ -152,49 +148,49 @@ function Rail<T extends string>({
   };
 
   return (
-    <View
-      accessibilityRole="radiogroup"
-      accessibilityLabel={label}
-      accessibilityHint={hint}
-    >
-      <ScrollView
-        ref={scrollRef}
-        horizontal
-        keyboardShouldPersistTaps="handled"
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.rail}
-        onScroll={trackOverflow}
-        onLayout={(event) => {
-          viewport.current = {
-            ...viewport.current,
-            width: event.nativeEvent.layout.width,
-          };
-          nudge();
-        }}
-        onContentSizeChange={() =>
-          // Seed the end fade before any scroll happens.
-          setOverflow((current) =>
-            current.end ? current : { ...current, end: true },
-          )
-        }
-        scrollEventThrottle={16}
-      >
-        {childArray.map((chip, index) => (
-          <View
-            key={chip.key}
-            onLayout={(event) => {
-              const { x, width } = event.nativeEvent.layout;
-              offsets.current.set(index, { x, width });
-              nudge();
-            }}
-          >
-            {chip}
-          </View>
-        ))}
-        {trailing}
-      </ScrollView>
-      {overflow.start ? <EdgeFade side="start" /> : null}
-      {overflow.end ? <EdgeFade side="end" /> : null}
+    <View accessibilityRole="radiogroup" accessibilityLabel={label}>
+      {/* The fades' containing block is the chip row alone, so they never
+          reach the hint under it. Guard: kit.test.ts. */}
+      <View>
+        <ScrollView
+          ref={scrollRef}
+          horizontal
+          keyboardShouldPersistTaps="handled"
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.rail}
+          onScroll={trackOverflow}
+          onLayout={(event) => {
+            viewport.current = {
+              ...viewport.current,
+              width: event.nativeEvent.layout.width,
+            };
+            nudge();
+          }}
+          onContentSizeChange={() =>
+            // Seed the end fade before any scroll happens.
+            setOverflow((current) =>
+              current.end ? current : { ...current, end: true },
+            )
+          }
+          scrollEventThrottle={16}
+        >
+          {childArray.map((chip, index) => (
+            <View
+              key={chip.key}
+              onLayout={(event) => {
+                const { x, width } = event.nativeEvent.layout;
+                offsets.current.set(index, { x, width });
+                nudge();
+              }}
+            >
+              {chip}
+            </View>
+          ))}
+          {trailing}
+        </ScrollView>
+        {overflow.start ? <EdgeFade side="start" /> : null}
+        {overflow.end ? <EdgeFade side="end" /> : null}
+      </View>
       {hint ? <Text style={hintStyles.hint}>{hint}</Text> : null}
     </View>
   );
