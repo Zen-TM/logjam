@@ -8,16 +8,27 @@ import {
   type WeatherPick,
   type WeatherLayerKey,
   type WeatherMapFile,
+  type WeatherTotalKey,
 } from "@logjam/shared";
 
 export type WeatherBarModel =
   | { kind: "loading"; text: string }
   | { kind: "failed"; text: string; canRetry: boolean }
   | { kind: "outOfDate"; text: string }
+  /** A total this run leaves out: failed words, and the card's rail of
+   *  periods, so another can be picked. Nothing to retry until a newer run. */
+  | {
+      kind: "missing";
+      text: string;
+      layer: WeatherLayerKey;
+      totals: WeatherTotalKey[];
+    }
   | {
       kind: "ready";
       /** What Play is tied to: a new layer opens paused. */
       layer: WeatherLayerKey;
+      /** The totals the run has (the card's rail disables the rest). */
+      totals: WeatherTotalKey[];
       title: string;
       /** The step or window on the map, and the run's age. */
       detail: string;
@@ -55,15 +66,20 @@ export function weatherBarModel(input: {
     picked: input.picked,
     now,
   });
+  if (shown.kind === "outOfDate")
+    return { kind: "outOfDate", text: copy.weatherOutOfDate };
   if (shown.kind !== "ready")
-    return shown.kind === "outOfDate"
-      ? { kind: "outOfDate", text: copy.weatherOutOfDate }
-      : // A total this run leaves out draws nothing and there is nothing to retry.
-        { kind: "failed", text: copy.weatherFailed, canRetry: false };
+    return {
+      kind: "missing",
+      text: copy.weatherFailed,
+      layer: input.layer,
+      totals: file.totals,
+    };
   const { layer, step, first, last } = shown;
   return {
     kind: "ready",
     layer: layer.key,
+    totals: file.totals,
     title: `${layer.label} (${layer.unit})`,
     detail: `${shown.shown} · ${shown.age}`,
     scale: weatherScale(layer.key),

@@ -97,6 +97,9 @@
   padding: 0 var(--space-1-5);
   border-radius: var(--radius-pill);
   background: var(--color-card);
+  /* The chips it holds (a rail of periods) fill with the page, not this card's
+     own colour. Guard: Notice.test.tsx. */
+  --chip-fill: var(--color-page);
   color: var(--color-text);
   max-width: 100%;
   box-shadow: var(--shadow-map-card);

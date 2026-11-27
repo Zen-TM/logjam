@@ -204,8 +204,8 @@ describe("the Weather bar", () => {
   // leave the rail's `onChange` unwired, and a period press changes nothing.
   it("picks a period from the card", () => {
     const { onLayerChange } = bar({ layerKey: "rainPast24" });
-    fireEvent.click(screen.getByRole("radio", { name: "Next 72 h" }));
-    expect(onLayerChange).toHaveBeenCalledWith("rainNext72");
+    fireEvent.click(screen.getByRole("radio", { name: "Past 7 days" }));
+    expect(onLayerChange).toHaveBeenCalledWith("rainPast168");
   });
 
   // jsdom has no layout, so the card's height is read from the stylesheets: a
@@ -278,10 +278,31 @@ describe("the Weather bar", () => {
   // asks for the same manifest, which still lacks it.
   it("offers nothing to try again for a total the run left out", () => {
     bar({ layerKey: "rainNext72" });
-    expect(document.body.textContent).toBe(copy.weatherFailed);
+    expect(document.body.textContent).toContain(copy.weatherFailed);
     expect(
       screen.queryByRole("button", { name: WEATHER.copy.tryAgain }),
     ).toBeNull();
+  });
+
+  // Mutation: collapse a missing total to the plain failed notice (no rail),
+  // or leave every period enabled, and a run that dropped one total traps the
+  // user on "Couldn't get the weather map" with no way to the totals it has.
+  it("keeps the rail on a missing total, with the periods the run lacks disabled", () => {
+    const { onLayerChange } = bar({ layerKey: "rainNext72" });
+    const radios = within(
+      screen.getByRole("radiogroup", { name: copy.weatherPeriod }),
+    ).getAllByRole("radio") as HTMLButtonElement[];
+    expect(
+      Object.fromEntries(radios.map((r) => [r.textContent, r.disabled])),
+    ).toEqual({
+      "Past 7 days": false,
+      "Past 72 h": true,
+      "Past 24 h": false,
+      "Next 24 h": true,
+      "Next 72 h": true,
+    });
+    fireEvent.click(screen.getByRole("radio", { name: "Past 7 days" }));
+    expect(onLayerChange).toHaveBeenCalledWith("rainPast168");
   });
 
   // Mutation: drop `quiet`, and a screen reader re-reads the bar on every

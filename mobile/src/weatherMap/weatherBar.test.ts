@@ -80,12 +80,25 @@ describe("weatherBarModel", () => {
   });
 
   // Mutation: treat a total the run leaves out as ready, and the bar shows a
-  // window over a map that draws nothing.
-  it("fails, without a retry, for a total the run does not have", () => {
+  // window over a map that draws nothing; collapse it to `failed` again, and
+  // the card has no rail and no way to a total the run has.
+  it("says a total the run does not have is missing, with the totals it has", () => {
     expect(weatherBarModel({ ...base, layer: "rainPast72" })).toEqual({
-      kind: "failed",
+      kind: "missing",
       text: copy.weatherFailed,
-      canRetry: false,
+      layer: "rainPast72",
+      totals: base.file!.totals,
+    });
+  });
+
+  // Mutation: leave `totals` off a ready model, and the rail cannot disable
+  // the periods the run lacks.
+  it("carries the run's totals on a ready bar", () => {
+    expect(
+      weatherBarModel({ ...base, layer: base.file!.totals[0]! }),
+    ).toMatchObject({
+      kind: "ready",
+      totals: base.file!.totals,
     });
   });
 

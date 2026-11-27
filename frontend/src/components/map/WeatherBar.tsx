@@ -5,9 +5,10 @@ import {
   WEATHER_MAP,
   type WeatherLayerKey,
   type WeatherTotalKey,
-  WEATHER_PERIODS,
   isWeatherTotal,
+  weatherLayer,
   weatherNextStep,
+  weatherPeriodOptions,
   weatherScale,
 } from "@logjam/shared";
 import { ChipRail, ColourScale, IconButton, Notice, Scrubber } from "../../ui";
@@ -103,11 +104,36 @@ export default function WeatherBar({
       onClick={onDismiss}
     />
   );
+  // A total's periods, those the run lacks left off: the user can pick another
+  // even when the one chosen is missing.
+  const periods = isWeatherTotal(weatherLayer(layerKey)) ? (
+    <ChipRail<WeatherTotalKey>
+      label={copy.weatherPeriod}
+      options={weatherPeriodOptions(
+        state.status === "ready" ? state.file.totals : null,
+      )}
+      value={layerKey as WeatherTotalKey}
+      onChange={onLayerChange}
+    />
+  ) : null;
   if (view.kind === "off") return null;
   if (view.kind === "loading")
     return (
       <Notice icon="weatherMap" action={dismiss}>
         {copy.weatherLoading}
+      </Notice>
+    );
+  // The total the run lacks: the failed words on the card, over the rail.
+  if (view.kind === "missing" && periods)
+    return (
+      <Notice
+        icon="warning"
+        tone="warning"
+        fixedWidth
+        action={dismiss}
+        controls={<span className={classes.controls}>{periods}</span>}
+      >
+        {copy.weatherFailed}
       </Notice>
     );
   if (view.kind !== "ready")
@@ -171,14 +197,7 @@ export default function WeatherBar({
               />
             </span>
           )}
-          {isWeatherTotal(layer) && (
-            <ChipRail<WeatherTotalKey>
-              label={copy.weatherPeriod}
-              options={WEATHER_PERIODS}
-              value={layer.key as WeatherTotalKey}
-              onChange={onLayerChange}
-            />
-          )}
+          {periods}
           <ColourScale stops={weatherScale(layer.key)} />
         </span>
       }

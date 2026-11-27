@@ -11,7 +11,10 @@
   padding: 0 var(--space-1);
   border-radius: var(--radius-pill);
   border: var(--hairline);
-  background: var(--color-card);
+  /* A surface that is itself a card (a `Notice`) sets `--chip-fill` to the
+     page colour, so an unselected chip is told from it by fill as well as
+     edge (shared/DESIGN.md §1; the pair is `card on page` in wcag-contrast). */
+  background: var(--chip-fill, var(--color-card));
   color: var(--color-text);
   font-family: inherit;
   line-height: inherit;

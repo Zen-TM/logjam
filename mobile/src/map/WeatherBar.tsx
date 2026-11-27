@@ -5,10 +5,10 @@ import {
   WEATHER,
   type WeatherLayerKey,
   type WeatherTotalKey,
-  WEATHER_PERIODS,
   isWeatherTotal,
   weatherLayer,
   weatherNextStep,
+  weatherPeriodOptions,
 } from "@logjam/shared";
 
 import {
@@ -97,6 +97,7 @@ export function WeatherBar({
       controlSize.sm * 3 -
       spacing(0.5) * 3,
   );
+  const controlsWidth = width + controlSize.sm * 3 + spacing(0.5) * 3;
   const dismiss = (
     <IconButton
       icon="close"
@@ -116,6 +117,32 @@ export function WeatherBar({
   if (model.kind === "outOfDate")
     return (
       <Notice icon="warning" tone="warning" action={dismiss}>
+        {model.text}
+      </Notice>
+    );
+  const periods = (layer: WeatherLayerKey, totals: WeatherTotalKey[]) =>
+    isWeatherTotal(weatherLayer(layer)) ? (
+      <ChipRail<WeatherTotalKey>
+        scroll
+        label={copy.weatherPeriod}
+        options={weatherPeriodOptions(totals)}
+        value={layer as WeatherTotalKey}
+        onChange={onLayerChange}
+      />
+    ) : null;
+  if (model.kind === "missing")
+    return (
+      <Notice
+        icon="warning"
+        tone="warning"
+        compact
+        action={dismiss}
+        controls={
+          <View style={[styles.controls, { width: controlsWidth }]}>
+            {periods(model.layer, model.totals)}
+          </View>
+        }
+      >
         {model.text}
       </Notice>
     );
@@ -154,12 +181,7 @@ export function WeatherBar({
       controls={
         // As wide as the scrubber's row, so a total's scale (no scrubber)
         // still spaces its numbers.
-        <View
-          style={[
-            styles.controls,
-            { width: width + controlSize.sm * 3 + spacing(0.5) * 3 },
-          ]}
-        >
+        <View style={[styles.controls, { width: controlsWidth }]}>
           {scrub ? (
             <View style={styles.scrub}>
               <IconButton
@@ -200,15 +222,7 @@ export function WeatherBar({
               />
             </View>
           ) : null}
-          {isWeatherTotal(weatherLayer(model.layer)) ? (
-            <ChipRail<WeatherTotalKey>
-              scroll
-              label={copy.weatherPeriod}
-              options={[...WEATHER_PERIODS]}
-              value={model.layer as WeatherTotalKey}
-              onChange={onLayerChange}
-            />
-          ) : null}
+          {periods(model.layer, model.totals)}
           <ColourScale stops={model.scale} compact />
         </View>
       }

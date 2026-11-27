@@ -104,13 +104,16 @@ type Stop = { value: number; colour: RgbaHex; label?: string };
 
 export type WeatherLayer = {
   key: WeatherLayerKey;
-  /** The picker's option, and the bar's title. */
+  /** The bar's title, and the picker's option for a stepped layer. */
   label: string;
   unit: string;
   /** Interpolated, low to high; a `label` stop is a legend row. */
   stops: readonly Stop[];
   /** Hours either side of the anchor, for a total; absent for a field. */
   hours?: number;
+  /** A total's short name on the card's rail ("Past 24 h"); absent for a
+   *  field. Guard: weatherMap.test.ts holds `period` and `hours` together. */
+  period?: string;
   /** Whether wind arrows go over it. */
   arrows?: boolean;
 };
@@ -194,8 +197,10 @@ const WIND_STOPS = withClear(5, [
   { value: 100, colour: "#ae3ec9bf", label: "100" },
 ]);
 
-/** The picker's options in order: the stepped fields, then the totals from
- *  the furthest past to the furthest ahead. */
+/** Every layer the overlay can draw, in order: the stepped fields, then the
+ *  totals from the furthest past to the furthest ahead. The picker offers the
+ *  fields and one chip for the totals (`WEATHER_TOTALS_CHIP`); the card's
+ *  rail offers the totals by their `period`. */
 export const WEATHER_LAYERS: readonly WeatherLayer[] = [
   { key: "rain", label: "Rain", unit: "mm/h", stops: RAIN_STOPS },
   {
@@ -224,6 +229,7 @@ export const WEATHER_LAYERS: readonly WeatherLayer[] = [
     unit: "mm",
     stops: TOTAL_STOPS,
     hours: -168,
+    period: MAP_TERRAIN.copy.weatherPast168,
   },
   {
     key: "rainPast72",
@@ -231,6 +237,7 @@ export const WEATHER_LAYERS: readonly WeatherLayer[] = [
     unit: "mm",
     stops: TOTAL_STOPS,
     hours: -72,
+    period: MAP_TERRAIN.copy.weatherPast72,
   },
   {
     key: "rainPast24",
@@ -238,6 +245,7 @@ export const WEATHER_LAYERS: readonly WeatherLayer[] = [
     unit: "mm",
     stops: TOTAL_STOPS,
     hours: -24,
+    period: MAP_TERRAIN.copy.weatherPast24,
   },
   {
     key: "rainNext24",
@@ -245,6 +253,7 @@ export const WEATHER_LAYERS: readonly WeatherLayer[] = [
     unit: "mm",
     stops: TOTAL_STOPS,
     hours: 24,
+    period: MAP_TERRAIN.copy.weatherNext24,
   },
   {
     key: "rainNext72",
@@ -252,6 +261,7 @@ export const WEATHER_LAYERS: readonly WeatherLayer[] = [
     unit: "mm",
     stops: TOTAL_STOPS,
     hours: 72,
+    period: MAP_TERRAIN.copy.weatherNext72,
   },
 ];
 
@@ -265,45 +275,66 @@ export function weatherLayer(key: string | undefined): WeatherLayer {
 }
 
 /**
- * The five totals as the card's periods, past to future. The layer picker
- * shows them as one chip (`WEATHER_TOTALS_CHIP`) and the card holds the
- * choice among them. Guard: weatherMap.test.ts.
+ * The totals as the card's periods, past to future, read off `WEATHER_LAYERS`.
+ * The layer picker shows them as one chip (`WEATHER_TOTALS_CHIP`) and the card
+ * holds the choice among them. Guard: weatherMap.test.ts.
  */
 export const WEATHER_PERIODS: readonly {
   value: WeatherTotalKey;
   label: string;
-}[] = [
-  { value: "rainPast168", label: MAP_TERRAIN.copy.weatherPast168 },
-  { value: "rainPast72", label: MAP_TERRAIN.copy.weatherPast72 },
-  { value: "rainPast24", label: MAP_TERRAIN.copy.weatherPast24 },
-  { value: "rainNext24", label: MAP_TERRAIN.copy.weatherNext24 },
-  { value: "rainNext72", label: MAP_TERRAIN.copy.weatherNext72 },
-];
+}[] = WEATHER_LAYERS.flatMap((l) =>
+  l.period === undefined
+    ? []
+    : [{ value: l.key as WeatherTotalKey, label: l.period }],
+);
 
 /** The picker's chip for every total; not a layer key. */
 export const WEATHER_TOTALS_CHIP = "rainTotals";
 
-/** The total the chip picks from a stepped layer. */
+/** The total the chip picks from a stepped layer, when the run has it. */
 export const WEATHER_PERIOD_DEFAULT: WeatherTotalKey = "rainPast24";
 
 const isPeriod = (key: string | null | undefined) =>
   WEATHER_PERIODS.some((p) => p.value === key);
+
+/**
+ * The card's rail: every period, those the run's manifest lacks disabled (a
+ * run drops a total when an hour it needs is missing). Every period is on
+ * until a manifest is known.
+ */
+export const weatherPeriodOptions = (
+  totals?: readonly string[] | null,
+): { value: WeatherTotalKey; label: string; disabled: boolean }[] =>
+  WEATHER_PERIODS.map((p) => ({
+    ...p,
+    disabled: totals != null && !totals.includes(p.value),
+  }));
+
+/** The total the totals chip picks: 24 h past, else the first the run has. */
+export const weatherPeriodDefault = (
+  totals?: readonly string[] | null,
+): WeatherTotalKey =>
+  totals == null || totals.includes(WEATHER_PERIOD_DEFAULT)
+    ? WEATHER_PERIOD_DEFAULT
+    : (WEATHER_PERIODS.find((p) => totals.includes(p.value))?.value ??
+      WEATHER_PERIOD_DEFAULT);
 
 /** The picker's chip that stands for the stored layer `key`. */
 export const weatherChip = (key: string | null | undefined): string =>
   isPeriod(key) ? WEATHER_TOTALS_CHIP : (key ?? WEATHER_LAYER_DEFAULT);
 
 /** The layer to store when `chip` is pressed with `key` stored: the totals
- *  chip keeps the period already picked. */
+ *  chip keeps the period already picked, else takes the run's default. */
 export const weatherChipLayer = (
   chip: string,
   key: string | null | undefined,
+  totals?: readonly string[] | null,
 ) =>
   chip !== WEATHER_TOTALS_CHIP
     ? chip
     : isPeriod(key)
       ? key!
-      : WEATHER_PERIOD_DEFAULT;
+      : weatherPeriodDefault(totals);
 
 export const isWeatherTotal = (layer: WeatherLayer): boolean =>
   layer.hours !== undefined;

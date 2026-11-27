@@ -21,6 +21,8 @@ import {
   isWeatherTotal,
   weatherChip,
   weatherChipLayer,
+  weatherPeriodDefault,
+  weatherPeriodOptions,
   weatherLayer,
   weatherLayerUrl,
   weatherLegendRows,
@@ -437,6 +439,48 @@ describe("the Weather legend", () => {
       "Next 24 h",
       "Next 72 h",
     ]);
+  });
+
+  // Mutation: give a total no `period` (or a field one), and the card's rail
+  // misses a period or lists a stepped layer.
+  it("gives every total a period and no field one", () => {
+    for (const l of WEATHER_LAYERS)
+      expect(l.period !== undefined, l.key).toBe(isWeatherTotal(l));
+  });
+
+  // Mutation: build the options without `disabled`, and a run that dropped a
+  // total still offers it, to a bar that says "couldn't get the weather map".
+  it("disables the periods a run's manifest lacks", () => {
+    const only = ["rainPast168", "rainNext72"];
+    expect(
+      weatherPeriodOptions(only)
+        .filter((o) => !o.disabled)
+        .map((o) => o.value),
+    ).toEqual(only);
+    expect(weatherPeriodOptions(null).some((o) => o.disabled)).toBe(false);
+  });
+
+  // Mutation: return "rainPast24" whatever the run has, and the totals chip
+  // picks a total the run lacks, leaving no way to a total that exists.
+  it("picks 24 h past when the run has it, else the first it has", () => {
+    expect(weatherPeriodDefault(null)).toBe("rainPast24");
+    expect(weatherPeriodDefault(["rainPast24", "rainNext24"])).toBe(
+      "rainPast24",
+    );
+    expect(weatherPeriodDefault(["rainNext72", "rainNext24"])).toBe(
+      "rainNext24",
+    );
+    expect(weatherChipLayer(WEATHER_TOTALS_CHIP, "wind", ["rainPast72"])).toBe(
+      "rainPast72",
+    );
+    expect(
+      overlayChoicePick(legend, WEATHER_TOTALS_CHIP, "rain", ["rainNext72"]),
+    ).toBe("rainNext72");
+    // A period already picked is kept, even one the run lacks: the card
+    // shows it missing and offers the others.
+    expect(weatherChipLayer(WEATHER_TOTALS_CHIP, "rainPast168", [])).toBe(
+      "rainPast168",
+    );
   });
 
   // Mutation: make `weatherChip` return the key as given, and a stored total

@@ -127,9 +127,16 @@ describe("the weather picker and card", () => {
   it("draw their chips from shared", () => {
     const sheet = source("MapLayersSheet.tsx");
     expect(sheet).toContain("overlayChoiceOption(legend, choice.value)");
-    expect(sheet).toContain("overlayChoicePick(legend, option, choice.value)");
-    expect(source("WeatherBar.tsx")).toContain(
-      "options={[...WEATHER_PERIODS]}",
-    );
+    expect(sheet).toContain("overlayChoicePick(");
+    expect(sheet).toContain("choice.available");
+    // The card's rail: one line (`scroll`), only on a total, named from shared,
+    // its periods from the run's totals. Mutation: drop any of the four, and
+    // the card wraps, grows a rail on a stepped layer, has an unnamed group,
+    // or offers a period the run lacks.
+    const bar = source("WeatherBar.tsx");
+    expect(bar).toContain("isWeatherTotal(weatherLayer(layer))");
+    expect(bar).toMatch(/<ChipRail<WeatherTotalKey>\s+scroll\b/);
+    expect(bar).toContain("label={copy.weatherPeriod}");
+    expect(bar).toContain("weatherPeriodOptions(totals)");
   });
 });

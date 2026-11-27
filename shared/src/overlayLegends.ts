@@ -69,7 +69,12 @@ export type OverlayLegend = {
      */
     stored?: {
       chip: (stored: string | null | undefined) => string;
-      pick: (chip: string, stored: string | null | undefined) => string;
+      pick: (
+        chip: string,
+        stored: string | null | undefined,
+        /** What the source has now (Weather's `file.totals`), if known. */
+        available?: readonly string[] | null,
+      ) => string;
       label: (stored: string | undefined) => string | undefined;
     };
   };
@@ -201,6 +206,7 @@ export function overlayChoicePick(
   legend: OverlayLegend,
   option: string,
   value: string | null | undefined,
+  available?: readonly string[] | null,
 ): string {
-  return legend.choice?.stored?.pick(option, value) ?? option;
+  return legend.choice?.stored?.pick(option, value, available) ?? option;
 }

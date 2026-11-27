@@ -76,13 +76,15 @@ export const MAP_TERRAIN = {
     coverageCaveat:
       "It's a prediction, and valley and canyon floors are where it's most often wrong. A reseller on Telstra's network may get less than Telstra's own.",
     weather: "Weather",
-    // The Weather tab's (`MAP_LAYERS`): its switch, a picker of
-    // `WEATHER_LAYERS`, and the chosen layer's key, inline.
+    // The Weather tab's (`MAP_LAYERS`): its switch, a picker of the stepped
+    // `WEATHER_LAYERS` and one chip for the totals, and the chosen layer's key,
+    // inline.
     weatherAbout: "About the weather map",
     weatherLayer: "Show",
     // The picker's one chip for the five rain totals, and the card's rail of
-    // them (`WEATHER_PERIODS`): the chip says what they are, the card's group
-    // name says what the chips on it choose.
+    // them (`WEATHER_PERIODS`, whose labels are the `period` of each total in
+    // `WEATHER_LAYERS`): the chip says what they are, the card's group name says
+    // what the chips on it choose.
     weatherTotals: "Rain accumulation",
     weatherPeriod: "Rain accumulation period",
     weatherPast168: "Past 7 days",

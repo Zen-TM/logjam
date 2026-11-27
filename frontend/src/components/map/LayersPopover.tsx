@@ -106,6 +106,7 @@ export default function LayersPopover({
   onCoverageCarrierChange,
   weatherLayer: weatherLayerKey,
   onWeatherLayerChange,
+  weatherTotals,
   slopeBands,
   onSlopeBandsChange,
   mapView,
@@ -149,6 +150,8 @@ export default function LayersPopover({
   onCoverageCarrierChange: (carrier: CarrierId) => void;
   weatherLayer: WeatherLayerKey;
   onWeatherLayerChange: (layer: WeatherLayerKey) => void;
+  /** The totals the weather run on the map has, once it is known. */
+  weatherTotals?: readonly string[] | null;
   slopeBands: SlopeBand[];
   onSlopeBandsChange: (bands: SlopeBand[]) => void;
   mapView: { lng: number; lat: number; zoom: number } | null;
@@ -392,6 +395,7 @@ export default function LayersPopover({
                   checked={terrainLayers.weather}
                   onToggle={(on) => onTerrainLayerChange("weather", on)}
                   layer={weatherLayerKey}
+                  totals={weatherTotals}
                   onLayerChange={(value) =>
                     onWeatherLayerChange(weatherLayer(value).key)
                   }
@@ -619,7 +623,12 @@ export function OverlayLegendRow({
   /** The value of `legend.choice`, for an overlay that has one: null until
    *  one is picked, when the row offers the legend's choice in place of its
    *  switch. */
-  choice?: { value: string | null; onChange: (value: string) => void };
+  choice?: {
+    value: string | null;
+    onChange: (value: string) => void;
+    /** What the source has now, for a choice whose pick depends on it. */
+    available?: readonly string[] | null;
+  };
 }) {
   const [legendOpen, setLegendOpen] = useState(false);
   const openLegend = () => setLegendOpen(true);
@@ -676,7 +685,12 @@ function OverlayLegendBody({
   onToggle,
 }: {
   legend: OverlayLegend;
-  choice?: { value: string | null; onChange: (value: string) => void };
+  choice?: {
+    value: string | null;
+    onChange: (value: string) => void;
+    /** What the source has now, for a choice whose pick depends on it. */
+    available?: readonly string[] | null;
+  };
   onToggle: (next: boolean) => void;
 }) {
   return (
@@ -690,7 +704,9 @@ function OverlayLegendBody({
             // The first pick comes from the row's button: the overlay was
             // asked for, so it comes on.
             if (overlayAwaitsChoice(legend, choice.value)) onToggle(true);
-            choice.onChange(overlayChoicePick(legend, option, choice.value));
+            choice.onChange(
+              overlayChoicePick(legend, option, choice.value, choice.available),
+            );
           }}
           wrap
         />
@@ -725,11 +741,14 @@ export function WeatherPane({
   checked,
   onToggle,
   layer,
+  totals,
   onLayerChange,
 }: {
   checked: boolean;
   onToggle: (next: boolean) => void;
   layer: string;
+  /** The totals the run has: the totals chip picks one of them. */
+  totals?: readonly string[] | null;
   onLayerChange: (value: string) => void;
 }) {
   const legend = OVERLAY_LEGENDS.weather;
@@ -749,7 +768,7 @@ export function WeatherPane({
       />
       <OverlayLegendBody
         legend={legend}
-        choice={{ value: layer, onChange: onLayerChange }}
+        choice={{ value: layer, onChange: onLayerChange, available: totals }}
         onToggle={onToggle}
       />
     </div>

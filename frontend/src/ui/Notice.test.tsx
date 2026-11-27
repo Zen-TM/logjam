@@ -104,4 +104,21 @@ describe("Notice", () => {
     expect(words.className).toMatch(/twoLines/);
     expect(words.textContent).toBe("A long name");
   });
+
+  // Mutation: drop `--chip-fill` from `.notice`, or from `.chip`'s background,
+  // and an unselected chip on the weather card is card on card: a hairline
+  // alone, about 1.3:1 in the dark schemes.
+  it("fills the chips it holds with the page, not its own card colour", () => {
+    const dir = dirname(fileURLToPath(import.meta.url));
+    const rule = (file: string, selector: string) =>
+      readFileSync(join(dir, file), "utf8").match(
+        new RegExp(`^\\${selector} \\{([^}]*)\\}`, "m"),
+      )?.[1];
+    expect(rule("MapControl.module.css", ".notice")).toContain(
+      "--chip-fill: var(--color-page)",
+    );
+    expect(rule("Chip.module.css", ".chip")).toContain(
+      "background: var(--chip-fill, var(--color-card))",
+    );
+  });
 });

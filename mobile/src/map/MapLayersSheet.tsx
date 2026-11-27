@@ -198,6 +198,7 @@ export function MapLayersSheet({
   choices,
   onChoiceChange,
   weatherKept,
+  weatherTotals,
   artifacts,
   layers,
   hasVegetation,
@@ -225,6 +226,8 @@ export function MapLayersSheet({
   onChoiceChange: (key: OverlayTerrainKey, value: string) => void;
   /** A weather run is kept with a saved area, so Weather draws offline. */
   weatherKept: boolean;
+  /** The totals the weather run on the map has, once it is known. */
+  weatherTotals?: readonly string[] | null;
   artifacts: MapArtifact[];
   /** Every kind drawn over the basemap, in the order they are listed. */
   layers: LayerToggleEntry[];
@@ -317,6 +320,7 @@ export function MapLayersSheet({
         state={weatherSwitch}
         onChange={(on) => onTerrainLayerChange("weather", on)}
         layer={choices.weather}
+        totals={weatherTotals}
         onLayerChange={(value) => onChoiceChange("weather", value)}
       />
     ),
@@ -351,6 +355,7 @@ export function MapLayersSheet({
               ? {
                   choice: {
                     value: choices[legend],
+                    available: legend === "weather" ? weatherTotals : null,
                     onChange: (value: string) =>
                       legend === "coverage"
                         ? pickCoverageCarrier(
@@ -588,11 +593,14 @@ function WeatherTab({
   state,
   onChange,
   layer,
+  totals,
   onLayerChange,
 }: {
   state: TerrainSwitchState;
   onChange: (on: boolean) => void;
   layer: string | null | undefined;
+  /** The totals the run has: the totals chip picks one of them. */
+  totals?: readonly string[] | null;
   onLayerChange: (value: string) => void;
 }) {
   const styles = useStyles();
@@ -610,7 +618,7 @@ function WeatherTab({
       />
       <OverlayLegendSheet
         legend={legend}
-        choice={{ value: layer, onChange: onLayerChange }}
+        choice={{ value: layer, onChange: onLayerChange, available: totals }}
       />
     </View>
   );
@@ -645,6 +653,8 @@ function OverlayLegendSheet({
   choice?: {
     value: string | null | undefined;
     onChange: (value: string) => void;
+    /** What the source has now, for a choice whose pick depends on it. */
+    available?: readonly string[] | null;
   };
 }) {
   const styles = useStyles();
@@ -656,7 +666,14 @@ function OverlayLegendSheet({
             options={[...legend.choice.options]}
             value={overlayChoiceOption(legend, choice.value)}
             onChange={(option) =>
-              choice.onChange(overlayChoicePick(legend, option, choice.value))
+              choice.onChange(
+                overlayChoicePick(
+                  legend,
+                  option,
+                  choice.value,
+                  choice.available,
+                ),
+              )
             }
           />
         </Field>

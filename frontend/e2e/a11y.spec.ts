@@ -183,7 +183,13 @@ async function stubWeatherManifest(page: Page) {
           time: new Date(start + i * hour).toISOString(),
           hours: 1,
         })),
-        totals: [],
+        totals: [
+          "rainPast168",
+          "rainPast72",
+          "rainPast24",
+          "rainNext24",
+          "rainNext72",
+        ],
         attribution: "",
       },
     }),
@@ -197,6 +203,22 @@ async function showWeather(page: Page) {
   const layers = page.getByRole("dialog", { name: "Map layers" });
   await layers.getByRole("radio", { name: /^Weather/ }).click();
   await layers.getByRole("switch", { name: "Show weather" }).click();
+}
+
+// From the stepped card to the rain totals' card, whose period rail sits where
+// the scrubber was: the card's own words open Layers on its Weather tab.
+async function showRainTotals(page: Page) {
+  await page.getByTitle("Choose what the weather map shows").click();
+  await page
+    .getByRole("dialog", { name: "Map layers" })
+    .getByRole("radio", { name: "Rain accumulation" })
+    .click();
+  await page.keyboard.press("Escape");
+  const rail = page.getByRole("radiogroup", {
+    name: "Rain accumulation period",
+  });
+  await expect(rail).toBeVisible();
+  return rail;
 }
 
 test.describe("desktop", () => {
@@ -1348,6 +1370,9 @@ test.describe("desktop", () => {
     await page.keyboard.press("Escape");
     await expect(page.getByRole("slider")).toBeVisible();
     await expectNoViolations(page, "[data-tone='info']");
+    // The totals' card, with its rail of periods in place of the scrubber.
+    await showRainTotals(page);
+    await expectNoViolations(page, "[data-tone='info']");
   });
 
   // Stubbed: the gauge file is public and never fetched from prod here.
@@ -2094,6 +2119,13 @@ test.describe("narrow web", () => {
     const box = (await slider.boundingBox())!;
     expect(box.x).toBeGreaterThanOrEqual(0);
     expect(box.x + box.width).toBeLessThanOrEqual(390);
+    // The totals' card: its rail scrolls inside the card, so the card (not the
+    // rail's own width, which is the five chips) stays inside the phone.
+    await showRainTotals(page);
+    await expectNoViolations(page, "[data-tone='info']");
+    const card = (await page.locator("[data-tone='info']").boundingBox())!;
+    expect(card.x).toBeGreaterThanOrEqual(0);
+    expect(card.x + card.width).toBeLessThanOrEqual(390);
   });
 
   test("the tab bar and its More menu", async ({ page }) => {

@@ -105,3 +105,20 @@ describe("kit screen-reader roles", () => {
     expect(source("Chip.tsx")).toContain("{ checked: active, disabled }");
   });
 });
+
+// The nudge runs from the layout callbacks as well as the selection's effect,
+// which fires before layout. Mutation: drop `nudge()` from either `onLayout`,
+// and a rail opened on a chip off the end stays at its start; drop either
+// `accessibilityLabel={label}`, and a screen reader hears an unnamed group on
+// the weather card.
+describe("ChipRail", () => {
+  it("nudges from layout, and names its radiogroup", () => {
+    const source = readFileSync(
+      new URL("./ChipRail.tsx", import.meta.url),
+      "utf8",
+    );
+    expect(source.match(/\bnudge\(\);/g)?.length).toBeGreaterThanOrEqual(2);
+    expect(source).toContain("useEffect(nudge, [activeIndex])");
+    expect(source.match(/accessibilityLabel=\{label\}/g)).toHaveLength(2);
+  });
+});

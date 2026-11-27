@@ -432,12 +432,14 @@ describe("the Weather tab on Logjam Web", () => {
     onToggle?: (on: boolean) => void;
     onChange?: (value: string) => void;
     value?: string;
+    totals?: readonly string[];
   }) =>
     render(
       <WeatherPane
         checked={TERRAIN_LAYER_DEFAULTS.weather}
         onToggle={props.onToggle ?? vi.fn()}
         layer={props.value ?? "temperature"}
+        totals={props.totals}
         onLayerChange={props.onChange ?? vi.fn()}
       />,
     );
@@ -491,6 +493,15 @@ describe("the Weather tab on Logjam Web", () => {
     expect(chip.getAttribute("aria-checked")).toBe("true");
     fireEvent.click(chip);
     expect(onChange).toHaveBeenCalledWith("rainPast72");
+  });
+
+  // Mutation: ignore the run's totals, and the chip picks 24 h past for a run
+  // that dropped it: the card opens on "couldn't get the weather map".
+  it("picks the first total the run has when it lacks 24 h past", () => {
+    const onChange = vi.fn();
+    pane({ onChange, totals: ["rainNext24", "rainNext72"] });
+    fireEvent.click(screen.getByRole("radio", { name: "Rain accumulation" }));
+    expect(onChange).toHaveBeenCalledWith("rainNext24");
   });
 
   // Mutation: drop `className={classes.legendText}` from a legend paragraph,

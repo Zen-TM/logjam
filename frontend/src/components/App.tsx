@@ -2403,6 +2403,11 @@ function App() {
           onCoverageCarrierChange={setCoverageCarrier}
           weatherLayer={weatherLayerKey}
           onWeatherLayerChange={setWeatherLayer}
+          weatherTotals={
+            weatherMap.state.status === "ready"
+              ? weatherMap.state.file.totals
+              : null
+          }
           slopeBands={slopeBands.bands}
           onSlopeBandsChange={slopeBands.setBands}
           mapView={mapCenter}
