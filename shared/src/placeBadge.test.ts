@@ -64,10 +64,13 @@ describe("the place badge images", () => {
 
   it("are exactly what the generator produces", () => {
     const file = join(here, "placeBadgeImages.ts");
-    const committed = readFileSync(file, "utf8");
-    execFileSync("node", [
-      join(here, "../scripts/generate-place-badge-images.mjs"),
-    ]);
-    expect(readFileSync(file, "utf8")).toBe(committed);
+    // `--stdout`: compared, never rewritten, so a drifted file stays drifted
+    // for the next run to report too.
+    const generated = execFileSync(
+      "node",
+      [join(here, "../scripts/generate-place-badge-images.mjs"), "--stdout"],
+      { encoding: "utf8" },
+    );
+    expect(generated).toBe(readFileSync(file, "utf8"));
   });
 });

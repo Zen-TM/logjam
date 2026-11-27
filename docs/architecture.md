@@ -123,6 +123,7 @@ definitions are in `envs/prod/ecs.tf`:
 | `logjam-gauges` | topo worker | `topo/build_gauges.py`: WaterNSW latest readings (every 2 hours), BoM history (daily) and BoM rain gauge totals (every 2 hours) → the public river and rain gauge files under `master/gauges/` | an EventBridge schedule, every 2 hours |
 | `logjam-fire-history` | topo worker | `topo/build_fire_history.py`: NPWS's fire history map service → the most-recent-fire-year raster the vegetation layer reads, under `fire/`, and the public Fire history overlay archive under `master/fire/` | an EventBridge schedule, monthly |
 | `logjam-coverage` | topo worker | `topo/build_coverage.py`: the ACCC's mobile coverage maps on data.gov.au → the public Coverage overlay archive under `master/coverage/` | an EventBridge schedule, monthly |
+| `logjam-weather` | topo worker | `topo/build_weather.py`: Open-Meteo's ECMWF IFS grids → the public Weather overlay files under `master/weather/` ([0049](decisions/0049-the-weather-overlay-is-public-files-cut-from-open-meteos-grids-by-a-job.md)) | an EventBridge schedule, hourly; builds only when a new run has landed |
 | `logjam-api-script` | API | a one-off maintainer script (`api/src/scripts/`); formerly the GeoPDF worker, [0043](decisions/0043-geopdfs-render-in-the-browser.md) | the maintainer, by hand ([announcements](operations/announcements.md#in-prod)) |
 | `logjam-api-migrate` | API | `prisma migrate deploy` | the API deploy workflow, before each release |
 
