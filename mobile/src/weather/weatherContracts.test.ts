@@ -47,7 +47,6 @@ describe("Logjam GPS draws what the weather contracts name", () => {
     expect(view).toContain("cards={found.cards}");
     // Every gauge's row, not the first. Mutation: `rows.find` → red.
     expect(view).toContain(".filter((r) => r.key === row)");
-    // A horizontal scroller that hands the sheet its vertical drags.
     const rail = read("../ui/ForecastRail.tsx");
     // A gauge week's total that sums a modelled day is marked like the day,
     // and read as including it. Mutation: drop `summaryNote` or
@@ -56,6 +55,7 @@ describe("Logjam GPS draws what the weather contracts name", () => {
     expect(view).toContain("summarySpoken={found.summarySpoken}");
     expect(rail).toContain("{summaryNote}");
     expect(rail).toContain("`${title}, ${summarySpoken}`");
+    // A horizontal scroller that hands the sheet its vertical drags.
     expect(rail).toMatch(/<ScrollView\s+horizontal\s+nestedScrollEnabled/);
     // A larger font widens the cards, and the snap follows. Mutation: size
     // the cards from CARD_WIDTH alone, and "10 km/h" wraps at font 1.5.

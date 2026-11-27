@@ -410,11 +410,14 @@ describe("rain gauges", () => {
     ).toBe("true");
     expect(screen.queryByText(WEATHER.copy.pastModel)).toBeNull();
     // The week's total sums those modelled days, so it carries the mark too:
-    // seen ("Model") and read as including them. Mutation: drop `summaryNote`
-    // or `summarySpoken` from the rail → red.
+    // seen ("Model") and read once, as including them. Mutation: drop
+    // `summaryNote` or `summarySpoken` from the rail, or `aria-hidden` from
+    // either visible part → red.
     const total = screen.getByText(/including modelled days/).parentElement;
     expect(total?.textContent).toContain(WEATHER.copy.modelledDay);
-    expect(total?.querySelector("[aria-hidden]")).not.toBeNull();
+    const hidden = total?.querySelectorAll('[aria-hidden="true"]') ?? [];
+    expect(hidden).toHaveLength(2);
+    expect(hidden[1]?.textContent).toBe(WEATHER.copy.modelledDay);
     expect(screen.getByText("© Made-up owner")).toBeTruthy();
   });
 
