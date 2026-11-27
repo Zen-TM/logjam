@@ -18,6 +18,7 @@ import {
   WEATHER_MAP,
   WEATHER_PERIODS,
   WEATHER_TOTALS_CHIP,
+  isWeatherEstimate,
   isWeatherTotal,
   weatherChip,
   weatherChipLayer,
@@ -31,6 +32,7 @@ import {
   weatherReliefColor,
   weatherShown,
   weatherShownLabel,
+  weatherTotalsNow,
   weatherNextStep,
   weatherStepAt,
   weatherTimeLabel,
@@ -465,7 +467,7 @@ describe("the Weather legend", () => {
   // greyed when none is; return it never, and a disabled chip gives no reason.
   it("explains greyed periods only while one is greyed", () => {
     expect(weatherPeriodHint(["rainPast24"])).toBe(
-      "A greyed period isn't in this run.",
+      "A greyed period isn't in this run or has run out.",
     );
     expect(weatherPeriodHint(WEATHER_PERIODS.map((p) => p.value))).toBe(
       undefined,
@@ -607,6 +609,65 @@ describe("what the overlay shows", () => {
         now: anchor,
       }).kind,
     ).toBe("missing");
+  });
+
+  // Mutation: drop the `outOfDate` return for a run-out total (or the
+  // `forecastTotalHours` test in `weatherTotalsNow`), and Next 24 h is drawn
+  // days after, as a forecast of rain that has fallen; make a past total run
+  // out too, and a kept run's Past 24 h goes blank.
+  it("runs a forecast total out after the anchor, and never a past one", () => {
+    const at = (layer: "rainNext24" | "rainPast24", hours: number) =>
+      weatherShown({
+        file,
+        layer,
+        picked: null,
+        now: anchor + hours * 3_600_000,
+      }).kind;
+    expect(at("rainNext24", 5)).toBe("ready");
+    expect(at("rainNext24", 7)).toBe("outOfDate");
+    expect(at("rainPast24", 7 * 24)).toBe("ready");
+    // A total the run never had stays missing, however late.
+    expect(
+      weatherShown({
+        file: { ...file, totals: [] },
+        layer: "rainNext24",
+        picked: null,
+        now: anchor + 7 * 3_600_000,
+      }).kind,
+    ).toBe("missing");
+  });
+
+  // Mutation: filter on the wrong sign (drop the past totals, keep the
+  // forecast ones), or drop nothing, and the rail greys the wrong periods.
+  it("drops only the forecast totals that have run out", () => {
+    const all = file.totals;
+    expect(all).toEqual(
+      expect.arrayContaining(["rainPast24", "rainNext24", "rainNext72"]),
+    );
+    expect(weatherTotalsNow(file, anchor + 6 * 3_600_000)).toEqual(all);
+    const late = weatherTotalsNow(file, anchor + 7 * 3_600_000);
+    expect(late).toEqual(all.filter((k) => (weatherLayer(k).hours ?? 0) < 0));
+    expect(late).toContain("rainPast24");
+  });
+
+  // Mutation: return true for every total, or only for the 24 h one, and a
+  // stepped layer or a forecast says "estimated", or a past total does not.
+  it("calls a past total, and only that, an estimate", () => {
+    expect(
+      Object.fromEntries(
+        WEATHER_LAYERS.map((l) => [l.key, isWeatherEstimate(l)]),
+      ),
+    ).toEqual({
+      rain: false,
+      temperature: false,
+      wind: false,
+      gusts: false,
+      rainPast168: true,
+      rainPast72: true,
+      rainPast24: true,
+      rainNext24: false,
+      rainNext72: false,
+    });
   });
 
   it("ages the run from when it was built", () => {

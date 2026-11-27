@@ -4,7 +4,8 @@
 // files. The manifest is written last: a run with a manifest is whole, and a
 // run folder without one is a download that stopped. The files are public and
 // the same for everyone; they are wiped anyway because every store joins the
-// wipe (ADR 0006).
+// wipe (ADR 0006). The run goes when the last saved area does too
+// (`dropKeptWeather`): it is not listed in Saved, so nothing else clears it.
 import * as FileSystem from "expo-file-system/legacy";
 import {
   WEATHER_MAP,
@@ -65,6 +66,17 @@ export function holdForWipe(running: Promise<unknown>): void {
 export async function stopWeatherMapForWipe(): Promise<void> {
   bumpWeatherMapEpoch();
   await job.catch(() => {});
+}
+
+/**
+ * The last saved area is gone: stop a download in flight (the wipe's epoch),
+ * delete the run and its manifest, and tell the overlay it has no kept run.
+ * Guard: weatherMapKeep.test.ts.
+ */
+export async function dropKeptWeather(): Promise<void> {
+  await stopWeatherMapForWipe();
+  await FileSystem.deleteAsync(WEATHER_MAP_DIR, { idempotent: true });
+  announceKeptWeather();
 }
 
 /** Runs when a run has been kept. Returns the unsubscribe. */

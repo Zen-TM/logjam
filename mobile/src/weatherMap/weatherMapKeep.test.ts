@@ -82,9 +82,12 @@ vi.mock("./weatherMapFeed", () => ({
 const { CHECK_EVERY, keepLatestWeather: keep } = await import(
   "./weatherMapKeep"
 );
-const { readKeptWeather, stopWeatherMapForWipe } = await import(
-  "./weatherMapStorage"
-);
+const {
+  dropKeptWeather,
+  onKeptWeatherChange,
+  readKeptWeather,
+  stopWeatherMapForWipe,
+} = await import("./weatherMapStorage");
 
 const keepLatestWeather = (allowCellular: boolean, area: typeof PERTH) =>
   keep(allowCellular, [area]);
@@ -222,6 +225,31 @@ describe("keepLatestWeather", () => {
     h.latest = null;
     await keepLatestWeather(false, BLUE_MOUNTAINS);
     expect(h.files.size).toBe(0);
+  });
+
+  // Mutation: delete only the manifest, or skip the announce, and the folders
+  // stay on the phone, or the overlay goes on offering a run that is gone.
+  it("drops the kept run and tells the overlay", async () => {
+    await keepLatestWeather(false, BLUE_MOUNTAINS);
+    expect(await readKeptWeather()).not.toBeNull();
+    const told = vi.fn();
+    const off = onKeptWeatherChange(told);
+    await dropKeptWeather();
+    off();
+    expect(h.files.size).toBe(0);
+    expect(await readKeptWeather()).toBeNull();
+    expect(told).toHaveBeenCalledOnce();
+  });
+
+  // Mutation: drop the `stopWeatherMapForWipe` from `dropKeptWeather`, and a
+  // keep in flight when the last area goes finishes into the emptied store,
+  // leaving a run nothing lists.
+  it("leaves no run behind when a keep is in flight", async () => {
+    const done = keepLatestWeather(false, BLUE_MOUNTAINS);
+    await dropKeptWeather();
+    await done;
+    expect(h.files.size).toBe(0);
+    expect(h.order).not.toContain("manifest");
   });
 
   // Mutation: drop the epoch check, and a download in flight when the user

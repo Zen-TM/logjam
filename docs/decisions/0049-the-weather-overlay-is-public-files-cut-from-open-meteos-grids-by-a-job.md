@@ -98,6 +98,20 @@ receives.**
   (CC BY 4.0), ECMWF IFS", carried in the manifest and mirrored as
   `WEATHER_MAP.credit`, which both clients draw wherever the overlay is.
   Guard: `test_weather.py` ("the prefix and format match shared").
+- **Update 2026-11-27: the kept run goes with the last saved area.**
+  Removing or abandoning the last saved area (a delete in Saved, a stopped
+  first save, a discarded or swept half-saved one) while no download is
+  queued, running or paused deletes the run and tells the overlay
+  (`dropKeptWeatherWithoutAreas` in `mobile/src/offline/regionDownloads.ts`,
+  `dropKeptWeather` in `mobile/src/weatherMap/weatherMapStorage.ts`). Saved
+  does not list the run, so nothing else could clear it. Chosen over listing
+  it in Saved as a row of its own: its size is one shared run, a number the
+  user can't move by deleting anything. Guards:
+  `mobile/src/offline/regionDownloads.test.ts`,
+  `mobile/src/offline/regionDownloadQueue.test.ts`,
+  `mobile/src/offline/regionMbtilesSweep.test.ts`. The discard of a
+  half-saved area in `mobile/src/saved/SavedScreen.tsx` has no guard test.
+  Everything else above stands.
 
 ## Consequences
 

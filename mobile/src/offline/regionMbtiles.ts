@@ -381,7 +381,12 @@ export async function listUnfinishedRegions(
   // queue's memory, so after an app kill nothing can resume it, unlike the
   // MBTiles below. This is the one place that already walks this directory
   // on every Saved-tab open.
-  await sweepOrphanFiles(REGION_DIR, ".pmtiles", liveIds);
+  // A swept clip may have been the last of a first save an app kill cut short:
+  // the run kept for it has no area left to go with.
+  if ((await sweepOrphanFiles(REGION_DIR, ".pmtiles", liveIds)) > 0)
+    await import("./regionDownloads")
+      .then((m) => m.dropKeptWeatherWithoutAreas())
+      .catch(console.error);
   const names = await FileSystem.readDirectoryAsync(REGION_DIR);
   const unfinished: UnfinishedRegion[] = [];
   for (const name of names) {

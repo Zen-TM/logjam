@@ -301,6 +301,57 @@ describe("the Weather bar", () => {
     expect(document.body.textContent).toBe(copy.weatherOutOfDate);
   });
 
+  // Mutation: read `file.totals` for the rail, or drop `outOfDate` from the
+  // rail branch, and a run-out forecast total's card has no rail or enables
+  // the dead period, and the user cannot reach a past one.
+  it("keeps the rail on a forecast total that has run out, with its own words", () => {
+    const file24 = parseWeatherMap({
+      ...file,
+      totals: ["rainPast24", "rainNext24"],
+    })!;
+    const { onLayerChange } = bar({
+      layerKey: "rainNext24",
+      state: { status: "ready", file: file24 },
+      now: T0 + 7 * hour,
+    });
+    expect(document.body.textContent).toContain(copy.weatherOutOfDate);
+    const radios = within(
+      screen.getByRole("radiogroup", { name: copy.weatherPeriod }),
+    ).getAllByRole("radio") as HTMLButtonElement[];
+    expect(radios.find((r) => r.textContent === "Next 24 h")!.disabled).toBe(
+      true,
+    );
+    fireEvent.click(screen.getByRole("radio", { name: "Past 24 h" }));
+    expect(onLayerChange).toHaveBeenCalledWith("rainPast24");
+    expect(screen.getByText(copy.weatherPeriodMissing)).toBeTruthy();
+  });
+
+  // Mutation: draw the estimated word outside the muted span, drop it, or
+  // add it to a forecast total or a stepped layer, and the title differs from
+  // "Rain, past 24 h mm, estimated" or a forecast claims to be an estimate.
+  it("ends a past total's title with estimated, in the unit's muted span", () => {
+    bar({ layerKey: "rainPast24" });
+    const unit = screen.getByText(`mm, ${copy.weatherEstimated}`);
+    expect(unit.parentElement!.textContent).toMatch(
+      /^Rain, past 24 h mm, estimated/,
+    );
+    cleanup();
+    // A ready forecast total and a stepped layer: neither is an estimate.
+    const withNext24 = parseWeatherMap({
+      ...file,
+      totals: ["rainPast24", "rainNext24"],
+    })!;
+    bar({
+      layerKey: "rainNext24",
+      state: { status: "ready", file: withNext24 },
+    });
+    expect(document.body.textContent).toMatch(/Rain, next 24 h.* To /);
+    expect(document.body.textContent).not.toContain(copy.weatherEstimated);
+    cleanup();
+    bar({ layerKey: "rain" });
+    expect(document.body.textContent).not.toContain(copy.weatherEstimated);
+  });
+
   // Mutation: offer Try again for a total the run left out, and the button
   // asks for the same manifest, which still lacks it.
   it("offers nothing to try again for a total the run left out", () => {

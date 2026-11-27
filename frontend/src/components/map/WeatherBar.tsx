@@ -5,12 +5,14 @@ import {
   WEATHER_MAP,
   type WeatherLayerKey,
   type WeatherTotalKey,
+  isWeatherEstimate,
   isWeatherTotal,
   weatherLayer,
   weatherNextStep,
   weatherPeriodHint,
   weatherPeriodOptions,
   weatherScale,
+  weatherTotalsNow,
 } from "@logjam/shared";
 import { ChipRail, ColourScale, IconButton, Notice, Scrubber } from "../../ui";
 import {
@@ -105,11 +107,12 @@ export default function WeatherBar({
       onClick={onDismiss}
     />
   );
-  // A total's periods, those the run lacks left off: the user can pick another
-  // even when the one chosen is missing.
-  const totals = state.status === "ready" ? state.file.totals : null;
-  // The same element in the ready and missing cards (`key`), so picking a
-  // period from the missing one keeps the rail's focus.
+  // A total's periods, those the run lacks or has run out left off: the user
+  // can pick another even when the one chosen is missing or out of date.
+  const totals =
+    state.status === "ready" ? weatherTotalsNow(state.file, now) : null;
+  // The same element in the ready, missing and out-of-date cards (`key`), so
+  // picking a period from the others keeps the rail's focus.
   const periods = isWeatherTotal(weatherLayer(layerKey)) ? (
     <ChipRail<WeatherTotalKey>
       key="periods"
@@ -127,8 +130,9 @@ export default function WeatherBar({
         {copy.weatherLoading}
       </Notice>
     );
-  // The total the run lacks: the failed words on the card, over the rail.
-  if (view.kind === "missing" && periods)
+  // The total the run lacks or has run out: its words on the card, over the
+  // rail. A stepped layer's out-of-date card has no rail and falls through.
+  if ((view.kind === "missing" || view.kind === "outOfDate") && periods)
     return (
       <Notice
         icon="warning"
@@ -137,7 +141,7 @@ export default function WeatherBar({
         action={dismiss}
         controls={<span className={classes.controls}>{periods}</span>}
       >
-        {copy.weatherFailed}
+        {view.kind === "missing" ? copy.weatherFailed : copy.weatherOutOfDate}
       </Notice>
     );
   if (view.kind !== "ready")
@@ -209,7 +213,11 @@ export default function WeatherBar({
       {/* Always two lines, each cut rather than wrapped, so the card keeps
           one height as the time and the layer change, as it keeps one width. */}
       <span className={classes.line}>
-        {layer.label} <span className={classes.muted}>{layer.unit}</span>{" "}
+        {layer.label}{" "}
+        <span className={classes.muted}>
+          {layer.unit}
+          {isWeatherEstimate(layer) && `, ${copy.weatherEstimated}`}
+        </span>{" "}
       </span>
       <span className={classes.line}>
         {shown} · <span className={classes.muted}>{age}</span>

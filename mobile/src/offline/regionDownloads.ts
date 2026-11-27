@@ -40,7 +40,8 @@ import type { MapArtifact } from "../map/sourceResolver";
 import { failureDetail } from "./failureDetail";
 import { assertSpaceFor } from "./freeSpace";
 import { REGION_DIR } from "./localStores";
-import { settleUpdate } from "./artifactGroups";
+import { isRegionArtifact, settleUpdate } from "./artifactGroups";
+import { regionJobsLive } from "./regionLiveJobs";
 import {
   deleteArtifact,
   insertArtifact,
@@ -536,6 +537,31 @@ export async function runRegionClip(
   }
 }
 
+/**
+ * The kept weather run (ADR 0049) lives only while a saved area does, and
+ * Saved does not list it: when no region is left in the registry (the list
+ * Saved draws its areas from) and the queue has no job still on its way to
+ * one, it goes. Called wherever an area or a job is gone for good: a delete
+ * in Saved, a stopped download, a discarded or swept half-saved one. Never
+ * rejects. Guard: regionDownloads.test.ts.
+ */
+export async function dropKeptWeatherWithoutAreas(): Promise<void> {
+  try {
+    // Loaded when needed: only an area's removal reaches the weather files.
+    const { dropKeptWeather } = await import("../weatherMap/weatherMapStorage");
+    // The queue's flag is read on both sides of the registry read: a download
+    // enqueued while it is pending, or one that saved (and so left the flag)
+    // in the meantime, must not lose its run. The drop starts in the same turn
+    // as the last read, so no later enqueue falls between them.
+    const liveBefore = regionJobsLive();
+    const areas = (await listArtifacts()).some(isRegionArtifact);
+    if (liveBefore || areas || regionJobsLive()) return;
+    await dropKeptWeather();
+  } catch (err) {
+    console.error(err);
+  }
+}
+
 /** Delete any downloaded artifact (region or overlay): registry row + file. */
 export async function deleteDownloadedArtifact(id: string): Promise<void> {
   const artifact = await deleteArtifact(id);
@@ -543,6 +569,7 @@ export async function deleteDownloadedArtifact(id: string): Promise<void> {
     await FileSystem.deleteAsync(`file://${artifact.path}`, {
       idempotent: true,
     }).catch(() => {});
+    if (isRegionArtifact(artifact)) await dropKeptWeatherWithoutAreas();
   }
 }
 

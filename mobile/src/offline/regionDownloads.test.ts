@@ -87,7 +87,25 @@ vi.mock("../config", () => ({
   config: { apiUrl: "https://api.test", topoCdnBaseUrl: CDN },
 }));
 const insertArtifact = vi.hoisted(() => vi.fn());
-vi.mock("./registryDb", () => ({ insertArtifact, deleteArtifact: vi.fn() }));
+const registry = vi.hoisted(() => ({
+  deleted: null as { kind: string } | null,
+  listed: [] as { kind: string }[],
+  /** Holds `listArtifacts` pending until it resolves. */
+  gate: Promise.resolve(),
+  reads: 0,
+}));
+vi.mock("./registryDb", () => ({
+  insertArtifact,
+  deleteArtifact: vi.fn(async () => registry.deleted),
+  listArtifacts: vi.fn(async () => {
+    registry.reads += 1;
+    await registry.gate;
+    return registry.listed;
+  }),
+}));
+const dropKeptWeather = vi.hoisted(() => vi.fn(async () => {}));
+const { setRegionJobsLive } = await import("./regionLiveJobs");
+vi.mock("../weatherMap/weatherMapStorage", () => ({ dropKeptWeather }));
 vi.mock("./freeSpace", () => ({ assertSpaceFor: vi.fn() }));
 vi.mock("./localStores", () => ({ REGION_DIR: "file:///regions/" }));
 const online = vi.hoisted(() => ({ value: true }));
@@ -117,7 +135,12 @@ const {
   NSW_REGION,
   planExtract,
 } = await import("@logjam/shared");
-const { resumeIndex, runRegionClip } = await import("./regionDownloads");
+const {
+  deleteDownloadedArtifact,
+  dropKeptWeatherWithoutAreas,
+  resumeIndex,
+  runRegionClip,
+} = await import("./regionDownloads");
 type RegionCancelToken = { stop: null | "pause" | "cancel" };
 
 const BBOX = { west: 150.2, south: -33.8, east: 150.6, north: -33.4 };
@@ -503,6 +526,92 @@ describe("runRegionClip", () => {
       status: "cancelled",
     });
     expect(disk.size).toBe(0);
+  });
+});
+
+describe("the kept weather run", () => {
+  beforeEach(() => {
+    dropKeptWeather.mockClear();
+    registry.reads = 0;
+    setRegionJobsLive(false);
+    registry.deleted = {
+      kind: "basemap-region",
+      path: "/r/a.pmtiles",
+    } as never;
+  });
+
+  // Mutation: drop the call, and the run stays on the phone with no saved
+  // area and nowhere in Saved to clear it.
+  it("goes with the last saved area", async () => {
+    registry.listed = [];
+    await deleteDownloadedArtifact("a");
+    expect(dropKeptWeather).toHaveBeenCalledOnce();
+  });
+
+  // Mutation: drop the `regionJobsLive` test, and the last saved area's
+  // delete drops the run (and stops the keep) under another area's first save
+  // that is still downloading, which then finishes "Saved" with no weather.
+  it("stays while a download is still on its way, and goes when it is gone", async () => {
+    registry.listed = [];
+    setRegionJobsLive(true);
+    await deleteDownloadedArtifact("a");
+    expect(dropKeptWeather).not.toHaveBeenCalled();
+    setRegionJobsLive(false);
+    await dropKeptWeatherWithoutAreas();
+    expect(dropKeptWeather).toHaveBeenCalledOnce();
+  });
+
+  // Mutation: drop the `regionJobsLive()` read after the registry's, and a
+  // download enqueued while the list is pending loses the run it has just
+  // begun to keep; drop the one before it, and a download that saves (and so
+  // leaves the flag) while the list is pending, its artifact not yet in the
+  // list read, loses it too.
+  it("stays for a download that goes live, or settles, while the registry is read", async () => {
+    registry.listed = [];
+    let release = () => {};
+    registry.gate = new Promise<void>((resolve) => (release = resolve));
+    const goingLive = dropKeptWeatherWithoutAreas();
+    await vi.waitFor(() => expect(registry.reads).toBe(1));
+    setRegionJobsLive(true);
+    release();
+    await goingLive;
+    expect(dropKeptWeather).not.toHaveBeenCalled();
+
+    setRegionJobsLive(true);
+    registry.gate = new Promise<void>((resolve) => (release = resolve));
+    const settling = dropKeptWeatherWithoutAreas();
+    await vi.waitFor(() => expect(registry.reads).toBe(2));
+    setRegionJobsLive(false);
+    release();
+    await settling;
+    expect(dropKeptWeather).not.toHaveBeenCalled();
+    registry.gate = Promise.resolve();
+  });
+
+  // Mutation: drop on every delete, not on none left, and removing one of two
+  // areas takes the other's offline weather with it.
+  it("stays while another saved area does", async () => {
+    registry.listed = [{ kind: "basemap-region" }];
+    await deleteDownloadedArtifact("a");
+    expect(dropKeptWeather).not.toHaveBeenCalled();
+  });
+
+  // Mutation: drop for any artifact, and deleting a topo overlay clears the
+  // run kept for an area still being saved.
+  it("is not taken by an overlay's delete", async () => {
+    registry.deleted = { kind: "topo-overlay", path: "/r/o" } as never;
+    registry.listed = [];
+    await deleteDownloadedArtifact("o");
+    expect(dropKeptWeather).not.toHaveBeenCalled();
+  });
+
+  // Mutation: let the failure through, and a delete that has already
+  // removed the area reports an error.
+  it("never rejects", async () => {
+    registry.listed = [];
+    dropKeptWeather.mockRejectedValueOnce(new Error("disk"));
+    vi.spyOn(console, "error").mockImplementationOnce(() => {});
+    await expect(dropKeptWeatherWithoutAreas()).resolves.toBeUndefined();
   });
 });
 
