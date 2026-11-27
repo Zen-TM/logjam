@@ -32,6 +32,7 @@ _ENTRYPOINTS = (
     "build_gauges.py",
     "build_fire_history.py",
     "build_coverage.py",
+    "build_weather.py",
     "build_nsw_dem.py",
 )
 
