@@ -45,6 +45,7 @@ vi.mock("./regionDownloads", () => {
   return {
     deleteClipFile: async (id: string) => void disk.files.delete(id),
     deleteDownloadedArtifact,
+    dropKeptWeatherWithoutAreas: async () => {},
     swapSuperseded: async (fresh: MapArtifact, failed: number) => {
       await disk.swapGate;
       const { accepted, drop } = settleUpdate(

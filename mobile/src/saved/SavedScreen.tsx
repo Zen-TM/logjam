@@ -728,7 +728,7 @@ export function SavedScreen({
   const refreshOrphans = useCallback(() => {
     // The live ids go IN, rather than filtering the result: opening a file the
     // queue is writing is what cost a download its finalize.
-    const live = new Set(queuedIds.split(","));
+    const live = new Set(queuedIds ? queuedIds.split(",") : []);
     listUnfinishedRegions(live).then(setOrphans).catch(console.error);
   }, [queuedIds]);
   useEffect(refreshOrphans, [refreshOrphans]);

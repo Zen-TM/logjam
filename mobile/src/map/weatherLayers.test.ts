@@ -138,8 +138,10 @@ describe("the weather picker and card", () => {
   // stepped layer, has an unnamed group, gives no reason for a greyed period
   // or offers one the run lacks; drop `{periods(...)}` from either the ready
   // or the missing card (both call sites are counted), and that card has no
-  // rail.
-  it("draws the card's rail from shared, in the ready and missing cards", () => {
+  // rail; move the rail-less `outOfDate` fallback above the branch that takes
+  // `outOfDate` with a `layer`, or drop `outOfDate` from that branch, and a
+  // run-out forecast total's card has no way to a past period.
+  it("draws the card's rail from shared, in the ready, missing and out-of-date total cards", () => {
     const bar = source("WeatherBar.tsx");
     expect(bar).toContain("isWeatherTotal(weatherLayer(layer))");
     expect(bar).toMatch(/<ChipRail<WeatherTotalKey>[^>]*\bscroll\b/s);
@@ -149,5 +151,11 @@ describe("the weather picker and card", () => {
     expect(
       bar.match(/\{periods\(model\.layer, model\.totals\)\}/g),
     ).toHaveLength(2);
+    const railBranch = bar.indexOf(
+      'model.kind === "missing" || (model.kind === "outOfDate" && model.layer)',
+    );
+    const fallback = bar.indexOf('if (model.kind === "outOfDate")');
+    expect(railBranch).toBeGreaterThan(-1);
+    expect(fallback).toBeGreaterThan(railBranch);
   });
 });

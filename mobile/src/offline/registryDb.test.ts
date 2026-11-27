@@ -38,7 +38,9 @@ describe("sweepOrphanFiles", () => {
     artifactRows.length = 0;
     deleted.length = 0;
 
-    await sweepOrphanFiles("dir/", ".pmtiles");
+    // Mutation: return 0 whatever it deleted, and a sweep that took a first
+    // save's clip never reconciles the kept weather run (regionMbtiles.ts).
+    expect(await sweepOrphanFiles("dir/", ".pmtiles")).toBe(1);
 
     expect(deleted).toEqual(["dir/orphan.pmtiles"]);
   });

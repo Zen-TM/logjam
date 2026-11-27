@@ -77,6 +77,7 @@ const {
   stopRegionGroup,
 } = await import("./regionDownloadQueue");
 const { deleteRegionFile } = await import("./regionMbtiles");
+const { regionJobsLive } = await import("./regionLiveJobs");
 const { deleteDownloadedArtifact, dropKeptWeatherWithoutAreas } = await import(
   "./regionDownloads"
 );
@@ -332,6 +333,60 @@ describe("stopping an update", () => {
     });
     await vi.advanceTimersByTimeAsync(0);
     expect(dropKeptWeatherWithoutAreas).toHaveBeenCalled();
+  });
+
+  // Mutation: drop the reconcile from `drain`'s cancelled branch, and a first
+  // save the user stops while it runs (its runner returns "cancelled", so
+  // `deleteAbandonedRegion` is never reached) leaves the kept weather run.
+  it("drops the kept weather run when a running first save is stopped", async () => {
+    vi.mocked(dropKeptWeatherWithoutAreas).mockClear();
+    let finish: (outcome: unknown) => void = () => {};
+    runRegionDownload.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    enqueueRegionDownloads([{ ...job("running"), groupId: "card" }]);
+    await vi.advanceTimersByTimeAsync(0);
+    stopRegionGroup({
+      groupId: "card",
+      update: false,
+      jobs: [jobOf("running", "paused")],
+    });
+    // The token is only marked while the runner has the file; nothing yet.
+    expect(dropKeptWeatherWithoutAreas).not.toHaveBeenCalled();
+    finish({ status: "cancelled" });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(dropKeptWeatherWithoutAreas).toHaveBeenCalled();
+  });
+
+  // Mutation: drop the `stoppedLate` test, and an optional clip that cancels
+  // itself (403, 404, outside NSW) reconciles while its area's other files are
+  // still being saved.
+  it("does not reconcile when a clip cancels itself", async () => {
+    vi.mocked(dropKeptWeatherWithoutAreas).mockClear();
+    runRegionDownload.mockResolvedValueOnce({ status: "cancelled" });
+    enqueueRegionDownloads([{ ...job("self"), groupId: "card" }]);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(dropKeptWeatherWithoutAreas).not.toHaveBeenCalled();
+  });
+
+  // Mutation: drop the write from `publish`, and `regionDownloads` never sees
+  // a job on its way, so the last saved area's delete drops the run under a
+  // download that has yet to finish.
+  it("tells regionDownloads while a job is queued, running or paused", async () => {
+    expect(regionJobsLive()).toBe(false);
+    enqueueRegionDownloads([{ ...job("live"), groupId: "card" }]);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(regionJobsLive()).toBe(true);
+    stopRegionGroup({
+      groupId: "card",
+      update: false,
+      jobs: [jobOf("live", "paused")],
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(regionJobsLive()).toBe(false);
   });
 
   // Mutation: announce a stopped run, and what is left of an update the user

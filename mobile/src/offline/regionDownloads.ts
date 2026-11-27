@@ -41,6 +41,7 @@ import { failureDetail } from "./failureDetail";
 import { assertSpaceFor } from "./freeSpace";
 import { REGION_DIR } from "./localStores";
 import { isRegionArtifact, settleUpdate } from "./artifactGroups";
+import { regionJobsLive } from "./regionLiveJobs";
 import {
   deleteArtifact,
   insertArtifact,
@@ -539,13 +540,15 @@ export async function runRegionClip(
 /**
  * The kept weather run (ADR 0049) lives only while a saved area does, and
  * Saved does not list it: when no region is left in the registry (the list
- * Saved draws its areas from), it goes. Called wherever an area is removed
- * for good: a delete in Saved, a cancelled download, a discarded half-saved
- * one. Never rejects. Guard: regionDownloads.test.ts.
+ * Saved draws its areas from) and the queue has no job still on its way to
+ * one, it goes. Called wherever an area or a job is gone for good: a delete
+ * in Saved, a stopped download, a discarded or swept half-saved one. Never
+ * rejects. Guard: regionDownloads.test.ts.
  */
 export async function dropKeptWeatherWithoutAreas(): Promise<void> {
   try {
-    if ((await listArtifacts()).some(isRegionArtifact)) return;
+    if (regionJobsLive() || (await listArtifacts()).some(isRegionArtifact))
+      return;
     // Loaded when needed: only an area's removal reaches the weather files.
     await (await import("../weatherMap/weatherMapStorage")).dropKeptWeather();
   } catch (err) {

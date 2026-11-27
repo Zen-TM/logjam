@@ -336,6 +336,18 @@ describe("the Weather bar", () => {
       /^Rain, past 24 h mm, estimated/,
     );
     cleanup();
+    // A ready forecast total and a stepped layer: neither is an estimate.
+    const withNext24 = parseWeatherMap({
+      ...file,
+      totals: ["rainPast24", "rainNext24"],
+    })!;
+    bar({
+      layerKey: "rainNext24",
+      state: { status: "ready", file: withNext24 },
+    });
+    expect(document.body.textContent).toMatch(/Rain, next 24 h.* To /);
+    expect(document.body.textContent).not.toContain(copy.weatherEstimated);
+    cleanup();
     bar({ layerKey: "rain" });
     expect(document.body.textContent).not.toContain(copy.weatherEstimated);
   });

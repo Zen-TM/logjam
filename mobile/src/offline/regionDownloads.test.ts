@@ -97,6 +97,7 @@ vi.mock("./registryDb", () => ({
   listArtifacts: vi.fn(async () => registry.listed),
 }));
 const dropKeptWeather = vi.hoisted(() => vi.fn(async () => {}));
+const { setRegionJobsLive } = await import("./regionLiveJobs");
 vi.mock("../weatherMap/weatherMapStorage", () => ({ dropKeptWeather }));
 vi.mock("./freeSpace", () => ({ assertSpaceFor: vi.fn() }));
 vi.mock("./localStores", () => ({ REGION_DIR: "file:///regions/" }));
@@ -524,6 +525,7 @@ describe("runRegionClip", () => {
 describe("the kept weather run", () => {
   beforeEach(() => {
     dropKeptWeather.mockClear();
+    setRegionJobsLive(false);
     registry.deleted = {
       kind: "basemap-region",
       path: "/r/a.pmtiles",
@@ -535,6 +537,19 @@ describe("the kept weather run", () => {
   it("goes with the last saved area", async () => {
     registry.listed = [];
     await deleteDownloadedArtifact("a");
+    expect(dropKeptWeather).toHaveBeenCalledOnce();
+  });
+
+  // Mutation: drop the `regionJobsLive` test, and the last saved area's
+  // delete drops the run (and stops the keep) under another area's first save
+  // that is still downloading, which then finishes "Saved" with no weather.
+  it("stays while a download is still on its way, and goes when it is gone", async () => {
+    registry.listed = [];
+    setRegionJobsLive(true);
+    await deleteDownloadedArtifact("a");
+    expect(dropKeptWeather).not.toHaveBeenCalled();
+    setRegionJobsLive(false);
+    await dropKeptWeatherWithoutAreas();
     expect(dropKeptWeather).toHaveBeenCalledOnce();
   });
 

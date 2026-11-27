@@ -359,9 +359,8 @@ export const isWeatherEstimate = (layer: WeatherLayer): boolean =>
   layer.hours !== undefined && layer.hours < 0;
 
 /** The run's totals less the forecast ones that have run out: `now` is more
- *  than `WEATHER_MAP.forecastTotalHours` past the anchor. Every read of
- *  `file.totals` for the rail or the default period goes through this.
- *  Guard: weatherMap.test.ts. */
+ *  than `WEATHER_MAP.forecastTotalHours` past the anchor. Guard:
+ *  weatherMap.test.ts. */
 export const weatherTotalsNow = (
   file: WeatherMapFile,
   now: number,

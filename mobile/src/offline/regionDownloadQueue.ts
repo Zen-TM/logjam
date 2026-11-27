@@ -39,6 +39,7 @@ import {
   type RegionRunOutcome,
 } from "./regionTileDownload";
 import type { RegionClipSpec } from "./regionDownloads";
+import { setRegionJobsLive } from "./regionLiveJobs";
 
 /**
  * Two task kinds, one queue: the SIX rasters are fetched tile by tile straight
@@ -86,6 +87,11 @@ const listeners = new Set<() => void>();
 function publish(): void {
   // New array identity per change — useSyncExternalStore compares by reference.
   snapshot = [...jobs];
+  setRegionJobsLive(
+    jobs.some((job) =>
+      ["queued", "downloading", "paused"].includes(job.state.kind),
+    ),
+  );
   for (const listener of listeners) listener();
   announceSettledGroups();
   syncDownloadService();
@@ -406,6 +412,9 @@ async function drain(): Promise<void> {
     if (outcome.status === "cancelled") {
       jobs = jobs.filter((job) => job.spec.id !== next.spec.id);
       publish();
+      // Only the user's Stop: an optional clip that cancels itself (403, 404,
+      // outside NSW) leaves its area's other jobs running.
+      if (stoppedLate) dropKeptWeatherIfNoAreas();
       continue;
     }
     // A Stop that came after the file was saved: a first save is cancelled as
@@ -534,6 +543,14 @@ export async function cancelAllRegionDownloads(): Promise<void> {
   publish();
 }
 
+/** Reconciles the kept weather run after a job went for good (see
+ *  `dropKeptWeatherWithoutAreas`); nothing waits on it. */
+function dropKeptWeatherIfNoAreas(): void {
+  void import("./regionDownloads")
+    .then((m) => m.dropKeptWeatherWithoutAreas())
+    .catch((err) => console.error(err));
+}
+
 /**
  * Clean up after a job cancelled while it was not running. Both task kinds
  * use the job's own id for their file, so this covers either: the tile
@@ -542,16 +559,14 @@ export async function cancelAllRegionDownloads(): Promise<void> {
  */
 async function deleteAbandonedRegion(id: string): Promise<void> {
   const { deleteRegionFile } = await import("./regionMbtiles");
-  const {
-    deleteClipFile,
-    deleteDownloadedArtifact,
-    dropKeptWeatherWithoutAreas,
-  } = await import("./regionDownloads");
+  const { deleteClipFile, deleteDownloadedArtifact } = await import(
+    "./regionDownloads"
+  );
   await deleteRegionFile(id);
   await deleteClipFile(id);
   await deleteDownloadedArtifact(id);
   // A first save that never finished has no artifact to take the run with it.
-  await dropKeptWeatherWithoutAreas();
+  dropKeptWeatherIfNoAreas();
 }
 
 export type { OfflineBasemapId };
