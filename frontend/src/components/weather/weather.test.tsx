@@ -409,8 +409,12 @@ describe("rain gauges", () => {
       cards[5].querySelector("[data-muted]")?.getAttribute("data-muted"),
     ).toBe("true");
     expect(screen.queryByText(WEATHER.copy.pastModel)).toBeNull();
-    // The week's total sums those modelled days, so it carries the mark too.
-    expect(screen.getByLabelText(/including modelled days/)).toBeTruthy();
+    // The week's total sums those modelled days, so it carries the mark too:
+    // seen ("Model") and read as including them. Mutation: drop `summaryNote`
+    // or `summarySpoken` from the rail → red.
+    const total = screen.getByText(/including modelled days/).parentElement;
+    expect(total?.textContent).toContain(WEATHER.copy.modelledDay);
+    expect(total?.querySelector("[aria-hidden]")).not.toBeNull();
     expect(screen.getByText("© Made-up owner")).toBeTruthy();
   });
 

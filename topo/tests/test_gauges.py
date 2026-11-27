@@ -11,6 +11,7 @@ Pure Python: boto3 is faked, nothing touches the network.
 """
 
 import gzip
+import http.client
 import json
 import os
 import re
@@ -733,15 +734,24 @@ class TestRain(unittest.TestCase):
         self.assertIn(g.S3_PREFIX + "latest.json", s3.store)
 
     def test_one_failed_bom_call_in_the_rain_step_is_retried(self):
-        # Mutation: call BoM once, without bom_get's retry → red (one blip
-        # fails the run and pages).
+        # Mutation: call BoM once, without bom_get's retry, in either
+        # `rain_coverage` or `publish_rain`; or retry only OSError and
+        # ValueError, not HTTPException → red (one blip fails the run and
+        # pages).
         calls = []
+        blipped = set()
 
         def flaky(url, timeout=60):
             calls.append(url)
-            if len(calls) == 1:
-                raise OSError("BoM blip")
-            if "getTimeseriesList" in url:
+            kind = "list" if "getTimeseriesList" in url else "values"
+            if kind not in blipped:
+                blipped.add(kind)
+                raise (
+                    OSError("BoM blip")
+                    if kind == "list"
+                    else http.client.IncompleteRead(b"")
+                )
+            if kind == "list":
                 return [
                     ["ts_id", "from", "to"],
                     ["12", "", "2026-10-29T09:00:01.000+10:00"],
@@ -755,7 +765,7 @@ class TestRain(unittest.TestCase):
             mock.patch.object(g.time, "sleep"),
         ):
             g.publish_rain(s3, "bucket", NOW)
-        self.assertEqual(len(calls), 3)
+        self.assertEqual(len(calls), 4)
         self.assertEqual(s3.doc("rain.json"), fixture_rain())
 
     def test_a_rain_call_failing_every_try_still_fails_the_run(self):
@@ -766,7 +776,14 @@ class TestRain(unittest.TestCase):
         real_publish_rain = g.publish_rain
 
         def down(url, timeout=60):
+            # The coverage call answers, so it is the values call that is
+            # retried to the end.
             calls.append(url)
+            if "getTimeseriesList" in url:
+                return [
+                    ["ts_id", "from", "to"],
+                    ["12", "", "2026-10-29T09:00:01.000+10:00"],
+                ]
             raise OSError("BoM down")
 
         s3 = FakeS3()
@@ -781,7 +798,7 @@ class TestRain(unittest.TestCase):
                 lambda i, k: TestRun.fresh(None, i, k),
                 rain=real_publish_rain,
             )
-        self.assertEqual(len(calls), g.BOM_TRIES)
+        self.assertEqual(len(calls), 1 + g.BOM_TRIES)
         self.assertIn(g.S3_PREFIX + "latest.json", s3.store)
         self.assertNotIn(g.S3_PREFIX + "rain.json", s3.store)
 

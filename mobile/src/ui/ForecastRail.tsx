@@ -83,7 +83,7 @@ export function ForecastRail({
           <View>
             <Text style={styles.summary}>{summary}</Text>
             {summaryNote ? (
-              <Text style={styles.meta}>{summaryNote}</Text>
+              <Text style={styles.summaryNote}>{summaryNote}</Text>
             ) : null}
           </View>
         ) : null}
@@ -142,6 +142,10 @@ const useStyles = makeStyles((theme, textRole) => ({
   heading: { flexDirection: "row", alignItems: "baseline", gap: spacing(1) },
   title: { ...textRole.control, color: theme.text, flexShrink: 1 },
   summary: { ...muted(theme, textRole.detail), fontVariant: ["tabular-nums"] },
+  summaryNote: {
+    ...muted(theme, textRole.meta),
+    fontVariant: ["tabular-nums"],
+  },
   track: { gap: GAP },
   card: {
     alignItems: "center",

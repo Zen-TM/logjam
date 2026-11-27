@@ -26,6 +26,7 @@ gauge or series id and constants.
 
 import argparse
 import gzip
+import http.client
 import json
 import math
 import os
@@ -649,7 +650,7 @@ def bom_get(url: str):
         time.sleep(BOM_SPACING_S * (attempt + 1))
         try:
             return http_get(url, timeout=BOM_TIMEOUT_S)
-        except (OSError, ValueError) as err:
+        except (OSError, http.client.HTTPException, ValueError) as err:
             print(f"BoM try {attempt + 1} failed: {err}", flush=True)
             last = err
     raise last
@@ -660,7 +661,7 @@ def bom_list(**params) -> list:
     # fails the command rather than writing a short one.
     try:
         rows = bom_get(bom_url(**params))
-    except (OSError, ValueError):
+    except (OSError, http.client.HTTPException, ValueError):
         raise SystemExit("BoM did not answer: not writing a short registry")
     if isinstance(rows, dict):  # BoM's error body
         raise SystemExit(f"BoM refused: {rows.get('message')}")

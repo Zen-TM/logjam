@@ -67,13 +67,18 @@ export function ForecastRail({
       <div className={classes.heading}>
         <h4 className={classes.title}>{title}</h4>
         {summary && (
-          <span
-            className={classes.total}
-            role={summarySpoken ? "group" : undefined}
-            aria-label={summarySpoken ?? undefined}
-          >
-            <span className={classes.summary}>{summary}</span>
-            {summaryNote && <span className={classes.meta}>{summaryNote}</span>}
+          <span className={classes.total}>
+            <span className={classes.summary} aria-hidden={!!summarySpoken}>
+              {summary}
+            </span>
+            {summaryNote && (
+              <span className={classes.meta} aria-hidden={!!summarySpoken}>
+                {summaryNote}
+              </span>
+            )}
+            {summarySpoken && (
+              <span className="visually-hidden">{summarySpoken}</span>
+            )}
           </span>
         )}
         <div className={classes.buttons}>
