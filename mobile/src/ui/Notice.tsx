@@ -1,6 +1,14 @@
-import { Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 
-import { radius, spacing, makeStyles, useTheme, controlSize } from "../theme";
+import {
+  radius,
+  spacing,
+  makeStyles,
+  useTheme,
+  controlSize,
+  opacity,
+  slopTo,
+} from "../theme";
 import { Icon, type Glyph } from "./Icon";
 
 /**
@@ -26,6 +34,9 @@ export function Notice({
   action,
   controls,
   numberOfLines,
+  compact = false,
+  onText,
+  textHint,
   tone = "info",
 }: {
   children: string;
@@ -35,6 +46,13 @@ export function Notice({
   controls?: React.ReactNode;
   /** A user's own title in the words stops at two lines (shared/DESIGN.md §9). */
   numberOfLines?: number;
+  /** Less air round the words and between them and the controls, for a notice
+   *  that is mostly controls (the weather bar). */
+  compact?: boolean;
+  /** Makes the words pressable (the weather bar's layer name opens Layers);
+   *  `textHint` is what a press does, as its accessibility hint. */
+  onText?: () => void;
+  textHint?: string;
 } & (
   | { tone?: "info" | "warning"; icon?: Glyph }
   | { tone: "critical"; icon: Glyph }
@@ -55,12 +73,33 @@ export function Notice({
           }
         />
       ) : null}
-      <Text
-        style={[styles.text, critical && styles.criticalText]}
-        numberOfLines={numberOfLines}
-      >
-        {children}
-      </Text>
+      {onText ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityHint={textHint}
+          onPress={onText}
+          hitSlop={slopTo(controlSize.sm)}
+          style={({ pressed }) => [styles.textPress, pressed && styles.pressed]}
+        >
+          <Text
+            style={[
+              styles.text,
+              styles.pressable,
+              critical && styles.criticalText,
+            ]}
+            numberOfLines={numberOfLines}
+          >
+            {children}
+          </Text>
+        </Pressable>
+      ) : (
+        <Text
+          style={[styles.text, critical && styles.criticalText]}
+          numberOfLines={numberOfLines}
+        >
+          {children}
+        </Text>
+      )}
       {action}
     </>
   );
@@ -69,6 +108,7 @@ export function Notice({
       style={[
         styles.notice,
         controls != null && styles.stacked,
+        compact && styles.compact,
         warning && styles.warning,
         critical && styles.critical,
       ]}
@@ -105,6 +145,7 @@ const useStyles = makeStyles((theme, textRole) => ({
   critical: { backgroundColor: theme.warning },
   criticalText: { color: theme.onFill },
   stacked: { flexDirection: "column", paddingVertical: spacing(1) },
+  compact: { paddingVertical: spacing(0.5), gap: spacing(0.25) },
   line: { flexDirection: "row", alignItems: "center", gap: spacing(1) },
   controls: {
     flexDirection: "row",
@@ -112,6 +153,15 @@ const useStyles = makeStyles((theme, textRole) => ({
     justifyContent: "center",
     gap: spacing(1),
   },
+  // A target of the control's least height, the words centred in it, and
+  // `hitSlop` taking it to 48 dp.
+  textPress: {
+    flexShrink: 1,
+    minHeight: controlSize.sm,
+    justifyContent: "center",
+  },
+  pressed: { opacity: opacity.pressed },
+  pressable: { textDecorationLine: "underline" },
   // `flexShrink`, not `flex: 1`: the notice hugs its words until they wrap.
   text: {
     flexShrink: 1,

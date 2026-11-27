@@ -52,6 +52,10 @@ vi.mock("./registryDb", () => ({
   getOfflineDb: () => Promise.resolve(fakeDb()),
   notifyRegistryChanged: () => {},
 }));
+vi.mock("@logjam/shared", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@logjam/shared")>()),
+  clearWeatherTile: () => record("clear:weather-tile"),
+}));
 vi.mock("./demLookup", () => ({ clearOfflineDemCache: () => {} }));
 vi.mock("../api/apiFetch", () => ({ invalidateCurrentUser: () => {} }));
 vi.mock("./regionDownloadQueue", () => ({
@@ -96,6 +100,12 @@ vi.mock("../weather/weatherStorage", () => ({
 vi.mock("../gauges/gaugeStorage", () => ({
   stopGaugesForWipe: () => {
     record("stop:gauges");
+    return Promise.resolve();
+  },
+}));
+vi.mock("../weatherMap/weatherMapStorage", () => ({
+  stopWeatherMapForWipe: () => {
+    record("stop:weather-map");
     return Promise.resolve();
   },
 }));
@@ -186,7 +196,8 @@ describe("wipeAllLocalData", () => {
   // delete: a live producer would re-create what the wipe just removed, and
   // the sharpened areas' transforms would keep their presigned URLs.
   // Mutation: drop `stopPlansForWipe()` from the wipe, and a plan fetch
-  // landing after sign-out writes the departing user's plan back.
+  // landing after sign-out writes the departing user's plan back; drop
+  // `stopWeatherMapForWipe()`, and a kept run lands after the delete.
   it("stops every producer before deleting anything", async () => {
     await wipeAllLocalData();
     const firstDelete = events.findIndex((e) => /^(sql|delete):/.test(e));
@@ -196,6 +207,7 @@ describe("wipeAllLocalData", () => {
       "stop:track",
       "stop:weather",
       "stop:gauges",
+      "stop:weather-map",
       "stop:sharpened",
       "stop:sharpened-areas",
       "stop:plans",
@@ -204,6 +216,13 @@ describe("wipeAllLocalData", () => {
       expect(at).toBeGreaterThanOrEqual(0);
       expect(at).toBeLessThan(firstDelete);
     }
+  });
+
+  // Mutation: drop `clearWeatherTile()` from the wipe, and the held forecast
+  // tile (archive handle, tile values) outlives the sign-out in memory.
+  it("drops the held forecast tile", async () => {
+    await wipeAllLocalData();
+    expect(events).toContain("clear:weather-tile");
   });
 
   // Red if the per-directory try/catch is removed or hoisted around the loop,

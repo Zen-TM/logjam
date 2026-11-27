@@ -94,6 +94,12 @@ import {
   landNameOf,
   NSW_REGION,
   drawsCoverage,
+  normalizeCarrier,
+  WEATHER_MAP,
+  weatherPointSource,
+  weatherLayer,
+  type OverlayTerrainKey,
+  type WeatherLayerKey,
   fireNameOf,
   NSW_COVERAGE,
   NSW_FIRE,
@@ -260,9 +266,11 @@ import {
 import {
   readBasemapPreference,
   readCoverageCarrier,
+  readWeatherLayer,
   readTerrainLayers,
   setBasemapPreference,
   setCoverageCarrier,
+  setWeatherLayer,
   setTerrainLayers,
   readGaugesLayer,
   readMgaGridLayer,
@@ -432,6 +440,16 @@ import {
   coverageMinZoom,
 } from "./coverageLayers";
 import { fireLayerIds, fireLayerPaints, fireMinZoom } from "./fireLayers";
+import { WeatherBar } from "./WeatherBar";
+import { WeatherLayers } from "./WeatherLayers";
+import {
+  WEATHER_ARROWS_ID,
+  weatherFieldLayerId,
+  weatherSource,
+} from "./weatherLayers";
+import { useSettled } from "./useSettled";
+import { useKeptWeather, useWeatherMap } from "../weatherMap/useWeatherMap";
+import { weatherBarModel, weatherDrawnStep } from "../weatherMap/weatherBar";
 import { mapDataAttribution } from "./mapDataCredits";
 import { TopoVectorOverlay, topoVectorLayerIds } from "./TopoVectorOverlay";
 
@@ -1000,6 +1018,22 @@ export function MapScreen({
     setCoverageCarrierState(next);
     setCoverageCarrier(next);
   }, []);
+  const [weatherLayerKey, setWeatherLayerKey] =
+    useState<WeatherLayerKey>(readWeatherLayer);
+  const chooseOverlayChoice = useCallback(
+    (key: OverlayTerrainKey, value: string) => {
+      if (key === "coverage") {
+        const next = normalizeCarrier(value);
+        if (next) chooseCoverageCarrier(next);
+      }
+      if (key === "weather") {
+        const next = weatherLayer(value).key;
+        setWeatherLayerKey(next);
+        setWeatherLayer(next);
+      }
+    },
+    [chooseCoverageCarrier],
+  );
   const slopeBands = useSlopeBands();
   const [layersOpen] = useState(createLayersOpen);
   const [attributionOpen, setAttributionOpen] = useState(false);
@@ -1671,6 +1705,71 @@ export function MapScreen({
   const coverageFilterExpr = useMemo(
     () => (coverageCarrier ? coverageLayerFilter(coverageCarrier) : undefined),
     [coverageCarrier],
+  );
+  const weatherOn = terrainLayers.weather;
+  const weatherArrows = weatherLayer(weatherLayerKey).arrows === true;
+  const keptWeather = useKeptWeather();
+  const weather = useWeatherMap(
+    weatherOn,
+    connectivity === "online",
+    keptWeather,
+    weatherArrows,
+  );
+  const [weatherPick, setWeatherPick] = useState<{
+    path: string;
+    step: number;
+  } | null>(null);
+  const weatherBar = weatherBarModel({
+    status: weather.status,
+    file: weather.file,
+    layer: weatherLayerKey,
+    picked: weatherPick,
+    now: weather.now,
+    online: connectivity === "online",
+  });
+  // The scrubber and the picker move at once; the map follows when they
+  // rest, layer and step together, so a drag doesn't open an archive per step
+  // passed and a new layer never draws for a moment at the old one's step.
+  const weatherNowStep = weatherDrawnStep(weatherBar);
+  const weatherSettled = useSettled(
+    weatherNowStep === null ? null : `${weatherLayerKey}|${weatherNowStep}`,
+    WEATHER_MAP.settleMs,
+  );
+  // The arrows follow the settled region, never a frame of a move; no view
+  // while they are not drawn, so a pan does not re-render the layer for nothing.
+  const weatherView = useMemo(
+    () =>
+      weatherOn && weatherArrows && viewportBbox
+        ? { bounds: viewportBbox, zoom: camera.zoom }
+        : null,
+    [weatherOn, weatherArrows, viewportBbox, camera.zoom],
+  );
+  const weatherDrawn = useMemo(() => {
+    if (!weatherOn || !weather.file || weatherSettled === null) return null;
+    const [key, at] = weatherSettled.split("|");
+    const layer = key as WeatherLayerKey;
+    const step = Number(at);
+    const source = weatherSource(weather.base, weather.file, layer, step);
+    return source ? { source, layer, step } : null;
+  }, [weatherOn, weather.file, weather.base, weatherSettled]);
+  const weatherResolved = useMemo(
+    () => (weatherDrawn ? [weatherDrawn.source] : []),
+    [weatherDrawn],
+  );
+  // What the point sheet reads its weather figure from: what is drawn.
+  const weatherPoint = useMemo(
+    () =>
+      weatherDrawn && weather.file
+        ? weatherPointSource({
+            base: weather.base,
+            file: weather.file,
+            layer: weatherDrawn.layer,
+            step: weatherDrawn.step,
+            wind: weather.wind,
+            now: weather.now,
+          })
+        : null,
+    [weatherDrawn, weather.file, weather.base, weather.wind, weather.now],
   );
   const slopeResolved = useMemo(
     () =>
@@ -5097,6 +5196,7 @@ export function MapScreen({
     land: landResolved,
     fire: fireResolved,
     coverage: coverageResolved,
+    weather: weatherResolved,
     hillshade: hillshadeResolved,
   });
 
@@ -5131,6 +5231,12 @@ export function MapScreen({
     ]),
     fire: fireResolved.flatMap((r) => fireLayerIds(r.key)),
     coverage: coverageLayerIdList,
+    weather: weatherDrawn
+      ? [
+          weatherFieldLayerId(weatherDrawn.source.key),
+          ...(weatherArrows ? [WEATHER_ARROWS_ID] : []),
+        ]
+      : [],
     hillshade: hillshadeResolved.map((r) => `nsw-hillshade-${r.key}`),
   };
   // The Terrain group goes in the basemap's bands: under the vector map's roads
@@ -5414,6 +5520,17 @@ export function MapScreen({
             </ResolvedSource>
           );
         })}
+        {weatherDrawn ? (
+          <WeatherLayers
+            source={weatherDrawn.source}
+            layer={weatherDrawn.layer}
+            step={weatherDrawn.step}
+            wind={weather.wind}
+            arrows={weatherArrows}
+            view={weatherView}
+            beforeIds={groundBefore}
+          />
+        ) : null}
         {slopeResolved.map((r) => (
           <ResolvedSource key={r.key} resolved={r}>
             <Layer
@@ -5983,6 +6100,22 @@ export function MapScreen({
         {downloadProgress ? (
           <Notice icon="saveOffline">{downloadProgress}</Notice>
         ) : null}
+
+        {/* The forecast layer on the map: what it shows, how old it is, and
+            for a stepped layer a scrubber over the hours. */}
+        {weatherOn ? (
+          <WeatherBar
+            model={weatherBar}
+            active={sensorsActive}
+            onStep={(step) =>
+              weather.file && setWeatherPick({ path: weather.file.path, step })
+            }
+            onRetry={weather.retry}
+            onDismiss={() => chooseTerrainLayer("weather", false)}
+            onChooseLayer={() => layersOpen.set(true, "weather")}
+            onLayerChange={(layer) => chooseOverlayChoice("weather", layer)}
+          />
+        ) : null}
       </ScrollView>
 
       {/* One column of actions on one edge; the OTHER edge belongs to the map's
@@ -6158,6 +6291,7 @@ export function MapScreen({
         land={tappedLand}
         fire={tappedFire}
         coverage={tappedCoverage}
+        weatherPoint={weatherPoint}
         userCoord={userCoord}
         onClose={() => setTappedPoint(null)}
         onClosed={openParkedPlaceForm}
@@ -6317,8 +6451,10 @@ export function MapScreen({
         downBasemaps={downBasemaps}
         terrainLayers={terrainLayers}
         onTerrainLayerChange={chooseTerrainLayer}
-        coverageCarrier={coverageCarrier}
-        onCoverageCarrierChange={chooseCoverageCarrier}
+        choices={{ coverage: coverageCarrier, weather: weatherLayerKey }}
+        onChoiceChange={chooseOverlayChoice}
+        weatherKept={keptWeather !== null}
+        weatherTotals={weather.file?.totals ?? null}
         artifacts={artifacts}
         hasVegetation={mergedOverlays.jobs.some((job) =>
           job.layers.some((layer) => layer.name === "vegetation"),

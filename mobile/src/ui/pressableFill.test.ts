@@ -80,3 +80,16 @@ describe("a selected chip is its fill alone", () => {
     );
   });
 });
+
+// A selected chip that is also disabled (the weather card's missing period)
+// keeps its `onFill` label: muted ink on the tint is under 1.3:1 in the dark
+// schemes (shared/DESIGN.md §1).
+// Mutation: change `disabled && !active && styles.labelMuted` to
+// `disabled && styles.labelMuted`.
+describe("a selected chip that is disabled", () => {
+  it("keeps its label on the fill's own ink", () => {
+    expect(source("Chip.tsx")).toContain(
+      "disabled && !active && styles.labelMuted",
+    );
+  });
+});

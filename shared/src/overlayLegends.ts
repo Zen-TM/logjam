@@ -15,6 +15,16 @@ import { FIRE_RAMP, fireLegendRows, NSW_FIRE } from "./nswFire.js";
 import { LAND_CLASSES } from "./nswLand.js";
 import { NSW_REGION } from "./regions.js";
 import type { OverlayTerrainKey } from "./terrain.js";
+import {
+  WEATHER_LAYER_DEFAULT,
+  WEATHER_LAYERS,
+  WEATHER_MAP,
+  WEATHER_TOTALS_CHIP,
+  isWeatherTotal,
+  weatherChip,
+  weatherChipLayer,
+  weatherLegendRows,
+} from "./weatherMap.js";
 
 export type OverlayLegend = {
   /** The row's label and the legend's title. */
@@ -33,14 +43,40 @@ export type OverlayLegend = {
    */
   rows: readonly { label: string; colour: string; pattern?: string }[];
   /**
+   * The key for a value of `choice`, where the key changes with it (Weather's
+   * layer); `rows` is the default choice's.
+   */
+  rowsFor?: (
+    choice: string | undefined,
+  ) => readonly { label: string; colour: string }[];
+  /**
    * A setting of what the overlay draws, picked at the top of its legend and
    * named under its row: Coverage's carrier. The value is the client's.
    */
   choice?: {
     label: string;
-    /** The row's one button until a value is picked: it opens the legend. */
-    choose: string;
+    /**
+     * The row's one button until a value is picked: it opens the legend.
+     * Absent where a value is always picked (Weather's layer has a default).
+     */
+    choose?: string;
     options: readonly { value: string; label: string }[];
+    /**
+     * Where the stored value is finer than the options (Weather's five totals
+     * are one option): `chip` is the option a stored value shows as, `pick`
+     * the value to store when an option is pressed with `stored` held, and
+     * `label` the stored value's own name.
+     */
+    stored?: {
+      chip: (stored: string | null | undefined) => string;
+      pick: (
+        chip: string,
+        stored: string | null | undefined,
+        /** What the source has now (Weather's `file.totals`), if known. */
+        available?: readonly string[] | null,
+      ) => string;
+      label: (stored: string | undefined) => string | undefined;
+    };
   };
   /** What the source gets wrong, said beside the key it qualifies. */
   caveat: string;
@@ -53,6 +89,34 @@ const copy = MAP_TERRAIN.copy;
 export const OVERLAY_LEGENDS: Readonly<
   Record<OverlayTerrainKey, OverlayLegend>
 > = {
+  weather: {
+    title: copy.weather,
+    about: copy.weatherAbout,
+    hue: weatherLegendRows("rain")[1]!.colour,
+    intro: copy.weatherLegend,
+    rows: weatherLegendRows(WEATHER_LAYER_DEFAULT),
+    rowsFor: (choice) =>
+      weatherLegendRows(
+        WEATHER_LAYERS.find((l) => l.key === choice)?.key ??
+          WEATHER_LAYER_DEFAULT,
+      ),
+    choice: {
+      label: copy.weatherLayer,
+      options: [
+        ...WEATHER_LAYERS.filter((l) => !isWeatherTotal(l)).map(
+          ({ key, label }) => ({ value: key as string, label }),
+        ),
+        { value: WEATHER_TOTALS_CHIP, label: copy.weatherTotals },
+      ],
+      stored: {
+        chip: weatherChip,
+        pick: weatherChipLayer,
+        label: (stored) => WEATHER_LAYERS.find((l) => l.key === stored)?.label,
+      },
+    },
+    caveat: copy.weatherCaveat,
+    credit: WEATHER_MAP.credit,
+  },
   land: {
     title: copy.land,
     about: copy.landAbout,
@@ -96,6 +160,14 @@ export const OVERLAY_LEGENDS: Readonly<
   },
 };
 
+/** The key `legend` shows for `choice`: its own for that value, if it has one. */
+export function overlayLegendRows(
+  legend: OverlayLegend,
+  choice: string | null | undefined,
+): OverlayLegend["rows"] {
+  return legend.rowsFor?.(choice ?? undefined) ?? legend.rows;
+}
+
 /**
  * Whether `legend`'s row offers its choice (one button that opens the legend)
  * in place of its switch: it has a choice, and nothing is picked yet. Both
@@ -106,7 +178,7 @@ export function overlayAwaitsChoice(
   legend: OverlayLegend,
   value: string | null | undefined,
 ): boolean {
-  return legend.choice !== undefined && value === null;
+  return legend.choice?.choose !== undefined && value === null;
 }
 
 /** The label of the option `value` names in `legend`'s choice, if it has one. */
@@ -114,5 +186,27 @@ export function overlayChoiceLabel(
   legend: OverlayLegend,
   value: string | undefined,
 ): string | undefined {
-  return legend.choice?.options.find((o) => o.value === value)?.label;
+  const { choice } = legend;
+  return (
+    choice?.stored?.label(value) ??
+    choice?.options.find((o) => o.value === value)?.label
+  );
+}
+
+/** The option of `legend`'s choice that the stored `value` shows as. */
+export function overlayChoiceOption(
+  legend: OverlayLegend,
+  value: string | null | undefined,
+): string {
+  return legend.choice?.stored?.chip(value) ?? value ?? "";
+}
+
+/** The value to store when `option` is pressed with `value` stored. */
+export function overlayChoicePick(
+  legend: OverlayLegend,
+  option: string,
+  value: string | null | undefined,
+  available?: readonly string[] | null,
+): string {
+  return legend.choice?.stored?.pick(option, value, available) ?? option;
 }

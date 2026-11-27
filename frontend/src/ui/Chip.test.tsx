@@ -1,4 +1,7 @@
 import { cleanup, render, screen } from "@testing-library/react";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import { Chip, ChipRail } from "./Chip";
 
@@ -77,5 +80,28 @@ describe("ChipRail", () => {
     expect(
       screen.getByRole("radiogroup").getAttribute("aria-describedby"),
     ).toBeNull();
+  });
+});
+
+describe("a wrapped ChipRail's alignment", () => {
+  const css = (file: string) =>
+    readFileSync(join(dirname(fileURLToPath(import.meta.url)), file), "utf8");
+
+  // Mutation: set the default to `flex-end`, and a wrapped rail in a tab
+  // (Weather's layers) sits against the right edge, away from its label.
+  it("starts where its container does", () => {
+    expect(
+      css("Chip.module.css").match(
+        /\.rail\[data-wrap="true"\] \.group \{([^}]*)\}/,
+      )?.[1],
+    ).toContain("justify-content: var(--rail-wrap-align, flex-start)");
+  });
+
+  // Mutation: drop `--rail-wrap-align` from `.control`, and GeoPDF's Scale
+  // chips start at the left of their cell instead of beside the label's end.
+  it("ends in a SettingsRow's value cell", () => {
+    expect(
+      css("SettingsRow.module.css").match(/\.control \{([^}]*)\}/)?.[1],
+    ).toContain("--rail-wrap-align: flex-end");
   });
 });

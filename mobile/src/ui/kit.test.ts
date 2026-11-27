@@ -35,6 +35,24 @@ describe("AttributeFilter", () => {
   });
 });
 
+// Mutation: drop `accessibilityRole="adjustable"` or the increment/decrement
+// actions from `Scrubber`, and a screen reader meets a plain view it cannot
+// step; drop `valueText`, and it reads no time.
+describe("Scrubber", () => {
+  it("is one adjustable control that reads its step in words", () => {
+    const source = readFileSync(
+      new URL("./Scrubber.tsx", import.meta.url),
+      "utf8",
+    );
+    expect(source).toContain('accessibilityRole="adjustable"');
+    expect(source).toContain(
+      'accessibilityActions={[{ name: "increment" }, { name: "decrement" }]}',
+    );
+    expect(source).toContain("accessibilityValue={{ text: valueText }}");
+    expect(source).toContain("accessibilityLabel={label}");
+  });
+});
+
 describe("the Logjam GPS kit barrel", () => {
   it("exports exactly the declared components", () => {
     const barrel = readFileSync(new URL("./index.ts", import.meta.url), "utf8");
@@ -85,5 +103,27 @@ describe("kit screen-reader roles", () => {
     expect(source("Chip.tsx")).toMatch(/"radio"[\s\S]*"checkbox"/);
     // A radio or checkbox reports `checked`, not `selected`.
     expect(source("Chip.tsx")).toContain("{ checked: active, disabled }");
+  });
+});
+
+// The nudge runs from the layout callbacks as well as the selection's effect,
+// which fires before layout. Mutation: drop `nudge()` from either `onLayout`,
+// and a rail opened on a chip off the end stays at its start; drop either
+// `accessibilityLabel={label}`, and a screen reader hears an unnamed group on
+// the weather card; drop either layout's hint line, or draw the scrolling
+// one inside the fades' box, and a greyed period loses its reason.
+describe("ChipRail", () => {
+  it("nudges from layout, and names its radiogroup", () => {
+    const source = readFileSync(
+      new URL("./ChipRail.tsx", import.meta.url),
+      "utf8",
+    );
+    expect(source.match(/\bnudge\(\);/g)?.length).toBeGreaterThanOrEqual(2);
+    expect(source).toContain("useEffect(nudge, [activeIndex])");
+    expect(source.match(/accessibilityLabel=\{label\}/g)).toHaveLength(2);
+    expect(source).toContain("{hintLine}");
+    expect(source).toMatch(
+      /<EdgeFade side="end" \/> : null\}\s*<\/View>\s*\{hint \? <Text style=\{hintStyles\.hint\}>/,
+    );
   });
 });

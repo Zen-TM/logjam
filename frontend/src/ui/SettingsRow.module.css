@@ -10,6 +10,9 @@
   /* The grid's own cell: the wrapper exists so a disabled row can make its
      control `inert` without dimming or silencing the label beside it. */
   display: contents;
+  /* A wrapped `ChipRail` here ends at the row's right, as the control does
+     (it inherits through `display: contents`). */
+  --rail-wrap-align: flex-end;
 }
 
 .row[data-disabled] .control > * {

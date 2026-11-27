@@ -122,6 +122,24 @@
   padding: 0 12px 12px;
 }
 
+/* A legend's prose and key in one column, whether it sits in a dialog or in the
+   popover's tab: the same gaps and the body role in both. */
+.legend {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1-5);
+}
+
+.legendText {
+  composes: body from "../../textRoles.generated.module.css";
+  margin: 0;
+  line-height: 1.45;
+}
+
+.legend .legendList {
+  margin: 0;
+}
+
 .legendList {
   list-style: none;
   margin: var(--space-2) 0;

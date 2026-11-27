@@ -8,6 +8,11 @@ import {
   OVERLAY_LEGENDS,
   overlayAwaitsChoice,
   overlayChoiceLabel,
+  overlayChoiceOption,
+  overlayChoicePick,
+  overlayLegendRows,
+  weatherLayer,
+  type WeatherLayerKey,
   normalizeCarrier,
   type CarrierId,
   PLACE_TYPE_COLORS,
@@ -15,6 +20,7 @@ import {
   takesNswContours,
   takesNswHillshade,
   type OverlayLegend,
+  type OverlayTerrainKey,
   type SectionKeysOn,
   type SlopeBand,
   type TerrainSwitchKey,
@@ -39,7 +45,14 @@ import {
 } from "../../ui";
 import classes from "./LayersPopover.module.css";
 
-type View = "overlays" | "basemap" | "terrain" | "slopeBands" | "sharpened";
+type View =
+  | SectionKeysOn<typeof MAP_LAYERS, "web">
+  | "slopeBands"
+  | "sharpened";
+
+/** A request to open Layers on a view the button does not: Logjam Web's own
+ *  `openLayers` in `App` makes one. */
+export type LayersStart = { view: "sharpened" | "weather" };
 
 /** The tab a view belongs to: a sub-view is Terrain's. */
 const tabOf = (view: View): View =>
@@ -47,13 +60,19 @@ const tabOf = (view: View): View =>
 
 const copy = MAP_LAYERS.copy;
 const terrainCopy = MAP_TERRAIN.copy;
+const tabLabel: Record<SectionKeysOn<typeof MAP_LAYERS, "web">, string> = {
+  basemap: copy.tabBasemap,
+  terrain: copy.tabTerrain,
+  overlays: copy.tabOverlays,
+  weather: copy.tabWeather,
+};
 
 const countOf = (count: number, noun: string) =>
   `${count} ${noun}${count === 1 ? "" : "s"}`;
 
 /**
  * What is drawn on the map, in a popover over it — not a page, because it is a
- * question about the map. Three tabs (Map, Terrain, Overlays); a row with more
+ * question about the map. Four tabs (Map, Terrain, Overlays, Weather); a row with more
  * inside it than a switch (the slope bands) opens a sub-view in place.
  */
 /** "Show river gauges", but "Show MGA grid": an acronym keeps its capitals. */
@@ -85,6 +104,9 @@ export default function LayersPopover({
   onTerrainLayerChange,
   coverageCarrier,
   onCoverageCarrierChange,
+  weatherLayer: weatherLayerKey,
+  onWeatherLayerChange,
+  weatherTotals,
   slopeBands,
   onSlopeBandsChange,
   mapView,
@@ -126,6 +148,10 @@ export default function LayersPopover({
   onTerrainLayerChange: (key: TerrainSwitchKey, on: boolean) => void;
   coverageCarrier: CarrierId | null;
   onCoverageCarrierChange: (carrier: CarrierId) => void;
+  weatherLayer: WeatherLayerKey;
+  onWeatherLayerChange: (layer: WeatherLayerKey) => void;
+  /** The totals the weather run on the map has, once it is known. */
+  weatherTotals?: readonly string[] | null;
   slopeBands: SlopeBand[];
   onSlopeBandsChange: (bands: SlopeBand[]) => void;
   mapView: { lng: number; lat: number; zoom: number } | null;
@@ -136,7 +162,7 @@ export default function LayersPopover({
    * request is a new object, so asking again for the same view navigates
    * again (Back, then the Inbox's Show once more).
    */
-  startView: { view: "sharpened" } | null;
+  startView: LayersStart | null;
   /** False until the first fetch of sharpened areas settles (shared/DESIGN.md §11). */
   sharpenedLoaded: boolean;
   activeTopoJobs: TopoJob[];
@@ -226,13 +252,10 @@ export default function LayersPopover({
             <ChipRail
               label="Layers view"
               className={classes.grow}
-              options={contractSectionKeys(MAP_LAYERS, "web").map((key) =>
-                key === "basemap"
-                  ? { value: key, label: copy.tabBasemap }
-                  : key === "terrain"
-                    ? { value: key, label: copy.tabTerrain }
-                    : { value: key, label: copy.tabOverlays },
-              )}
+              options={contractSectionKeys(MAP_LAYERS, "web").map((key) => ({
+                value: key,
+                label: tabLabel[key],
+              }))}
               value={view}
               onChange={setView}
             />
@@ -315,7 +338,11 @@ export default function LayersPopover({
                     onToggle={setShowWays}
                   />
                   {contractSectionKeys(MAP_OVERLAYS, "web")
-                    .filter(isOverlayTerrainKey)
+                    // Weather has a tab, so the list holds the other three.
+                    .filter(
+                      (key): key is Extract<typeof key, OverlayTerrainKey> =>
+                        isOverlayTerrainKey(key),
+                    )
                     .map((key) => (
                       <OverlayLegendRow
                         key={key}
@@ -362,6 +389,17 @@ export default function LayersPopover({
                     }}
                   />
                 </div>
+              ),
+              weather: () => (
+                <WeatherPane
+                  checked={terrainLayers.weather}
+                  onToggle={(on) => onTerrainLayerChange("weather", on)}
+                  layer={weatherLayerKey}
+                  totals={weatherTotals}
+                  onLayerChange={(value) =>
+                    onWeatherLayerChange(weatherLayer(value).key)
+                  }
+                />
               ),
             };
             return panes[view as keyof typeof panes]();
@@ -585,7 +623,12 @@ export function OverlayLegendRow({
   /** The value of `legend.choice`, for an overlay that has one: null until
    *  one is picked, when the row offers the legend's choice in place of its
    *  switch. */
-  choice?: { value: string | null; onChange: (value: string) => void };
+  choice?: {
+    value: string | null;
+    onChange: (value: string) => void;
+    /** What the source has now, for a choice whose pick depends on it. */
+    available?: readonly string[] | null;
+  };
 }) {
   const [legendOpen, setLegendOpen] = useState(false);
   const openLegend = () => setLegendOpen(true);
@@ -624,23 +667,54 @@ export function OverlayLegendRow({
         />
       )}
       <Dialog open={legendOpen} title={legend.title} onClose={closeLegend}>
-        {legend.choice && choice && (
-          <ChipRail
-            label={legend.choice.label}
-            options={legend.choice.options}
-            value={choice.value ?? ""}
-            onChange={(value) => {
-              // The first pick comes from the row's button: the overlay was
-              // asked for, so it comes on.
-              if (overlayAwaitsChoice(legend, choice.value)) onToggle(true);
-              choice.onChange(value);
-            }}
-            wrap
-          />
-        )}
-        <p>{legend.intro}</p>
-        <ul className={classes.legendList}>
-          {legend.rows.map(({ label, colour, pattern }) => (
+        <OverlayLegendBody
+          legend={legend}
+          choice={choice}
+          onToggle={onToggle}
+        />
+      </Dialog>
+    </>
+  );
+}
+
+/** What a legend holds: its choice (if any), the intro, the key, the caveat and
+ *  the credit. In a dialog behind a row's help button, or inline in a tab. */
+function OverlayLegendBody({
+  legend,
+  choice,
+  onToggle,
+}: {
+  legend: OverlayLegend;
+  choice?: {
+    value: string | null;
+    onChange: (value: string) => void;
+    /** What the source has now, for a choice whose pick depends on it. */
+    available?: readonly string[] | null;
+  };
+  onToggle: (next: boolean) => void;
+}) {
+  return (
+    <div className={classes.legend}>
+      {legend.choice && choice && (
+        <ChipRail
+          label={legend.choice.label}
+          options={legend.choice.options}
+          value={overlayChoiceOption(legend, choice.value)}
+          onChange={(option) => {
+            // The first pick comes from the row's button: the overlay was
+            // asked for, so it comes on.
+            if (overlayAwaitsChoice(legend, choice.value)) onToggle(true);
+            choice.onChange(
+              overlayChoicePick(legend, option, choice.value, choice.available),
+            );
+          }}
+          wrap
+        />
+      )}
+      <p className={classes.legendText}>{legend.intro}</p>
+      <ul className={classes.legendList}>
+        {overlayLegendRows(legend, choice?.value).map(
+          ({ label, colour, pattern }) => (
             <li key={label}>
               {pattern ? (
                 <IconTile pattern={pattern} hue={colour} />
@@ -649,12 +723,55 @@ export function OverlayLegendRow({
               )}
               {label}
             </li>
-          ))}
-        </ul>
-        <p>{legend.caveat}</p>
-        <p>{legend.credit}</p>
-      </Dialog>
-    </>
+          ),
+        )}
+      </ul>
+      <p className={classes.legendText}>{legend.caveat}</p>
+      <p className={classes.legendText}>{legend.credit}</p>
+    </div>
+  );
+}
+
+/**
+ * The Weather tab: its switch, and the legend inline (the layer picker, the
+ * chosen layer's key, the caveat and the credit), since the layer is what the
+ * tab is for. Its words and look are the overlays' own (`OVERLAY_LEGENDS`).
+ */
+export function WeatherPane({
+  checked,
+  onToggle,
+  layer,
+  totals,
+  onLayerChange,
+}: {
+  checked: boolean;
+  onToggle: (next: boolean) => void;
+  layer: string;
+  /** The totals the run has: the totals chip picks one of them. */
+  totals?: readonly string[] | null;
+  onLayerChange: (value: string) => void;
+}) {
+  const legend = OVERLAY_LEGENDS.weather;
+  return (
+    <div className={classes.body}>
+      <Row
+        leading={<IconTile icon="layers" hue={legend.hue} />}
+        title={copy.showWeather}
+        onPress={() => onToggle(!checked)}
+        trailing={
+          <Toggle
+            checked={checked}
+            onChange={onToggle}
+            label={copy.showWeather}
+          />
+        }
+      />
+      <OverlayLegendBody
+        legend={legend}
+        choice={{ value: layer, onChange: onLayerChange, available: totals }}
+        onToggle={onToggle}
+      />
+    </div>
   );
 }
 

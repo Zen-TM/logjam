@@ -1,8 +1,9 @@
 // The statewide Terrain group: contours, slope and hillshade over all of NSW,
-// from the 5 m DEM, with no LiDAR job, and three overlays from statewide
-// archives of their own: Coverage (nswCoverage.ts), Fire history (nswFire.ts)
-// and Land (nswLand.ts). The height-derived archives and Land are the region's
-// (`NSW_REGION.terrain`, regions.ts); each client only draws these.
+// from the 5 m DEM, with no LiDAR job, and four overlays from statewide
+// archives of their own: Weather (weatherMap.ts), Coverage (nswCoverage.ts),
+// Fire history (nswFire.ts) and Land (nswLand.ts). The height-derived archives
+// and Land are the region's (`NSW_REGION.terrain`, regions.ts); each client
+// only draws these.
 //
 // Slope is baked once as a fake DEM, a terrarium archive whose "height" is the
 // slope in degrees. A client loads it as a `raster-dem` source and colours it with a
@@ -14,15 +15,17 @@ import { rgbaCssFromHex, type SlopeBand } from "./topoSettings.js";
 
 /**
  * The group's layers, top of the map first: contour lines over the edges of
- * who holds the land over the hatch of where the user's carrier predicts no
- * mobile reception over the tint of when the ground last burnt over the slope
- * colours over the shading. Land is only edges, so it goes over the hatch and
- * the two fills, which would otherwise wash it out. Both clients list them in
- * this order and stack them in it.
+ * who holds the land over the weather (a translucent colour field, with its
+ * wind arrows) over the hatch of where the user's carrier predicts no mobile
+ * reception over the tint of when the ground last burnt over the slope
+ * colours over the shading. Land is only edges, so it goes over the weather,
+ * the hatch and the two fills, which would otherwise wash it out. Both clients
+ * list them in this order and stack them in it.
  */
 export const TERRAIN_LAYER_KEYS = [
   "contours",
   "land",
+  "weather",
   "coverage",
   "fire",
   "slope",
@@ -34,9 +37,10 @@ export type TerrainLayerKey = (typeof TERRAIN_LAYER_KEYS)[number];
 /**
  * The Terrain layers that are overlays of their own: each drawn from its own
  * statewide archive rather than a DEM, with its own credit and its row under
- * Overlays, and none redrawn by a sharpened area or turned on by a job in it.
+ * Overlays (Weather's is the Weather tab), and none redrawn by a sharpened area or turned on by a job in it.
  */
 export const OVERLAY_TERRAIN_KEYS = [
+  "weather",
   "coverage",
   "fire",
   "land",
@@ -63,6 +67,7 @@ export const TERRAIN_BASEMAP_ANCHORS: Readonly<
   Record<TerrainLayerKey, string>
 > = {
   contours: "water_stream",
+  weather: "water_stream",
   coverage: "water_stream",
   fire: "water_stream",
   slope: "water_stream",
@@ -132,6 +137,7 @@ export const TERRAIN_LAYER_DEFAULTS: Readonly<
   Record<TerrainSwitchKey, boolean>
 > = {
   contours: true,
+  weather: false,
   coverage: false,
   fire: false,
   slope: true,

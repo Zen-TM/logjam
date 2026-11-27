@@ -97,6 +97,9 @@
   padding: 0 var(--space-1-5);
   border-radius: var(--radius-pill);
   background: var(--color-card);
+  /* The chips it holds (a rail of periods) fill with the page, not this card's
+     own colour. Guard: Notice.test.tsx. */
+  --chip-fill: var(--color-page);
   color: var(--color-text);
   max-width: 100%;
   box-shadow: var(--shadow-map-card);
@@ -116,6 +119,59 @@
   border-radius: var(--radius-lg);
 }
 
+/* One width for every layer, step and total: the words wrap inside it, the
+   controls span it, and a phone narrower than it holds the card to its own
+   width (the notice's max-width). */
+.fixedWidth {
+  width: var(--notice-card-width);
+}
+
+.fixedWidth .noticeLine,
+.fixedWidth .noticeControls {
+  align-self: stretch;
+  justify-content: center;
+}
+
+/* A card's head: the glyph, larger, on its left edge, the words beside it, the
+   action in its top right corner, wherever the words end. */
+.fixedWidth .noticeLine {
+  justify-content: flex-start;
+  align-items: flex-start;
+}
+
+.fixedWidth .noticeText {
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: start;
+}
+
+/* The action sits over the card's top right corner rather than in a column of
+   its own, so only the first line of words makes room for it and the second
+   runs on beneath it. */
+.fixedWidth {
+  position: relative;
+}
+
+.fixedWidth .noticeAction {
+  position: absolute;
+  top: var(--space-1);
+  right: calc((40px - var(--control-sm)) / 2);
+}
+
+/* Words that are a bare string have no first child to pad, so the words
+   themselves clear the X, on every line they wrap to. */
+.fixedWidth.withAction .noticeText > :first-child,
+.fixedWidth.withAction .noticeText:not(:has(> *)) {
+  padding-inline-end: calc(var(--control-sm) + var(--space-0-5));
+}
+
+/* As tall as the two lines of words beside it (`lh`, so it follows the text
+   size); the `size` the kit passes stays as the fallback. */
+.fixedWidth .noticeGlyph {
+  width: 2lh;
+  height: 2lh;
+}
+
 .noticeLine {
   display: inline-flex;
   align-items: center;
@@ -126,12 +182,43 @@
 .noticeControls {
   display: flex;
   flex-wrap: wrap;
+  max-width: 100%;
   justify-content: center;
   gap: var(--space-1);
 }
 
+/* The words as a button: no button look, the dotted underline says it is
+   pressable, and the press answers by dimming. The words sit centred in a
+   target of the control's least height, so a single line is not a 21 px
+   sliver; the two-line head is taller than that and is not changed. */
+.textButton {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: var(--control-sm);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-decoration: underline dotted;
+  text-underline-offset: var(--space-0-5);
+  cursor: pointer;
+}
+
+.textButton:hover,
+.textButton:active {
+  opacity: var(--opacity-pressed);
+}
+
 .twoLines {
   composes: twoLines from "./TwoLines.module.css";
+}
+
+.noticeAction {
+  display: inline-flex;
+  flex: none;
+  gap: var(--space-1);
 }
 
 .noticeGlyph {

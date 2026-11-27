@@ -5,6 +5,9 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
@@ -18,7 +21,7 @@ import {
   RASTER_TEMPLATE_DEFAULTS,
   TERRAIN_LAYER_DEFAULTS,
 } from "@logjam/shared";
-import { OverlayLegendRow, TerrainPane } from "./LayersPopover";
+import { OverlayLegendRow, TerrainPane, WeatherPane } from "./LayersPopover";
 
 // jsdom has no ResizeObserver, which the Coverage legend's ChipRail uses.
 vi.stubGlobal(
@@ -202,6 +205,7 @@ describe("the Terrain group on Logjam Web", () => {
       );
     const stored = {
       contours: true,
+      weather: false,
       coverage: false,
       fire: false,
       slope: true,
@@ -420,5 +424,112 @@ describe("the Coverage row on Logjam Web", () => {
   it("is an overlay row, not a Terrain one", () => {
     draw();
     expect(screen.queryByRole("switch", { name: "Show coverage" })).toBeNull();
+  });
+});
+
+describe("the Weather tab on Logjam Web", () => {
+  const pane = (props: {
+    onToggle?: (on: boolean) => void;
+    onChange?: (value: string) => void;
+    value?: string;
+    totals?: readonly string[];
+  }) =>
+    render(
+      <WeatherPane
+        checked={TERRAIN_LAYER_DEFAULTS.weather}
+        onToggle={props.onToggle ?? vi.fn()}
+        layer={props.value ?? "temperature"}
+        totals={props.totals}
+        onLayerChange={props.onChange ?? vi.fn()}
+      />,
+    );
+
+  // Mutation: start it on, and every map opens under a forecast nobody asked
+  // for.
+  it("is off by default and switches the weather key", () => {
+    const onToggle = vi.fn();
+    pane({ onToggle });
+    const weather = screen.getByRole("switch", { name: "Show weather" });
+    expect(weather.getAttribute("aria-checked")).toBe("false");
+    fireEvent.click(weather);
+    expect(onToggle).toHaveBeenCalledWith(true);
+  });
+
+  // Mutation: render `legend.rows` as the key (the default layer's), and
+  // Temperature's key lists rain's mm/h; drop the picker, the caveat or the
+  // credit, and the tab loses what its dialog held.
+  it("picks the layer inline, over the chosen layer's own key", () => {
+    const onChange = vi.fn();
+    const onToggle = vi.fn();
+    const { container } = pane({ onChange, onToggle });
+    expect(screen.queryByRole("dialog")).toBeNull();
+    for (const { label } of OVERLAY_LEGENDS.weather.choice!.options)
+      expect(screen.getByRole("radio", { name: label })).toBeTruthy();
+    expect(
+      screen
+        .getByRole("radio", { name: "Temperature" })
+        .getAttribute("aria-checked"),
+    ).toBe("true");
+    const text = container.textContent;
+    expect(text).toContain("22 °C");
+    expect(text).not.toContain("mm/h");
+    // Five chips; the totals are one, which picks 24 h from a stepped layer.
+    expect(screen.getAllByRole("radio")).toHaveLength(5);
+    fireEvent.click(screen.getByRole("radio", { name: "Rain accumulation" }));
+    expect(onChange).toHaveBeenCalledWith("rainPast24");
+    expect(onToggle).not.toHaveBeenCalled();
+    expect(text).toContain(copy.weatherLegend);
+    expect(text).toContain(copy.weatherCaveat);
+    expect(text).toContain(OVERLAY_LEGENDS.weather.credit);
+  });
+
+  // Mutation: key the chip by the stored layer, and a stored 72 h total
+  // leaves "Rain accumulation" unselected; make the chip pick the default
+  // total, and pressing it on a total resets the period.
+  it("shows any total as the one chip, and keeps its period when pressed", () => {
+    const onChange = vi.fn();
+    pane({ value: "rainPast72", onChange });
+    const chip = screen.getByRole("radio", { name: "Rain accumulation" });
+    expect(chip.getAttribute("aria-checked")).toBe("true");
+    fireEvent.click(chip);
+    expect(onChange).toHaveBeenCalledWith("rainPast72");
+  });
+
+  // Mutation: ignore the run's totals, and the chip picks 24 h past for a run
+  // that dropped it: the card opens on "couldn't get the weather map".
+  it("picks the first total the run has when it lacks 24 h past", () => {
+    const onChange = vi.fn();
+    pane({ onChange, totals: ["rainNext24", "rainNext72"] });
+    fireEvent.click(screen.getByRole("radio", { name: "Rain accumulation" }));
+    expect(onChange).toHaveBeenCalledWith("rainNext24");
+  });
+
+  // Mutation: drop `className={classes.legendText}` from a legend paragraph,
+  // and it is 16 px with the browser's margins, a 40 px gap in the tab.
+  it("sets the legend's prose in the body role, without margins", () => {
+    const { container } = pane({});
+    const prose = [copy.weatherLegend, copy.weatherCaveat].map(
+      (text) =>
+        [...container.querySelectorAll("p")].find(
+          (p) => p.textContent === text,
+        )!,
+    );
+    expect(prose).toHaveLength(2);
+    for (const p of prose) expect(p.className).toMatch(/legendText/);
+    expect(
+      readFileSync(
+        join(
+          dirname(fileURLToPath(import.meta.url)),
+          "LayersPopover.module.css",
+        ),
+        "utf8",
+      ),
+    ).toMatch(/\.legendText \{[^}]*composes: body from[^}]*margin: 0/);
+  });
+
+  // Mutation: list it among the Terrain rows, and it shows twice.
+  it("is a tab, not a Terrain row", () => {
+    draw();
+    expect(screen.queryByRole("switch", { name: "Show weather" })).toBeNull();
   });
 });

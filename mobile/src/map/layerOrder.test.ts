@@ -63,6 +63,7 @@ describe("two saved areas and the Terrain group", () => {
         land: ["land"],
         fire: ["fire-fill", "fire-edge"],
         coverage: ["coverage"],
+        weather: ["weather-field", "weather-arrows"],
         slope: ["slope"],
         contours: ["contours"],
       },
@@ -104,6 +105,10 @@ describe("two saved areas and the Terrain group", () => {
     expect(at("fire-edge")).toBeLessThan(at("contours"));
     expect(at("slope")).toBeLessThan(at("coverage"));
     expect(at("coverage")).toBeLessThan(at("contours"));
+    // Weather's arrows over its field, both under the contours and the labels.
+    expect(at("slope")).toBeLessThan(at("weather-field"));
+    expect(at("weather-field")).toBeLessThan(at("weather-arrows"));
+    expect(at("weather-arrows")).toBeLessThan(at("contours"));
     // Where saves overlap, the newest draws on top.
     expect(at("older/earth")).toBeLessThan(at("newer/earth"));
     expect(at("older/places_locality")).toBeLessThan(

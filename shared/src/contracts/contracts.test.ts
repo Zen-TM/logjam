@@ -835,16 +835,19 @@ describe("the account", () => {
 });
 
 describe("the map's layers", () => {
+  // Mutation: move "weather" below "offline" in `MAP_LAYERS`.
   it("draws Offline on Logjam GPS only, and says why", () => {
     expect(contractSectionKeys(MAP_LAYERS, "web")).toEqual([
       "basemap",
       "terrain",
       "overlays",
+      "weather",
     ]);
     expect(contractSectionKeys(MAP_LAYERS, "gps")).toEqual([
       "basemap",
       "terrain",
       "overlays",
+      "weather",
       "offline",
     ]);
   });
@@ -984,7 +987,8 @@ describe("the logbook's stats", () => {
 
 describe("the map's overlays list", () => {
   // Red when Logjam GPS's list drifts from Logjam Web's: the web's rows are the
-  // list, and each client differs only by what a row declares (`on`).
+  // list, and each client differs only by what a row declares (`on`). Also red
+  // when the Weather row comes back: it is the Weather tab's (`MAP_LAYERS`).
   it("is Logjam Web's rows plus the phone's GeoPDF row", () => {
     expect(contractSectionKeys(MAP_OVERLAYS, "web")).toEqual([
       "places",
@@ -1302,6 +1306,53 @@ describe("the map point panel", () => {
     expect(facts(null)).not.toContain("land");
   });
 
+  // Mutation: push the figure whatever `weatherMap` is, and with the overlay
+  // off or no value at the point the panel has a Weather figure with nothing
+  // in it; or drop the hint and it reads as the forecast's.
+  it("says the weather map's figure, and where it comes from, only when it has one", () => {
+    const facts = (
+      weatherMap?: Parameters<typeof mapPointFacts>[0]["weatherMap"],
+    ) =>
+      mapPointFacts({
+        point,
+        elevation: { state: "unavailable" },
+        from: null,
+        weatherMap,
+      });
+    expect(facts().map((fact) => fact.key)).not.toContain("weatherMap");
+    expect(facts(null).map((fact) => fact.key)).not.toContain("weatherMap");
+    const hint = "Weather map, 9 km cell";
+    expect(MAP_POINT.copy.weatherMapHint).toBe(hint);
+    expect(
+      facts({ layer: "rain", value: 2.5, from: null, shown: "Today, 9 pm" }).at(
+        -1,
+      ),
+    ).toEqual({
+      key: "weatherMap",
+      label: "Rain",
+      value: "2.5 mm/h",
+      note: `Today, 9 pm · ${hint}`,
+    });
+    // A total's own name holds its window: no time beside it.
+    expect(
+      facts({
+        layer: "rainPast168",
+        value: 38.2,
+        from: null,
+        shown: "To Today, 9 pm",
+      }).at(-1),
+    ).toMatchObject({
+      label: "Rain, past 7 days",
+      value: "38 mm",
+      note: hint,
+    });
+    expect(
+      facts({ layer: "wind", value: 24, from: 225, shown: "Today, 9 pm" }).at(
+        -1,
+      )!.value,
+    ).toBe("24 km/h from the SW");
+  });
+
   it("keeps its sections and facts in step", () => {
     const keys = MAP_POINT.sections.map((section) => section.key);
     const facts = mapPointFacts({
@@ -1312,6 +1363,7 @@ describe("the map point panel", () => {
       land: "Private land",
       fire: "Wildfire, Dec 2019",
       coverage: "Telstra: no mobile reception",
+      weatherMap: { layer: "rain", value: 1, from: null, shown: "Today, 9 pm" },
       fix: { atMs: 0, accuracyM: 5, nowMs: 1_000 },
     });
     expect(facts.map((fact) => fact.key)).toEqual(keys);

@@ -7,6 +7,7 @@
 //   Basemap  — what is the map made of?
 //   Terrain  — what shape is the ground?
 //   Layers   — what is drawn on top of it?
+//   Weather  — what is the weather doing, and which quantity is drawn?
 //   Offline  — what works with no signal?
 //
 // Tabs rather than a second sheet, per DESIGN.md: one sheet, content swapped
@@ -56,7 +57,9 @@ import {
   OVERLAY_TERRAIN_KEYS,
   overlayAwaitsChoice,
   overlayChoiceLabel,
-  type CarrierId,
+  overlayChoiceOption,
+  overlayChoicePick,
+  overlayLegendRows,
   slopeLegendRows,
   TERRAIN_LAYER_KEYS,
   type OverlayLegend,
@@ -65,7 +68,7 @@ import {
   type TerrainSwitchKey,
 } from "@logjam/shared";
 
-import { type LayersOpen } from "./layersOpen";
+import { type LayersOpen, type LayersTab as OpenTab } from "./layersOpen";
 import {
   spacing,
   makeStyles,
@@ -98,7 +101,7 @@ import { terrainSwitch, type TerrainSwitchState } from "./terrainSwitches";
 import type { BasemapId, MapArtifact } from "./sourceResolver";
 import { savedAreaTotals } from "../offline/artifactGroups";
 
-type Tab = SectionKeysOn<typeof MAP_LAYERS, "gps">;
+type Tab = OpenTab;
 
 const copy = MAP_LAYERS.copy;
 
@@ -106,6 +109,7 @@ const TAB_LABEL: Record<Tab, string> = {
   basemap: copy.tabBasemap,
   terrain: copy.tabTerrain,
   overlays: copy.tabOverlays,
+  weather: copy.tabWeather,
   offline: copy.tabOffline,
 };
 
@@ -158,12 +162,16 @@ export function MapLayersSheetHost({
   open,
   onOpened,
   ...rest
-}: Omit<ComponentProps<typeof MapLayersSheet>, "visible" | "onClose"> & {
+}: Omit<
+  ComponentProps<typeof MapLayersSheet>,
+  "visible" | "startTab" | "onClose"
+> & {
   open: LayersOpen;
   /** Runs each time the sheet opens (the basemap reachability probe). */
   onOpened: () => void;
 }) {
   const visible = useSyncExternalStore(open.subscribe, open.get);
+  const startTab = useSyncExternalStore(open.subscribe, open.tab);
   useEffect(() => {
     if (visible) onOpened();
   }, [visible, onOpened]);
@@ -171,6 +179,7 @@ export function MapLayersSheetHost({
     <MapLayersSheet
       {...rest}
       visible={visible}
+      startTab={startTab}
       onClose={() => open.set(false)}
     />
   );
@@ -178,6 +187,7 @@ export function MapLayersSheetHost({
 
 export function MapLayersSheet({
   visible,
+  startTab,
   onClose,
   connectivity,
   basemapId,
@@ -185,8 +195,10 @@ export function MapLayersSheet({
   downBasemaps,
   terrainLayers,
   onTerrainLayerChange,
-  coverageCarrier,
-  onCoverageCarrierChange,
+  choices,
+  onChoiceChange,
+  weatherKept,
+  weatherTotals,
   artifacts,
   layers,
   hasVegetation,
@@ -197,6 +209,9 @@ export function MapLayersSheet({
   onImportFile,
 }: {
   visible: boolean;
+  /** The tab the opening asked for, if any: the sheet moves to it, once per
+   *  request (`LayersOpen.tab`). */
+  startTab: Tab | null;
   onClose: () => void;
   connectivity: Connectivity;
   basemapId: BasemapId;
@@ -205,10 +220,14 @@ export function MapLayersSheet({
   downBasemaps: ReadonlySet<BasemapId>;
   terrainLayers: Readonly<Record<TerrainSwitchKey, boolean>>;
   onTerrainLayerChange: (key: TerrainSwitchKey, on: boolean) => void;
-  /** The network the Coverage overlay draws, a per-device choice: null until
-   *  the user picks. */
-  coverageCarrier: CarrierId | null;
-  onCoverageCarrierChange: (id: CarrierId) => void;
+  /** What each overlay with a `choice` draws, a per-device choice: Coverage's network, Weather's layer.
+   *  Null until picked, for an overlay that waits on one. */
+  choices: Partial<Record<OverlayTerrainKey, string | null>>;
+  onChoiceChange: (key: OverlayTerrainKey, value: string) => void;
+  /** A weather run is kept with a saved area, so Weather draws offline. */
+  weatherKept: boolean;
+  /** The totals the weather run on the map has, once it is known. */
+  weatherTotals?: readonly string[] | null;
   artifacts: MapArtifact[];
   /** Every kind drawn over the basemap, in the order they are listed. */
   layers: LayerToggleEntry[];
@@ -234,7 +253,20 @@ export function MapLayersSheet({
     setWasVisible(visible);
     setLegend(null);
   }
+  const [seenStartTab, setSeenStartTab] = useState(startTab);
+  if (seenStartTab !== startTab) {
+    setSeenStartTab(startTab);
+    if (startTab) setTab(startTab);
+  }
   const online = connectivity === "online";
+  const weatherSwitch = terrainSwitch(
+    "weather",
+    terrainLayers.weather,
+    basemapId,
+    online,
+    artifacts,
+    weatherKept,
+  );
 
   // Exhaustive by type: a tab the contract names and this sheet does not
   // draw, or the reverse, fails `tsc` (`MAP_LAYERS`, shared/src/contracts).
@@ -273,13 +305,23 @@ export function MapLayersSheet({
                 basemapId,
                 online,
                 artifacts,
+                weatherKept,
               ),
             ]),
           ) as Record<OverlayTerrainKey, TerrainSwitchState>
         }
         onOverlayChange={onTerrainLayerChange}
         onOpenOverlayLegend={setLegend}
-        choices={{ coverage: coverageCarrier }}
+        choices={choices}
+      />
+    ),
+    weather: () => (
+      <WeatherTab
+        state={weatherSwitch}
+        onChange={(on) => onTerrainLayerChange("weather", on)}
+        layer={choices.weather}
+        totals={weatherTotals}
+        onLayerChange={(value) => onChoiceChange("weather", value)}
       />
     ),
     offline: () => (
@@ -309,26 +351,30 @@ export function MapLayersSheet({
         legend && isOverlayTerrainKey(legend) ? (
           <OverlayLegendSheet
             legend={OVERLAY_LEGENDS[legend]}
-            {...(legend === "coverage"
+            {...(OVERLAY_LEGENDS[legend].choice
               ? {
                   choice: {
-                    value: coverageCarrier,
+                    value: choices[legend],
+                    available: legend === "weather" ? weatherTotals : null,
                     onChange: (value: string) =>
-                      pickCoverageCarrier(
-                        value,
-                        coverageCarrier,
-                        terrainSwitch(
-                          "coverage",
-                          terrainLayers.coverage,
-                          basemapId,
-                          online,
-                          artifacts,
-                        ).disabled,
-                        {
-                          choose: onCoverageCarrierChange,
-                          turnOn: () => onTerrainLayerChange("coverage", true),
-                        },
-                      ),
+                      legend === "coverage"
+                        ? pickCoverageCarrier(
+                            value,
+                            choices.coverage ?? null,
+                            terrainSwitch(
+                              "coverage",
+                              terrainLayers.coverage,
+                              basemapId,
+                              online,
+                              artifacts,
+                            ).disabled,
+                            {
+                              choose: (id) => onChoiceChange("coverage", id),
+                              turnOn: () =>
+                                onTerrainLayerChange("coverage", true),
+                            },
+                          )
+                        : onChoiceChange(legend, value),
                   },
                 }
               : {})}
@@ -537,6 +583,47 @@ function TerrainTab({
   );
 }
 
+/**
+ * The Weather tab: the switch, then what a legend holds (the layer picker, the
+ * key, the caveat and the credit) inline, since the layer is the tab's whole
+ * point. The switch follows the same rules the Overlays row's did
+ * (`terrainSwitch`: offline only while a run is kept).
+ */
+function WeatherTab({
+  state,
+  onChange,
+  layer,
+  totals,
+  onLayerChange,
+}: {
+  state: TerrainSwitchState;
+  onChange: (on: boolean) => void;
+  layer: string | null | undefined;
+  /** The totals the run has: the totals chip picks one of them. */
+  totals?: readonly string[] | null;
+  onLayerChange: (value: string) => void;
+}) {
+  const styles = useStyles();
+  const legend = OVERLAY_LEGENDS.weather;
+  return (
+    <View style={styles.body}>
+      <SwitchRow
+        icon="layers"
+        hue={legend.hue}
+        title={copy.showWeather}
+        description={state.reason}
+        disabled={state.disabled}
+        checked={state.checked}
+        onChange={onChange}
+      />
+      <OverlayLegendSheet
+        legend={legend}
+        choice={{ value: layer, onChange: onLayerChange, available: totals }}
+      />
+    </View>
+  );
+}
+
 /** What the slope's colours mean: the account's bands, chosen on Logjam Web. */
 function SlopeLegend() {
   const styles = useStyles();
@@ -563,7 +650,12 @@ function OverlayLegendSheet({
 }: {
   legend: OverlayLegend;
   /** The value of `legend.choice`, for an overlay that has one. */
-  choice?: { value: string | null; onChange: (value: string) => void };
+  choice?: {
+    value: string | null | undefined;
+    onChange: (value: string) => void;
+    /** What the source has now, for a choice whose pick depends on it. */
+    available?: readonly string[] | null;
+  };
 }) {
   const styles = useStyles();
   return (
@@ -572,32 +664,45 @@ function OverlayLegendSheet({
         <Field label={legend.choice.label}>
           <ChipRail
             options={[...legend.choice.options]}
-            value={choice.value ?? ""}
-            onChange={choice.onChange}
+            value={overlayChoiceOption(legend, choice.value)}
+            onChange={(option) =>
+              choice.onChange(
+                overlayChoicePick(
+                  legend,
+                  option,
+                  choice.value,
+                  choice.available,
+                ),
+              )
+            }
           />
         </Field>
       ) : null}
       <Text style={styles.legend}>{legend.intro}</Text>
-      {legend.rows.map(({ label, colour, pattern }) => (
-        <View key={label} style={styles.legendRow}>
-          <View
-            style={[
-              styles.legendSwatch,
-              pattern ? styles.patternSwatch : null,
-              { backgroundColor: colour },
-            ]}
-          >
-            {pattern ? (
-              <Image
-                source={{ uri: pattern }}
-                resizeMode="repeat"
-                style={StyleSheet.absoluteFill}
-              />
-            ) : null}
+      {overlayLegendRows(legend, choice?.value).map((row) => {
+        const { label, colour } = row;
+        const pattern = "pattern" in row ? row.pattern : undefined;
+        return (
+          <View key={label} style={styles.legendRow}>
+            <View
+              style={[
+                styles.legendSwatch,
+                pattern ? styles.patternSwatch : null,
+                { backgroundColor: colour },
+              ]}
+            >
+              {pattern ? (
+                <Image
+                  source={{ uri: pattern }}
+                  resizeMode="repeat"
+                  style={StyleSheet.absoluteFill}
+                />
+              ) : null}
+            </View>
+            <Text style={styles.legend}>{label}</Text>
           </View>
-          <Text style={styles.legend}>{label}</Text>
-        </View>
-      ))}
+        );
+      })}
       <Text style={styles.legend}>{legend.caveat}</Text>
       <Text style={styles.legend}>{legend.credit}</Text>
     </>
@@ -717,7 +822,8 @@ function LayersTab({
     const legend = OVERLAY_LEGENDS[key];
     const state = overlays[key];
     const openLegend = () => onOpenOverlayLegend(key);
-    if (legend.choice && overlayAwaitsChoice(legend, choices[key]))
+    const choose = legend.choice?.choose;
+    if (choose !== undefined && overlayAwaitsChoice(legend, choices[key]))
       return (
         <Row
           icon="layers"
@@ -728,7 +834,7 @@ function LayersTab({
             <Button
               compact
               variant="outlineAccent"
-              label={legend.choice.choose}
+              label={choose}
               onPress={openLegend}
             />
           }

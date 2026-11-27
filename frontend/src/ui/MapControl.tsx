@@ -74,8 +74,16 @@ export function Notice({
   tone = "info",
   controls,
   twoLines = false,
+  quiet = false,
+  fixedWidth = false,
+  onText,
+  textHint,
 }: {
   children: ReactNode;
+  /** Words that change as the user moves a control in it (the weather bar's
+   *  time), kept out of the stack's live region: the control says its own
+   *  value, and re-reading the notice on each notch would talk over it. */
+  quiet?: boolean;
   action?: ReactNode;
   /** Controls in a row under the words, for a notice that is a mode with
    *  ways out (a plan on the map), as Logjam GPS's `Notice` has. */
@@ -83,21 +91,52 @@ export function Notice({
   /** Words with a user's own title in them stop at two lines
    *  (shared/DESIGN.md §9). */
   twoLines?: boolean;
+  /** One width, whatever the words (capped at the room there is): the words
+   *  wrap inside it. For a notice whose words change as a control moves, so
+   *  the card does not breathe. Guard: Notice.test.tsx. */
+  fixedWidth?: boolean;
+  /** Makes the words a button (the weather bar's layer name opens Layers);
+   *  `textHint` is what it does, as its tooltip and description. */
+  onText?: () => void;
+  textHint?: string;
 } & (
   | { tone?: "info" | "warning"; icon?: Glyph }
   | { tone: "critical"; icon: Glyph }
 )) {
   const line = (
     <>
-      {icon && <Icon idea={icon} size={16} className={classes.noticeGlyph} />}
-      <span
-        className={[classes.noticeText, twoLines ? classes.twoLines : ""].join(
-          " ",
-        )}
-      >
-        {children}
-      </span>
-      {action}
+      {icon && (
+        <Icon
+          idea={icon}
+          size={fixedWidth ? 24 : 16}
+          className={classes.noticeGlyph}
+        />
+      )}
+      {onText ? (
+        <button
+          type="button"
+          className={[classes.noticeText, classes.textButton].join(" ")}
+          title={textHint}
+          onClick={onText}
+        >
+          {/* The clamp is a `-webkit-box`, which the button's own layout is not. */}
+          {twoLines ? (
+            <span className={classes.twoLines}>{children}</span>
+          ) : (
+            children
+          )}
+        </button>
+      ) : (
+        <span
+          className={[
+            classes.noticeText,
+            twoLines ? classes.twoLines : "",
+          ].join(" ")}
+        >
+          {children}
+        </span>
+      )}
+      {action && <span className={classes.noticeAction}>{action}</span>}
     </>
   );
   return (
@@ -106,9 +145,11 @@ export function Notice({
         classes.notice,
         action ? classes.withAction : "",
         controls ? classes.stacked : "",
+        fixedWidth ? classes.fixedWidth : "",
       ].join(" ")}
       data-tone={tone}
       role={tone === "info" ? undefined : "alert"}
+      aria-live={quiet ? "off" : undefined}
     >
       {controls ? (
         <>

@@ -20,6 +20,11 @@ const ALLOWED: { file: string; reason: string }[] = [
     reason:
       "the active filter's summary, not a name: the field opens to show it whole",
   },
+  {
+    file: "components/map/WeatherBar.module.css",
+    reason:
+      "the weather card's layer and time, not names: short, known words the card is sized to hold, cut only on a screen narrower than the card, so the card keeps one height while the time moves",
+  },
 ];
 
 function stylesheets(dir: string): string[] {

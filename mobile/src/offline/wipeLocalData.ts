@@ -28,6 +28,7 @@
 // failure to delete is worth surfacing, so per-store failures are collected and
 // returned rather than swallowed — but one failing store never prevents the
 // others from being cleared.
+import { clearWeatherTile } from "@logjam/shared";
 import { OfflineManager } from "@maplibre/maplibre-react-native";
 import * as FileSystem from "expo-file-system/legacy";
 
@@ -40,6 +41,7 @@ import { forgetRegions } from "../regionsPreference";
 import { stopPlansForWipe } from "../plans/plansCache";
 import { wipeAllSyncData, withSyncTransaction } from "../sync/syncDb";
 import { stopGaugesForWipe } from "../gauges/gaugeStorage";
+import { stopWeatherMapForWipe } from "../weatherMap/weatherMapStorage";
 import { stopWeatherForWipe } from "../weather/weatherStorage";
 import { stopTrackRecordingForWipe } from "../tracks/trackRecorder";
 import { CACHE_ROOT, WIPED_DIRS } from "./localStores";
@@ -98,6 +100,7 @@ export async function wipeAllLocalData(): Promise<WipeResult> {
     stoppedInTime(stopTrackRecordingForWipe()),
     stoppedInTime(stopWeatherForWipe()),
     stoppedInTime(stopGaugesForWipe()),
+    stoppedInTime(stopWeatherMapForWipe()),
     stoppedInTime(forgetSharpenedAreas()),
     stoppedInTime(stopPlansForWipe()),
   ]);
@@ -107,6 +110,10 @@ export async function wipeAllLocalData(): Promise<WipeResult> {
   // saved areas. The files go with the region directory below; this is the copy
   // that would otherwise outlive them in the process.
   clearOfflineDemCache();
+
+  // The held forecast tile (its archive handle and a z5 tile of values): in
+  // memory like the DEM tiles, so the wipe path drops it too (ADR 0006).
+  clearWeatherTile();
 
   // The in-memory `/users/me` record (username, email, preferences). Cached for
   // a minute to stop eight screens re-fetching it; a minute is long enough for

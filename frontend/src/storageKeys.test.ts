@@ -39,6 +39,8 @@ const KEPT: Record<string, string> = {
     "which terrain overlays are on: a device preference, names no place",
   "logjam.coverageCarrier":
     "the phone carrier picked for the coverage layer: a device preference",
+  "logjam.weatherLayer":
+    "which weather layer is drawn (rain, wind): a device preference, names no place",
   "logjam.showPlaces": "overlay toggle: a device preference",
   "logjam.showWays": "overlay toggle: a device preference",
   "logjam.showGauges": "overlay toggle: a device preference",

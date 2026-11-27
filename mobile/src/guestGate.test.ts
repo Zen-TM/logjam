@@ -207,6 +207,11 @@ const RAW_FETCH: Entry[] = [
     why: "the place registry on the public CDN (ADR 0034)",
   },
   {
+    file: "weatherMap/weatherMapFeed.ts",
+    gate: "public",
+    why: "the Weather overlay's public files on the CDN (ADR 0049)",
+  },
+  {
     file: "offline/regionDownloads.ts",
     gate: "public",
     why: "range reads of the map archive on the CDN; the clip is cut on the phone (ADR 0036)",

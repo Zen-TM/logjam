@@ -55,6 +55,11 @@ import {
   COVERAGE_HATCH_URIS,
   coverageFilter,
   type CarrierId,
+  WEATHER_LAYER_DEFAULT,
+  weatherReliefColor,
+  type WeatherLayerKey,
+  type WeatherWindFile,
+  type WeatherPointSource,
   TERRAIN_LAYER_KEYS,
   type SharpenedOverlay,
   type TerrainLayerKey,
@@ -75,6 +80,7 @@ import {
   GRID_LINES,
   LAND_EDGE_LAYER,
   COVERAGE_FILL_LAYER,
+  WEATHER_FIELD_LAYER,
   LAND_FILL_LAYER,
   PRESSABLE_LAYERS,
   pressClosedGauge,
@@ -101,6 +107,8 @@ import {
   ROUTE_ARROW_IMAGE,
   ROUTE_ARROW_MIN_ZOOM,
   ROUTE_ARROW_SDF_URI,
+  WIND_ARROW_IMAGE,
+  WIND_ARROW_SDF_URI,
   SAVED_ROUTE_MIN_ZOOM,
   type RouteDraft,
   type RoutePoint,
@@ -178,6 +186,7 @@ import { fetchTrackGeoJSON, trackGeoCacheKey } from "../media/trackGeo";
 import { useToast } from "../feedback/ToastProvider";
 import { moveTerrainIntoBasemap, stackTopoLayers } from "./layerOrder";
 import { coverageLayerSpec } from "./coverageLayers";
+import { placeWindArrows, weatherFieldLayerSpec } from "./weatherLayers";
 import { fireLayerSpecs } from "./fireLayers";
 import { TERRAIN_ENTRIES, type RoutedTiles } from "./terrainEntries";
 import {
@@ -603,6 +612,7 @@ function Map({
   onBasemapHealth,
   slopeBands,
   coverageCarrier = null,
+  weather,
   activeLayerId,
   selectingGeoPdfExtent,
   geoPdfPaperAspect,
@@ -718,7 +728,8 @@ function Map({
       | "hillshade"
       | "land"
       | "fire"
-      | "coverage";
+      | "coverage"
+      | "weather";
     attribution?: string;
     /** Read through the terrain router instead of `pmtilesUrl`'s archive. */
     tiles?: RoutedTiles;
@@ -731,6 +742,14 @@ function Map({
   slopeBands?: SlopeBand[];
   /** The carrier a `coverage` entry draws. */
   coverageCarrier?: CarrierId | null;
+  /** What the `weather` entry draws: its colours, and the wind to place
+   *  arrows from, if any; and `point`, what the point panel reads its value
+   *  from. */
+  weather?: {
+    layer: WeatherLayerKey;
+    arrows: { data: WeatherWindFile; step: number } | null;
+    point: WeatherPointSource | null;
+  };
   activeLayerId: string;
   selectingGeoPdfExtent?: boolean;
   geoPdfPaperAspect?: number;
@@ -826,6 +845,8 @@ function Map({
 
   const slopeBandsRef = useRef(slopeBands);
   const coverageCarrierRef = useRef(coverageCarrier);
+  const weatherRef = useRef(weather);
+  const weatherDrawnRef = useRef<WeatherLayerKey | null>(null);
 
   // Keep refs up to date for use inside event handlers
   const selectPlaceRef = useRef(selectPlace);
@@ -1018,6 +1039,10 @@ function Map({
   useEffect(() => {
     coverageCarrierRef.current = coverageCarrier;
   }, [coverageCarrier]);
+
+  useEffect(() => {
+    weatherRef.current = weather;
+  }, [weather]);
 
   // Initialise map once
   useEffect(() => {
@@ -2800,7 +2825,9 @@ function Map({
           ? ROUTE_ARROW_SDF_URI
           : id === GAUGE_ICON_IMAGE
             ? GAUGE_ICON_SDF_URI
-            : null;
+            : id === WIND_ARROW_IMAGE
+              ? WIND_ARROW_SDF_URI
+              : null;
       // Badges are plain bitmaps, two colours and a rim, so there is no tint
       // to protect and MapLibre can take the decoded element itself. So are
       // the Coverage hatches, which are drawn at 2x.
@@ -2938,7 +2965,14 @@ function Map({
       const fmt = format ?? "raster";
       // A Terrain source made for another set of areas (or for none) has the
       // wrong zooms and holds tiles from the wrong archives: rebuild it.
-      if (TERRAIN_LAYER_KEYS.some((key) => TERRAIN_ENTRIES[key].id === id)) {
+      // Weather's archive changes with every step: it keeps its source and
+      // points it at the next archive (below), so the last step stays drawn
+      // until the next one's tiles arrive.
+      if (
+        TERRAIN_LAYER_KEYS.some(
+          (key) => key !== "weather" && TERRAIN_ENTRIES[key].id === id,
+        )
+      ) {
         const reads = tiles?.template ?? pmtilesUrl;
         const before = terrainSourceFromRef.current.get(srcId);
         if (before !== undefined && before !== reads && map.getSource(srcId)) {
@@ -2957,6 +2991,34 @@ function Map({
             bounds: [...tiles.bounds] as [number, number, number, number],
           }
         : { url: `pmtiles://${pmtilesUrl}` };
+
+      if (fmt === "weather") {
+        const url = `pmtiles://${pmtilesUrl}`;
+        const key = weatherRef.current?.layer ?? WEATHER_LAYER_DEFAULT;
+        // Another quantity's numbers under these colours would read as the
+        // wrong thing for the moment its tiles take: start blank instead.
+        if (weatherDrawnRef.current !== key && map.getSource(srcId)) {
+          if (map.getLayer(WEATHER_FIELD_LAYER))
+            map.removeLayer(WEATHER_FIELD_LAYER);
+          map.removeSource(srcId);
+        }
+        weatherDrawnRef.current = key;
+        const source = map.getSource(srcId) as
+          | maplibregl.RasterDEMTileSource
+          | undefined;
+        if (!source)
+          map.addSource(srcId, {
+            type: "raster-dem",
+            url,
+            tileSize: 256,
+            encoding: "terrarium",
+            attribution,
+          });
+        else if (source.url !== url) source.setUrl(url);
+        if (!map.getLayer(WEATHER_FIELD_LAYER))
+          map.addLayer(weatherFieldLayerSpec(srcId, key));
+        return;
+      }
 
       if (fmt === "slope" || fmt === "hillshade") {
         if (!map.getSource(srcId)) {
@@ -3209,6 +3271,31 @@ function Map({
         coverageFilter(coverageCarrier) as maplibregl.FilterSpecification,
       );
   }, [topoLayers, coverageCarrier, mapLoaded]);
+
+  // The weather layer picked and its wind arrows, live: a paint change and a
+  // source's data, never a new layer.
+  useEffect(() => {
+    if (!mapLoaded || !mapRef.current) return;
+    const map = mapRef.current;
+    if (map.getLayer(WEATHER_FIELD_LAYER))
+      map.setPaintProperty(
+        WEATHER_FIELD_LAYER,
+        "color-relief-color",
+        weatherReliefColor(
+          weather?.layer ?? WEATHER_LAYER_DEFAULT,
+        ) as maplibregl.ExpressionSpecification,
+      );
+    const wind = weather?.arrows ?? null;
+    // On `moveend` and not every frame: the arrows are placed for the view the
+    // map settles on, and a pan moves them with the map until then.
+    const place = () => placeWindArrows(map, wind);
+    place();
+    if (!wind) return;
+    map.on("moveend", place);
+    return () => {
+      map.off("moveend", place);
+    };
+  }, [topoLayers, weather, mapLoaded]);
 
   // Fly to a topo job's bbox when requested from App.tsx
   const onTopoFlyConsumedRef = useRef(onTopoFlyConsumed);
@@ -3762,6 +3849,7 @@ function Map({
           point={asked.point}
           from={asked.from}
           coverageCarrier={coverageCarrier}
+          weatherPoint={weather?.point ?? null}
           {...(asked.startAt ? { startAt: asked.startAt } : {})}
           onClose={closeAsked}
           onAddPlace={onAddPlaceAt}

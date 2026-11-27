@@ -1,4 +1,7 @@
 import {
+  CloudSunRain,
+  StepBack,
+  StepForward,
   Inbox,
   ClipboardList,
   DoorOpen,
@@ -204,6 +207,8 @@ export const WEB_ICONS = {
   disclosure: ChevronRight,
   scrollBack: ChevronsLeft,
   scrollOn: ChevronsRight,
+  earlier: StepBack,
+  later: StepForward,
   expand: ChevronDown,
   collapse: ChevronUp,
   overflow: EllipsisVertical,
@@ -269,6 +274,7 @@ export const WEB_ICONS = {
   weatherRain: CloudRain,
   weatherStorm: CloudLightning,
   weatherSnow: CloudSnow,
+  weatherMap: CloudSunRain,
 } as const satisfies Record<IconIdea, LucideIcon>;
 
 /** A compass NEEDLE, not lucide's Compass: that glyph is a symbol for

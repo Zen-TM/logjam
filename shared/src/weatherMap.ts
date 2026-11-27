@@ -14,13 +14,21 @@
 // Guards: weatherMap.test.ts, against the fixture topo/tests/test_weather.py
 // writes from the builder.
 import { SHORT_WEEKDAYS } from "./dateNames.js";
-import { WEATHER } from "./contracts/weather.js";
+import { MAP_TERRAIN } from "./contracts/mapTerrain.js";
+import { WEATHER, weatherAge } from "./contracts/weather.js";
 import {
   mixHex,
   parseRgbaHex,
   type RgbaHex,
   rgbaCssFromHex,
 } from "./topoSettings.js";
+
+export { WIND_ARROW_SDF_URI } from "./windArrowSdf.js";
+
+/** Style-image name for the wind arrow, registered by each client's map. It
+ *  points east, as the route arrowhead does, so `windArrowsIn`' `rotate` turns
+ *  it downwind. */
+export const WIND_ARROW_IMAGE = "wind-arrow";
 
 /** Bumped with the files' shape; each format has its own prefix. */
 export const WEATHER_MAP_FORMAT = 1;
@@ -36,6 +44,16 @@ export const WEATHER_MAP = {
   /** The job's ATTRIBUTION, which every manifest carries: CC BY 4.0's
    *  condition. Guard: topo/tests/test_weather.py. */
   credit: "Weather data by Open-Meteo.com (CC BY 4.0), ECMWF IFS",
+  /** A manifest this old is asked for again on the next turn-on or return
+   *  to the map; nothing polls. Guards: frontend useWeatherMap.test.tsx,
+   *  mobile weatherMapRefetch.test.ts. */
+  refreshAfterMs: 3_600_000,
+  /** How often an open map re-reads the clock, for the step now falls in. */
+  clockMs: 300_000,
+  /** How long the scrubber rests before the map asks for that step. */
+  settleMs: 150,
+  /** How long Play rests on a step before it moves to the next. */
+  playMs: 1000,
 } as const;
 
 export type WeatherFieldKey = "rain" | "temperature" | "wind" | "gusts";
@@ -86,61 +104,103 @@ type Stop = { value: number; colour: RgbaHex; label?: string };
 
 export type WeatherLayer = {
   key: WeatherLayerKey;
-  /** The picker's option, and the bar's title. */
+  /** The bar's title, and the picker's option for a stepped layer. */
   label: string;
   unit: string;
   /** Interpolated, low to high; a `label` stop is a legend row. */
   stops: readonly Stop[];
   /** Hours either side of the anchor, for a total; absent for a field. */
   hours?: number;
+  /** A total's short name on the card's rail ("Past 24 h"); absent for a
+   *  field. Guard: weatherMap.test.ts holds `period` and `hours` together. */
+  period?: string;
   /** Whether wind arrows go over it. */
   arrows?: boolean;
 };
 
-const CLEAR = "#00000000";
+// The first stop of each ramp is its first colour with no alpha, not clear
+// black: MapLibre mixes the channels as they are, so a fade from black draws a
+// grey fringe round every shower. Guard: weatherMap.test.ts.
+const clearOf = (colour: RgbaHex): RgbaHex => `${colour.slice(0, 7)}00`;
 
-// Rain runs pale blue to violet and purple, temperature blue to red, wind
-// green to red to purple: none reads as Slope's yellow-to-dark-red bands
-// alone, and the overlay is drawn over them translucent, so a band still
-// shows through. The alpha is in the stop: light rain stays light on the map.
-const RAIN_STOPS: readonly Stop[] = [
-  { value: 0.05, colour: CLEAR },
-  { value: 0.2, colour: "#a5d8ff8c", label: "0.2 mm/h" },
-  { value: 1, colour: "#4dabf7b2", label: "1 mm/h" },
-  { value: 3, colour: "#1c7ed6cc", label: "3 mm/h" },
-  { value: 8, colour: "#5f3dc4d9", label: "8 mm/h" },
-  { value: 20, colour: "#3b0764e6", label: "20 mm/h" },
-];
-const TOTAL_STOPS: readonly Stop[] = [
-  { value: 0.5, colour: CLEAR },
-  { value: 2, colour: "#a5d8ff8c", label: "2 mm" },
-  { value: 10, colour: "#4dabf7b2", label: "10 mm" },
-  { value: 25, colour: "#1c7ed6cc", label: "25 mm" },
-  { value: 50, colour: "#5f3dc4d9", label: "50 mm" },
-  { value: 100, colour: "#3b0764e6", label: "100 mm" },
+// Rain and its totals take the BoM radar's hues (lavender, blue, teal, then
+// yellow, orange and red for heavy falls), the ones an Australian already
+// reads a rain map in. Temperature runs purple to red through green and
+// wind green to red to purple, each with enough hues to read a value by eye.
+// The alpha is in the stop: light rain stays light, and the overlay is drawn
+// under the contours and labels, so the map stays legible over a heavy band.
+const RADAR = {
+  lavender: "#a9a9ff",
+  blue: "#4b5bff",
+  teal: "#00bfae",
+  yellow: "#ffd500",
+  orange: "#ff8a00",
+  red: "#e60000",
+  maroon: "#7a0010",
+} as const;
+
+function radarRamp(values: readonly number[], alpha: readonly string[]) {
+  const hues = Object.values(RADAR);
+  return values.map(
+    (value, i): Stop => ({
+      value,
+      colour: `${hues[i]}${alpha[i]}`,
+      label: String(value),
+    }),
+  );
+}
+
+function withClear(below: number, stops: readonly Stop[]): readonly Stop[] {
+  return [{ value: below, colour: clearOf(stops[0]!.colour) }, ...stops];
+}
+
+const RAIN_STOPS = withClear(
+  0.1,
+  radarRamp(
+    [0.2, 1, 2.5, 5, 10, 20, 40],
+    ["99", "b3", "bf", "c7", "cc", "d1", "d9"],
+  ),
+);
+const TOTAL_STOPS = withClear(
+  1,
+  radarRamp(
+    [2, 10, 25, 50, 100, 200, 400],
+    ["73", "8c", "99", "a6", "b3", "bf", "c7"],
+  ),
+);
+const TEMPERATURE_COLOURS: readonly [number, string][] = [
+  [-5, "#7048e8"],
+  [0, "#3b5bdb"],
+  [8, "#1098ad"],
+  [15, "#40c057"],
+  [22, "#fab005"],
+  [30, "#f76707"],
+  [38, "#e03131"],
+  [45, "#862e9c"],
 ];
 const TEMPERATURE_STOPS: readonly Stop[] = [
   // Below it is no value (−32768): clear, not the coldest colour.
-  { value: -1000, colour: CLEAR },
-  { value: -999, colour: "#4c6ef599" },
-  { value: -5, colour: "#4c6ef599", label: "−5°" },
-  { value: 5, colour: "#74c0fc99", label: "5°" },
-  { value: 15, colour: "#96f2d799", label: "15°" },
-  { value: 22, colour: "#ffec9999", label: "22°" },
-  { value: 30, colour: "#ff922b99", label: "30°" },
-  { value: 38, colour: "#c92a2aa6", label: "38°" },
+  { value: -1000, colour: "#7048e800" },
+  { value: -999, colour: "#7048e88c" },
+  ...TEMPERATURE_COLOURS.map(([value, hex]) => ({
+    value,
+    colour: `${hex}8c`,
+    label: String(value).replace("-", "−"),
+  })),
 ];
-const WIND_STOPS: readonly Stop[] = [
-  { value: 5, colour: CLEAR },
-  { value: 15, colour: "#96f2d773", label: "15 km/h" },
-  { value: 30, colour: "#ffe0668c", label: "30 km/h" },
-  { value: 50, colour: "#ff922ba6", label: "50 km/h" },
-  { value: 70, colour: "#e03131bf", label: "70 km/h" },
-  { value: 100, colour: "#862e9cd9", label: "100 km/h" },
-];
+const WIND_STOPS = withClear(5, [
+  { value: 10, colour: "#74c0fc4d", label: "10" },
+  { value: 20, colour: "#69db7c80", label: "20" },
+  { value: 35, colour: "#ffd43b99", label: "35" },
+  { value: 50, colour: "#ff922ba6", label: "50" },
+  { value: 70, colour: "#f03e3eb3", label: "70" },
+  { value: 100, colour: "#ae3ec9bf", label: "100" },
+]);
 
-/** The picker's options in order: the stepped fields, then the totals from
- *  the furthest past to the furthest ahead. */
+/** Every layer the overlay can draw, in order: the stepped fields, then the
+ *  totals from the furthest past to the furthest ahead. The picker offers the
+ *  fields and one chip for the totals (`WEATHER_TOTALS_CHIP`); the card's
+ *  rail offers the totals by their `period`. */
 export const WEATHER_LAYERS: readonly WeatherLayer[] = [
   { key: "rain", label: "Rain", unit: "mm/h", stops: RAIN_STOPS },
   {
@@ -169,6 +229,7 @@ export const WEATHER_LAYERS: readonly WeatherLayer[] = [
     unit: "mm",
     stops: TOTAL_STOPS,
     hours: -168,
+    period: MAP_TERRAIN.copy.weatherPast168,
   },
   {
     key: "rainPast72",
@@ -176,6 +237,7 @@ export const WEATHER_LAYERS: readonly WeatherLayer[] = [
     unit: "mm",
     stops: TOTAL_STOPS,
     hours: -72,
+    period: MAP_TERRAIN.copy.weatherPast72,
   },
   {
     key: "rainPast24",
@@ -183,6 +245,7 @@ export const WEATHER_LAYERS: readonly WeatherLayer[] = [
     unit: "mm",
     stops: TOTAL_STOPS,
     hours: -24,
+    period: MAP_TERRAIN.copy.weatherPast24,
   },
   {
     key: "rainNext24",
@@ -190,6 +253,7 @@ export const WEATHER_LAYERS: readonly WeatherLayer[] = [
     unit: "mm",
     stops: TOTAL_STOPS,
     hours: 24,
+    period: MAP_TERRAIN.copy.weatherNext24,
   },
   {
     key: "rainNext72",
@@ -197,6 +261,7 @@ export const WEATHER_LAYERS: readonly WeatherLayer[] = [
     unit: "mm",
     stops: TOTAL_STOPS,
     hours: 72,
+    period: MAP_TERRAIN.copy.weatherNext72,
   },
 ];
 
@@ -208,6 +273,76 @@ export function weatherLayer(key: string | undefined): WeatherLayer {
     WEATHER_LAYERS.find((layer) => layer.key === WEATHER_LAYER_DEFAULT)!
   );
 }
+
+/**
+ * The totals as the card's periods, past to future, read off `WEATHER_LAYERS`.
+ * The layer picker shows them as one chip (`WEATHER_TOTALS_CHIP`) and the card
+ * holds the choice among them. Guard: weatherMap.test.ts.
+ */
+export const WEATHER_PERIODS: readonly {
+  value: WeatherTotalKey;
+  label: string;
+}[] = WEATHER_LAYERS.flatMap((l) =>
+  l.period === undefined
+    ? []
+    : [{ value: l.key as WeatherTotalKey, label: l.period }],
+);
+
+/** The picker's chip for every total; not a layer key. */
+export const WEATHER_TOTALS_CHIP = "rainTotals";
+
+/** The total the chip picks from a stepped layer, when the run has it. */
+export const WEATHER_PERIOD_DEFAULT: WeatherTotalKey = "rainPast24";
+
+const isPeriod = (key: string | null | undefined) =>
+  WEATHER_PERIODS.some((p) => p.value === key);
+
+/**
+ * The card's rail: every period, those the run's manifest lacks disabled (a
+ * run drops a total when an hour it needs is missing). Every period is on
+ * until a manifest is known.
+ */
+export const weatherPeriodOptions = (
+  totals?: readonly string[] | null,
+): { value: WeatherTotalKey; label: string; disabled: boolean }[] =>
+  WEATHER_PERIODS.map((p) => ({
+    ...p,
+    disabled: totals != null && !totals.includes(p.value),
+  }));
+
+/** The sentence under the card's rail while any period is disabled. */
+export const weatherPeriodHint = (
+  totals?: readonly string[] | null,
+): string | undefined =>
+  weatherPeriodOptions(totals).some((o) => o.disabled)
+    ? MAP_TERRAIN.copy.weatherPeriodMissing
+    : undefined;
+
+/** The total the totals chip picks: 24 h past, else the first the run has. */
+export const weatherPeriodDefault = (
+  totals?: readonly string[] | null,
+): WeatherTotalKey =>
+  totals == null || totals.includes(WEATHER_PERIOD_DEFAULT)
+    ? WEATHER_PERIOD_DEFAULT
+    : (WEATHER_PERIODS.find((p) => totals.includes(p.value))?.value ??
+      WEATHER_PERIOD_DEFAULT);
+
+/** The picker's chip that stands for the stored layer `key`. */
+export const weatherChip = (key: string | null | undefined): string =>
+  isPeriod(key) ? WEATHER_TOTALS_CHIP : (key ?? WEATHER_LAYER_DEFAULT);
+
+/** The layer to store when `chip` is pressed with `key` stored: the totals
+ *  chip keeps the period already picked, else takes the run's default. */
+export const weatherChipLayer = (
+  chip: string,
+  key: string | null | undefined,
+  totals?: readonly string[] | null,
+) =>
+  chip !== WEATHER_TOTALS_CHIP
+    ? chip
+    : isPeriod(key)
+      ? key!
+      : weatherPeriodDefault(totals);
 
 export const isWeatherTotal = (layer: WeatherLayer): boolean =>
   layer.hours !== undefined;
@@ -221,9 +356,11 @@ export function weatherReliefColor(key: WeatherLayerKey): unknown[] {
   return ["interpolate", ["linear"], ["elevation"], ...stops];
 }
 
-/** The legend's key: each labelled stop's colour as it shows over a white
- *  map, opaque, since a legend sits on a sheet and not on the map. */
-export function weatherLegendRows(
+/** The bar's colour scale: each labelled stop's colour as it shows over a
+ *  white map, opaque, with its bare number; the bar names the unit once. A
+ *  strip spaces them evenly, so the gradient between two labels is the map's
+ *  own linear mix. Guard: weatherMap.test.ts. */
+export function weatherScale(
   key: WeatherLayerKey,
 ): { label: string; colour: string }[] {
   return weatherLayer(key).stops.flatMap((stop) =>
@@ -240,6 +377,18 @@ export function weatherLegendRows(
         ]
       : [],
   );
+}
+
+/** The legend's key: the scale's stops, each with the unit, since a legend
+ *  row stands alone on a sheet. */
+export function weatherLegendRows(
+  key: WeatherLayerKey,
+): { label: string; colour: string }[] {
+  const { unit } = weatherLayer(key);
+  return weatherScale(key).map(({ label, colour }) => ({
+    label: `${label} ${unit}`,
+    colour,
+  }));
 }
 
 /**
@@ -310,6 +459,16 @@ export function weatherStepAt(
   return i < 0 ? null : i;
 }
 
+/** The step Play moves to: the next, and from the last back to the first the
+ *  scrubber allows, so it loops. Guard: weatherMap.test.ts. */
+export function weatherNextStep(
+  step: number,
+  first: number,
+  last: number,
+): number {
+  return step >= last || step < first ? first : step + 1;
+}
+
 /** "Today, 5 pm" or "Sat 8, 2 pm", on this device's clock. */
 export function weatherTimeLabel(time: string, now: number): string {
   const d = new Date(time);
@@ -345,11 +504,112 @@ export function weatherShownLabel(
     : `To ${weatherTimeLabel(new Date(edge).toISOString(), now)}`;
 }
 
-/** The wind arrows of one step, as points a symbol layer rotates: `rotate`
- *  turns the route arrowhead (which points east) to where the wind blows. */
-export function windArrows(
+/**
+ * What the overlay shows for a manifest, the layer picked and the step the
+ * user picked (null until they do), on both clients: the step clamped to
+ * those still to come, starting at the one now falls in. A stepped layer
+ * whose every step is past is out of date, never drawn as today's; a total
+ * the run left out (an hour no run held) is missing. Each client maps this to
+ * its own bar and archive. Guard: weatherMap.test.ts.
+ */
+export type WeatherShown =
+  | { kind: "outOfDate" | "missing" }
+  | {
+      kind: "ready";
+      layer: WeatherLayer;
+      /** Index into the manifest's steps; null for a total. */
+      step: number | null;
+      /** The scrubber's reach; both 0 for a total. */
+      first: number;
+      last: number;
+      /** The step's time, or the total's window. */
+      shown: string;
+      /** The run's age. */
+      age: string;
+    };
+
+/** The step the user picked, for the run it was picked in. */
+export type WeatherPick = { path: string; step: number };
+
+export function weatherShown(input: {
+  file: WeatherMapFile;
+  layer: WeatherLayerKey;
+  /** Counts only in the run it was made in: a new run opens where now is. */
+  picked: WeatherPick | null;
+  now: number;
+}): WeatherShown {
+  const { file, now } = input;
+  const layer = weatherLayer(input.layer);
+  const age = weatherAge(Date.parse(file.built), now);
+  if (isWeatherTotal(layer)) {
+    if (!file.totals.includes(layer.key as WeatherTotalKey))
+      return { kind: "missing" };
+    const shown = weatherShownLabel(file, layer.key, 0, now);
+    return { kind: "ready", layer, step: null, first: 0, last: 0, shown, age };
+  }
+  const first = weatherStepAt(file, now);
+  if (first === null) return { kind: "outOfDate" };
+  const last = file.steps.length - 1;
+  const step = Math.min(
+    last,
+    Math.max(
+      first,
+      Math.round(input.picked?.path === file.path ? input.picked.step : first),
+    ),
+  );
+  const shown = weatherShownLabel(file, layer.key, step, now);
+  return { kind: "ready", layer, step, first, last, shown, age };
+}
+
+/** `wind.json` if it has the shape `windArrowsIn` reads, else null: a bad file
+ *  draws no arrows rather than throwing. */
+export function parseWeatherWind(raw: unknown): WeatherWindFile | null {
+  const w = raw as Partial<WeatherWindFile> | null;
+  return w &&
+    typeof w === "object" &&
+    [w.west, w.north, w.step, w.columns, w.rows].every(Number.isFinite) &&
+    Array.isArray(w.steps) &&
+    w.steps.every((s) => Array.isArray(s?.speed) && Array.isArray(s?.from))
+    ? (w as WeatherWindFile)
+    : null;
+}
+
+/** Where the arrows go: the map's visible box, in degrees. */
+export type WindBounds = {
+  west: number;
+  south: number;
+  east: number;
+  north: number;
+};
+
+/** Screen pixels between arrows, and the most arrows a viewport gets. A fixed
+ *  lattice and not collision: collision let the basemap's town names knock out
+ *  arrows over land, where they matter, and left the sea full. */
+const ARROW_GAP_PX = 90;
+const MAX_ARROWS = 600;
+/** Pixels in a degree of longitude at zoom 0: the 512 px tiles MapLibre draws. */
+const WORLD_PX = 512;
+
+const rad = Math.PI / 180;
+
+/**
+ * The wind arrows of one step for the map as it is, as points a symbol layer
+ * rotates: `rotate` turns the route arrowhead (which points east) to where the
+ * wind blows.
+ *
+ * The points sit on a lattice that is the file's grid times a power of two
+ * (every fourth point at a state-wide zoom, every cell close in, a fraction of
+ * one closer), from the grid's north-west corner, so they stay about
+ * `ARROW_GAP_PX` apart at any zoom and do not swim as the map pans. Between
+ * grid points the wind is interpolated bilinearly as u/v, never as speed and
+ * direction, which wrap. A lattice with more than `MAX_ARROWS` points in the
+ * box doubles its spacing. None outside the grid. Guard: weatherMap.test.ts.
+ */
+export function windArrowsIn(
   wind: WeatherWindFile,
   step: number,
+  bounds: WindBounds,
+  zoom: number,
 ): {
   type: "FeatureCollection";
   features: {
@@ -360,25 +620,83 @@ export function windArrows(
 } {
   const at = wind.steps[step];
   const features = [];
-  if (at)
-    for (let i = 0; i < wind.rows * wind.columns; i++) {
-      const speed = at.speed[i];
-      const from = at.from[i];
-      if (speed == null || from == null) continue;
-      const row = Math.floor(i / wind.columns);
-      const column = i % wind.columns;
+  const { west, north, columns, rows } = wind;
+  if (!at || columns < 1 || rows < 1 || !(wind.step > 0))
+    return { type: "FeatureCollection", features: [] };
+  const lonSpan = (columns - 1) * wind.step;
+  const latSpan = (rows - 1) * wind.step;
+  const ideal = (ARROW_GAP_PX * 360) / (WORLD_PX * 2 ** zoom);
+  let spacing = wind.step * 2 ** Math.round(Math.log2(ideal / wind.step));
+  // One spacing of margin, so a pan does not show an empty edge before it ends.
+  const range = (from: number, to: number, span: number, origin: number) => {
+    const lo = Math.max(0, Math.ceil((from - origin) / spacing - 1e-9));
+    const hi = Math.min(
+      Math.floor(span / spacing + 1e-9),
+      Math.floor((to - origin) / spacing + 1),
+    );
+    return [lo, hi] as const;
+  };
+  let across: readonly [number, number];
+  let down: readonly [number, number];
+  for (;;) {
+    across = range(bounds.west - spacing, bounds.east, lonSpan, west);
+    // Rows count down from the north edge.
+    down = range(-bounds.north - spacing, -bounds.south, latSpan, -north);
+    if (
+      (across[1] - across[0] + 1) * (down[1] - down[0] + 1) <= MAX_ARROWS ||
+      spacing > Math.max(lonSpan, latSpan)
+    )
+      break;
+    spacing *= 2;
+  }
+  const speedAt = (r: number, c: number) => at.speed[r * columns + c];
+  const fromAt = (r: number, c: number) => at.from[r * columns + c];
+  for (let j = down[0]; j <= down[1]; j++) {
+    for (let i = across[0]; i <= across[1]; i++) {
+      const fx = (i * spacing) / wind.step;
+      const fy = (j * spacing) / wind.step;
+      const c0 = Math.min(Math.floor(fx + 1e-9), Math.max(columns - 2, 0));
+      const r0 = Math.min(Math.floor(fy + 1e-9), Math.max(rows - 2, 0));
+      const tx = fx - c0;
+      const ty = fy - r0;
+      let u = 0;
+      let v = 0;
+      let missing = false;
+      for (const [r, c, w] of [
+        [r0, c0, (1 - tx) * (1 - ty)],
+        [r0, c0 + 1, tx * (1 - ty)],
+        [r0 + 1, c0, (1 - tx) * ty],
+        [r0 + 1, c0 + 1, tx * ty],
+      ] as const) {
+        if (w < 1e-9) continue;
+        const s = speedAt(r, c);
+        const f = fromAt(r, c);
+        if (s == null || f == null) {
+          missing = true;
+          break;
+        }
+        // Meteorological: `f` is where it blows from, so it goes the other way.
+        u -= w * s * Math.sin(f * rad);
+        v -= w * s * Math.cos(f * rad);
+      }
+      if (missing) continue;
+      // Towards is a bearing from north; the arrowhead at 0° points east (90°).
+      const towards = Math.atan2(u, v) / rad;
       features.push({
         type: "Feature" as const,
         geometry: {
           type: "Point" as const,
-          coordinates: [
-            wind.west + column * wind.step,
-            wind.north - row * wind.step,
-          ] as [number, number],
+          coordinates: [west + i * spacing, north - j * spacing] as [
+            number,
+            number,
+          ],
         },
-        // Towards is `from` + 180°; the arrowhead at 0° points east (90°).
-        properties: { speed, rotate: (from + 90) % 360 },
+        properties: {
+          speed: Math.round(Math.hypot(u, v) * 10) / 10,
+          rotate: (((Math.round(towards) - 90) % 360) + 360) % 360,
+        },
       });
     }
+  }
   return { type: "FeatureCollection", features };
 }

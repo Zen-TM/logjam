@@ -2,10 +2,12 @@ import {
   NSW_REGION,
   NSW_COVERAGE,
   NSW_FIRE,
+  WEATHER_MAP,
   type SharpenedOverlay,
   type TerrainLayerKey,
 } from "@logjam/shared";
 
+import { WEATHER_CREDIT_HTML } from "./weatherLayers";
 import {
   TERRAIN_STATEWIDE,
   routedAttribution,
@@ -21,6 +23,14 @@ import {
  * dash and styles an entry as contours by that word.
  */
 export const TERRAIN_ENTRIES = {
+  // The archive changes with the layer and step: App.tsx names the one to draw
+  // (`useWeatherMap`), and this is only the id and the credit.
+  weather: {
+    id: "nswweather",
+    pmtilesUrl: `${window.location.origin}/${WEATHER_MAP.prefix}`,
+    format: "weather" as const,
+    attribution: WEATHER_CREDIT_HTML,
+  },
   contours: {
     id: "nswcontours",
     pmtilesUrl: `${window.location.origin}/${TERRAIN_STATEWIDE.contours.archivePath}`,
@@ -98,6 +108,7 @@ export function terrainEntries(
     };
   };
   return {
+    weather: TERRAIN_ENTRIES.weather,
     contours: routed("contours", TERRAIN_STATEWIDE.contours.maxzoom),
     slope: routed("slope", deepest),
     coverage: TERRAIN_ENTRIES.coverage,

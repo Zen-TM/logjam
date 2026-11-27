@@ -1,0 +1,23 @@
+.scale {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-0-25);
+  align-self: stretch;
+  min-width: 0;
+}
+
+.strip {
+  /* intrinsic: thick enough to read a colour, thin enough to stay a key. */
+  height: 8px;
+  border-radius: var(--radius-sm);
+  background: linear-gradient(to right, var(--scale-stops));
+  box-shadow: inset 0 0 0 1px var(--color-line);
+}
+
+.ticks {
+  composes: meta from "../textRoles.generated.module.css";
+  display: flex;
+  justify-content: space-between;
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}

@@ -12,6 +12,7 @@ import {
   type CarrierId,
   type MapPointCoord,
   type MapPointVerbId,
+  type WeatherPointSource,
 } from "@logjam/shared";
 import { useElevationPoint } from "../../placeUtils";
 import { useIsMobile } from "../../useIsMobile";
@@ -28,6 +29,7 @@ import {
 } from "../../ui";
 import { coverageAt, fireAt, landClassAt } from "./layerOrder";
 import { PointAnchor } from "./PointAnchor";
+import { useWeatherPoint } from "./weatherPoint";
 import classes from "./MapPointPopover.module.css";
 
 /**
@@ -48,6 +50,7 @@ export default function MapPointPopover({
   point,
   from,
   coverageCarrier,
+  weatherPoint,
   startAt,
   onClose,
   onAddPlace,
@@ -60,6 +63,8 @@ export default function MapPointPopover({
   from: MapPointCoord | null;
   /** The carrier the Coverage overlay draws, or null before one is picked. */
   coverageCarrier: CarrierId | null;
+  /** What the Weather overlay is drawing, or null with it off. */
+  weatherPoint: WeatherPointSource | null;
   /** A right-click opens the panel on Options, with no facts to go back to. */
   startAt?: "options";
   onClose: () => void;
@@ -82,6 +87,7 @@ export default function MapPointPopover({
     point.latitude,
   );
   const metres = reading?.elevationM ?? null;
+  const weatherMap = useWeatherPoint(weatherPoint, point);
   const [{ land, fire, coverage }] = useState(() => {
     const { x, y } = map.project([point.longitude, point.latitude]);
     return {
@@ -144,6 +150,7 @@ export default function MapPointPopover({
     land,
     fire,
     coverage,
+    weatherMap,
   }).map((fact) => ({
     label: fact.label,
     value: fact.value,
