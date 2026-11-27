@@ -64,11 +64,14 @@ describe("the Coverage hatches", () => {
   // without rerunning it, and the committed hatch drifts from its source.
   it("are exactly what the generator produces", () => {
     const file = join(here, "coverageHatchImages.ts");
-    const committed = readFileSync(file, "utf8");
-    execFileSync("node", [
-      join(here, "../scripts/generate-coverage-hatch-images.mjs"),
-    ]);
-    expect(readFileSync(file, "utf8")).toBe(committed);
+    // `--stdout`: compared, never rewritten, so a drifted file stays drifted
+    // for the next run to report too.
+    const generated = execFileSync(
+      "node",
+      [join(here, "../scripts/generate-coverage-hatch-images.mjs"), "--stdout"],
+      { encoding: "utf8" },
+    );
+    expect(generated).toBe(readFileSync(file, "utf8"));
   });
 
   // Mutation: change the generator's inks alone, and the hatch stops being a
