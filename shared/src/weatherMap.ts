@@ -310,6 +310,14 @@ export const weatherPeriodOptions = (
     disabled: totals != null && !totals.includes(p.value),
   }));
 
+/** The sentence under the card's rail while any period is disabled. */
+export const weatherPeriodHint = (
+  totals?: readonly string[] | null,
+): string | undefined =>
+  weatherPeriodOptions(totals).some((o) => o.disabled)
+    ? MAP_TERRAIN.copy.weatherPeriodMissing
+    : undefined;
+
 /** The total the totals chip picks: 24 h past, else the first the run has. */
 export const weatherPeriodDefault = (
   totals?: readonly string[] | null,

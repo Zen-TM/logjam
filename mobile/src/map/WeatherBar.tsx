@@ -8,6 +8,7 @@ import {
   isWeatherTotal,
   weatherLayer,
   weatherNextStep,
+  weatherPeriodHint,
   weatherPeriodOptions,
 } from "@logjam/shared";
 
@@ -123,8 +124,10 @@ export function WeatherBar({
   const periods = (layer: WeatherLayerKey, totals: WeatherTotalKey[]) =>
     isWeatherTotal(weatherLayer(layer)) ? (
       <ChipRail<WeatherTotalKey>
+        key="periods"
         scroll
         label={copy.weatherPeriod}
+        hint={weatherPeriodHint(totals)}
         options={weatherPeriodOptions(totals)}
         value={layer as WeatherTotalKey}
         onChange={onLayerChange}

@@ -112,7 +112,9 @@ export function Chip({
           styles.label,
           active && styles.labelActive,
           dashed && styles.labelMuted,
-          disabled && styles.labelMuted,
+          // A selected chip's label stays `onFill` when disabled: muted ink on
+          // the tint is under 1.3:1. The chip's own dimming says disabled.
+          disabled && !active && styles.labelMuted,
         ]}
       >
         {label}

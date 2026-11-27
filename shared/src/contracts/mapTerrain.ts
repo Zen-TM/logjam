@@ -87,6 +87,9 @@ export const MAP_TERRAIN = {
     // what the chips on it choose.
     weatherTotals: "Rain accumulation",
     weatherPeriod: "Rain accumulation period",
+    // Under the rail, only while a period is greyed: a run drops a total when
+    // an hour it needs is missing.
+    weatherPeriodMissing: "A greyed period isn't in this run.",
     weatherPast168: "Past 7 days",
     weatherPast72: "Past 72 h",
     weatherPast24: "Past 24 h",

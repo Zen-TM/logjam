@@ -22,6 +22,7 @@ import {
   weatherChip,
   weatherChipLayer,
   weatherPeriodDefault,
+  weatherPeriodHint,
   weatherPeriodOptions,
   weatherLayer,
   weatherLayerUrl,
@@ -458,6 +459,18 @@ describe("the Weather legend", () => {
         .map((o) => o.value),
     ).toEqual(only);
     expect(weatherPeriodOptions(null).some((o) => o.disabled)).toBe(false);
+  });
+
+  // Mutation: return the hint always, and a full run's card says a chip is
+  // greyed when none is; return it never, and a disabled chip gives no reason.
+  it("explains greyed periods only while one is greyed", () => {
+    expect(weatherPeriodHint(["rainPast24"])).toBe(
+      "A greyed period isn't in this run.",
+    );
+    expect(weatherPeriodHint(WEATHER_PERIODS.map((p) => p.value))).toBe(
+      undefined,
+    );
+    expect(weatherPeriodHint(null)).toBe(undefined);
   });
 
   // Mutation: return "rainPast24" whatever the run has, and the totals chip

@@ -121,4 +121,29 @@ describe("Notice", () => {
       "background: var(--chip-fill, var(--color-card))",
     );
   });
+
+  // Mutation: drop the `:not(:has(> *))` selector from the clearance rule, and
+  // a fixed-width card whose words are a bare string (the weather card's
+  // failed state) runs under its absolutely-placed X.
+  it("clears the X for words that are a bare string", () => {
+    const css = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), "MapControl.module.css"),
+      "utf8",
+    );
+    const rule = css.match(
+      /\.fixedWidth\.withAction \.noticeText:not\(:has\(> \*\)\) \{([^}]*)\}/,
+    );
+    expect(rule?.[1]).toContain("padding-inline-end: calc(");
+    render(
+      <Notice fixedWidth action={<button type="button">Hide</button>}>
+        Couldn&apos;t get it
+      </Notice>,
+    );
+    const words = screen.getByText("Couldn't get it");
+    expect(words.className).toMatch(/noticeText/);
+    expect(words.children).toHaveLength(0);
+    expect(document.querySelector("[data-tone]")!.className).toMatch(
+      /withAction/,
+    );
+  });
 });

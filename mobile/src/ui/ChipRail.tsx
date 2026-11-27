@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   ScrollView,
   StyleSheet,
+  Text,
   View,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
@@ -9,7 +10,7 @@ import {
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 
-import { spacing, withAlpha, useTheme } from "../theme";
+import { makeStyles, muted, spacing, withAlpha, useTheme } from "../theme";
 import { Chip, CHIP_HEIGHT, type ChipOption } from "./Chip";
 import { railNudge } from "./railNudge";
 
@@ -37,6 +38,7 @@ export function ChipRail<T extends string>({
   scroll = false,
   trailing,
   label,
+  hint,
 }: {
   options: ChipOption<T>[];
   value: T;
@@ -45,7 +47,12 @@ export function ChipRail<T extends string>({
   trailing?: React.ReactNode;
   /** The group's accessible name, as Logjam Web's rail has. */
   label?: string;
+  /** One plain sentence about the choice (why a chip is off), drawn under the
+   *  rail and read with the group, as Logjam Web's rail has. */
+  hint?: string;
 }) {
+  const hintStyles = useHintStyles();
+  const hintLine = hint ? <Text style={hintStyles.hint}>{hint}</Text> : null;
   const chips = options.map((option) => (
     <Chip
       key={option.value}
@@ -65,14 +72,17 @@ export function ChipRail<T extends string>({
       <View
         accessibilityRole="radiogroup"
         accessibilityLabel={label}
-        style={styles.group}
+        accessibilityHint={hint}
       >
-        {chips}
-        {trailing}
+        <View style={styles.group}>
+          {chips}
+          {trailing}
+        </View>
+        {hintLine}
       </View>
     );
   return (
-    <Rail value={value} trailing={trailing} label={label}>
+    <Rail value={value} trailing={trailing} label={label} hint={hint}>
       {chips}
     </Rail>
   );
@@ -89,12 +99,15 @@ function Rail<T extends string>({
   children,
   trailing,
   label,
+  hint,
 }: {
   value: T;
   children: React.ReactNode[];
   trailing?: React.ReactNode;
   label?: string;
+  hint?: string;
 }) {
+  const hintStyles = useHintStyles();
   const scrollRef = useRef<ScrollViewInstance>(null);
   const offsets = useRef(new Map<number, { x: number; width: number }>());
   const viewport = useRef({ x: 0, width: 0 });
@@ -139,7 +152,11 @@ function Rail<T extends string>({
   };
 
   return (
-    <View accessibilityRole="radiogroup" accessibilityLabel={label}>
+    <View
+      accessibilityRole="radiogroup"
+      accessibilityLabel={label}
+      accessibilityHint={hint}
+    >
       <ScrollView
         ref={scrollRef}
         horizontal
@@ -178,6 +195,7 @@ function Rail<T extends string>({
       </ScrollView>
       {overflow.start ? <EdgeFade side="start" /> : null}
       {overflow.end ? <EdgeFade side="end" /> : null}
+      {hint ? <Text style={hintStyles.hint}>{hint}</Text> : null}
     </View>
   );
 }
@@ -205,6 +223,10 @@ function EdgeFade({ side }: { side: "start" | "end" }) {
 }
 
 const FADE_WIDTH = spacing(6);
+
+const useHintStyles = makeStyles((theme, textRole) => ({
+  hint: { ...muted(theme, textRole.detail), marginTop: spacing(0.5) },
+}));
 
 const styles = StyleSheet.create({
   group: { flexDirection: "row", flexWrap: "wrap", gap: spacing(1) },

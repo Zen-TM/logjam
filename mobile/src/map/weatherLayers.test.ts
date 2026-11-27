@@ -118,25 +118,36 @@ describe("the field and its arrows", () => {
 
 // The rain totals are one chip on the layer picker and a rail of periods on
 // the card, both from shared; this client has no render tests, so the wiring
-// is read from source. Mutation: build the sheet's chips from `options` alone
-// (no `overlayChoiceOption`/`overlayChoicePick`), or the card's rail from its
-// own list, and a stored total shows no chip selected, or the periods drift
-// from Logjam Web's.
+// is read from source.
 describe("the weather picker and card", () => {
   const source = (file: string) => readFileSync(join(__dirname, file), "utf8");
-  it("draw their chips from shared", () => {
+
+  // Mutation: build the sheet's chips from `options` alone (no
+  // `overlayChoiceOption`/`overlayChoicePick`), and a stored total shows no
+  // chip selected; drop `choice.available`, and the totals chip picks a total
+  // the run lacks.
+  it("draws the picker's chips from shared", () => {
     const sheet = source("MapLayersSheet.tsx");
     expect(sheet).toContain("overlayChoiceOption(legend, choice.value)");
     expect(sheet).toContain("overlayChoicePick(");
     expect(sheet).toContain("choice.available");
-    // The card's rail: one line (`scroll`), only on a total, named from shared,
-    // its periods from the run's totals. Mutation: drop any of the four, and
-    // the card wraps, grows a rail on a stepped layer, has an unnamed group,
-    // or offers a period the run lacks.
+  });
+
+  // Mutation: drop `scroll`, the `isWeatherTotal` gate, the label, the hint
+  // or the options from the rail, and the card wraps, grows a rail on a
+  // stepped layer, has an unnamed group, gives no reason for a greyed period
+  // or offers one the run lacks; drop `{periods(...)}` from either the ready
+  // or the missing card (both call sites are counted), and that card has no
+  // rail.
+  it("draws the card's rail from shared, in the ready and missing cards", () => {
     const bar = source("WeatherBar.tsx");
     expect(bar).toContain("isWeatherTotal(weatherLayer(layer))");
-    expect(bar).toMatch(/<ChipRail<WeatherTotalKey>\s+scroll\b/);
+    expect(bar).toMatch(/<ChipRail<WeatherTotalKey>[^>]*\bscroll\b/s);
     expect(bar).toContain("label={copy.weatherPeriod}");
+    expect(bar).toContain("hint={weatherPeriodHint(totals)}");
     expect(bar).toContain("weatherPeriodOptions(totals)");
+    expect(
+      bar.match(/\{periods\(model\.layer, model\.totals\)\}/g),
+    ).toHaveLength(2);
   });
 });

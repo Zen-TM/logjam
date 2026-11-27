@@ -10,6 +10,7 @@ import {
   MAP_TERRAIN,
   WEATHER,
   WEATHER_MAP,
+  WEATHER_PERIODS,
   parseWeatherMap,
   type WeatherLayerKey,
   weatherScale,
@@ -206,6 +207,32 @@ describe("the Weather bar", () => {
     const { onLayerChange } = bar({ layerKey: "rainPast24" });
     fireEvent.click(screen.getByRole("radio", { name: "Past 7 days" }));
     expect(onLayerChange).toHaveBeenCalledWith("rainPast168");
+  });
+
+  // Mutation: drop `hint` from the rail, and a greyed period gives no reason
+  // to a screen reader; show it always, and a full run's card claims one.
+  it("says why a period is greyed, and only then", () => {
+    bar({ layerKey: "rainPast24" });
+    const group = screen.getByRole("radiogroup", { name: copy.weatherPeriod });
+    expect(group.getAttribute("aria-describedby")).toBe(
+      screen.getByText(copy.weatherPeriodMissing).id,
+    );
+    cleanup();
+    const full = parseWeatherMap({
+      ...file,
+      totals: WEATHER_PERIODS.map((p) => p.value),
+    })!;
+    bar({ layerKey: "rainPast24", state: { status: "ready", file: full } });
+    expect(screen.queryByText(copy.weatherPeriodMissing)).toBeNull();
+  });
+
+  // Mutation: drop `key="periods"`, and picking a period from the missing
+  // card remounts the rail (a different child index), dropping keyboard focus.
+  it("keeps the rail's chips mounted from the missing card to the ready one", () => {
+    const { changeLayer } = bar({ layerKey: "rainNext72" });
+    const chip = screen.getByRole("radio", { name: "Past 7 days" });
+    changeLayer("rainPast168");
+    expect(screen.getByRole("radio", { name: "Past 7 days" })).toBe(chip);
   });
 
   // jsdom has no layout, so the card's height is read from the stylesheets: a

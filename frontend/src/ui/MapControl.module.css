@@ -158,7 +158,10 @@
   right: calc((40px - var(--control-sm)) / 2);
 }
 
-.fixedWidth.withAction .noticeText > :first-child {
+/* Words that are a bare string have no first child to pad, so the words
+   themselves clear the X, on every line they wrap to. */
+.fixedWidth.withAction .noticeText > :first-child,
+.fixedWidth.withAction .noticeText:not(:has(> *)) {
   padding-inline-end: calc(var(--control-sm) + var(--space-0-5));
 }
 

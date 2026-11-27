@@ -8,6 +8,7 @@ import {
   isWeatherTotal,
   weatherLayer,
   weatherNextStep,
+  weatherPeriodHint,
   weatherPeriodOptions,
   weatherScale,
 } from "@logjam/shared";
@@ -106,12 +107,15 @@ export default function WeatherBar({
   );
   // A total's periods, those the run lacks left off: the user can pick another
   // even when the one chosen is missing.
+  const totals = state.status === "ready" ? state.file.totals : null;
+  // The same element in the ready and missing cards (`key`), so picking a
+  // period from the missing one keeps the rail's focus.
   const periods = isWeatherTotal(weatherLayer(layerKey)) ? (
     <ChipRail<WeatherTotalKey>
+      key="periods"
       label={copy.weatherPeriod}
-      options={weatherPeriodOptions(
-        state.status === "ready" ? state.file.totals : null,
-      )}
+      hint={weatherPeriodHint(totals)}
+      options={weatherPeriodOptions(totals)}
       value={layerKey as WeatherTotalKey}
       onChange={onLayerChange}
     />
