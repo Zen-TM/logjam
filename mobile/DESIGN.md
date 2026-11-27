@@ -184,7 +184,10 @@ handler or a camera write, read
   the first error out of view.
 - **Seed a form when its sheet opens**, not on a prop's identity.
 - **A bounded range is `RangePills`, never a slider**: a thumb is smaller
-  than a fingertip and its drag fights the sheet's.
+  than a fingertip and its drag fights the sheet's. The one exception is a
+  run of steps dragged through over the map, off any sheet (the weather
+  bar's hours): that is the `Scrubber`, with Earlier and Later beside it for
+  the fingertip.
 - **`DatePicker` for a date or a range.**
 - **An unavailable cell in a swipeable grid stays a `Pressable` with a no-op
   press**, so the grid still swipes.
