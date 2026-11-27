@@ -7,6 +7,8 @@ import { parseRgbaHex } from "./topoSettings.js";
 import {
   OVERLAY_LEGENDS,
   overlayChoiceLabel,
+  overlayChoiceOption,
+  overlayChoicePick,
   overlayLegendRows,
 } from "./overlayLegends.js";
 import {
@@ -14,6 +16,11 @@ import {
   parseWeatherWind,
   WEATHER_LAYERS,
   WEATHER_MAP,
+  WEATHER_PERIODS,
+  WEATHER_TOTALS_CHIP,
+  isWeatherTotal,
+  weatherChip,
+  weatherChipLayer,
   weatherLayer,
   weatherLayerUrl,
   weatherLegendRows,
@@ -403,11 +410,62 @@ describe("the Weather legend", () => {
     );
   });
 
-  it("offers every layer and names the one picked", () => {
-    expect(legend.choice?.options.map((o) => o.value)).toEqual(
-      WEATHER_LAYERS.map((l) => l.key),
+  // Mutation: list a total as its own option again, and the picker is nine
+  // chips; drop the totals chip, and no total can be picked.
+  it("offers the stepped layers and one chip for the totals", () => {
+    expect(legend.choice?.options.map((o) => o.value)).toEqual([
+      "rain",
+      "temperature",
+      "wind",
+      "gusts",
+      WEATHER_TOTALS_CHIP,
+    ]);
+    expect(legend.choice?.options.at(-1)?.label).toBe("Rain accumulation");
+  });
+
+  // Mutation: reorder WEATHER_PERIODS, or add a total to WEATHER_LAYERS
+  // without a period, and a card's rail lists them out of time order or
+  // misses one.
+  it("holds every total as a period, past to future", () => {
+    expect(WEATHER_PERIODS.map((p) => p.value)).toEqual(
+      WEATHER_LAYERS.filter(isWeatherTotal).map((l) => l.key),
     );
+    expect(WEATHER_PERIODS.map((p) => p.label)).toEqual([
+      "Past 7 days",
+      "Past 72 h",
+      "Past 24 h",
+      "Next 24 h",
+      "Next 72 h",
+    ]);
+  });
+
+  // Mutation: make `weatherChip` return the key as given, and a stored total
+  // shows no chip selected; make the totals chip pick `rain`, and pressing it
+  // leaves the totals.
+  it("shows every total as the totals chip, and picks 24 h from a stepped layer", () => {
+    for (const { value } of WEATHER_PERIODS) {
+      expect(weatherChip(value)).toBe(WEATHER_TOTALS_CHIP);
+      expect(weatherChipLayer(WEATHER_TOTALS_CHIP, value)).toBe(value);
+      expect(overlayChoiceOption(legend, value)).toBe(WEATHER_TOTALS_CHIP);
+    }
+    for (const key of ["rain", "temperature", "wind", "gusts"]) {
+      expect(weatherChip(key)).toBe(key);
+      expect(weatherChipLayer(key, "rainNext72")).toBe(key);
+      expect(weatherChipLayer(WEATHER_TOTALS_CHIP, key)).toBe("rainPast24");
+    }
+    expect(weatherChip(null)).toBe("rain");
+    expect(overlayChoicePick(legend, WEATHER_TOTALS_CHIP, "wind")).toBe(
+      "rainPast24",
+    );
+    // A choice without a grouping stores what is pressed.
+    expect(overlayChoicePick(OVERLAY_LEGENDS.coverage, "tpg", null)).toBe(
+      "tpg",
+    );
+  });
+
+  it("names the layer picked, a total by its own title", () => {
     expect(overlayChoiceLabel(legend, "rainPast168")).toBe("Rain, past 7 days");
+    expect(overlayChoiceLabel(legend, "wind")).toBe("Wind");
     expect(legend.credit).toBe(WEATHER_MAP.credit);
   });
 });

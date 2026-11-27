@@ -1,4 +1,6 @@
 import { MAP_INK, WEATHER_MAP, WIND_ARROW_IMAGE } from "@logjam/shared";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { weatherFixture as file } from "../weatherMap/weatherMapFixture";
@@ -111,5 +113,23 @@ describe("the field and its arrows", () => {
     expect(
       weatherArrowData(wind, 0, { bounds, zoom: 9 }).features.length,
     ).toBeGreaterThan(9);
+  });
+});
+
+// The rain totals are one chip on the layer picker and a rail of periods on
+// the card, both from shared; this client has no render tests, so the wiring
+// is read from source. Mutation: build the sheet's chips from `options` alone
+// (no `overlayChoiceOption`/`overlayChoicePick`), or the card's rail from its
+// own list, and a stored total shows no chip selected, or the periods drift
+// from Logjam Web's.
+describe("the weather picker and card", () => {
+  const source = (file: string) => readFileSync(join(__dirname, file), "utf8");
+  it("draw their chips from shared", () => {
+    const sheet = source("MapLayersSheet.tsx");
+    expect(sheet).toContain("overlayChoiceOption(legend, choice.value)");
+    expect(sheet).toContain("overlayChoicePick(legend, option, choice.value)");
+    expect(source("WeatherBar.tsx")).toContain(
+      "options={[...WEATHER_PERIODS]}",
+    );
   });
 });

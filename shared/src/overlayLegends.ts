@@ -19,6 +19,10 @@ import {
   WEATHER_LAYER_DEFAULT,
   WEATHER_LAYERS,
   WEATHER_MAP,
+  WEATHER_TOTALS_CHIP,
+  isWeatherTotal,
+  weatherChip,
+  weatherChipLayer,
   weatherLegendRows,
 } from "./weatherMap.js";
 
@@ -57,6 +61,17 @@ export type OverlayLegend = {
      */
     choose?: string;
     options: readonly { value: string; label: string }[];
+    /**
+     * Where the stored value is finer than the options (Weather's five totals
+     * are one option): `chip` is the option a stored value shows as, `pick`
+     * the value to store when an option is pressed with `stored` held, and
+     * `label` the stored value's own name.
+     */
+    stored?: {
+      chip: (stored: string | null | undefined) => string;
+      pick: (chip: string, stored: string | null | undefined) => string;
+      label: (stored: string | undefined) => string | undefined;
+    };
   };
   /** What the source gets wrong, said beside the key it qualifies. */
   caveat: string;
@@ -82,7 +97,17 @@ export const OVERLAY_LEGENDS: Readonly<
       ),
     choice: {
       label: copy.weatherLayer,
-      options: WEATHER_LAYERS.map(({ key, label }) => ({ value: key, label })),
+      options: [
+        ...WEATHER_LAYERS.filter((l) => !isWeatherTotal(l)).map(
+          ({ key, label }) => ({ value: key as string, label }),
+        ),
+        { value: WEATHER_TOTALS_CHIP, label: copy.weatherTotals },
+      ],
+      stored: {
+        chip: weatherChip,
+        pick: weatherChipLayer,
+        label: (stored) => WEATHER_LAYERS.find((l) => l.key === stored)?.label,
+      },
     },
     caveat: copy.weatherCaveat,
     credit: WEATHER_MAP.credit,
@@ -156,5 +181,26 @@ export function overlayChoiceLabel(
   legend: OverlayLegend,
   value: string | undefined,
 ): string | undefined {
-  return legend.choice?.options.find((o) => o.value === value)?.label;
+  const { choice } = legend;
+  return (
+    choice?.stored?.label(value) ??
+    choice?.options.find((o) => o.value === value)?.label
+  );
+}
+
+/** The option of `legend`'s choice that the stored `value` shows as. */
+export function overlayChoiceOption(
+  legend: OverlayLegend,
+  value: string | null | undefined,
+): string {
+  return legend.choice?.stored?.chip(value) ?? value ?? "";
+}
+
+/** The value to store when `option` is pressed with `value` stored. */
+export function overlayChoicePick(
+  legend: OverlayLegend,
+  option: string,
+  value: string | null | undefined,
+): string {
+  return legend.choice?.stored?.pick(option, value) ?? option;
 }

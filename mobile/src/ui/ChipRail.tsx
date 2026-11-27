@@ -35,12 +35,15 @@ export function ChipRail<T extends string>({
   onChange,
   scroll = false,
   trailing,
+  label,
 }: {
   options: ChipOption<T>[];
   value: T;
   onChange: (next: T) => void;
   scroll?: boolean;
   trailing?: React.ReactNode;
+  /** The group's accessible name, as Logjam Web's rail has. */
+  label?: string;
 }) {
   const chips = options.map((option) => (
     <Chip
@@ -58,13 +61,17 @@ export function ChipRail<T extends string>({
 
   if (!scroll)
     return (
-      <View accessibilityRole="radiogroup" style={styles.group}>
+      <View
+        accessibilityRole="radiogroup"
+        accessibilityLabel={label}
+        style={styles.group}
+      >
         {chips}
         {trailing}
       </View>
     );
   return (
-    <Rail value={value} trailing={trailing}>
+    <Rail value={value} trailing={trailing} label={label}>
       {chips}
     </Rail>
   );
@@ -80,10 +87,12 @@ function Rail<T extends string>({
   value,
   children,
   trailing,
+  label,
 }: {
   value: T;
   children: React.ReactNode[];
   trailing?: React.ReactNode;
+  label?: string;
 }) {
   const scrollRef = useRef<ScrollViewInstance>(null);
   const offsets = useRef(new Map<number, { x: number; width: number }>());
@@ -130,7 +139,7 @@ function Rail<T extends string>({
   };
 
   return (
-    <View accessibilityRole="radiogroup">
+    <View accessibilityRole="radiogroup" accessibilityLabel={label}>
       <ScrollView
         ref={scrollRef}
         horizontal

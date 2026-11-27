@@ -80,6 +80,16 @@ export const MAP_TERRAIN = {
     // `WEATHER_LAYERS`, and the chosen layer's key, inline.
     weatherAbout: "About the weather map",
     weatherLayer: "Show",
+    // The picker's one chip for the five rain totals, and the card's rail of
+    // them (`WEATHER_PERIODS`): the chip says what they are, the card's group
+    // name says what the chips on it choose.
+    weatherTotals: "Rain accumulation",
+    weatherPeriod: "Rain accumulation period",
+    weatherPast168: "Past 7 days",
+    weatherPast72: "Past 72 h",
+    weatherPast24: "Past 24 h",
+    weatherNext24: "Next 24 h",
+    weatherNext72: "Next 72 h",
     weatherLegend:
       "ECMWF's forecast, coloured by what you pick. Drag the bar on the map to move through the week; past rain is the model's estimate of what fell, not a gauge's.",
     // The model's limits, said beside the key they qualify: one sentence.

@@ -1730,6 +1730,7 @@ function App() {
         onRetry={weatherMap.retry}
         onDismiss={() => setTerrainLayer("weather", false)}
         onChooseLayer={() => openLayers("weather")}
+        onLayerChange={setWeatherLayer}
       />
     </>
   ) : (

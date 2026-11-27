@@ -4,10 +4,13 @@ import {
   WEATHER,
   WEATHER_MAP,
   type WeatherLayerKey,
+  type WeatherTotalKey,
+  WEATHER_PERIODS,
+  isWeatherTotal,
   weatherNextStep,
   weatherScale,
 } from "@logjam/shared";
-import { ColourScale, IconButton, Notice, Scrubber } from "../../ui";
+import { ChipRail, ColourScale, IconButton, Notice, Scrubber } from "../../ui";
 import {
   weatherView,
   type WeatherMapState,
@@ -41,6 +44,7 @@ export default function WeatherBar({
   onRetry,
   onDismiss,
   onChooseLayer,
+  onLayerChange,
 }: {
   state: WeatherMapState;
   layerKey: WeatherLayerKey;
@@ -53,6 +57,8 @@ export default function WeatherBar({
   onDismiss: () => void;
   /** Opens Layers, to pick what the map shows. */
   onChooseLayer: () => void;
+  /** Picks a rain total's period from the card, as the Layers tab does. */
+  onLayerChange: (layer: WeatherLayerKey) => void;
 }) {
   const [pick, setPick] = useState(settled);
   useEffect(() => {
@@ -164,6 +170,14 @@ export default function WeatherBar({
                 onClick={() => onStep(Math.min(last, step + 1))}
               />
             </span>
+          )}
+          {isWeatherTotal(layer) && (
+            <ChipRail<WeatherTotalKey>
+              label={copy.weatherPeriod}
+              options={WEATHER_PERIODS}
+              value={layer.key as WeatherTotalKey}
+              onChange={onLayerChange}
+            />
           )}
           <ColourScale stops={weatherScale(layer.key)} />
         </span>

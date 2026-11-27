@@ -14,6 +14,7 @@
 // Guards: weatherMap.test.ts, against the fixture topo/tests/test_weather.py
 // writes from the builder.
 import { SHORT_WEEKDAYS } from "./dateNames.js";
+import { MAP_TERRAIN } from "./contracts/mapTerrain.js";
 import { WEATHER, weatherAge } from "./contracts/weather.js";
 import {
   mixHex,
@@ -262,6 +263,47 @@ export function weatherLayer(key: string | undefined): WeatherLayer {
     WEATHER_LAYERS.find((layer) => layer.key === WEATHER_LAYER_DEFAULT)!
   );
 }
+
+/**
+ * The five totals as the card's periods, past to future. The layer picker
+ * shows them as one chip (`WEATHER_TOTALS_CHIP`) and the card holds the
+ * choice among them. Guard: weatherMap.test.ts.
+ */
+export const WEATHER_PERIODS: readonly {
+  value: WeatherTotalKey;
+  label: string;
+}[] = [
+  { value: "rainPast168", label: MAP_TERRAIN.copy.weatherPast168 },
+  { value: "rainPast72", label: MAP_TERRAIN.copy.weatherPast72 },
+  { value: "rainPast24", label: MAP_TERRAIN.copy.weatherPast24 },
+  { value: "rainNext24", label: MAP_TERRAIN.copy.weatherNext24 },
+  { value: "rainNext72", label: MAP_TERRAIN.copy.weatherNext72 },
+];
+
+/** The picker's chip for every total; not a layer key. */
+export const WEATHER_TOTALS_CHIP = "rainTotals";
+
+/** The total the chip picks from a stepped layer. */
+export const WEATHER_PERIOD_DEFAULT: WeatherTotalKey = "rainPast24";
+
+const isPeriod = (key: string | null | undefined) =>
+  WEATHER_PERIODS.some((p) => p.value === key);
+
+/** The picker's chip that stands for the stored layer `key`. */
+export const weatherChip = (key: string | null | undefined): string =>
+  isPeriod(key) ? WEATHER_TOTALS_CHIP : (key ?? WEATHER_LAYER_DEFAULT);
+
+/** The layer to store when `chip` is pressed with `key` stored: the totals
+ *  chip keeps the period already picked. */
+export const weatherChipLayer = (
+  chip: string,
+  key: string | null | undefined,
+) =>
+  chip !== WEATHER_TOTALS_CHIP
+    ? chip
+    : isPeriod(key)
+      ? key!
+      : WEATHER_PERIOD_DEFAULT;
 
 export const isWeatherTotal = (layer: WeatherLayer): boolean =>
   layer.hours !== undefined;

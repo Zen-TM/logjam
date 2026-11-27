@@ -4,10 +4,15 @@ import {
   MAP_TERRAIN,
   WEATHER,
   type WeatherLayerKey,
+  type WeatherTotalKey,
+  WEATHER_PERIODS,
+  isWeatherTotal,
+  weatherLayer,
   weatherNextStep,
 } from "@logjam/shared";
 
 import {
+  ChipRail,
   ColourScale,
   IconButton,
   Notice,
@@ -39,6 +44,7 @@ export function WeatherBar({
   onRetry,
   onDismiss,
   onChooseLayer,
+  onLayerChange,
 }: {
   model: WeatherBarModel;
   /** Whether the Map tab is focused and the app in front (`sensorsActive`); Play runs only then. */
@@ -49,6 +55,8 @@ export function WeatherBar({
   onDismiss: () => void;
   /** Opens Layers, to pick what the map shows. */
   onChooseLayer: () => void;
+  /** Picks a rain total's period from the card, as the Layers tab does. */
+  onLayerChange: (layer: WeatherLayerKey) => void;
 }) {
   const theme = useTheme();
   const styles = useStyles();
@@ -191,6 +199,15 @@ export function WeatherBar({
                 onPress={() => userStep(scrub.step + 1)}
               />
             </View>
+          ) : null}
+          {isWeatherTotal(weatherLayer(model.layer)) ? (
+            <ChipRail<WeatherTotalKey>
+              scroll
+              label={copy.weatherPeriod}
+              options={[...WEATHER_PERIODS]}
+              value={model.layer as WeatherTotalKey}
+              onChange={onLayerChange}
+            />
           ) : null}
           <ColourScale stops={model.scale} compact />
         </View>

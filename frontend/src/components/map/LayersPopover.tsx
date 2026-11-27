@@ -8,6 +8,8 @@ import {
   OVERLAY_LEGENDS,
   overlayAwaitsChoice,
   overlayChoiceLabel,
+  overlayChoiceOption,
+  overlayChoicePick,
   overlayLegendRows,
   weatherLayer,
   type WeatherLayerKey,
@@ -683,12 +685,12 @@ function OverlayLegendBody({
         <ChipRail
           label={legend.choice.label}
           options={legend.choice.options}
-          value={choice.value ?? ""}
-          onChange={(value) => {
+          value={overlayChoiceOption(legend, choice.value)}
+          onChange={(option) => {
             // The first pick comes from the row's button: the overlay was
             // asked for, so it comes on.
             if (overlayAwaitsChoice(legend, choice.value)) onToggle(true);
-            choice.onChange(value);
+            choice.onChange(overlayChoicePick(legend, option, choice.value));
           }}
           wrap
         />

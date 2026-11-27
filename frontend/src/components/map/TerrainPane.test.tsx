@@ -471,12 +471,26 @@ describe("the Weather tab on Logjam Web", () => {
     const text = container.textContent;
     expect(text).toContain("22 °C");
     expect(text).not.toContain("mm/h");
-    fireEvent.click(screen.getByRole("radio", { name: "Rain, past 72 h" }));
-    expect(onChange).toHaveBeenCalledWith("rainPast72");
+    // Five chips; the totals are one, which picks 24 h from a stepped layer.
+    expect(screen.getAllByRole("radio")).toHaveLength(5);
+    fireEvent.click(screen.getByRole("radio", { name: "Rain accumulation" }));
+    expect(onChange).toHaveBeenCalledWith("rainPast24");
     expect(onToggle).not.toHaveBeenCalled();
     expect(text).toContain(copy.weatherLegend);
     expect(text).toContain(copy.weatherCaveat);
     expect(text).toContain(OVERLAY_LEGENDS.weather.credit);
+  });
+
+  // Mutation: key the chip by the stored layer, and a stored 72 h total
+  // leaves "Rain accumulation" unselected; make the chip pick the default
+  // total, and pressing it on a total resets the period.
+  it("shows any total as the one chip, and keeps its period when pressed", () => {
+    const onChange = vi.fn();
+    pane({ value: "rainPast72", onChange });
+    const chip = screen.getByRole("radio", { name: "Rain accumulation" });
+    expect(chip.getAttribute("aria-checked")).toBe("true");
+    fireEvent.click(chip);
+    expect(onChange).toHaveBeenCalledWith("rainPast72");
   });
 
   // Mutation: drop `className={classes.legendText}` from a legend paragraph,

@@ -199,5 +199,7 @@
 
 .rail[data-wrap="true"] .group {
   flex-wrap: wrap;
-  justify-content: flex-end;
+  /* Starts where its container does; a `SettingsRow`'s value cell sets
+     `--rail-wrap-align` to end, beside its label. */
+  justify-content: var(--rail-wrap-align, flex-start);
 }

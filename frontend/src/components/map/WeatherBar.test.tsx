@@ -4,6 +4,7 @@ import {
   fireEvent,
   render,
   screen,
+  within,
 } from "@testing-library/react";
 import {
   MAP_TERRAIN,
@@ -13,9 +14,18 @@ import {
   type WeatherLayerKey,
   weatherScale,
 } from "@logjam/shared";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import WeatherBar from "./WeatherBar";
 import type { WeatherMapState, WeatherPick } from "./weatherView";
+
+// jsdom has no ResizeObserver, which a total's ChipRail reads.
+globalThis.ResizeObserver ??= class {
+  observe() {}
+  disconnect() {}
+} as unknown as typeof ResizeObserver;
 
 beforeEach(() => vi.useFakeTimers());
 afterEach(() => {
@@ -57,7 +67,9 @@ const bar = (
   const onRetry = vi.fn();
   const onDismiss = vi.fn();
   const onChooseLayer = vi.fn();
+  const onLayerChange = vi.fn();
   const props = {
+    onLayerChange,
     onSettle,
     online: over.online ?? true,
     onRetry,
@@ -79,6 +91,7 @@ const bar = (
     onRetry,
     onDismiss,
     onChooseLayer,
+    onLayerChange,
     changeLayer: (key: WeatherLayerKey) => rerender(view(key)),
     setState: (state: WeatherMapState) =>
       rerender(view(over.layerKey ?? "rain", state)),
@@ -163,6 +176,58 @@ describe("the Weather bar", () => {
     expect(
       screen.queryByRole("button", { name: copy.weatherLater }),
     ).toBeNull();
+  });
+
+  // Mutation: draw the rail for a stepped layer, drop it for a total, or
+  // order the periods other than past to future, and the card holds the wrong
+  // controls or a period out of place.
+  it("gives a total a rail of its five periods and a stepped layer none", () => {
+    bar({ layerKey: "rainPast24" });
+    const group = screen.getByRole("radiogroup", { name: copy.weatherPeriod });
+    const radios = within(group).getAllByRole("radio");
+    expect(radios.map((r) => r.textContent)).toEqual([
+      "Past 7 days",
+      "Past 72 h",
+      "Past 24 h",
+      "Next 24 h",
+      "Next 72 h",
+    ]);
+    expect(
+      radios.filter((r) => r.getAttribute("aria-checked") === "true"),
+    ).toEqual([radios[2]]);
+    cleanup();
+    bar({ layerKey: "temperature" });
+    expect(screen.queryByRole("radiogroup")).toBeNull();
+  });
+
+  // Mutation: pass the chip's label, not its layer, to `onLayerChange`, or
+  // leave the rail's `onChange` unwired, and a period press changes nothing.
+  it("picks a period from the card", () => {
+    const { onLayerChange } = bar({ layerKey: "rainPast24" });
+    fireEvent.click(screen.getByRole("radio", { name: "Next 72 h" }));
+    expect(onLayerChange).toHaveBeenCalledWith("rainNext72");
+  });
+
+  // jsdom has no layout, so the card's height is read from the stylesheets: a
+  // total's period rail is one chip tall and the stepped row is one icon
+  // button tall, both `--control-md`, and the rail's scroller pads and pulls
+  // back by the same amount. Mutation: give `.chip` a taller `min-height`, or
+  // the scroller a margin that differs from its padding, and a total's card
+  // is no longer as tall as a stepped layer's.
+  it("holds a total's rail to the height of the stepped row", () => {
+    const ui = join(dirname(fileURLToPath(import.meta.url)), "../../ui");
+    const css = (file: string) => readFileSync(join(ui, file), "utf8");
+    const rule = (file: string, selector: string) =>
+      css(file).match(new RegExp(`^\\${selector} \\{([^}]*)\\}`, "m"))?.[1];
+    expect(rule("Button.module.css", ".iconButton")).toContain(
+      "height: var(--control-md)",
+    );
+    expect(rule("Chip.module.css", ".chip")).toContain(
+      "min-height: var(--control-md)",
+    );
+    const scroller = rule("Chip.module.css", ".scroller")!;
+    expect(scroller).toContain("padding: var(--space-0-5)");
+    expect(scroller).toContain("margin: calc(-1 * var(--space-0-5))");
   });
 
   // Mutation: put the layer and the time back on one line, and a long time or

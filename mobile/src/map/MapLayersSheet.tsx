@@ -57,6 +57,8 @@ import {
   OVERLAY_TERRAIN_KEYS,
   overlayAwaitsChoice,
   overlayChoiceLabel,
+  overlayChoiceOption,
+  overlayChoicePick,
   overlayLegendRows,
   slopeLegendRows,
   TERRAIN_LAYER_KEYS,
@@ -652,8 +654,10 @@ function OverlayLegendSheet({
         <Field label={legend.choice.label}>
           <ChipRail
             options={[...legend.choice.options]}
-            value={choice.value ?? ""}
-            onChange={choice.onChange}
+            value={overlayChoiceOption(legend, choice.value)}
+            onChange={(option) =>
+              choice.onChange(overlayChoicePick(legend, option, choice.value))
+            }
           />
         </Field>
       ) : null}
