@@ -47,6 +47,10 @@ describe("Logjam GPS draws what the weather contracts name", () => {
     expect(view).toContain("cards={found.cards}");
     // Every gauge's row, not the first. Mutation: `rows.find` → red.
     expect(view).toContain(".filter((r) => r.key === row)");
+    // A gauge week's total that sums a modelled day is marked like the day.
+    // Mutation: drop `summaryNote` from either file → red.
+    expect(view).toContain("summaryNote={found.summaryNote}");
+    expect(read("../ui/ForecastRail.tsx")).toContain("{summaryNote}");
     // A horizontal scroller that hands the sheet its vertical drags.
     const rail = read("../ui/ForecastRail.tsx");
     expect(rail).toMatch(/<ScrollView\s+horizontal\s+nestedScrollEnabled/);

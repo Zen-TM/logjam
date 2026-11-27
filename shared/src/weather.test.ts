@@ -369,11 +369,21 @@ describe("weatherRows", () => {
         "Rain gauge at Other Creek at Dam, 9.0 km",
       ]);
       expect(past[0].summary).toBe("56\u00a0mm");
-      // Mutation: put the note on every row, or on none → red.
-      expect(past.map((row) => row.note)).toEqual([
-        null,
-        WEATHER.copy.gaugeNote,
-      ]);
+    });
+
+    // The total sums the model's days, so it is marked like them. Mutation:
+    // mark only when every day is modelled, or never → red; or mark a fully
+    // measured week → red.
+    it("marks a week's total that sums a modelled day, and only then", () => {
+      expect(past.map((row) => row.summaryNote)).toEqual(["Model", "Model"]);
+      expect(past[0].summarySpoken).toBe("56\u00a0mm, including modelled days");
+      const whole = weatherRows(forecast, spotNine, {
+        ...rain,
+        gauges: [gauge("MADE UP TBRG", 3460, [0, 30, 0, 1.5, 12, 3, 0])],
+      }).find((row) => row.key === "past");
+      expect(whole?.summaryNote).toBeNull();
+      expect(whole?.summarySpoken).toBeNull();
+      expect(byKey.past.summaryNote).toBeNull();
     });
 
     // A day the gauge has not sent is Open-Meteo's figure, marked: never a

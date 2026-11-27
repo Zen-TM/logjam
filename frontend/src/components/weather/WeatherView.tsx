@@ -85,6 +85,8 @@ function WeatherBody({
           <ForecastRail
             title={r.title}
             summary={r.summary}
+            summaryNote={r.summaryNote}
+            summarySpoken={r.summarySpoken}
             labels={{
               back: `${WEATHER.copy.earlier}: ${r.title}`,
               on: `${WEATHER.copy.later}: ${r.title}`,

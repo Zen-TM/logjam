@@ -36,12 +36,17 @@ export type ForecastCard = {
 export function ForecastRail({
   title,
   summary,
+  summaryNote,
+  summarySpoken,
   cards,
   labels,
 }: {
   title: string;
   /** A total for the row ("34 mm"), at its right. */
   summary?: string | null;
+  /** Said under the total ("Model"), and `summarySpoken` for a screen reader. */
+  summaryNote?: string | null;
+  summarySpoken?: string | null;
   cards: readonly ForecastCard[];
   /** The two buttons' names: each says which row it pages. */
   labels: { back: string; on: string };
@@ -61,7 +66,16 @@ export function ForecastRail({
     <section className={classes.rail}>
       <div className={classes.heading}>
         <h4 className={classes.title}>{title}</h4>
-        {summary && <span className={classes.summary}>{summary}</span>}
+        {summary && (
+          <span
+            className={classes.total}
+            role={summarySpoken ? "group" : undefined}
+            aria-label={summarySpoken ?? undefined}
+          >
+            <span className={classes.summary}>{summary}</span>
+            {summaryNote && <span className={classes.meta}>{summaryNote}</span>}
+          </span>
+        )}
         <div className={classes.buttons}>
           <IconButton
             icon="scrollBack"

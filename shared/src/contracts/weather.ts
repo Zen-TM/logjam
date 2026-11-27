@@ -48,8 +48,8 @@ export const WEATHER = {
     pastGauge: "Rain gauge at",
     // Under a gauge's day that Open-Meteo filled in.
     modelledDay: "Model",
-    gaugeNote:
-      "Gauges count rain from 9 am to 9 am and report a day or two late; a day marked Model is Open-Meteo's.",
+    // Said in place of the "Model" under a week's total that sums such a day.
+    modelledTotal: "including modelled days",
     noGaugeNear: `No rain gauge within ${RAIN_GAUGE_MAX_M / 1000} km, so these are Open-Meteo's.`,
     // A gauge is near but sent nothing for these days (an outage, or a kept
     // forecast older than the kept gauge file).
@@ -232,6 +232,11 @@ export type WeatherRow = {
   title: string;
   /** "34 mm" over the row's days, for the rain row; null otherwise. */
   summary: string | null;
+  /** `WEATHER.copy.modelledDay` when a day in the total is the model's, said
+   *  under it like the day's own mark; null for a fully measured week. */
+  summaryNote: string | null;
+  /** The total in words for a screen reader when it is marked; null otherwise. */
+  summarySpoken: string | null;
   cards: WeatherCard[];
   /** A line under the row, saying where its figures come from. */
   note: string | null;
@@ -289,6 +294,8 @@ export function weatherRows(
           ? `Next ${hours.length} ${hours.length === 1 ? "hour" : "hours"}`
           : WEATHER.copy.hours,
       summary: null,
+      summaryNote: null,
+      summarySpoken: null,
       note: null,
       cards: withSpoken(
         hours.map((hour, i) => {
@@ -326,6 +333,8 @@ export function weatherRows(
       key: "days",
       title: WEATHER.copy.days,
       summary: null,
+      summaryNote: null,
+      summarySpoken: null,
       note: null,
       cards: withSpoken(
         days.map((day, i) => {
@@ -368,10 +377,16 @@ function pastRow(
     "past",
     days.map((d) => d.mm),
   );
+  const summary = formatRainMm(days.reduce((sum, d) => sum + d.mm, 0));
+  const modelled = days.some((d) => d.modelled);
   return {
     key: "past",
     title,
-    summary: formatRainMm(days.reduce((sum, d) => sum + d.mm, 0)),
+    summary,
+    summaryNote: modelled ? WEATHER.copy.modelledDay : null,
+    summarySpoken: modelled
+      ? `${summary}, ${WEATHER.copy.modelledTotal}`
+      : null,
     note,
     cards: withSpoken(
       days.map(({ day, mm, modelled }, i) => ({
@@ -410,13 +425,13 @@ function pastRows(
             : WEATHER.copy.noGaugeNear,
       ),
     ];
-  return rain.gauges.map((g, i) =>
+  return rain.gauges.map((g) =>
     pastRow(
       forecast,
       now,
       `${WEATHER.copy.pastGauge} ${gaugeDisplayName(g.gauge.name)}, ${formatDistanceM(g.distanceM)}`,
       g.mm,
-      i === rain.gauges.length - 1 ? WEATHER.copy.gaugeNote : null,
+      null,
     ),
   );
 }

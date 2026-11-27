@@ -53,11 +53,16 @@ const GAP = spacing(0.5);
 export function ForecastRail({
   title,
   summary,
+  summaryNote,
+  summarySpoken,
   cards,
 }: {
   title: string;
   /** A total for the row ("34 mm"), at its right. */
   summary?: string | null;
+  /** Said under the total ("Model"), and `summarySpoken` for a screen reader. */
+  summaryNote?: string | null;
+  summarySpoken?: string | null;
   cards: readonly ForecastCard[];
 }) {
   const theme = useTheme();
@@ -65,9 +70,23 @@ export function ForecastRail({
   const width = forecastCardWidth(useWindowDimensions().fontScale);
   return (
     <View style={styles.rail}>
-      <View style={styles.heading} accessible accessibilityRole="header">
+      <View
+        style={styles.heading}
+        accessible
+        accessibilityRole="header"
+        accessibilityLabel={
+          summarySpoken ? `${title}, ${summarySpoken}` : undefined
+        }
+      >
         <Text style={styles.title}>{title}</Text>
-        {summary ? <Text style={styles.summary}>{summary}</Text> : null}
+        {summary ? (
+          <View>
+            <Text style={styles.summary}>{summary}</Text>
+            {summaryNote ? (
+              <Text style={styles.meta}>{summaryNote}</Text>
+            ) : null}
+          </View>
+        ) : null}
       </View>
       <ScrollView
         horizontal

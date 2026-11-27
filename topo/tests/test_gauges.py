@@ -732,6 +732,59 @@ class TestRain(unittest.TestCase):
             )
         self.assertIn(g.S3_PREFIX + "latest.json", s3.store)
 
+    def test_one_failed_bom_call_in_the_rain_step_is_retried(self):
+        # Mutation: call BoM once, without bom_get's retry → red (one blip
+        # fails the run and pages).
+        calls = []
+
+        def flaky(url, timeout=60):
+            calls.append(url)
+            if len(calls) == 1:
+                raise OSError("BoM blip")
+            if "getTimeseriesList" in url:
+                return [
+                    ["ts_id", "from", "to"],
+                    ["12", "", "2026-10-29T09:00:01.000+10:00"],
+                ]
+            return [{"ts_id": "11", "data": FIXTURE_RAIN_DATA}]
+
+        s3 = FakeS3()
+        with (
+            mock.patch.object(g, "http_get", flaky),
+            mock.patch.object(g, "load_rain_gauges", lambda: FIXTURE_RAIN),
+            mock.patch.object(g.time, "sleep"),
+        ):
+            g.publish_rain(s3, "bucket", NOW)
+        self.assertEqual(len(calls), 3)
+        self.assertEqual(s3.doc("rain.json"), fixture_rain())
+
+    def test_a_rain_call_failing_every_try_still_fails_the_run(self):
+        # Mutation: swallow the last error after the tries, or stop retrying
+        # early → red (a stale rain.json would go unnoticed, or the tries
+        # would not all be spent).
+        calls = []
+        real_publish_rain = g.publish_rain
+
+        def down(url, timeout=60):
+            calls.append(url)
+            raise OSError("BoM down")
+
+        s3 = FakeS3()
+        with (
+            mock.patch.object(g, "http_get", down),
+            mock.patch.object(g, "load_rain_gauges", lambda: FIXTURE_RAIN),
+            self.assertRaises(SystemExit),
+        ):
+            run_with(
+                s3,
+                FIXTURE_GAUGES,
+                lambda i, k: TestRun.fresh(None, i, k),
+                rain=real_publish_rain,
+            )
+        self.assertEqual(len(calls), g.BOM_TRIES)
+        self.assertIn(g.S3_PREFIX + "latest.json", s3.store)
+        self.assertNotIn(g.S3_PREFIX + "rain.json", s3.store)
+
     def test_rain_is_published_even_when_waternsw_fails(self):
         # Mutation: publish rain after the hot fetch → red.
         published = []

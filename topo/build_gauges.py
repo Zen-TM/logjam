@@ -340,14 +340,12 @@ def rain_coverage(raw_ts: List[str]) -> Dict[str, datetime]:
     """{raw ts_id: the last tip WDO holds}."""
     out: Dict[str, datetime] = {}
     for i in range(0, len(raw_ts), RAIN_COVERAGE_PER_CALL):
-        time.sleep(BOM_SPACING_S)
-        rows = http_get(
+        rows = bom_get(
             bom_url(
                 request="getTimeseriesList",
                 ts_id=",".join(raw_ts[i : i + RAIN_COVERAGE_PER_CALL]),
                 returnfields="ts_id,coverage",
-            ),
-            timeout=BOM_TIMEOUT_S,
+            )
         )
         for r in rows[1:]:
             row = dict(zip(rows[0], r))
@@ -402,7 +400,7 @@ def build_rain(
 
 def publish_rain(s3, bucket: str, now: datetime) -> None:
     """Fetches every listed station's last RAIN_DAYS totals and publishes
-    them. Any failed request fails the step and leaves the old file: its
+    them. A request that fails every try fails the step and leaves the old file: its
     days are dated, so a client only falls back to the model for more of
     them."""
     stations = load_rain_gauges()
@@ -414,14 +412,13 @@ def publish_rain(s3, bucket: str, now: datetime) -> None:
     days: Dict[str, Dict[str, float]] = {}
     ids = list(raw_of)
     for i in range(0, len(ids), RAIN_SERIES_PER_CALL):
-        time.sleep(BOM_SPACING_S)
         url = bom_values_url(
             ids[i : i + RAIN_SERIES_PER_CALL],
             start,
             end,
             "Timestamp,Value,Quality Code",
         )
-        for series in http_get(url, timeout=BOM_TIMEOUT_S):
+        for series in bom_get(url):
             ts = str(series["ts_id"])
             days[ts] = rain_days(series["data"], coverage.get(raw_of[ts]))
     put_json(s3, bucket, "rain.json", build_rain(stations, days, now), 3600)
@@ -645,18 +642,25 @@ def run(bucket: str) -> None:
 # ── registry ─────────────────────────────────────────────────────────────
 
 
-def bom_list(**params) -> list:
-    url = bom_url(**params)
-    # `registry` is a run-once tool, so it retries; a list it cannot finish
-    # fails the command rather than writing a short one.
+def bom_get(url: str):
+    """BoM's answer to `url`, retried with a growing pause; the last error
+    is raised once every try has failed."""
     for attempt in range(BOM_TRIES):
         time.sleep(BOM_SPACING_S * (attempt + 1))
         try:
-            rows = http_get(url, timeout=BOM_TIMEOUT_S)
-            break
+            return http_get(url, timeout=BOM_TIMEOUT_S)
         except (OSError, ValueError) as err:
             print(f"BoM try {attempt + 1} failed: {err}", flush=True)
-    else:
+            last = err
+    raise last
+
+
+def bom_list(**params) -> list:
+    # `registry` is a run-once tool, so it retries; a list it cannot finish
+    # fails the command rather than writing a short one.
+    try:
+        rows = bom_get(bom_url(**params))
+    except (OSError, ValueError):
         raise SystemExit("BoM did not answer: not writing a short registry")
     if isinstance(rows, dict):  # BoM's error body
         raise SystemExit(f"BoM refused: {rows.get('message')}")

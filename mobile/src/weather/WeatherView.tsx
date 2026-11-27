@@ -43,6 +43,8 @@ function RowSection({
         <ForecastRail
           title={found.title}
           summary={found.summary}
+          summaryNote={found.summaryNote}
+          summarySpoken={found.summarySpoken}
           cards={found.cards}
         />
         {found.note ? <Text style={styles.note}>{found.note}</Text> : null}

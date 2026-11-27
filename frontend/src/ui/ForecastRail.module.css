@@ -17,6 +17,11 @@
   color: var(--color-text);
 }
 
+.total {
+  display: flex;
+  flex-direction: column;
+}
+
 .summary {
   composes: detail from "../textRoles.generated.module.css";
   color: var(--color-text-muted);

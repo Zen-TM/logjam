@@ -409,7 +409,8 @@ describe("rain gauges", () => {
       cards[5].querySelector("[data-muted]")?.getAttribute("data-muted"),
     ).toBe("true");
     expect(screen.queryByText(WEATHER.copy.pastModel)).toBeNull();
-    expect(screen.getByText(WEATHER.copy.gaugeNote)).toBeTruthy();
+    // The week's total sums those modelled days, so it carries the mark too.
+    expect(screen.getByLabelText(/including modelled days/)).toBeTruthy();
     expect(screen.getByText("© Made-up owner")).toBeTruthy();
   });
 
